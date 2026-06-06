@@ -88,34 +88,40 @@ void main() {
       final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
       // The last switch in the page is the hide-tray one (added after startup).
       final hideTraySwitch = switches.last;
-      expect(hideTraySwitch.onChanged, isNull,
-          reason: 'hide-tray switch must be disabled without a hotkey');
+      expect(
+        hideTraySwitch.onChanged,
+        isNull,
+        reason: 'hide-tray switch must be disabled without a hotkey',
+      );
     });
 
-    testWidgets(
-      'hide tray switch is enabled when hotkey is configured',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 1600);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('hide tray switch is enabled when hotkey is configured', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-        // Write hotkey file before makeFixtures reads it via the provider.
-        File('${tempDir.path}/global_hotkey')
-            .writeAsStringSync(HotkeyPreset.defaults.first.serialized);
+      // Write hotkey file before makeFixtures reads it via the provider.
+      File(
+        '${tempDir.path}/global_hotkey',
+      ).writeAsStringSync(HotkeyPreset.defaults.first.serialized);
 
-        final f = makeFixtures(dir: tempDir);
-        await tester.pumpWidget(
-          buildTestApp(const GeneralPage(), overrides: f.overrides),
-        );
-        await tester.pumpAndSettle();
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
 
-        final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
-        final hideTraySwitch = switches.last;
-        expect(hideTraySwitch.onChanged, isNotNull,
-            reason: 'hide-tray switch must be enabled when hotkey is set');
-      },
-    );
+      final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+      final hideTraySwitch = switches.last;
+      expect(
+        hideTraySwitch.onChanged,
+        isNotNull,
+        reason: 'hide-tray switch must be enabled when hotkey is set',
+      );
+    });
 
     testWidgets('hotkey dropdown shows None option', (tester) async {
       tester.view.physicalSize = const Size(800, 2400);

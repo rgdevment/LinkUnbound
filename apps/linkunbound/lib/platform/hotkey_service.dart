@@ -63,8 +63,7 @@ final class HotkeyService {
   static String serialize(HotKey hotKey) {
     final parts = <String>[
       if (hotKey.modifiers != null)
-        for (final m in hotKey.modifiers!)
-          _modifierLabel(m),
+        for (final m in hotKey.modifiers!) _modifierLabel(m),
       _keyLabel(hotKey.key),
     ];
     return parts.join('+');

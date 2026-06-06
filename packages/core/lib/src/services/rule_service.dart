@@ -18,10 +18,21 @@ final class RuleService {
       return;
     }
     final content = await rulesFile.readAsString();
-    final decoded = jsonDecode(content) as List;
-    _rules = decoded
-        .map((e) => Rule.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final raw = jsonDecode(content);
+    if (raw is! List) {
+      _rules = [];
+      return;
+    }
+    // One corrupt entry must not discard the rest.
+    _rules = raw.fold(<Rule>[], (acc, e) {
+      if (e is! Map<String, dynamic>) return acc;
+      if (e['domain'] is! String || e['browserId'] is! String) return acc;
+      try {
+        return [...acc, Rule.fromJson(e)];
+      } catch (_) {
+        return acc;
+      }
+    });
   }
 
   Future<void> save() async {

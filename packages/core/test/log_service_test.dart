@@ -154,10 +154,7 @@ void main() {
     });
 
     test('does not short-circuit when :\\ is present', () {
-      expect(
-        redactUrls(r'C:\Users\Bob\file.pdf'),
-        isNot(contains('Bob')),
-      );
+      expect(redactUrls(r'C:\Users\Bob\file.pdf'), isNot(contains('Bob')));
     });
   });
 

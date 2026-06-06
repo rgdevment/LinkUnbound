@@ -61,16 +61,18 @@ void main() {
       expect(result, equals((0.0, 0.0, 1920.0, 1080.0)));
     });
 
-    test('cursor exactly at right/bottom edge is outside (half-open interval)',
-        () {
-      // The hit-test uses px < originX + width so exactly at 1920 falls back.
-      final displays = [
-        (originX: 0.0, originY: 0.0, width: 1920.0, height: 1080.0),
-        (originX: 1920.0, originY: 0.0, width: 1920.0, height: 1080.0),
-      ];
-      final result = findDisplayForPoint(1920, 0, displays);
-      // Falls on the boundary of the second display's left edge
-      expect(result, equals((1920.0, 0.0, 1920.0, 1080.0)));
-    });
+    test(
+      'cursor exactly at right/bottom edge is outside (half-open interval)',
+      () {
+        // The hit-test uses px < originX + width so exactly at 1920 falls back.
+        final displays = [
+          (originX: 0.0, originY: 0.0, width: 1920.0, height: 1080.0),
+          (originX: 1920.0, originY: 0.0, width: 1920.0, height: 1080.0),
+        ];
+        final result = findDisplayForPoint(1920, 0, displays);
+        // Falls on the boundary of the second display's left edge
+        expect(result, equals((1920.0, 0.0, 1920.0, 1080.0)));
+      },
+    );
   });
 }

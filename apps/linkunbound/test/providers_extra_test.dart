@@ -218,24 +218,27 @@ void main() {
       expect(result, isNull);
     });
 
-    test('provider is invalidated and re-fetched after invalidateSelf', () async {
-      var callCount = 0;
-      final container = ProviderContainer(
-        overrides: [
-          updateInfoProvider.overrideWith((ref) async {
-            callCount++;
-            return null;
-          }),
-        ],
-      );
-      addTearDown(container.dispose);
+    test(
+      'provider is invalidated and re-fetched after invalidateSelf',
+      () async {
+        var callCount = 0;
+        final container = ProviderContainer(
+          overrides: [
+            updateInfoProvider.overrideWith((ref) async {
+              callCount++;
+              return null;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      await container.read(updateInfoProvider.future);
-      expect(callCount, 1);
+        await container.read(updateInfoProvider.future);
+        expect(callCount, 1);
 
-      container.invalidate(updateInfoProvider);
-      await container.read(updateInfoProvider.future);
-      expect(callCount, 2);
-    });
+        container.invalidate(updateInfoProvider);
+        await container.read(updateInfoProvider.future);
+        expect(callCount, 2);
+      },
+    );
   });
 }

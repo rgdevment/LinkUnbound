@@ -86,9 +86,7 @@ void main() {
     });
 
     ProviderContainer makeContainer() => ProviderContainer(
-      overrides: [
-        globalHotkeyFileProvider.overrideWithValue(globalHotkeyFile),
-      ],
+      overrides: [globalHotkeyFileProvider.overrideWithValue(globalHotkeyFile)],
     );
 
     test('initial state is null when file does not exist', () {
@@ -157,10 +155,7 @@ void main() {
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
-    ProviderContainer makeContainer({
-      bool hideTray = false,
-      String? hotkey,
-    }) {
+    ProviderContainer makeContainer({bool hideTray = false, String? hotkey}) {
       final hideTrayFile = File('${tempDir.path}/hide_tray');
       final globalHotkeyFile = File('${tempDir.path}/global_hotkey');
       if (hideTray) hideTrayFile.writeAsStringSync('1');

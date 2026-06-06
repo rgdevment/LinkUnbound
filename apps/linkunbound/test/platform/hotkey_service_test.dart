@@ -29,15 +29,18 @@ void main() {
       expect(serialized, contains('l'));
     });
 
-    test('serialize of parsed ctrl+alt+space contains ctrl, alt, and space', () {
-      const raw = 'ctrl+alt+space';
-      final parsed = HotkeyService.parse(raw);
-      expect(parsed, isNotNull);
-      final serialized = HotkeyService.serialize(parsed!);
-      expect(serialized, contains('ctrl'));
-      expect(serialized, contains('alt'));
-      expect(serialized, contains('space'));
-    });
+    test(
+      'serialize of parsed ctrl+alt+space contains ctrl, alt, and space',
+      () {
+        const raw = 'ctrl+alt+space';
+        final parsed = HotkeyService.parse(raw);
+        expect(parsed, isNotNull);
+        final serialized = HotkeyService.serialize(parsed!);
+        expect(serialized, contains('ctrl'));
+        expect(serialized, contains('alt'));
+        expect(serialized, contains('space'));
+      },
+    );
 
     test('parse returns null for unknown key', () {
       expect(HotkeyService.parse('meta+~'), isNull);

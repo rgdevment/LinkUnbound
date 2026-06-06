@@ -3,6 +3,37 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:linkunbound/platform/windows/win_registration_service.dart';
 
 void main() {
+  group('openWithExts', () {
+    test('contains all expected file extensions', () {
+      final exts = winRegistrationOpenWithExts;
+      expect(
+        exts,
+        containsAll([
+          '.htm',
+          '.html',
+          '.xhtml',
+          '.xht',
+          '.pdf',
+          '.svg',
+          '.mhtml',
+          '.mht',
+          '.shtml',
+          '.webp',
+        ]),
+      );
+    });
+
+    test('has no duplicates', () {
+      final exts = winRegistrationOpenWithExts;
+      expect(exts.toSet().length, equals(exts.length));
+    });
+
+    test('every entry starts with a dot', () {
+      for (final ext in winRegistrationOpenWithExts) {
+        expect(ext, startsWith('.'), reason: '$ext should start with a dot');
+      }
+    });
+  });
   group('progIdMatchesLinkUnbound', () {
     test('returns false for null', () {
       expect(progIdMatchesLinkUnbound(null), isFalse);

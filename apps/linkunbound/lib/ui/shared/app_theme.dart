@@ -124,10 +124,7 @@ class AppTheme {
       ),
     ),
     iconTheme: const IconThemeData(color: _lightOnSurfaceVariant, size: 18),
-    dividerTheme: const DividerThemeData(
-      color: _lightOutline,
-      thickness: 0.5,
-    ),
+    dividerTheme: const DividerThemeData(color: _lightOutline, thickness: 0.5),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)

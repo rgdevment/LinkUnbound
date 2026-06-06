@@ -126,5 +126,41 @@ void main() {
       expect(decoded, hasLength(1));
       expect((decoded.first as Map<String, dynamic>)['domain'], 'x.com');
     });
+
+    test('load treats non-list root as empty', () async {
+      rulesFile.writeAsStringSync('{"domain":"a.com","browserId":"chrome"}');
+      await service.load();
+      expect(service.rules, isEmpty);
+    });
+
+    test('load skips non-Map entries and keeps valid ones', () async {
+      rulesFile.writeAsStringSync(
+        jsonEncode([
+          {'domain': 'good.com', 'browserId': 'chrome'},
+          'not-a-map',
+          {'domain': 'also-good.com', 'browserId': 'firefox'},
+        ]),
+      );
+      await service.load();
+      expect(service.rules, hasLength(2));
+      expect(
+        service.rules.map((r) => r.domain),
+        containsAll(['good.com', 'also-good.com']),
+      );
+    });
+
+    test('load skips entries missing required String fields', () async {
+      rulesFile.writeAsStringSync(
+        jsonEncode([
+          {'domain': 'valid.com', 'browserId': 'edge'},
+          {'domain': 123, 'browserId': 'chrome'},
+          {'browserId': 'firefox'},
+          {'domain': 'noBrowser.com'},
+        ]),
+      );
+      await service.load();
+      expect(service.rules, hasLength(1));
+      expect(service.rules.first.domain, 'valid.com');
+    });
   });
 }

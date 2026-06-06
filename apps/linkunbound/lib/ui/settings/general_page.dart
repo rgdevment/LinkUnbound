@@ -284,8 +284,7 @@ class GeneralPage extends ConsumerWidget {
                   child: DropdownButton<String?>(
                     value: hotkey,
                     isDense: true,
-                    dropdownColor:
-                        Theme.of(context).colorScheme.surfaceBright,
+                    dropdownColor: Theme.of(context).colorScheme.surfaceBright,
                     style: Theme.of(context).textTheme.bodyMedium,
                     items: [
                       DropdownMenuItem<String?>(
@@ -295,8 +294,9 @@ class GeneralPage extends ConsumerWidget {
                       // Guard against a saved hotkey from another OS that isn't
                       // in the current platform's preset list.
                       if (hotkey != null &&
-                          HotkeyPreset.defaults
-                              .every((p) => p.serialized != hotkey))
+                          HotkeyPreset.defaults.every(
+                            (p) => p.serialized != hotkey,
+                          ))
                         DropdownMenuItem<String?>(
                           value: hotkey,
                           child: Text(hotkey),
@@ -308,9 +308,7 @@ class GeneralPage extends ConsumerWidget {
                         ),
                     ],
                     onChanged: (value) {
-                      ref
-                          .read(globalHotkeyProvider.notifier)
-                          .setHotkey(value);
+                      ref.read(globalHotkeyProvider.notifier).setHotkey(value);
                     },
                   ),
                 ),
@@ -328,18 +326,15 @@ class GeneralPage extends ConsumerWidget {
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: hasHotkey
                               ? null
-                              : Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withValues(alpha: 0.38),
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.38),
                         ),
                       ),
                       Text(
                         hideTraySubtitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -475,7 +470,8 @@ class GeneralPage extends ConsumerWidget {
               return BrowserTile(
                 key: ValueKey(b.id),
                 name: b.name,
-                iconPath: '${iconsDir.path}${Platform.pathSeparator}${b.id}.png',
+                iconPath:
+                    '${iconsDir.path}${Platform.pathSeparator}${b.id}.png',
                 onTap: () => _showEditBrowserDialog(context, ref, b),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -607,8 +603,12 @@ class GeneralPage extends ConsumerWidget {
     await ref.read(browsersProvider.notifier).add(copy);
 
     final iconsDir = ref.read(iconsDirProvider);
-    final sourceIcon = File('${iconsDir.path}${Platform.pathSeparator}${source.id}.png');
-    final destIcon = File('${iconsDir.path}${Platform.pathSeparator}$copyId.png');
+    final sourceIcon = File(
+      '${iconsDir.path}${Platform.pathSeparator}${source.id}.png',
+    );
+    final destIcon = File(
+      '${iconsDir.path}${Platform.pathSeparator}$copyId.png',
+    );
     if (sourceIcon.existsSync()) {
       await sourceIcon.copy(destIcon.path);
     }
@@ -757,7 +757,9 @@ class GeneralPage extends ConsumerWidget {
   ) async {
     final iconsDir = ref.read(iconsDirProvider);
     final iconSource = customIcon.isNotEmpty ? customIcon : exePath;
-    final iconDest = File('${iconsDir.path}${Platform.pathSeparator}$browserId.png');
+    final iconDest = File(
+      '${iconsDir.path}${Platform.pathSeparator}$browserId.png',
+    );
 
     if (customIcon.isNotEmpty && iconDest.existsSync()) {
       await iconDest.delete();
@@ -766,7 +768,10 @@ class GeneralPage extends ConsumerWidget {
     try {
       await ref
           .read(iconExtractorProvider)
-          .extractIcon(iconSource, '${iconsDir.path}${Platform.pathSeparator}$browserId.png');
+          .extractIcon(
+            iconSource,
+            '${iconsDir.path}${Platform.pathSeparator}$browserId.png',
+          );
     } on Exception {
       // Best-effort
     }

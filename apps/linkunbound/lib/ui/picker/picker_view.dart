@@ -71,7 +71,8 @@ class _PickerViewState extends ConsumerState<PickerView> {
                 itemCount: browsers.length,
                 itemBuilder: (context, index) => _BrowserRow(
                   browser: browsers[index],
-                  iconPath: '${iconsDir.path}${Platform.pathSeparator}${browsers[index].id}.png',
+                  iconPath:
+                      '${iconsDir.path}${Platform.pathSeparator}${browsers[index].id}.png',
                   shortcut: index < 9 ? '${index + 1}' : null,
                   onTap: () => _launch(browsers[index], iconsDir),
                 ),

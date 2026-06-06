@@ -28,6 +28,12 @@ bool progIdMatchesLinkUnbound(String? progId) {
 Iterable<String> get winRegistrationUserChoiceKeys =>
     WinRegistrationService._userChoicePaths.keys;
 
+/// Extensions registered under OpenWithProgIds during install.
+/// Exposed for testing to verify write/remove symmetry without touching the registry.
+@visibleForTesting
+List<String> get winRegistrationOpenWithExts =>
+    WinRegistrationService._openWithExts;
+
 typedef _SHChangeNotifyNative =
     Void Function(
       Int32 wEventId,
@@ -79,6 +85,7 @@ final class WinRegistrationService implements RegistrationService {
     _deleteKeyTree(r'Software\Clients\StartMenuInternet\LinkUnbound');
     _deleteKeyTree(r'Software\LinkUnbound');
     _removeRegisteredApplication();
+    _removeOpenWithProgIds();
     _notifyShell();
   }
 
@@ -323,25 +330,26 @@ final class WinRegistrationService implements RegistrationService {
     root.close();
   }
 
+  static const _openWithExts = [
+    '.htm',
+    '.html',
+    '.xhtml',
+    '.xht',
+    '.pdf',
+    '.svg',
+    '.mhtml',
+    '.mht',
+    '.shtml',
+    '.webp',
+  ];
+
   void _writeOpenWithProgIds() {
-    const exts = [
-      '.htm',
-      '.html',
-      '.xhtml',
-      '.xht',
-      '.pdf',
-      '.svg',
-      '.mhtml',
-      '.mht',
-      '.shtml',
-      '.webp',
-    ];
     final classes = Registry.openPath(
       RegistryHive.currentUser,
       path: r'Software\Classes',
       desiredAccessRights: AccessRights.allAccess,
     );
-    for (final ext in exts) {
+    for (final ext in _openWithExts) {
       try {
         final extKey = classes.createKey(ext);
         final openWith = extKey.createKey('OpenWithProgIds');
@@ -355,6 +363,22 @@ final class WinRegistrationService implements RegistrationService {
       }
     }
     classes.close();
+  }
+
+  void _removeOpenWithProgIds() {
+    for (final ext in _openWithExts) {
+      try {
+        final openWith = Registry.openPath(
+          RegistryHive.currentUser,
+          path: r'Software\Classes\' + ext + r'\OpenWithProgIds',
+          desiredAccessRights: AccessRights.allAccess,
+        );
+        openWith.deleteValue('LinkUnboundURL');
+        openWith.close();
+      } on Exception catch (e) {
+        _log.fine('Failed to remove OpenWithProgIds for $ext: $e');
+      }
+    }
   }
 
   void _writeRegisteredApplications() {

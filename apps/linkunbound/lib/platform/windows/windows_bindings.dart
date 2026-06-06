@@ -154,7 +154,9 @@ final class WindowsBindings implements PlatformBindings {
     // ConnectNamedPipe).
     for (var attempt = 0; attempt < 3; attempt++) {
       if (await client.send(payload)) return true;
-      if (attempt < 2) await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (attempt < 2) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
     }
     return false;
   }
@@ -224,27 +226,36 @@ final class WindowsBindings implements PlatformBindings {
 }
 
 /// Moves [oldDir] to [newDir] atomically when possible; falls back to
-/// recursive copy + delete when they are on different volumes.
+/// recursive copy + delete when they are on different volumes or when the
+/// destination directory already exists.
 @visibleForTesting
 void migrateDirIfNeeded(Directory oldDir, Directory newDir) {
   if (!oldDir.existsSync()) return;
-  if (newDir.existsSync()) return;
-  try {
-    oldDir.renameSync(newDir.path);
-    _log.info('Migrated app data from ${oldDir.path} to ${newDir.path}');
-  } on FileSystemException {
-    // rename fails across volumes; fall back to recursive copy then delete.
-    _log.info(
-      'Cross-volume migration: copying ${oldDir.path} to ${newDir.path}',
-    );
+  // Startup creates newDir before migration runs, so only real user data
+  // (browsers.json, same marker as bootstrap's first-boot check) can gate it.
+  final dataMarker = File(
+    '${newDir.path}${Platform.pathSeparator}browsers.json',
+  );
+  if (dataMarker.existsSync()) return;
+
+  if (!newDir.existsSync()) {
     try {
-      copyDirRecursive(oldDir, newDir);
-      oldDir.deleteSync(recursive: true);
-      _log.info('Cross-volume migration complete');
-    } on FileSystemException catch (e) {
-      _log.warning('Cross-volume migration failed: $e');
-      // Leave oldDir intact so the user doesn't lose data.
+      oldDir.renameSync(newDir.path);
+      _log.info('Migrated app data from ${oldDir.path} to ${newDir.path}');
+      return;
+    } on FileSystemException {
+      // rename fails across volumes; fall through to copy + delete.
     }
+  }
+
+  _log.info('Cross-volume migration: copying ${oldDir.path} to ${newDir.path}');
+  try {
+    copyDirRecursive(oldDir, newDir);
+    oldDir.deleteSync(recursive: true);
+    _log.info('Cross-volume migration complete');
+  } on FileSystemException catch (e) {
+    _log.warning('Cross-volume migration failed: $e');
+    // Leave oldDir intact so the user doesn't lose data.
   }
 }
 
@@ -255,7 +266,11 @@ void copyDirRecursive(Directory src, Directory dst) {
     final name = entity.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
     final target = '${dst.path}${Platform.pathSeparator}$name';
     if (entity is File) {
-      entity.copySync(target);
+      // Existing files belong to this boot (e.g. the open log file, which
+      // Windows refuses to overwrite); skipping them keeps the migration alive.
+      if (!File(target).existsSync()) {
+        entity.copySync(target);
+      }
     } else if (entity is Directory) {
       copyDirRecursive(entity, Directory(target));
     }

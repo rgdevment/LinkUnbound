@@ -19,9 +19,11 @@ const _windowChannel = MethodChannel('window_manager');
 
 Future<dynamic> _defaultWindowHandler(MethodCall call) async {
   return switch (call.method) {
-    'isFullScreen' || 'isMaximized' || 'isMinimized' || 'isVisible' ||
-        'isFocused' =>
-      false,
+    'isFullScreen' ||
+    'isMaximized' ||
+    'isMinimized' ||
+    'isVisible' ||
+    'isFocused' => false,
     _ => null,
   };
 }
@@ -33,10 +35,7 @@ Future<dynamic> _defaultWindowHandler(MethodCall call) async {
   final tempDir = Directory.systemTemp.createTempSync('phase5_test_');
   final f = makeFixtures(dir: tempDir, browsers: browsers);
   final container = ProviderContainer(
-    overrides: [
-      ...f.overrides,
-      exitAppProvider.overrideWithValue(() async {}),
-    ],
+    overrides: [...f.overrides, exitAppProvider.overrideWithValue(() async {})],
   );
   return (container: container, tempDir: tempDir);
 }
@@ -63,7 +62,9 @@ void main() {
     ) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -73,7 +74,9 @@ void main() {
       );
       await tester.pump();
 
-      container.read(appStateProvider.notifier).showPicker('https://example.com');
+      container
+          .read(appStateProvider.notifier)
+          .showPicker('https://example.com');
       await tester.pump();
       await tester.pump();
 
@@ -83,10 +86,14 @@ void main() {
       expect(pickerState, isNot(isA<WindowListener>()));
     });
 
-    testWidgets('blur before grace period does not hide picker', (tester) async {
+    testWidgets('blur before grace period does not hide picker', (
+      tester,
+    ) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -97,7 +104,9 @@ void main() {
       await tester.pump();
 
       final dynamic appState = tester.state(find.byType(NavigateApp));
-      container.read(appStateProvider.notifier).showPicker('https://example.com');
+      container
+          .read(appStateProvider.notifier)
+          .showPicker('https://example.com');
       await tester.pump();
       await tester.pump();
 
@@ -111,7 +120,9 @@ void main() {
     testWidgets('blur after grace period hides picker', (tester) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -122,7 +133,9 @@ void main() {
       await tester.pump();
 
       final dynamic appState = tester.state(find.byType(NavigateApp));
-      container.read(appStateProvider.notifier).showPicker('https://example.com');
+      container
+          .read(appStateProvider.notifier)
+          .showPicker('https://example.com');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -139,7 +152,9 @@ void main() {
     ) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -150,7 +165,9 @@ void main() {
       await tester.pump();
 
       final dynamic appState = tester.state(find.byType(NavigateApp));
-      container.read(appStateProvider.notifier).showPicker('https://example.com');
+      container
+          .read(appStateProvider.notifier)
+          .showPicker('https://example.com');
       await tester.pump();
       await tester.pump();
 
@@ -167,7 +184,9 @@ void main() {
     testWidgets('blur in settings mode does nothing', (tester) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -224,7 +243,9 @@ void main() {
     testWidgets('MaterialApp uses ThemeMode.system', (tester) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -238,10 +259,14 @@ void main() {
       expect(app.themeMode, ThemeMode.system);
     });
 
-    testWidgets('MaterialApp has both light and dark themes set', (tester) async {
+    testWidgets('MaterialApp has both light and dark themes set', (
+      tester,
+    ) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -279,7 +304,9 @@ void main() {
     testWidgets('rapid focus events do not throw', (tester) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -303,7 +330,9 @@ void main() {
     testWidgets('invalidation fires again after 2s cooldown', (tester) async {
       final (:container, :tempDir) = _buildApp(tester);
       addTearDown(container.dispose);
-      addTearDown(() { if (tempDir.existsSync()) tempDir.deleteSync(recursive: true); });
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(

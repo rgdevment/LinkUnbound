@@ -15,8 +15,9 @@ import 'package:linkunbound/ui/settings/settings_window.dart';
 
 const _hotkeyChannel = MethodChannel('dev.leanflutter.plugins/hotkey_manager');
 
-const _hotkeyEventChannel =
-    MethodChannel('dev.leanflutter.plugins/hotkey_manager_event');
+const _hotkeyEventChannel = MethodChannel(
+  'dev.leanflutter.plugins/hotkey_manager_event',
+);
 
 const _windowChannel = MethodChannel('window_manager');
 const _macWindowChannel = MethodChannel('linkunbound/window');

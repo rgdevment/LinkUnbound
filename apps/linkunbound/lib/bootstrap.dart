@@ -22,6 +22,11 @@ import 'ui/picker/picker_layout.dart';
 
 final _log = Logger('Bootstrap');
 
+Never _exitAfterFlush() {
+  disposeLogging();
+  exit(0);
+}
+
 Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
   initLogging(bindings.logFile);
 
@@ -29,7 +34,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
 
   try {
     if (await bindings.tryDelegate(bindings.initialEvent)) {
-      exit(0);
+      _exitAfterFlush();
     }
   } on Object catch (e, st) {
     _log.warning('Delegation check failed', e, st);
@@ -48,7 +53,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     // now guaranteed to be listening (claim waits for readiness). Retry once.
     try {
       if (await bindings.tryDelegate(bindings.initialEvent)) {
-        exit(0);
+        _exitAfterFlush();
       }
     } on Object catch (e, st) {
       _log.warning('Post-claim delegation retry failed', e, st);
@@ -66,7 +71,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
       // now be ready to receive the pipe message.
       try {
         if (await bindings.tryDelegate(bindings.initialEvent)) {
-          exit(0);
+          _exitAfterFlush();
         }
       } on Object catch (e, st) {
         _log.warning('Final delegation attempt failed', e, st);
@@ -78,7 +83,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
           '(type=$eventType)',
         );
       }
-      exit(0);
+      _exitAfterFlush();
     }
   }
 
@@ -179,7 +184,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
         } on Object catch (e, st) {
           _log.warning('Release failed during exit', e, st);
         }
-        exit(0);
+        _exitAfterFlush();
       }),
     ],
   );
@@ -319,9 +324,7 @@ Future<void> _applyAppMode(
       await macWindow?.setSettingsMode();
       // On macOS the settings window has a native title bar (~28px) that eats
       // into the frame; compensate so the content keeps its designed height.
-      await windowManager.setSize(
-        Size(640, Platform.isMacOS ? 728 : 700),
-      );
+      await windowManager.setSize(Size(640, Platform.isMacOS ? 728 : 700));
       await windowManager.center();
       await windowManager.setSkipTaskbar(false);
       await windowManager.setAlwaysOnTop(false);

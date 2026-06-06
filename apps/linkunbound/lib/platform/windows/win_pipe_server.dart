@@ -328,8 +328,9 @@ final class WinPipeServer implements InboundEventServer {
   // Cached at class level so each iteration of _serverLoop doesn't reopen the DLL.
   static final _getLastError = () {
     final kernel32 = DynamicLibrary.open('kernel32.dll');
-    return kernel32
-        .lookupFunction<Uint32 Function(), int Function()>('GetLastError');
+    return kernel32.lookupFunction<Uint32 Function(), int Function()>(
+      'GetLastError',
+    );
   }();
 }
 
