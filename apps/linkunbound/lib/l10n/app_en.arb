@@ -26,6 +26,12 @@
   "languageEnglish": "English",
   "languageSpanish": "Spanish",
 
+  "sectionAppearance": "APPEARANCE",
+  "themeLabel": "Theme",
+  "themeSystem": "Automatic (system)",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+
   "sectionBrowsers": "BROWSERS",
   "addBrowserTooltip": "Add custom browser",
   "refreshBrowsersTooltip": "Refresh browsers",

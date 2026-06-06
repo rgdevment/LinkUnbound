@@ -107,6 +107,7 @@ makeFixtures({
   final configFile = File('${tempDir.path}/browsers.json');
   final rulesFile = File('${tempDir.path}/rules.json');
   final localeFile = File('${tempDir.path}/locale');
+  final themeFile = File('${tempDir.path}/theme');
   final edgeWarningFile = File('${tempDir.path}/edge_warning_dismissed');
   final hideTrayFile = File('${tempDir.path}/hide_tray');
   final globalHotkeyFile = File('${tempDir.path}/global_hotkey');
@@ -145,6 +146,7 @@ makeFixtures({
     ),
     iconsDirProvider.overrideWithValue(iconsDir),
     localeFileProvider.overrideWithValue(localeFile),
+    themeFileProvider.overrideWithValue(themeFile),
     edgeWarningFileProvider.overrideWithValue(edgeWarningFile),
     hideTrayFileProvider.overrideWithValue(hideTrayFile),
     globalHotkeyFileProvider.overrideWithValue(globalHotkeyFile),

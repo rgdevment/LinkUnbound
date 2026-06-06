@@ -264,7 +264,8 @@ void main() {
         buildTestApp(const GeneralPage(), overrides: f.overrides),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Automatic (system)'), findsOneWidget);
+      // One for the language dropdown, one for the theme dropdown.
+      expect(find.text('Automatic (system)'), findsNWidgets(2));
     });
 
     testWidgets('opening dropdown shows all language options', (tester) async {
@@ -302,6 +303,69 @@ void main() {
       await tester.tap(find.text('English').last);
       await tester.pumpAndSettle();
       expect(find.text('English'), findsOneWidget);
+    });
+  });
+
+  group('GeneralPage — appearance section', () {
+    testWidgets('shows APPEARANCE section header', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('APPEARANCE'), findsOneWidget);
+    });
+
+    testWidgets('opening dropdown shows all theme options', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byType(DropdownButton<ThemeMode>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButton<ThemeMode>));
+      await tester.pumpAndSettle();
+      expect(find.text('Light'), findsOneWidget);
+      expect(find.text('Dark'), findsOneWidget);
+    });
+
+    testWidgets('selecting Dark persists and updates provider', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byType(DropdownButton<ThemeMode>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButton<ThemeMode>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dark').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Dark'), findsOneWidget);
+      expect(File('${tempDir.path}/theme').readAsStringSync(), 'dark');
+    });
+
+    testWidgets('saved dark theme is preselected', (tester) async {
+      File('${tempDir.path}/theme').writeAsStringSync('dark');
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Dark'), findsOneWidget);
     });
   });
 

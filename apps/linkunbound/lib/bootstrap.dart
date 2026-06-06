@@ -169,6 +169,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
       iconsDirProvider.overrideWithValue(bindings.iconsDir),
       launchServiceProvider.overrideWithValue(bindings.launchService),
       localeFileProvider.overrideWithValue(bindings.localeFile),
+      themeFileProvider.overrideWithValue(bindings.themeFile),
       edgeWarningFileProvider.overrideWithValue(bindings.edgeWarningFile),
       hideTrayFileProvider.overrideWithValue(bindings.hideTrayFile),
       globalHotkeyFileProvider.overrideWithValue(bindings.globalHotkeyFile),

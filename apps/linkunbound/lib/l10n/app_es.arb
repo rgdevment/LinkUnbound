@@ -25,6 +25,12 @@
   "languageEnglish": "Inglés",
   "languageSpanish": "Español",
 
+  "sectionAppearance": "APARIENCIA",
+  "themeLabel": "Tema",
+  "themeSystem": "Automático (sistema)",
+  "themeLight": "Claro",
+  "themeDark": "Oscuro",
+
   "sectionBrowsers": "NAVEGADORES",
   "addBrowserTooltip": "Añadir navegador personalizado",
   "refreshBrowsersTooltip": "Actualizar navegadores",

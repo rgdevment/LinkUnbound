@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -35,6 +36,8 @@ final launchServiceProvider = Provider<LaunchService>(
 );
 
 final localeFileProvider = Provider<File>((_) => throw _mustOverride());
+
+final themeFileProvider = Provider<File>((_) => throw _mustOverride());
 
 final edgeWarningFileProvider = Provider<File>((_) => throw _mustOverride());
 
@@ -100,6 +103,33 @@ final class LocaleNotifier extends Notifier<Locale?> {
       file.writeAsStringSync(locale.languageCode);
     }
     state = locale;
+  }
+}
+
+final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
+  ThemeModeNotifier.new,
+);
+
+final class ThemeModeNotifier extends Notifier<ThemeMode> {
+  @override
+  ThemeMode build() {
+    final file = ref.read(themeFileProvider);
+    if (!file.existsSync()) return ThemeMode.system;
+    return switch (file.readAsStringSync().trim()) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  void setThemeMode(ThemeMode mode) {
+    final file = ref.read(themeFileProvider);
+    if (mode == ThemeMode.system) {
+      if (file.existsSync()) file.deleteSync();
+    } else {
+      file.writeAsStringSync(mode.name);
+    }
+    state = mode;
   }
 }
 

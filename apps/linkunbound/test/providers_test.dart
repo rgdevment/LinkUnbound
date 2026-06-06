@@ -146,6 +146,85 @@ void main() {
     });
   });
 
+  group('ThemeModeNotifier', () {
+    late Directory tempDir;
+    late File themeFile;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('theme_notifier_test_');
+      themeFile = File('${tempDir.path}/theme');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    ProviderContainer makeContainer() => ProviderContainer(
+      overrides: [themeFileProvider.overrideWithValue(themeFile)],
+    );
+
+    test('returns system when theme file does not exist', () {
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      expect(c.read(themeModeProvider), ThemeMode.system);
+    });
+
+    test('returns light when file contains light', () {
+      themeFile.writeAsStringSync('light');
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      expect(c.read(themeModeProvider), ThemeMode.light);
+    });
+
+    test('returns dark when file contains dark', () {
+      themeFile.writeAsStringSync('dark');
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      expect(c.read(themeModeProvider), ThemeMode.dark);
+    });
+
+    test('returns system for unrecognized content', () {
+      themeFile.writeAsStringSync('sepia');
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      expect(c.read(themeModeProvider), ThemeMode.system);
+    });
+
+    test('setThemeMode dark writes file and updates state', () {
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      c.read(themeModeProvider.notifier).setThemeMode(ThemeMode.dark);
+      expect(themeFile.readAsStringSync(), 'dark');
+      expect(c.read(themeModeProvider), ThemeMode.dark);
+    });
+
+    test('setThemeMode light writes file and updates state', () {
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      c.read(themeModeProvider.notifier).setThemeMode(ThemeMode.light);
+      expect(themeFile.readAsStringSync(), 'light');
+      expect(c.read(themeModeProvider), ThemeMode.light);
+    });
+
+    test('setThemeMode system deletes file and updates state', () {
+      themeFile.writeAsStringSync('dark');
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      c.read(themeModeProvider.notifier).setThemeMode(ThemeMode.system);
+      expect(themeFile.existsSync(), isFalse);
+      expect(c.read(themeModeProvider), ThemeMode.system);
+    });
+
+    test('setThemeMode system when file absent does not throw', () {
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      expect(
+        () => c.read(themeModeProvider.notifier).setThemeMode(ThemeMode.system),
+        returnsNormally,
+      );
+    });
+  });
+
   group('BrowsersNotifier', () {
     late Directory tempDir;
 

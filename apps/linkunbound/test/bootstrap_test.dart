@@ -313,6 +313,9 @@ final class _FakeBindings implements PlatformBindings {
   File get localeFile => File('${appDataDir.path}/locale');
 
   @override
+  File get themeFile => File('${appDataDir.path}/theme');
+
+  @override
   File get logFile => File('${appDataDir.path}/linkunbound.log');
 
   @override

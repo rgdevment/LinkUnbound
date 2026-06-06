@@ -60,6 +60,8 @@ class GeneralPage extends ConsumerWidget {
         const SizedBox(height: 20),
         ..._buildAccessibilitySection(context, ref),
         const SizedBox(height: 20),
+        ..._buildAppearanceSection(context, ref),
+        const SizedBox(height: 20),
         ..._buildLanguageSection(context, ref),
       ],
     );
@@ -353,6 +355,53 @@ class GeneralPage extends ConsumerWidget {
                       : null,
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildAppearanceSection(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final themeMode = ref.watch(themeModeProvider);
+
+    return [
+      SectionHeader(label: l10n.sectionAppearance),
+      GroupCard(
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                l10n.themeLabel,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<ThemeMode>(
+                value: themeMode,
+                isDense: true,
+                dropdownColor: Theme.of(context).colorScheme.surfaceBright,
+                style: Theme.of(context).textTheme.bodyMedium,
+                items: [
+                  DropdownMenuItem(
+                    value: ThemeMode.system,
+                    child: Text(l10n.themeSystem),
+                  ),
+                  DropdownMenuItem(
+                    value: ThemeMode.light,
+                    child: Text(l10n.themeLight),
+                  ),
+                  DropdownMenuItem(
+                    value: ThemeMode.dark,
+                    child: Text(l10n.themeDark),
+                  ),
+                ],
+                onChanged: (mode) {
+                  if (mode == null) return;
+                  ref.read(themeModeProvider.notifier).setThemeMode(mode);
+                },
+              ),
             ),
           ],
         ),

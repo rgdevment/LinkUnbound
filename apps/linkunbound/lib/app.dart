@@ -77,6 +77,7 @@ final class _NavigateAppState extends ConsumerState<NavigateApp>
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
     final locale = ref.watch(localeProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     ref.listen<AppState>(appStateProvider, (prev, next) {
       if (prev?.mode == next.mode) return;
@@ -102,7 +103,7 @@ final class _NavigateAppState extends ConsumerState<NavigateApp>
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

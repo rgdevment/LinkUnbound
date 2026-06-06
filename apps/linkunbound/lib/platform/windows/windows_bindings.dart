@@ -36,6 +36,7 @@ final class WindowsBindings implements PlatformBindings {
     required this.rulesFile,
     required this.logFile,
     required this.localeFile,
+    required this.themeFile,
     required this.edgeWarningFile,
     required this.hideTrayFile,
     required this.globalHotkeyFile,
@@ -73,6 +74,7 @@ final class WindowsBindings implements PlatformBindings {
       rulesFile: File('${appDataDir.path}\\rules.json'),
       logFile: File('${appDataDir.path}\\navigate.log'),
       localeFile: File('${appDataDir.path}\\locale'),
+      themeFile: File('${appDataDir.path}\\theme'),
       edgeWarningFile: File('${appDataDir.path}\\edge_warning_dismissed'),
       hideTrayFile: File('${appDataDir.path}\\hide_tray'),
       globalHotkeyFile: File('${appDataDir.path}\\global_hotkey'),
@@ -109,6 +111,8 @@ final class WindowsBindings implements PlatformBindings {
   final File logFile;
   @override
   final File localeFile;
+  @override
+  final File themeFile;
   @override
   final File edgeWarningFile;
   @override

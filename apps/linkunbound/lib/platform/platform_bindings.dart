@@ -43,6 +43,7 @@ abstract class PlatformBindings {
   File get rulesFile;
   File get logFile;
   File get localeFile;
+  File get themeFile;
   File get edgeWarningFile;
   File get hideTrayFile;
   File get globalHotkeyFile;
