@@ -1,6 +1,6 @@
 ﻿<div align="center">
 
-<img src="resources/assets/navigate.svg" alt="LinkUnbound icon" width="96" height="96"/>
+<img src="resources/assets/icon_128.png" alt="LinkUnbound icon" width="96" height="96"/>
 
 # LinkUnbound
 
