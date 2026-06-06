@@ -13,6 +13,11 @@ import 'package:linkunbound/platform/tray_controller.dart';
 import 'package:linkunbound/ui/picker/picker_window.dart';
 import 'package:linkunbound/ui/settings/settings_window.dart';
 
+const _hotkeyChannel = MethodChannel('dev.leanflutter.plugins/hotkey_manager');
+
+const _hotkeyEventChannel =
+    MethodChannel('dev.leanflutter.plugins/hotkey_manager_event');
+
 const _windowChannel = MethodChannel('window_manager');
 const _macWindowChannel = MethodChannel('linkunbound/window');
 const _screenChannel = MethodChannel(
@@ -173,6 +178,12 @@ final class _FakeCursorLocator implements CursorLocator {
 
   @override
   Future<(double, double)> screenSize() async => screen;
+
+  @override
+  Future<List<({double originX, double originY, double width, double height})>>
+  displayRects() async => [
+    (originX: 0.0, originY: 0.0, width: screen.$1, height: screen.$2),
+  ];
 }
 
 final class _FakeTrayController implements TrayController {
@@ -291,6 +302,12 @@ final class _FakeBindings implements PlatformBindings {
   @override
   File get rulesFile => File('${appDataDir.path}/rules.json');
 
+  @override
+  File get hideTrayFile => File('${appDataDir.path}/hide_tray');
+
+  @override
+  File get globalHotkeyFile => File('${appDataDir.path}/global_hotkey');
+
   File get trayIconPathFile => File('${appDataDir.path}/tray.png');
 
   @override
@@ -393,6 +410,11 @@ void main() {
         .setMockMethodCallHandler(_macWindowChannel, macWindowSpy.handle);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_screenChannel, screenSpy.handle);
+    // hotkey_manager calls into native on register/unregister; return null (no-op).
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_hotkeyChannel, (_) async => null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_hotkeyEventChannel, (_) async => null);
   });
 
   tearDown(() {
@@ -402,6 +424,10 @@ void main() {
         .setMockMethodCallHandler(_macWindowChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_screenChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_hotkeyChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_hotkeyEventChannel, null);
     if (tempDir.existsSync()) {
       tempDir.deleteSync(recursive: true);
     }
@@ -416,12 +442,21 @@ void main() {
     // (file reads, tray init, AppLocalizations.delegate.load, runApp) that
     // need the real event loop.  tester.runAsync escapes FakeAsync so those
     // futures can complete, then we pump to process widget frames.
+    // The extra runAsync gives post-frame callbacks (tray init, icon
+    // extraction) time to complete before we assert on their side effects.
     await tester.runAsync(() async {
       await HttpOverrides.runZoned(
         () => bootstrap(bindings, args),
         createHttpClient: (_) => _FailingHttpClient(),
       );
     });
+    await tester.pump();
+    await tester.pump();
+    // Allow deferred post-frame async work (tray init, icon extraction) to
+    // complete in real-time before widget assertions.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pump();
     await tester.pump();
   }

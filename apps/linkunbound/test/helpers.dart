@@ -107,6 +107,8 @@ makeFixtures({
   final rulesFile = File('${tempDir.path}/rules.json');
   final localeFile = File('${tempDir.path}/locale');
   final edgeWarningFile = File('${tempDir.path}/edge_warning_dismissed');
+  final hideTrayFile = File('${tempDir.path}/hide_tray');
+  final globalHotkeyFile = File('${tempDir.path}/global_hotkey');
   final iconsDir = Directory('${tempDir.path}/icons')..createSync();
 
   final browserService = BrowserService(
@@ -143,6 +145,8 @@ makeFixtures({
     iconsDirProvider.overrideWithValue(iconsDir),
     localeFileProvider.overrideWithValue(localeFile),
     edgeWarningFileProvider.overrideWithValue(edgeWarningFile),
+    hideTrayFileProvider.overrideWithValue(hideTrayFile),
+    globalHotkeyFileProvider.overrideWithValue(globalHotkeyFile),
     appDataDirProvider.overrideWithValue(tempDir),
     packageInfoProvider.overrideWith(
       (ref) async => PackageInfo(

@@ -27,4 +27,17 @@ class MacStartupService implements StartupService {
       return false;
     }
   }
+
+  /// Returns true when the process was launched by the macOS login item
+  /// mechanism (parent PID == launchd). Used to suppress the Settings window
+  /// on login-triggered starts.
+  Future<bool> get isLoginItemLaunch async {
+    try {
+      final result = await _channel.invokeMethod<bool>('isLoginItemLaunch');
+      return result ?? false;
+    } on PlatformException catch (e, st) {
+      _log.warning('isLoginItemLaunch check failed', e, st);
+      return false;
+    }
+  }
 }

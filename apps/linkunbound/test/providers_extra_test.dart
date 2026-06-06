@@ -6,6 +6,7 @@ import 'package:linkunbound_core/linkunbound_core.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:linkunbound/providers.dart';
+import 'helpers.dart';
 
 final class _CountingRegistrationService implements RegistrationService {
   _CountingRegistrationService({
@@ -181,6 +182,60 @@ void main() {
       expect(info.appName, 'LinkUnbound');
       expect(info.version, '9.9.9');
       expect(info.buildNumber, '42');
+    });
+  });
+
+  group('updateInfoProvider TTL', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('update_ttl_test_');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    test('override seam works — returns injected UpdateInfo', () async {
+      const fakeInfo = UpdateInfo(
+        latestVersion: '99.0.0',
+        releaseUrl: 'https://example.com',
+      );
+      final fixtures = makeFixtures(dir: tempDir, updateInfo: fakeInfo);
+      final container = ProviderContainer(overrides: fixtures.overrides);
+      addTearDown(container.dispose);
+
+      final result = await container.read(updateInfoProvider.future);
+      expect(result?.latestVersion, '99.0.0');
+    });
+
+    test('override seam works — returns null when no update', () async {
+      final fixtures = makeFixtures(dir: tempDir, updateInfo: null);
+      final container = ProviderContainer(overrides: fixtures.overrides);
+      addTearDown(container.dispose);
+
+      final result = await container.read(updateInfoProvider.future);
+      expect(result, isNull);
+    });
+
+    test('provider is invalidated and re-fetched after invalidateSelf', () async {
+      var callCount = 0;
+      final container = ProviderContainer(
+        overrides: [
+          updateInfoProvider.overrideWith((ref) async {
+            callCount++;
+            return null;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(updateInfoProvider.future);
+      expect(callCount, 1);
+
+      container.invalidate(updateInfoProvider);
+      await container.read(updateInfoProvider.future);
+      expect(callCount, 2);
     });
   });
 }

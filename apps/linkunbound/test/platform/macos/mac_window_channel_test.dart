@@ -47,4 +47,20 @@ void main() {
 
     expect(methodCalls, ['activate']);
   });
+
+  test('setRegular invokes native channel', () async {
+    final channel = MacWindowChannel();
+
+    await channel.setRegular();
+
+    expect(methodCalls, ['setRegular']);
+  });
+
+  test('setAccessory invokes native channel', () async {
+    final channel = MacWindowChannel();
+
+    await channel.setAccessory();
+
+    expect(methodCalls, ['setAccessory']);
+  });
 }

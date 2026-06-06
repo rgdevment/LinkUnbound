@@ -1,8 +1,42 @@
+import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
 import 'package:win32_registry/win32_registry.dart';
 
 final _log = Logger('WinBrowserDetector');
+
+/// Parses the executable path from a registry shell/open/command value.
+/// Handles quoted paths and paths where an intermediate directory name
+/// contains '.exe' (e.g. C:\some.exe.dir\chrome.exe --args).
+@visibleForTesting
+String extractExePath(String rawCommand) {
+  final trimmed = rawCommand.trim();
+  if (trimmed.isEmpty) return '';
+
+  if (trimmed.startsWith('"')) {
+    final end = trimmed.indexOf('"', 1);
+    if (end < 0) return trimmed.substring(1);
+    return trimmed.substring(1, end);
+  }
+
+  // Find the last '.exe' immediately followed by a non-path character so that
+  // intermediate directory components like "foo.exe.d\" are skipped.
+  final lower = trimmed.toLowerCase();
+  var searchFrom = lower.length;
+  while (true) {
+    final idx = lower.lastIndexOf('.exe', searchFrom - 1);
+    if (idx < 0) break;
+    final after = idx + 4;
+    if (after == lower.length || lower[after] == ' ' || lower[after] == '%') {
+      return trimmed.substring(0, after);
+    }
+    searchFrom = idx;
+  }
+
+  final spaceIndex = trimmed.indexOf(' ');
+  if (spaceIndex < 0) return trimmed;
+  return trimmed.substring(0, spaceIndex);
+}
 
 final class WinBrowserDetector implements BrowserDetector {
   @override
@@ -93,23 +127,7 @@ final class WinBrowserDetector implements BrowserDetector {
     }
   }
 
-  String _extractExePath(String rawCommand) {
-    final trimmed = rawCommand.trim();
-    if (trimmed.isEmpty) return '';
-
-    if (trimmed.startsWith('"')) {
-      final end = trimmed.indexOf('"', 1);
-      if (end < 0) return trimmed.substring(1);
-      return trimmed.substring(1, end);
-    }
-
-    final exeIndex = trimmed.toLowerCase().indexOf('.exe');
-    if (exeIndex > 0) return trimmed.substring(0, exeIndex + 4);
-
-    final spaceIndex = trimmed.indexOf(' ');
-    if (spaceIndex < 0) return trimmed;
-    return trimmed.substring(0, spaceIndex);
-  }
+  String _extractExePath(String rawCommand) => extractExePath(rawCommand);
 
   String _extractIconPath(String raw) {
     final trimmed = raw.trim();

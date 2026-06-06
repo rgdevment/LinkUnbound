@@ -16,18 +16,26 @@ final class BrowserService {
 
   List<Browser> _browsers = [];
 
-  List<Browser> get browsers => List.unmodifiable(_browsers);
+  // Rebuilt only when _browsers is replaced, avoiding per-access allocation.
+  List<Browser> _browsersView = const [];
+
+  List<Browser> get browsers => _browsersView;
+
+  void _setBrowsers(List<Browser> list) {
+    _browsers = list;
+    _browsersView = List.unmodifiable(list);
+  }
 
   Future<void> load() async {
     if (!configFile.existsSync()) {
-      _browsers = [];
+      _setBrowsers([]);
       return;
     }
     final content = await configFile.readAsString();
     final config = BrowserConfig.fromJson(
       jsonDecode(content) as Map<String, dynamic>,
     );
-    _browsers = config.browsers;
+    _setBrowsers(config.browsers);
   }
 
   Future<void> save() async {
@@ -59,7 +67,7 @@ final class BrowserService {
         .where((d) => !existingIds.contains(d.id))
         .toList();
 
-    _browsers = [...kept, ...newBrowsers];
+    _setBrowsers([...kept, ...newBrowsers]);
     if (newBrowsers.isNotEmpty || removedCount > 0) {
       _log.info(
         'Browsers updated: ${newBrowsers.length} added, '
@@ -70,29 +78,29 @@ final class BrowserService {
   }
 
   void addBrowser(Browser browser) {
-    _browsers = [..._browsers, browser];
+    _setBrowsers([..._browsers, browser]);
   }
 
   void removeBrowser(String id) {
-    _browsers = _browsers.where((b) => b.id != id).toList();
+    _setBrowsers(_browsers.where((b) => b.id != id).toList());
   }
 
   void updateBrowser(String id, Browser browser) {
-    _browsers = [
+    _setBrowsers([
       for (final b in _browsers)
         if (b.id == id) browser else b,
-    ];
+    ]);
   }
 
   void reorder(int oldIndex, int newIndex) {
     final list = [..._browsers];
     final item = list.removeAt(oldIndex);
     list.insert(newIndex.clamp(0, list.length), item);
-    _browsers = list;
+    _setBrowsers(list);
   }
 
   Future<void> reset() async {
-    _browsers = [];
+    _setBrowsers([]);
     if (configFile.existsSync()) {
       await configFile.delete();
     }

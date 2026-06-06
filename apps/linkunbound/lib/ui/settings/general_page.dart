@@ -6,6 +6,7 @@ import 'package:linkunbound_core/linkunbound_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../platform/hotkey_service.dart';
 import '../../providers.dart';
 import '../shared/widgets/browser_tile.dart';
 import '../shared/widgets/group_card.dart';
@@ -56,6 +57,8 @@ class GeneralPage extends ConsumerWidget {
         ],
         const SizedBox(height: 20),
         ..._buildStartupSection(context, ref, isStartupAsync),
+        const SizedBox(height: 20),
+        ..._buildAccessibilitySection(context, ref),
         const SizedBox(height: 20),
         ..._buildLanguageSection(context, ref),
       ],
@@ -244,6 +247,108 @@ class GeneralPage extends ConsumerWidget {
                   ref.invalidate(isStartupEnabledProvider);
                 }
               },
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildAccessibilitySection(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final hotkey = ref.watch(globalHotkeyProvider);
+    final hideTray = ref.watch(hideTrayProvider);
+    final hasHotkey = hotkey != null && hotkey.isNotEmpty;
+
+    final hideTraySubtitle = !hasHotkey
+        ? l10n.hideTraySubtitleNoHotkey
+        : Platform.isMacOS
+        ? l10n.hideTraySubtitleMac
+        : l10n.hideTraySubtitleWindows;
+
+    return [
+      SectionHeader(label: l10n.sectionAccessibility),
+      GroupCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.globalHotkeyLabel,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: hotkey,
+                    isDense: true,
+                    dropdownColor:
+                        Theme.of(context).colorScheme.surfaceBright,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text(l10n.globalHotkeyNone),
+                      ),
+                      for (final preset in HotkeyPreset.defaults)
+                        DropdownMenuItem<String?>(
+                          value: preset.serialized,
+                          child: Text(preset.label),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      ref
+                          .read(globalHotkeyProvider.notifier)
+                          .setHotkey(value);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.hideTrayLabel,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: hasHotkey
+                              ? null
+                              : Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.38),
+                        ),
+                      ),
+                      Text(
+                        hideTraySubtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  // Safeguard: hide-tray is disabled unless a hotkey is set,
+                  // preventing the app from becoming unreachable.
+                  value: hasHotkey && hideTray,
+                  onChanged: hasHotkey
+                      ? (enabled) {
+                          ref
+                              .read(hideTrayProvider.notifier)
+                              .setHideTray(enabled);
+                        }
+                      : null,
+                ),
+              ],
             ),
           ],
         ),

@@ -31,6 +31,9 @@ final class MacOsBindings implements PlatformBindings {
     required this.logFile,
     required this.localeFile,
     required this.edgeWarningFile,
+    required this.hideTrayFile,
+    required this.globalHotkeyFile,
+    required this.startsHidden,
     required MacInboundEvents inboundServer,
   }) : _inboundServer = inboundServer;
 
@@ -49,11 +52,16 @@ final class MacOsBindings implements PlatformBindings {
       // Best-effort; downstream services will surface specific failures.
     }
 
+    final startupService = MacStartupService();
+    // Suppress the Settings window when the app was launched by the login item
+    // mechanism (parent is launchd). Best-effort: defaults to false on failure.
+    final launchedByLoginItem = await startupService.isLoginItemLaunch;
+
     return MacOsBindings._(
       browserDetector: MacBrowserDetector(),
       iconExtractor: MacIconExtractor(),
       registrationService: MacRegistrationService(),
-      startupService: MacStartupService(),
+      startupService: startupService,
       launchService: MacLaunchService(),
       trayController: MacOsTrayController(),
       cursorLocator: const ScreenRetrieverCursorLocator(),
@@ -64,6 +72,9 @@ final class MacOsBindings implements PlatformBindings {
       logFile: File('${appDataDir.path}/navigate.log'),
       localeFile: File('${appDataDir.path}/locale'),
       edgeWarningFile: File('${appDataDir.path}/edge_warning_dismissed'),
+      hideTrayFile: File('${appDataDir.path}/hide_tray'),
+      globalHotkeyFile: File('${appDataDir.path}/global_hotkey'),
+      startsHidden: launchedByLoginItem,
       inboundServer: MacInboundEvents(),
     );
   }
@@ -96,8 +107,15 @@ final class MacOsBindings implements PlatformBindings {
   final File localeFile;
   @override
   final File edgeWarningFile;
+  @override
+  final File hideTrayFile;
+  @override
+  final File globalHotkeyFile;
 
   final MacInboundEvents _inboundServer;
+
+  @override
+  final bool startsHidden;
 
   @override
   InboundEvent? get initialEvent => null;
@@ -110,9 +128,6 @@ final class MacOsBindings implements PlatformBindings {
 
   @override
   String get trayIconPath => 'assets/LinkUnbound_tray_64.png';
-
-  @override
-  bool get startsHidden => false;
 
   @override
   Future<bool> tryDelegate(InboundEvent? event) async => false;

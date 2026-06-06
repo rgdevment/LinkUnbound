@@ -1,3 +1,4 @@
+import Cocoa
 import FlutterMacOS
 import ServiceManagement
 
@@ -31,6 +32,8 @@ final class StartupChannel {
         }
       case "isEnabled":
         result(SMAppService.mainApp.status == .enabled)
+      case "isLoginItemLaunch":
+        result((NSApp.delegate as? AppDelegate)?.launchedAsLoginItem ?? false)
       default:
         result(FlutterMethodNotImplemented)
       }

@@ -3,12 +3,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
 import 'package:logging/logging.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'l10n/app_localizations.dart';
+import 'platform/cursor_locator.dart' show findDisplayForPoint;
+import 'platform/hotkey_service.dart';
 import 'platform/local_file_url.dart';
 import 'platform/macos/mac_window_channel.dart';
 import 'platform/platform_bindings.dart';
@@ -39,7 +42,27 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     _log.severe('claim() crashed', e, st);
     claimed = false;
   }
-  if (!claimed) exit(0);
+
+  if (!claimed) {
+    // claim() returned false means the mutex was held; the resident's pipe is
+    // now guaranteed to be listening (claim waits for readiness). Retry once.
+    try {
+      if (await bindings.tryDelegate(bindings.initialEvent)) {
+        exit(0);
+      }
+    } on Object catch (e, st) {
+      _log.warning('Post-claim delegation retry failed', e, st);
+    }
+    // Delegation failed again: the resident may have exited in between. Make
+    // one last attempt to become the resident before dropping the event.
+    try {
+      claimed = await bindings.claim();
+    } on Object catch (e, st) {
+      _log.severe('Second claim() attempt crashed', e, st);
+      claimed = false;
+    }
+    if (!claimed) exit(0);
+  }
 
   final browserService = BrowserService(
     configFile: bindings.browsersFile,
@@ -62,16 +85,12 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
 
   if (isFirstBoot) {
     try {
-      await _firstBoot(
+      await _firstBootEarlyPhase(
         browserService: browserService,
-        iconExtractor: bindings.iconExtractor,
         iconsDir: bindings.iconsDir,
-        registrationService: bindings.registrationService,
-        executablePath: bindings.executablePath,
-        skipRegistration: isRunningInMsix(),
       );
     } on Object catch (e, st) {
-      _log.severe('First boot failed (non-fatal)', e, st);
+      _log.severe('First boot early phase failed (non-fatal)', e, st);
     }
   }
 
@@ -111,6 +130,10 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     _log.severe('Window manager init failed', e, st);
   }
 
+  // Created here so that the exitApp callback can call hotkeyService.dispose()
+  // without needing to update the override after the container is built.
+  final hotkeyService = HotkeyService();
+
   final container = ProviderContainer(
     overrides: [
       browserServiceProvider.overrideWithValue(browserService),
@@ -124,8 +147,15 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
       launchServiceProvider.overrideWithValue(bindings.launchService),
       localeFileProvider.overrideWithValue(bindings.localeFile),
       edgeWarningFileProvider.overrideWithValue(bindings.edgeWarningFile),
+      hideTrayFileProvider.overrideWithValue(bindings.hideTrayFile),
+      globalHotkeyFileProvider.overrideWithValue(bindings.globalHotkeyFile),
       appDataDirProvider.overrideWithValue(bindings.appDataDir),
       exitAppProvider.overrideWithValue(() async {
+        try {
+          await hotkeyService.dispose();
+        } on Object catch (e, st) {
+          _log.warning('Hotkey dispose failed during exit', e, st);
+        }
         try {
           await bindings.release();
         } on Object catch (e, st) {
@@ -135,8 +165,6 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
       }),
     ],
   );
-
-  container.read(updateInfoProvider);
 
   final macWindow = Platform.isMacOS ? MacWindowChannel() : null;
 
@@ -148,6 +176,9 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     }
   });
 
+  // Subscribe to inbound events before runApp so no event is dropped while
+  // Flutter initialises. The ready signal fires only when this listener
+  // attaches (see MacInboundEvents._signalReadyOnce).
   bindings.inboundEvents.listen(
     (event) {
       try {
@@ -166,20 +197,80 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     },
   );
 
-  try {
-    await _initTray(bindings, container);
-  } on Object catch (e, st) {
-    _log.severe('Tray init failed (non-fatal)', e, st);
-  }
-
   runApp(
     UncontrolledProviderScope(container: container, child: const NavigateApp()),
   );
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (bindings.startsHidden) return;
     if (container.read(appStateProvider).mode != AppMode.hidden) return;
     container.read(appStateProvider.notifier).showSettings();
+  });
+
+  // Tray init, icon extraction and update check are off the critical path:
+  // defer them so the first frame renders (and the ready signal fires) before
+  // doing IO or network.
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    final hideTray = container.read(hideTrayProvider);
+    if (!hideTray) {
+      try {
+        await _initTray(bindings, container);
+      } on Object catch (e, st) {
+        _log.severe('Tray init failed (non-fatal)', e, st);
+      }
+    }
+
+    hotkeyService.setCallback(
+      () => container.read(appStateProvider.notifier).showSettings(),
+    );
+
+    final savedHotkey = container.read(globalHotkeyProvider);
+    try {
+      await hotKeyManager.unregisterAll();
+      await hotkeyService.register(savedHotkey);
+    } on Object catch (e, st) {
+      _log.warning('Hotkey registration failed (non-fatal)', e, st);
+    }
+
+    // Re-register hotkey when the setting changes and manage tray visibility.
+    container.listen<String?>(globalHotkeyProvider, (prev, next) async {
+      try {
+        await hotkeyService.register(next);
+      } on Object catch (e, st) {
+        _log.warning('Hotkey re-registration failed', e, st);
+      }
+    });
+
+    container.listen<bool>(hideTrayProvider, (prev, next) async {
+      try {
+        if (next) {
+          await bindings.trayController.dispose();
+        } else {
+          await _initTray(bindings, container);
+        }
+      } on Object catch (e, st) {
+        _log.warning('Tray visibility toggle failed', e, st);
+      }
+    });
+
+    if (isFirstBoot) {
+      try {
+        await _firstBootLatePhase(
+          browserService: browserService,
+          iconExtractor: bindings.iconExtractor,
+          iconsDir: bindings.iconsDir,
+          registrationService: bindings.registrationService,
+          executablePath: bindings.executablePath,
+          skipRegistration: isRunningInMsix(),
+          container: container,
+        );
+      } on Object catch (e, st) {
+        _log.severe('First boot late phase failed (non-fatal)', e, st);
+      }
+    }
+
+    // The update check is driven lazily by the first ref.watch(updateInfoProvider)
+    // in the UI (picker footer). No explicit pre-fetch needed here.
   });
 }
 
@@ -201,9 +292,18 @@ Future<void> _applyAppMode(
   switch (next.mode) {
     case AppMode.hidden:
       await windowManager.hide();
+      // Settings mode cleared skipTaskbar; restore it so the hidden window
+      // never lingers in the Windows taskbar.
+      await windowManager.setSkipTaskbar(true);
+      await macWindow?.setAccessory();
     case AppMode.settings:
+      await macWindow?.setRegular();
       await macWindow?.setSettingsMode();
-      await windowManager.setSize(const Size(640, 700));
+      // On macOS the settings window has a native title bar (~28px) that eats
+      // into the frame; compensate so the content keeps its designed height.
+      await windowManager.setSize(
+        Size(640, Platform.isMacOS ? 728 : 700),
+      );
       await windowManager.center();
       await windowManager.setSkipTaskbar(false);
       await windowManager.setAlwaysOnTop(false);
@@ -211,32 +311,55 @@ Future<void> _applyAppMode(
       await windowManager.focus();
       await macWindow?.activate();
     case AppMode.picker:
-      await macWindow?.setPickerMode();
-      final browsers = container.read(browsersProvider);
-      final winSize = PickerLayout.windowSize(browsers.length);
-      final (cursorX, cursorY) = await bindings.cursorLocator.cursorPosition();
-      final (screenW, screenH) = await bindings.cursorLocator.screenSize();
-      final x = (cursorX - winSize.width / 2).clamp(
-        8.0,
-        screenW - winSize.width - 8,
-      );
-      final y = (cursorY + 16).clamp(8.0, screenH - winSize.height - 8);
-      await windowManager.setSize(winSize);
-      await windowManager.setPosition(Offset(x, y));
-      await windowManager.setSkipTaskbar(true);
-      await windowManager.setAlwaysOnTop(true);
-      await windowManager.show();
-      await macWindow?.activate();
+      try {
+        await macWindow?.setPickerMode();
+        final browsers = container.read(browsersProvider);
+        final winSize = PickerLayout.windowSize(browsers.length);
+        // Fetch cursor and display list concurrently, then hit-test locally so
+        // both reads observe the same cursor position.
+        final (cursorResult, rects) = await (
+          bindings.cursorLocator.cursorPosition(),
+          bindings.cursorLocator.displayRects(),
+        ).wait;
+        final (cursorX, cursorY) = cursorResult;
+        final (originX, originY, displayW, displayH) = findDisplayForPoint(
+          cursorX,
+          cursorY,
+          rects,
+        );
+        final x = (cursorX - winSize.width / 2).clamp(
+          originX + 8.0,
+          originX + displayW - winSize.width - 8,
+        );
+        final y = (cursorY + 16).clamp(
+          originY + 8.0,
+          originY + displayH - winSize.height - 8,
+        );
+        await windowManager.setSize(winSize);
+        // Position before show() to prevent the ghost-flash at the old position.
+        await windowManager.setPosition(Offset(x, y));
+        await windowManager.setSkipTaskbar(true);
+        await windowManager.setAlwaysOnTop(true);
+        await windowManager.show();
+        if (!Platform.isMacOS) await windowManager.focus();
+        await macWindow?.activate();
+      } on Object catch (e, st) {
+        _log.warning('Picker transition failed, hiding to safe state', e, st);
+        try {
+          await windowManager.hide();
+        } on Object catch (hideErr) {
+          _log.warning('hide() after picker failure also failed: $hideErr');
+        }
+        rethrow;
+      }
   }
 }
 
-Future<void> _firstBoot({
+/// Runs before runApp: scan detected browsers and create the icons directory
+/// so browsersProvider has data for the first frame.
+Future<void> _firstBootEarlyPhase({
   required BrowserService browserService,
-  required IconExtractor iconExtractor,
   required Directory iconsDir,
-  required RegistrationService registrationService,
-  required String executablePath,
-  bool skipRegistration = false,
 }) async {
   await browserService.scanAndMerge();
   try {
@@ -244,15 +367,35 @@ Future<void> _firstBoot({
   } on Object catch (e, st) {
     _log.warning('Could not create icons directory', e, st);
   }
-  for (final browser in browserService.browsers) {
-    try {
-      final outputPath =
-          '${iconsDir.path}${Platform.pathSeparator}${browser.id}.png';
-      await iconExtractor.extractIcon(browser.executablePath, outputPath);
-    } on Object catch (e) {
-      _log.warning('Icon extraction failed for ${browser.name}: $e');
-    }
-  }
+}
+
+/// Runs after runApp: extract icons concurrently and register the app.
+/// The picker renders with fallback icons until extraction completes.
+Future<void> _firstBootLatePhase({
+  required BrowserService browserService,
+  required IconExtractor iconExtractor,
+  required Directory iconsDir,
+  required RegistrationService registrationService,
+  required String executablePath,
+  required ProviderContainer container,
+  bool skipRegistration = false,
+}) async {
+  // Extract all icons concurrently; swallow per-item errors as before.
+  await Future.wait(
+    browserService.browsers.map((browser) async {
+      try {
+        final outputPath =
+            '${iconsDir.path}${Platform.pathSeparator}${browser.id}.png';
+        await iconExtractor.extractIcon(browser.executablePath, outputPath);
+      } on Object catch (e) {
+        _log.warning('Icon extraction failed for ${browser.name}: $e');
+      }
+    }),
+  );
+
+  // Invalidate browsersProvider so the picker picks up freshly extracted icons.
+  container.invalidate(browsersProvider);
+
   if (skipRegistration) {
     _log.info('Skipping browser registration in MSIX context');
   } else {

@@ -120,5 +120,13 @@
   "errorStartupToggle": "Could not change startup setting",
   "errorUnregister": "Could not unregister LinkUnbound",
   "errorExportDiagnostics": "Could not export diagnostics",
-  "errorResetConfig": "Could not reset configuration"
+  "errorResetConfig": "Could not reset configuration",
+
+  "sectionAccessibility": "ACCESSIBILITY",
+  "globalHotkeyLabel": "Global shortcut to open settings",
+  "globalHotkeyNone": "None (disabled)",
+  "hideTrayLabel": "Hide tray / menu bar icon",
+  "hideTraySubtitleNoHotkey": "Requires a global shortcut to be configured first",
+  "hideTraySubtitleMac": "You can also reach the app by relaunching it from Applications",
+  "hideTraySubtitleWindows": "You can reach the app via its global shortcut"
 }

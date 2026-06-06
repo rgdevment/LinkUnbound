@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
@@ -46,6 +44,11 @@ class _SettingsViewState extends ConsumerState<SettingsView>
     ref.invalidate(defaultAssociationsProvider);
   }
 
+  Future<void> _hideWindow() async {
+    await windowManager.hide();
+    ref.read(appStateProvider.notifier).hide();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -61,16 +64,7 @@ class _SettingsViewState extends ConsumerState<SettingsView>
             l10n.tabMaintenance,
             l10n.tabAbout,
           ],
-          onClose: () async {
-            await windowManager.hide();
-            ref.read(appStateProvider.notifier).hide();
-          },
-          onExit: Platform.isMacOS
-              ? () async {
-                  await windowManager.hide();
-                  ref.read(appStateProvider.notifier).hide();
-                }
-              : null,
+          onClose: _hideWindow,
         ),
         Divider(
           height: 0.5,

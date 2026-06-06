@@ -10,6 +10,7 @@ import 'package:linkunbound/app.dart';
 import 'package:linkunbound/providers.dart';
 import 'package:linkunbound/ui/picker/picker_window.dart';
 import 'package:linkunbound/ui/settings/settings_window.dart';
+import 'package:linkunbound/ui/shared/widgets/title_bar.dart';
 
 import 'helpers.dart';
 
@@ -178,7 +179,7 @@ void main() {
     expect(find.text('Version 2.0.0 available'), findsOneWidget);
 
     windowSpy.clear();
-    await tester.drag(find.text('LinkUnbound'), const Offset(20, 0));
+    await tester.drag(find.byType(TitleBar), const Offset(20, 0));
     await tester.pump();
     expect(windowSpy.methods, contains('startDragging'));
   });

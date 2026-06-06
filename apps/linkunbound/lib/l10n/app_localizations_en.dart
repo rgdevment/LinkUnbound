@@ -271,4 +271,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errorResetConfig => 'Could not reset configuration';
+
+  @override
+  String get sectionAccessibility => 'ACCESSIBILITY';
+
+  @override
+  String get globalHotkeyLabel => 'Global shortcut to open settings';
+
+  @override
+  String get globalHotkeyNone => 'None (disabled)';
+
+  @override
+  String get hideTrayLabel => 'Hide tray / menu bar icon';
+
+  @override
+  String get hideTraySubtitleNoHotkey =>
+      'Requires a global shortcut to be configured first';
+
+  @override
+  String get hideTraySubtitleMac =>
+      'You can also reach the app by relaunching it from Applications';
+
+  @override
+  String get hideTraySubtitleWindows =>
+      'You can reach the app via its global shortcut';
 }

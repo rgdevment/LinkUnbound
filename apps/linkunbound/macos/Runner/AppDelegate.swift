@@ -15,6 +15,22 @@ class AppDelegate: FlutterAppDelegate {
   private var preBootUrls: [String] = []
   private var preBootShouldShowSettings = false
 
+  /// True when macOS launched the app as a login item. Read by StartupChannel
+  /// so Dart can start silently in the menu bar instead of opening Settings.
+  private(set) var launchedAsLoginItem = false
+
+  override func applicationDidFinishLaunching(_ notification: Notification) {
+    // The launch Apple Event carries keyAELaunchedAsLogInItem only for login
+    // item launches; Finder/Spotlight/open(1) launches do not set it. A parent
+    // PID check cannot distinguish these: launchd is the parent in all cases.
+    let event = NSAppleEventManager.shared().currentAppleEvent
+    launchedAsLoginItem =
+      event?.eventID == AEEventID(kAEOpenApplication)
+      && event?.paramDescriptor(forKeyword: AEKeyword(keyAEPropData))?.enumCodeValue
+        == OSType(keyAELaunchedAsLogInItem)
+    super.applicationDidFinishLaunching(notification)
+  }
+
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     // LinkUnbound stays alive in the menu bar (LSUIElement); closing the
     // settings window must not quit the app.

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
 import 'package:logging/logging.dart';
 
@@ -35,6 +37,8 @@ final class WindowsBindings implements PlatformBindings {
     required this.logFile,
     required this.localeFile,
     required this.edgeWarningFile,
+    required this.hideTrayFile,
+    required this.globalHotkeyFile,
     required this.initialEvent,
     required this.startsHidden,
     required WinInstance instance,
@@ -48,8 +52,6 @@ final class WindowsBindings implements PlatformBindings {
         Platform.environment['APPDATA'] ??
         '${Platform.environment['USERPROFILE'] ?? Directory.systemTemp.path}\\AppData\\Local';
     final appDataDir = Directory('$baseDir\\LinkUnbound');
-
-    _migrateFromRoamingIfNeeded(appDataDir);
 
     try {
       await appDataDir.create(recursive: true);
@@ -72,6 +74,8 @@ final class WindowsBindings implements PlatformBindings {
       logFile: File('${appDataDir.path}\\navigate.log'),
       localeFile: File('${appDataDir.path}\\locale'),
       edgeWarningFile: File('${appDataDir.path}\\edge_warning_dismissed'),
+      hideTrayFile: File('${appDataDir.path}\\hide_tray'),
+      globalHotkeyFile: File('${appDataDir.path}\\global_hotkey'),
       initialEvent: _parseInitialEvent(args),
       startsHidden: args.contains('--background'),
       instance: WinInstance(),
@@ -108,6 +112,10 @@ final class WindowsBindings implements PlatformBindings {
   @override
   final File edgeWarningFile;
   @override
+  final File hideTrayFile;
+  @override
+  final File globalHotkeyFile;
+  @override
   final InboundEvent? initialEvent;
   @override
   final bool startsHidden;
@@ -141,7 +149,14 @@ final class WindowsBindings implements PlatformBindings {
     final client = WinPipeClient();
     final payload = event ?? const ShowSettingsEvent();
     WinInstance.allowForeground();
-    return client.send(payload);
+    // Retry with backoff: resident may have the mutex but the pipe may not be
+    // bound yet (TOCTOU window between acquire() and the isolate calling
+    // ConnectNamedPipe).
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (await client.send(payload)) return true;
+      if (attempt < 2) await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return false;
   }
 
   @override
@@ -152,8 +167,23 @@ final class WindowsBindings implements PlatformBindings {
     }
     try {
       await _pipeServer.start();
+      // Wait until the pipe server is actually listening before returning so
+      // that a concurrent tryDelegate() from an incoming process can connect
+      // without hitting the TOCTOU race window.
+      await _pipeServer.ready.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => _log.warning('Pipe server readiness timeout'),
+      );
     } on Exception catch (e) {
       _log.warning('Pipe server failed to start: $e');
+    }
+    // Run in a worker isolate: cross-volume migration copies files and would
+    // block the UI thread.
+    final newPath = appDataDir.path;
+    try {
+      await Isolate.run(() => _migrateFromRoamingIfNeeded(Directory(newPath)));
+    } on Object catch (e) {
+      _log.warning('App data migration failed: $e');
     }
     return true;
   }
@@ -181,13 +211,45 @@ final class WindowsBindings implements PlatformBindings {
     final roamingBase = Platform.environment['APPDATA'];
     if (roamingBase == null || roamingBase.isEmpty) return;
     final oldDir = Directory('$roamingBase\\LinkUnbound');
-    if (!oldDir.existsSync()) return;
-    if (newDir.existsSync()) return;
+    migrateDirIfNeeded(oldDir, newDir);
+  }
+}
+
+/// Moves [oldDir] to [newDir] atomically when possible; falls back to
+/// recursive copy + delete when they are on different volumes.
+@visibleForTesting
+void migrateDirIfNeeded(Directory oldDir, Directory newDir) {
+  if (!oldDir.existsSync()) return;
+  if (newDir.existsSync()) return;
+  try {
+    oldDir.renameSync(newDir.path);
+    _log.info('Migrated app data from ${oldDir.path} to ${newDir.path}');
+  } on FileSystemException {
+    // rename fails across volumes; fall back to recursive copy then delete.
+    _log.info(
+      'Cross-volume migration: copying ${oldDir.path} to ${newDir.path}',
+    );
     try {
-      oldDir.renameSync(newDir.path);
-      _log.info('Migrated app data from ${oldDir.path} to ${newDir.path}');
+      copyDirRecursive(oldDir, newDir);
+      oldDir.deleteSync(recursive: true);
+      _log.info('Cross-volume migration complete');
     } on FileSystemException catch (e) {
-      _log.warning('Could not migrate app data from ${oldDir.path}: $e');
+      _log.warning('Cross-volume migration failed: $e');
+      // Leave oldDir intact so the user doesn't lose data.
+    }
+  }
+}
+
+@visibleForTesting
+void copyDirRecursive(Directory src, Directory dst) {
+  dst.createSync(recursive: true);
+  for (final entity in src.listSync()) {
+    final name = entity.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
+    final target = '${dst.path}${Platform.pathSeparator}$name';
+    if (entity is File) {
+      entity.copySync(target);
+    } else if (entity is Directory) {
+      copyDirRecursive(entity, Directory(target));
     }
   }
 }

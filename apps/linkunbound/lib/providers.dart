@@ -35,6 +35,10 @@ final localeFileProvider = Provider<File>((_) => throw _mustOverride());
 
 final edgeWarningFileProvider = Provider<File>((_) => throw _mustOverride());
 
+final hideTrayFileProvider = Provider<File>((_) => throw _mustOverride());
+
+final globalHotkeyFileProvider = Provider<File>((_) => throw _mustOverride());
+
 final appDataDirProvider = Provider<Directory>((_) => throw _mustOverride());
 
 /// Async callback that releases platform resources and terminates the process.
@@ -195,7 +199,78 @@ final packageInfoProvider = FutureProvider<PackageInfo>((ref) {
 
 const _updateService = UpdateService(owner: 'rgdevment', repo: 'LinkUnbound');
 
+/// Timestamp of the last completed update check. Module-level so it survives
+/// provider invalidations within the same process lifetime.
+DateTime? _lastUpdateFetch;
+
+/// Cached result of the last check, returned within the TTL window to avoid
+/// redundant network calls.
+UpdateInfo? _cachedUpdateInfo;
+
+/// After this duration the cached result is stale and the next provider
+/// evaluation re-fetches from GitHub.
+const _updateTtl = Duration(hours: 6);
+
 final updateInfoProvider = FutureProvider<UpdateInfo?>((ref) async {
+  final now = DateTime.now();
+  final lastFetch = _lastUpdateFetch;
+
+  // Within the TTL window, return the cached result without a network call.
+  if (lastFetch != null && now.difference(lastFetch) < _updateTtl) {
+    return _cachedUpdateInfo;
+  }
+
+  _lastUpdateFetch = now;
   final info = await ref.watch(packageInfoProvider.future);
-  return _updateService.checkForUpdate(info.version);
+  _cachedUpdateInfo = await _updateService.checkForUpdate(info.version);
+  return _cachedUpdateInfo;
 });
+
+final hideTrayProvider = NotifierProvider<HideTrayNotifier, bool>(
+  HideTrayNotifier.new,
+);
+
+final class HideTrayNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    final file = ref.read(hideTrayFileProvider);
+    return file.existsSync();
+  }
+
+  void setHideTray(bool value) {
+    final file = ref.read(hideTrayFileProvider);
+    if (value) {
+      file.writeAsStringSync('1');
+    } else {
+      if (file.existsSync()) file.deleteSync();
+    }
+    state = value;
+  }
+}
+
+/// Serialised as a single line `modifiers+keyLabel`, e.g. "meta+alt+space".
+/// Returns null when no hotkey is configured (file absent or blank).
+final globalHotkeyProvider = NotifierProvider<GlobalHotkeyNotifier, String?>(
+  GlobalHotkeyNotifier.new,
+);
+
+final class GlobalHotkeyNotifier extends Notifier<String?> {
+  @override
+  String? build() {
+    final file = ref.read(globalHotkeyFileProvider);
+    if (!file.existsSync()) return null;
+    final raw = file.readAsStringSync().trim();
+    return raw.isEmpty ? null : raw;
+  }
+
+  void setHotkey(String? serialized) {
+    final file = ref.read(globalHotkeyFileProvider);
+    if (serialized == null || serialized.isEmpty) {
+      if (file.existsSync()) file.deleteSync();
+      state = null;
+    } else {
+      file.writeAsStringSync(serialized);
+      state = serialized;
+    }
+  }
+}

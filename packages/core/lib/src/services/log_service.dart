@@ -7,6 +7,9 @@ const _maxLogSize = 2 * 1024 * 1024; // 2 MB
 
 StreamSubscription<LogRecord>? _logSubscription;
 
+// Kept open for the session lifetime to avoid reopening the fd on every record.
+RandomAccessFile? _logRaf;
+
 final _urlPattern = RegExp(r'https?://[^\s,\]\)]+', caseSensitive: false);
 final _filePathPattern = RegExp(
   r'file:///[a-zA-Z]:[\\/][^\s,\]\)]*|[a-zA-Z]:\\[^\s,\]\)]*',
@@ -14,6 +17,8 @@ final _filePathPattern = RegExp(
 );
 
 String redactUrls(String text) {
+  // Skip regex passes when no URL/path sentinel character is present.
+  if (!text.contains('://') && !text.contains(':\\')) return text;
   var result = text.replaceAllMapped(_urlPattern, (match) {
     final url = match.group(0)!;
     final uri = Uri.tryParse(url);
@@ -31,10 +36,14 @@ String redactUrls(String text) {
 void initLogging(File logFile, {Level fileLevel = Level.INFO}) {
   _logSubscription?.cancel();
   _logSubscription = null;
+  // Close the previous file handle before (re)opening to avoid fd leaks.
+  _logRaf?.closeSync();
+  _logRaf = null;
 
   try {
     logFile.parent.createSync(recursive: true);
     _rotateIfNeeded(logFile);
+    _logRaf = logFile.openSync(mode: FileMode.append);
   } on FileSystemException {
     // Best-effort: file logging will be disabled below if writes fail.
   }
@@ -62,10 +71,13 @@ void initLogging(File logFile, {Level fileLevel = Level.INFO}) {
         useStderr = false;
       }
     }
-    try {
-      logFile.writeAsStringSync('$line\n', mode: FileMode.append);
-    } on FileSystemException {
-      // Log directory may have been removed (e.g. during tests). Drop silently.
+    final raf = _logRaf;
+    if (raf != null) {
+      try {
+        raf.writeStringSync('$line\n');
+      } on FileSystemException {
+        // Log directory may have been removed (e.g. during tests). Drop silently.
+      }
     }
   });
 }

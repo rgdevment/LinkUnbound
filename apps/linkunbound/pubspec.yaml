@@ -32,6 +32,7 @@ dependencies:
   archive: ^3.6.1
   image: ^4.3.0
   win32: ^5.15.0
+  hotkey_manager: ^0.2.3
 
 dev_dependencies:
   flutter_test:

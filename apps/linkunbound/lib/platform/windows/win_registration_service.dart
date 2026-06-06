@@ -9,13 +9,17 @@ import 'win_package_context.dart';
 
 final _log = Logger('WinRegistrationService');
 
-/// Returns true when [progId] is a known LinkUnbound ProgId based on exact
-/// match or name containment alone — without reading the registry.
+// ProgIds written by _writeProgId / _writeCapabilities in the desktop install,
+// stored lower-cased for O(1) case-insensitive lookup.
+const _ownedProgIds = {'linkunboundurl', 'linkunboundedgeproto'};
+
+/// Returns true when [progId] exactly matches one of the ProgIds the app
+/// writes — case-insensitive. Substring match is intentionally avoided to
+/// prevent false positives from third-party ProgIds that embed "linkunbound".
 @visibleForTesting
 bool progIdMatchesLinkUnbound(String? progId) {
-  if (progId == null) return false;
-  if (progId == 'LinkUnboundURL') return true;
-  return progId.toLowerCase().contains('linkunbound');
+  if (progId == null || progId.isEmpty) return false;
+  return _ownedProgIds.contains(progId.toLowerCase());
 }
 
 /// Keys checked in the per-user registry when resolving default associations.
@@ -41,6 +45,11 @@ typedef _SHChangeNotifyDart =
 
 const _shcneAssocChanged = 0x08000000;
 const _shcnfIdList = 0x0000;
+
+// Loaded once per module; shell32 is always present on Windows.
+final _SHChangeNotifyDart _shChangeNotify = DynamicLibrary.open(
+  'shell32.dll',
+).lookupFunction<_SHChangeNotifyNative, _SHChangeNotifyDart>('SHChangeNotify');
 
 final class WinRegistrationService implements RegistrationService {
   @override
@@ -403,11 +412,6 @@ final class WinRegistrationService implements RegistrationService {
   }
 
   void _notifyShell() {
-    final shell32 = DynamicLibrary.open('shell32.dll');
-    final shChangeNotify = shell32
-        .lookupFunction<_SHChangeNotifyNative, _SHChangeNotifyDart>(
-          'SHChangeNotify',
-        );
-    shChangeNotify(_shcneAssocChanged, _shcnfIdList, nullptr, nullptr);
+    _shChangeNotify(_shcneAssocChanged, _shcnfIdList, nullptr, nullptr);
   }
 }

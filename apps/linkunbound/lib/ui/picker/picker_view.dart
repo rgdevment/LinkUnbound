@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
+import 'package:logging/logging.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../providers.dart';
+
+final _log = Logger('PickerView');
 
 class PickerView extends ConsumerStatefulWidget {
   const PickerView({required this.url, super.key});
@@ -58,14 +62,19 @@ class _PickerViewState extends ConsumerState<PickerView> {
           _UrlHeader(url: widget.url, domain: domain, isLocalFile: isLocalFile),
           Divider(height: 0.5, color: colors.outline.withAlpha(50)),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              itemCount: browsers.length,
-              itemBuilder: (context, index) => _BrowserRow(
-                browser: browsers[index],
-                iconPath: '${iconsDir.path}/${browsers[index].id}.png',
-                shortcut: index < 9 ? '${index + 1}' : null,
-                onTap: () => _launch(browsers[index], iconsDir),
+            // Scrollbar appears when browsers > maxVisible (6); shortcuts 1-9
+            // still work for off-screen rows — the scrollbar signals that.
+            child: Scrollbar(
+              thumbVisibility: browsers.length > 6,
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: browsers.length,
+                itemBuilder: (context, index) => _BrowserRow(
+                  browser: browsers[index],
+                  iconPath: '${iconsDir.path}/${browsers[index].id}.png',
+                  shortcut: index < 9 ? '${index + 1}' : null,
+                  onTap: () => _launch(browsers[index], iconsDir),
+                ),
               ),
             ),
           ),
@@ -88,7 +97,11 @@ class _PickerViewState extends ConsumerState<PickerView> {
       final uri = Uri.tryParse(widget.url);
       if (uri != null && uri.host.isNotEmpty) {
         ruleService.addRule(Rule(domain: uri.host, browserId: browser.id));
-        ruleService.save();
+        unawaited(
+          ruleService.save().catchError((Object e, StackTrace st) {
+            _log.warning('Failed to persist always-open rule', e, st);
+          }),
+        );
         ref.invalidate(rulesProvider);
       }
     }
@@ -187,6 +200,31 @@ String _redactedFilePath(String fileUrl) {
   return '…/${segs[segs.length - 2]}/${segs.last}';
 }
 
+/// Renders the browser icon using Image.file + errorBuilder so existsSync
+/// is never called in build — async image loading handles missing files.
+class _BrowserIcon extends StatelessWidget {
+  const _BrowserIcon({required this.iconPath, required this.fallbackColor});
+
+  final String iconPath;
+  final Color fallbackColor;
+
+  @override
+  Widget build(BuildContext context) {
+    if (iconPath.isEmpty) {
+      return Icon(Icons.public, size: 28, color: fallbackColor);
+    }
+    // cacheWidth=56 (2× render size) covers 2× DPI; the codec downsamples
+    // on decode instead of at paint time, saving texture memory.
+    return Image.file(
+      File(iconPath),
+      cacheWidth: 56,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (context, error, stack) =>
+          Icon(Icons.public, size: 28, color: fallbackColor),
+    );
+  }
+}
+
 class _BrowserRow extends StatefulWidget {
   const _BrowserRow({
     required this.browser,
@@ -210,7 +248,6 @@ class _BrowserRowState extends State<_BrowserRow> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final iconFile = File(widget.iconPath);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -226,13 +263,10 @@ class _BrowserRowState extends State<_BrowserRow> {
               SizedBox(
                 width: 28,
                 height: 28,
-                child: iconFile.existsSync()
-                    ? Image.file(iconFile, filterQuality: FilterQuality.medium)
-                    : Icon(
-                        Icons.public,
-                        size: 28,
-                        color: colors.onSurfaceVariant,
-                      ),
+                child: _BrowserIcon(
+                  iconPath: widget.iconPath,
+                  fallbackColor: colors.onSurfaceVariant,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(

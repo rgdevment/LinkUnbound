@@ -277,4 +277,28 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get errorResetConfig => 'No se pudo restablecer la configuración';
+
+  @override
+  String get sectionAccessibility => 'ACCESIBILIDAD';
+
+  @override
+  String get globalHotkeyLabel => 'Atajo global para abrir la configuración';
+
+  @override
+  String get globalHotkeyNone => 'Ninguno (desactivado)';
+
+  @override
+  String get hideTrayLabel => 'Ocultar icono de bandeja / barra de menú';
+
+  @override
+  String get hideTraySubtitleNoHotkey =>
+      'Requiere configurar primero un atajo global';
+
+  @override
+  String get hideTraySubtitleMac =>
+      'También puedes abrir la app relanzándola desde Aplicaciones';
+
+  @override
+  String get hideTraySubtitleWindows =>
+      'Puedes abrir la app mediante su atajo global';
 }

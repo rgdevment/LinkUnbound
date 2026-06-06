@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
 
@@ -18,7 +20,6 @@ const _pipeReadmodeByte = 0x00000000;
 const _pipeWait = 0x00000000;
 const _pipeUnlimitedInstances = 255;
 const _openExisting = 3;
-const _genericRead = 0x80000000;
 const _genericWrite = 0x40000000;
 const _invalidHandleValue = -1;
 
@@ -145,13 +146,47 @@ final class _NativePipe {
 }
 
 final class WinPipeServer implements InboundEventServer {
+  // Buffer events until the first listener attaches so a URL arriving between
+  // claim() and bootstrap's stream.listen() is never silently dropped.
   final _controller = StreamController<InboundEvent>.broadcast();
+
+  // _pendingBuffer holds events that arrive before the first listener.
+  final _pendingBuffer = <InboundEvent>[];
+  bool _hasListener = false;
+
+  // Completes when the isolate signals it has created (and is blocking on)
+  // its first named pipe — used by claim() to avoid the TOCTOU window.
+  final _ready = Completer<void>();
+
   Isolate? _isolate;
   ReceivePort? _receivePort;
   int _pipeHandle = 0;
 
   @override
-  Stream<InboundEvent> get events => _controller.stream;
+  Stream<InboundEvent> get events {
+    if (!_hasListener) {
+      _hasListener = true;
+      // Flush buffered events in order once a subscriber attaches.
+      Future.microtask(() {
+        for (final e in _pendingBuffer) {
+          _controller.add(e);
+        }
+        _pendingBuffer.clear();
+      });
+    }
+    return _controller.stream;
+  }
+
+  Future<void> get ready => _ready.future;
+
+  @visibleForTesting
+  void pushEvent(InboundEvent event) {
+    if (_hasListener) {
+      _controller.add(event);
+    } else {
+      _pendingBuffer.add(event);
+    }
+  }
 
   @override
   Future<void> start() async {
@@ -162,12 +197,19 @@ final class WinPipeServer implements InboundEventServer {
       if (data is String) {
         try {
           final event = InboundEvent.decode(data);
-          _controller.add(event);
+          if (_hasListener) {
+            _controller.add(event);
+          } else {
+            _pendingBuffer.add(event);
+          }
         } on FormatException catch (e) {
           _log.warning('Invalid inbound event: $e');
         }
       } else if (data is int) {
+        // The isolate reports each pipe handle when it starts listening and 0
+        // right after closing it, so stop() never cancels a stale handle.
         _pipeHandle = data;
+        if (data != 0 && !_ready.isCompleted) _ready.complete();
       }
     });
 
@@ -205,8 +247,14 @@ final class WinPipeServer implements InboundEventServer {
       );
       calloc.free(pipeName);
 
-      if (handle == _invalidHandleValue) continue;
+      if (handle == _invalidHandleValue) {
+        // Back off before retrying to avoid spinning the CPU on persistent errors.
+        sleep(const Duration(milliseconds: 50));
+        continue;
+      }
 
+      // Signal the main isolate: pipe is created and we're about to block on
+      // ConnectNamedPipe — this unblocks claim()'s readiness await.
       sendPort.send(handle);
 
       final connected = _NativePipe.connectNamedPipe(handle, nullptr);
@@ -214,6 +262,9 @@ final class WinPipeServer implements InboundEventServer {
         final lastError = _getLastError();
         if (lastError != 535) {
           _NativePipe.closeHandle(handle);
+          sendPort.send(0);
+          // Back off before retrying to avoid spinning the CPU on persistent errors.
+          sleep(const Duration(milliseconds: 50));
           continue;
         }
       }
@@ -242,16 +293,17 @@ final class WinPipeServer implements InboundEventServer {
         calloc.free(bytesRead);
         _NativePipe.disconnectNamedPipe(handle);
         _NativePipe.closeHandle(handle);
+        sendPort.send(0);
       }
     }
   }
 
-  static int _getLastError() {
+  // Cached at class level so each iteration of _serverLoop doesn't reopen the DLL.
+  static final _getLastError = () {
     final kernel32 = DynamicLibrary.open('kernel32.dll');
-    final getLastError = kernel32
+    return kernel32
         .lookupFunction<Uint32 Function(), int Function()>('GetLastError');
-    return getLastError();
-  }
+  }();
 }
 
 final class WinPipeClient implements InboundEventClient {
@@ -260,7 +312,8 @@ final class WinPipeClient implements InboundEventClient {
     final pipeName = _pipeName.toNativeUtf16();
     final handle = _NativePipe.createFile(
       pipeName,
-      _genericRead | _genericWrite,
+      // Write-only: the client pushes one event and never reads a response.
+      _genericWrite,
       0,
       nullptr,
       _openExisting,

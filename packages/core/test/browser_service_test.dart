@@ -329,6 +329,79 @@ void main() {
     });
   });
 
+  group('unmodifiable view cache', () {
+    test('browsers getter returns same instance when nothing mutated', () {
+      final service = BrowserService(
+        configFile: configFile,
+        browserDetector: _FakeDetector([]),
+      );
+      service.addBrowser(
+        const Browser(
+          id: 'a',
+          name: 'A',
+          executablePath: 'a.exe',
+          iconPath: 'a.png',
+        ),
+      );
+      final first = service.browsers;
+      final second = service.browsers;
+      expect(identical(first, second), isTrue);
+    });
+
+    test('browsers getter returns new instance after mutation', () {
+      final service = BrowserService(
+        configFile: configFile,
+        browserDetector: _FakeDetector([]),
+      );
+      service.addBrowser(
+        const Browser(
+          id: 'a',
+          name: 'A',
+          executablePath: 'a.exe',
+          iconPath: 'a.png',
+        ),
+      );
+      final before = service.browsers;
+      service.addBrowser(
+        const Browser(
+          id: 'b',
+          name: 'B',
+          executablePath: 'b.exe',
+          iconPath: 'b.png',
+        ),
+      );
+      final after = service.browsers;
+      expect(identical(before, after), isFalse);
+      expect(after, hasLength(2));
+    });
+
+    test('browsers list is unmodifiable', () {
+      final service = BrowserService(
+        configFile: configFile,
+        browserDetector: _FakeDetector([]),
+      );
+      service.addBrowser(
+        const Browser(
+          id: 'a',
+          name: 'A',
+          executablePath: 'a.exe',
+          iconPath: 'a.png',
+        ),
+      );
+      expect(
+        () => service.browsers.add(
+          const Browser(
+            id: 'x',
+            name: 'X',
+            executablePath: 'x.exe',
+            iconPath: 'x.png',
+          ),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+  });
+
   group('CRUD', () {
     test('addBrowser and removeBrowser', () {
       final service = BrowserService(

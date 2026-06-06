@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -24,9 +25,18 @@ final class WinIconExtractor implements IconExtractor {
       _log.warning('Could not create icon output dir: $e');
     }
 
-    final png = _extractViaWin32(executablePath);
-    if (png == null) {
+    // Win32 GDI calls (PrivateExtractIcons, GetDIBits) must run on the calling
+    // thread; pixel conversion + PNG encode are pure-Dart so offload them.
+    final rawPixels = _extractRawPixels(executablePath);
+    if (rawPixels == null) {
       throw IconExtractionException(executablePath, 'Win32 extraction failed');
+    }
+
+    final png = await Isolate.run(
+      () => _encodeRgbaToPng(rawPixels.$1, rawPixels.$2, rawPixels.$3),
+    );
+    if (png == null) {
+      throw IconExtractionException(executablePath, 'PNG encode failed');
     }
 
     try {
@@ -40,7 +50,9 @@ final class WinIconExtractor implements IconExtractor {
   }
 }
 
-Uint8List? _extractViaWin32(String executablePath) {
+/// Returns (rgba bytes, width, height) extracted via Win32, or null on failure.
+/// All GDI handles are released before this function returns.
+(Uint8List, int, int)? _extractRawPixels(String executablePath) {
   final pathPtr = executablePath.toNativeUtf16();
   final hIconPtr = calloc<IntPtr>();
   final iconIdPtr = calloc<Uint32>();
@@ -63,7 +75,7 @@ Uint8List? _extractViaWin32(String executablePath) {
 
     final hIcon = hIconPtr.value;
     try {
-      return _iconToPng(hIcon);
+      return _iconToRgba(hIcon);
     } finally {
       DestroyIcon(hIcon);
     }
@@ -77,7 +89,8 @@ Uint8List? _extractViaWin32(String executablePath) {
   }
 }
 
-Uint8List? _iconToPng(int hIcon) {
+/// Extracts RGBA pixels from a GDI icon handle. All handles freed on return.
+(Uint8List, int, int)? _iconToRgba(int hIcon) {
   final iconInfo = calloc<ICONINFO>();
   try {
     if (GetIconInfo(hIcon, iconInfo) == 0) {
@@ -118,7 +131,9 @@ Uint8List? _iconToPng(int hIcon) {
   }
 }
 
-Uint8List? _readBitmapPixels(int hBitmap, int width, int height) {
+/// Reads BGRA pixels via GDI, converts to RGBA, and returns the raw bytes
+/// with dimensions. PNG encoding is left to the caller to run off-thread.
+(Uint8List, int, int)? _readBitmapPixels(int hBitmap, int width, int height) {
   final hdc = GetDC(NULL);
   if (hdc == 0) return null;
 
@@ -151,6 +166,7 @@ Uint8List? _readBitmapPixels(int hBitmap, int width, int height) {
 
     final bgra = Uint8List.fromList(pixels.asTypedList(pixelBytes));
 
+    // Convert BGRA → RGBA in-place.
     var anyAlpha = false;
     for (var i = 0; i < bgra.length; i += 4) {
       final b = bgra[i];
@@ -169,24 +185,30 @@ Uint8List? _readBitmapPixels(int hBitmap, int width, int height) {
       }
     }
 
-    final image = img.Image.fromBytes(
-      width: width,
-      height: height,
-      bytes: bgra.buffer,
-      numChannels: 4,
-      order: img.ChannelOrder.rgba,
-    );
-
-    final target = image.width > _iconSize || image.height > _iconSize
-        ? img.copyResize(image, width: _iconSize, height: _iconSize)
-        : image;
-
-    return Uint8List.fromList(img.encodePng(target));
+    return (bgra, width, height);
   } finally {
     calloc.free(pixels);
     calloc.free(bmi);
     ReleaseDC(NULL, hdc);
   }
+}
+
+/// Pure function: resize if needed and encode as PNG.
+/// Runs in a separate isolate to keep the main thread free.
+Uint8List? _encodeRgbaToPng(Uint8List rgba, int width, int height) {
+  final image = img.Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: rgba.buffer,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
+
+  final target = image.width > _iconSize || image.height > _iconSize
+      ? img.copyResize(image, width: _iconSize, height: _iconSize)
+      : image;
+
+  return Uint8List.fromList(img.encodePng(target));
 }
 
 final class IconExtractionException implements Exception {

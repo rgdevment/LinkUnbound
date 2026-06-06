@@ -583,6 +583,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not reset configuration'**
   String get errorResetConfig;
+
+  /// No description provided for @sectionAccessibility.
+  ///
+  /// In en, this message translates to:
+  /// **'ACCESSIBILITY'**
+  String get sectionAccessibility;
+
+  /// No description provided for @globalHotkeyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Global shortcut to open settings'**
+  String get globalHotkeyLabel;
+
+  /// No description provided for @globalHotkeyNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None (disabled)'**
+  String get globalHotkeyNone;
+
+  /// No description provided for @hideTrayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide tray / menu bar icon'**
+  String get hideTrayLabel;
+
+  /// No description provided for @hideTraySubtitleNoHotkey.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires a global shortcut to be configured first'**
+  String get hideTraySubtitleNoHotkey;
+
+  /// No description provided for @hideTraySubtitleMac.
+  ///
+  /// In en, this message translates to:
+  /// **'You can also reach the app by relaunching it from Applications'**
+  String get hideTraySubtitleMac;
+
+  /// No description provided for @hideTraySubtitleWindows.
+  ///
+  /// In en, this message translates to:
+  /// **'You can reach the app via its global shortcut'**
+  String get hideTraySubtitleWindows;
 }
 
 class _AppLocalizationsDelegate

@@ -152,15 +152,20 @@ void main() {
     });
   });
 
+  // Close button is Windows-only; macOS uses native traffic lights.
   group('SettingsView — close button', () {
-    testWidgets('tapping close button hides the window', (tester) async {
-      final f = makeFixtures(dir: tempDir);
-      await tester.pumpWidget(
-        buildTestApp(const SettingsView(), overrides: f.overrides),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pumpAndSettle();
-    });
+    testWidgets(
+      'tapping close button hides the window',
+      skip: Platform.isMacOS,
+      (tester) async {
+        final f = makeFixtures(dir: tempDir);
+        await tester.pumpWidget(
+          buildTestApp(const SettingsView(), overrides: f.overrides),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+      },
+    );
   });
 }

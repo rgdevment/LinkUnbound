@@ -242,6 +242,9 @@ void main() {
 
   group('GeneralPage — language section', () {
     testWidgets('shows LANGUAGE section header', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       final f = makeFixtures(dir: tempDir);
       await tester.pumpWidget(
         buildTestApp(const GeneralPage(), overrides: f.overrides),
@@ -751,7 +754,9 @@ void main() {
     });
   });
 
-  group('GeneralPage — associations row labels', () {
+  // The extended association list only renders on Windows (macOS shows
+  // http/https only), so these assertions are Windows-specific.
+  group('GeneralPage — associations row labels', skip: !Platform.isWindows, () {
     testWidgets('shows XHTML and SVG labels in associations row', (
       tester,
     ) async {

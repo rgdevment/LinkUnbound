@@ -12,14 +12,22 @@ void main() {
       expect(progIdMatchesLinkUnbound('LinkUnboundURL'), isTrue);
     });
 
-    test(
-      'returns true when ProgId contains linkunbound (case-insensitive)',
-      () {
-        expect(progIdMatchesLinkUnbound('somethingLinkunboundXYZ'), isTrue);
-        expect(progIdMatchesLinkUnbound('LINKUNBOUND'), isTrue);
-        expect(progIdMatchesLinkUnbound('linkunbound'), isTrue);
-      },
-    );
+    test('returns true case-insensitively for owned ProgIds', () {
+      expect(progIdMatchesLinkUnbound('linkunboundurl'), isTrue);
+      expect(progIdMatchesLinkUnbound('LINKUNBOUNDURL'), isTrue);
+    });
+
+    test('returns true for EdgeProto ProgId', () {
+      expect(progIdMatchesLinkUnbound('LinkUnboundEdgeProto'), isTrue);
+      expect(progIdMatchesLinkUnbound('linkunboundedgeproto'), isTrue);
+    });
+
+    test('returns false for third-party ProgId that embeds our name', () {
+      // Substring match must NOT trigger a false positive.
+      expect(progIdMatchesLinkUnbound('somethingLinkunboundXYZ'), isFalse);
+      expect(progIdMatchesLinkUnbound('LINKUNBOUND'), isFalse);
+      expect(progIdMatchesLinkUnbound('linkunbound'), isFalse);
+    });
 
     test('returns false for an unrelated ProgId', () {
       expect(progIdMatchesLinkUnbound('ChromeHTML'), isFalse);

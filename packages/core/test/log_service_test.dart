@@ -134,6 +134,27 @@ void main() {
     });
   });
 
+  group('redactUrls short-circuit', () {
+    test('returns text unchanged when no :// or :\\ present', () {
+      const plain = 'browser opened at port 8080 with args --headless';
+      expect(redactUrls(plain), same(plain));
+    });
+
+    test('does not short-circuit when :// is present', () {
+      expect(
+        redactUrls('https://secret.com/path'),
+        isNot(contains('secret.com')),
+      );
+    });
+
+    test('does not short-circuit when :\\ is present', () {
+      expect(
+        redactUrls(r'C:\Users\Bob\file.pdf'),
+        isNot(contains('Bob')),
+      );
+    });
+  });
+
   group('redactUrls', () {
     test('replaces http URL with redacted placeholder', () {
       expect(

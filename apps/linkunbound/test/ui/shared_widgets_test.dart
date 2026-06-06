@@ -291,57 +291,77 @@ void main() {
       expect(find.text('Beta'), findsOneWidget);
     });
 
-    testWidgets('close button calls onClose when tapped', (tester) async {
-      var called = false;
-      await tester.pumpWidget(
-        buildTestApp(
-          _TitleBarHost(onClose: () => called = true),
-          overrides: [],
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.close));
-      expect(called, isTrue);
-    });
-
-    testWidgets('close button turns red on hover and reverts on exit', (
-      tester,
-    ) async {
+    testWidgets('does not show Exit button on any platform', (tester) async {
       await tester.pumpWidget(
         buildTestApp(_TitleBarHost(onClose: () {}), overrides: []),
       );
       await tester.pumpAndSettle();
-
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-
-      await gesture.moveTo(tester.getCenter(find.byIcon(Icons.close)));
-      await tester.pumpAndSettle();
-
-      final containers = tester.widgetList<Container>(
-        find.ancestor(
-          of: find.byIcon(Icons.close),
-          matching: find.byType(Container),
-        ),
-      );
-      expect(containers.any((c) => c.color == const Color(0xFFE81123)), isTrue);
-
-      // Move away — triggers onExit, reverts hover state
-      await gesture.moveTo(Offset.zero);
-      await tester.pumpAndSettle();
-
-      final containersAfter = tester.widgetList<Container>(
-        find.ancestor(
-          of: find.byIcon(Icons.close),
-          matching: find.byType(Container),
-        ),
-      );
-      expect(
-        containersAfter.any((c) => c.color == const Color(0xFFE81123)),
-        isFalse,
-      );
+      expect(find.byIcon(Icons.power_settings_new), findsNothing);
     });
+
+    // Close button is Windows-only; macOS uses native traffic lights.
+    testWidgets(
+      'close button calls onClose when tapped',
+      skip: Platform.isMacOS,
+      (tester) async {
+        var called = false;
+        await tester.pumpWidget(
+          buildTestApp(
+            _TitleBarHost(onClose: () => called = true),
+            overrides: [],
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.close));
+        expect(called, isTrue);
+      },
+    );
+
+    testWidgets(
+      'close button turns red on hover and reverts on exit',
+      skip: Platform.isMacOS,
+      (tester) async {
+        await tester.pumpWidget(
+          buildTestApp(_TitleBarHost(onClose: () {}), overrides: []),
+        );
+        await tester.pumpAndSettle();
+
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.addPointer(location: Offset.zero);
+        addTearDown(gesture.removePointer);
+
+        await gesture.moveTo(tester.getCenter(find.byIcon(Icons.close)));
+        await tester.pumpAndSettle();
+
+        final containers = tester.widgetList<Container>(
+          find.ancestor(
+            of: find.byIcon(Icons.close),
+            matching: find.byType(Container),
+          ),
+        );
+        expect(
+          containers.any((c) => c.color == const Color(0xFFE81123)),
+          isTrue,
+        );
+
+        // Move away — triggers onExit, reverts hover state
+        await gesture.moveTo(Offset.zero);
+        await tester.pumpAndSettle();
+
+        final containersAfter = tester.widgetList<Container>(
+          find.ancestor(
+            of: find.byIcon(Icons.close),
+            matching: find.byType(Container),
+          ),
+        );
+        expect(
+          containersAfter.any((c) => c.color == const Color(0xFFE81123)),
+          isFalse,
+        );
+      },
+    );
   });
 }
 

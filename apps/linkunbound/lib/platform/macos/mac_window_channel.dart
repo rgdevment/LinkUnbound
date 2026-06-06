@@ -12,6 +12,10 @@ class MacWindowChannel {
 
   Future<void> activate() => _invoke('activate');
 
+  Future<void> setRegular() => _invoke('setRegular');
+
+  Future<void> setAccessory() => _invoke('setAccessory');
+
   Future<void> _invoke(String method) async {
     try {
       await _channel.invokeMethod<void>(method);

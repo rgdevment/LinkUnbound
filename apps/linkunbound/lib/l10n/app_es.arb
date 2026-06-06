@@ -98,5 +98,13 @@
   "errorStartupToggle": "No se pudo cambiar la configuración de inicio",
   "errorUnregister": "No se pudo desregistrar LinkUnbound",
   "errorExportDiagnostics": "No se pudo exportar el diagnóstico",
-  "errorResetConfig": "No se pudo restablecer la configuración"
+  "errorResetConfig": "No se pudo restablecer la configuración",
+
+  "sectionAccessibility": "ACCESIBILIDAD",
+  "globalHotkeyLabel": "Atajo global para abrir la configuración",
+  "globalHotkeyNone": "Ninguno (desactivado)",
+  "hideTrayLabel": "Ocultar icono de bandeja / barra de menú",
+  "hideTraySubtitleNoHotkey": "Requiere configurar primero un atajo global",
+  "hideTraySubtitleMac": "También puedes abrir la app relanzándola desde Aplicaciones",
+  "hideTraySubtitleWindows": "Puedes abrir la app mediante su atajo global"
 }

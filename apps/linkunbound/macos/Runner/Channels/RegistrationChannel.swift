@@ -9,7 +9,7 @@ final class RegistrationChannel {
 
   private let channel: FlutterMethodChannel
   private let ownBundleId: String
-  private let safariBundleId = "com.apple.safari"
+  private let safariBundleId = "com.apple.Safari"
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name: Self.channelName, binaryMessenger: messenger)
