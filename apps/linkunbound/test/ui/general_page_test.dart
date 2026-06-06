@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
 
+import 'package:linkunbound/platform/hotkey_service.dart';
 import 'package:linkunbound/ui/settings/general_page.dart';
 
 import '../helpers.dart';
@@ -467,7 +468,11 @@ void main() {
           .widgetList<TextField>(find.byType(TextField))
           .firstWhere((f) => f.decoration?.labelText == 'Name');
       await tester.enterText(find.byWidget(nameField), 'Chrome Renamed');
-      await tester.tap(find.text('Save'));
+      // runAsync lets the async _saveBrowser → _updateBrowserIcon chain complete.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Save'));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
       await tester.pumpAndSettle();
       expect(find.text('Chrome Renamed'), findsOneWidget);
     });
@@ -703,6 +708,10 @@ void main() {
       await tester.tap(find.byIcon(Icons.more_vert));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Duplicate'));
+      // Multiple pumps give the async _duplicateBrowser Future time to complete.
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
       await tester.pumpAndSettle();
       // Both the original and the copy are visible.
       expect(find.text('Google Chrome'), findsWidgets);
@@ -750,6 +759,231 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Set default'));
       await tester.pumpAndSettle();
+      expect(find.byType(GeneralPage), findsOneWidget);
+    });
+  });
+
+  group('GeneralPage — hotkey dropdown', () {
+    testWidgets('selecting a preset hotkey persists to file', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      final dropdown = find.byType(DropdownButton<String?>);
+      await tester.ensureVisible(dropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+
+      // Tap the first preset (index 0 in the platform list).
+      final firstPreset = find.text(HotkeyPreset.defaults.first.label).last;
+      await tester.tap(firstPreset);
+      await tester.pumpAndSettle();
+
+      final file = File('${tempDir.path}/global_hotkey');
+      expect(file.existsSync(), isTrue);
+      expect(file.readAsStringSync(), HotkeyPreset.defaults.first.serialized);
+    });
+
+    testWidgets('selecting None hotkey clears the file', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      // Pre-write a hotkey so the initial value is non-null.
+      File(
+        '${tempDir.path}/global_hotkey',
+      ).writeAsStringSync(HotkeyPreset.defaults.first.serialized);
+
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      final dropdown = find.byType(DropdownButton<String?>);
+      await tester.ensureVisible(dropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('None (disabled)').last);
+      await tester.pumpAndSettle();
+
+      final file = File('${tempDir.path}/global_hotkey');
+      // After clearing, the file is either gone or empty.
+      expect(!file.existsSync() || file.readAsStringSync().isEmpty, isTrue);
+    });
+
+    testWidgets(
+      'dropdown shows extra item when saved hotkey is not in platform presets',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        // Write a serialized string that exists on no platform preset list.
+        const alienHotkey = 'ctrl+shift+z';
+        File('${tempDir.path}/global_hotkey').writeAsStringSync(alienHotkey);
+
+        final f = makeFixtures(dir: tempDir);
+        await tester.pumpWidget(
+          buildTestApp(const GeneralPage(), overrides: f.overrides),
+        );
+        await tester.pumpAndSettle();
+
+        // The current value shown in the collapsed dropdown is the alien key.
+        expect(find.text(alienHotkey), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'hide tray subtitle shows Windows text when hotkey is set on non-mac',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        File(
+          '${tempDir.path}/global_hotkey',
+        ).writeAsStringSync(HotkeyPreset.defaults.first.serialized);
+
+        final f = makeFixtures(dir: tempDir);
+        await tester.pumpWidget(
+          buildTestApp(const GeneralPage(), overrides: f.overrides),
+        );
+        await tester.pumpAndSettle();
+
+        // On Windows the subtitle says "You can reach the app via its global shortcut".
+        if (!Platform.isMacOS) {
+          expect(find.textContaining('global shortcut'), findsWidgets);
+        }
+      },
+    );
+
+    testWidgets('hide tray switch can be toggled when hotkey is set', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      File(
+        '${tempDir.path}/global_hotkey',
+      ).writeAsStringSync(HotkeyPreset.defaults.first.serialized);
+
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+      final hideTraySwitch = switches.last;
+      expect(hideTraySwitch.onChanged, isNotNull);
+
+      // Tap the last switch (hide-tray) and confirm it doesn't crash.
+      await tester.tap(find.byWidget(hideTraySwitch));
+      await tester.pumpAndSettle();
+      expect(find.byType(GeneralPage), findsOneWidget);
+    });
+  });
+
+  group('GeneralPage — _updateBrowserIcon with custom icon path', () {
+    testWidgets('adding browser always calls icon extractor after save', (
+      tester,
+    ) async {
+      final recording = _RecordingIconExtractor();
+      final f = makeFixtures(dir: tempDir, iconExtractor: recording);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Add custom browser'));
+      await tester.pumpAndSettle();
+
+      // Fill required fields only — iconPath left empty so exePath is used.
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Name'),
+        'My Browser',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Executable path'),
+        '/usr/bin/mybrowser',
+      );
+
+      // Tap Add and let all async futures settle via runAsync.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Add'));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      // Extractor is called even with no custom icon (uses exePath as source).
+      expect(recording.extractCalls, greaterThanOrEqualTo(1));
+    });
+
+    testWidgets('duplicating browser without icon file does not crash', (
+      tester,
+    ) async {
+      // chrome has no icon file on disk → sourceIcon.existsSync() == false
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Duplicate'));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Google Chrome'), findsWidgets);
+    });
+
+    testWidgets('adding browser with icon extraction failure does not crash', (
+      tester,
+    ) async {
+      final f = makeFixtures(
+        dir: tempDir,
+        iconExtractor: _ThrowingIconExtractor(),
+      );
+      await tester.pumpWidget(
+        buildTestApp(const GeneralPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Add custom browser'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Name'),
+        'Bad Browser',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Executable path'),
+        '/usr/bin/bad',
+      );
+
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Add'));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+
+      // Page still renders after best-effort icon extraction failure.
       expect(find.byType(GeneralPage), findsOneWidget);
     });
   });
@@ -864,4 +1098,14 @@ final class _ThrowingIconExtractor implements IconExtractor {
   @override
   Future<String> extractIcon(String executablePath, String outputPath) =>
       Future.error(Exception('icon extraction failed'));
+}
+
+final class _RecordingIconExtractor implements IconExtractor {
+  int extractCalls = 0;
+
+  @override
+  Future<String> extractIcon(String executablePath, String outputPath) async {
+    extractCalls++;
+    return outputPath;
+  }
 }

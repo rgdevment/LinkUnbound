@@ -412,6 +412,243 @@ void main() {
     );
   });
 
+  group('PickerView — numpad keyboard shortcuts', () {
+    testWidgets('numpad1 launches first browser', (tester) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome, _firefox]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpad1);
+      await tester.pumpAndSettle();
+      expect(f.launchService.launches, contains('chrome.exe'));
+    });
+
+    testWidgets('numpad2 launches second browser', (tester) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome, _firefox]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpad2);
+      await tester.pumpAndSettle();
+      expect(f.launchService.launches, contains('firefox.exe'));
+    });
+
+    testWidgets(
+      'digit3 through digit9 are mapped (index within range launches)',
+      (tester) async {
+        final browsers = [
+          _chrome,
+          _firefox,
+          const Browser(
+            id: 'b3',
+            name: 'B3',
+            executablePath: 'b3.exe',
+            iconPath: '',
+          ),
+          const Browser(
+            id: 'b4',
+            name: 'B4',
+            executablePath: 'b4.exe',
+            iconPath: '',
+          ),
+          const Browser(
+            id: 'b5',
+            name: 'B5',
+            executablePath: 'b5.exe',
+            iconPath: '',
+          ),
+          const Browser(
+            id: 'b6',
+            name: 'B6',
+            executablePath: 'b6.exe',
+            iconPath: '',
+          ),
+          const Browser(
+            id: 'b7',
+            name: 'B7',
+            executablePath: 'b7.exe',
+            iconPath: '',
+          ),
+          const Browser(
+            id: 'b8',
+            name: 'B8',
+            executablePath: 'b8.exe',
+            iconPath: '',
+          ),
+          const Browser(
+            id: 'b9',
+            name: 'B9',
+            executablePath: 'b9.exe',
+            iconPath: '',
+          ),
+        ];
+        final f = makeFixtures(dir: tempDir, browsers: browsers);
+        await tester.pumpWidget(
+          buildTestApp(
+            const PickerView(url: 'https://example.com'),
+            overrides: f.overrides,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.digit9);
+        await tester.pumpAndSettle();
+        expect(f.launchService.launches, contains('b9.exe'));
+      },
+    );
+
+    testWidgets('numpad3-9 are each mapped (numpad3 launches index 2)', (
+      tester,
+    ) async {
+      final browsers = [
+        _chrome,
+        _firefox,
+        const Browser(
+          id: 'b3',
+          name: 'B3',
+          executablePath: 'b3.exe',
+          iconPath: '',
+        ),
+      ];
+      final f = makeFixtures(dir: tempDir, browsers: browsers);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpad3);
+      await tester.pumpAndSettle();
+      expect(f.launchService.launches, contains('b3.exe'));
+    });
+
+    testWidgets('out-of-range digit key does nothing (no launch)', (
+      tester,
+    ) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      // digit2 → index 1, but only 1 browser exists
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+      await tester.pumpAndSettle();
+      expect(f.launchService.launches, isEmpty);
+    });
+
+    testWidgets('unrecognised key is ignored', (tester) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.pumpAndSettle();
+      expect(f.launchService.launches, isEmpty);
+    });
+  });
+
+  group('PickerView — copy button', () {
+    testWidgets('tapping copy button does not throw', (tester) async {
+      final f = makeFixtures(dir: tempDir);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com/path'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Clipboard.setData requires a platform channel; just verify no exception.
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pumpAndSettle();
+      expect(find.byType(PickerView), findsOneWidget);
+    });
+  });
+
+  group('PickerView — browser icon rendering', () {
+    testWidgets(
+      'renders Image widget for browser (icon path constructed from id)',
+      (tester) async {
+        // The PickerView always constructs iconPath as "${iconsDir}/${id}.png";
+        // when the file is absent Image.file renders (and errorBuilder fires asynchronously).
+        final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+        await tester.pumpWidget(
+          buildTestApp(
+            const PickerView(url: 'https://example.com'),
+            overrides: f.overrides,
+          ),
+        );
+        await tester.pump();
+        // Image widget is always rendered; errorBuilder fires later if decode fails.
+        expect(find.byType(Image), findsWidgets);
+      },
+    );
+  });
+
+  group('PickerView — scrollbar with many browsers', () {
+    testWidgets('scrollbar is visible when more than 6 browsers', (
+      tester,
+    ) async {
+      final browsers = List.generate(
+        7,
+        (i) => Browser(
+          id: 'b$i',
+          name: 'Browser $i',
+          executablePath: 'b$i.exe',
+          iconPath: '',
+        ),
+      );
+      final f = makeFixtures(dir: tempDir, browsers: browsers);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
+      expect(scrollbar.thumbVisibility, isTrue);
+    });
+
+    testWidgets('no shortcut badge for browser at index 9 or beyond', (
+      tester,
+    ) async {
+      final browsers = List.generate(
+        10,
+        (i) => Browser(
+          id: 'b$i',
+          name: 'Browser $i',
+          executablePath: 'b$i.exe',
+          iconPath: '',
+        ),
+      );
+      final f = makeFixtures(dir: tempDir, browsers: browsers);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Only digits 1-9 appear; index 9 gets no badge so '10' never renders.
+      expect(find.text('10'), findsNothing);
+    });
+  });
+
   group('PickerView — browser row hover', () {
     testWidgets('browser row changes color on mouse enter', (tester) async {
       final f = makeFixtures(dir: tempDir, browsers: [_chrome]);

@@ -140,6 +140,56 @@ void main() {
     });
   });
 
+  group('RulesPage — _browserName fallback', () {
+    testWidgets('shows browserId when browser not found in list', (
+      tester,
+    ) async {
+      // Rule references 'unknown-browser' but the browser list has no such id.
+      final f = makeFixtures(
+        dir: tempDir,
+        browsers: [_chrome],
+        rules: [
+          const Rule(domain: 'example.com', browserId: 'unknown-browser'),
+        ],
+      );
+      await tester.pumpWidget(
+        buildTestApp(const RulesPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+      // Domain row is visible even when browser name resolution falls back.
+      expect(find.textContaining('example.com'), findsWidgets);
+    });
+  });
+
+  group('RulesPage — onBrowserChanged', () {
+    testWidgets('changing browser in dropdown updates the rule', (
+      tester,
+    ) async {
+      final f = makeFixtures(
+        dir: tempDir,
+        browsers: [_chrome, _firefox],
+        rules: [const Rule(domain: 'github.com', browserId: 'chrome')],
+      );
+      await tester.pumpWidget(
+        buildTestApp(const RulesPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the browser dropdown for the first rule.
+      final dropdown = find.byType(DropdownButton<String>);
+      expect(dropdown, findsOneWidget);
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+
+      // Select Firefox.
+      await tester.tap(find.text('Firefox').last);
+      await tester.pumpAndSettle();
+
+      final updated = f.ruleService.rules.first;
+      expect(updated.browserId, 'firefox');
+    });
+  });
+
   group('RulesPage interactions', () {
     testWidgets('delete button shows confirmation dialog', (tester) async {
       final f = makeFixtures(

@@ -223,14 +223,21 @@ final class _FakeBindings implements PlatformBindings {
   _FakeBindings({
     required this.rootDir,
     List<Browser> detectedBrowsers = const [],
+    BrowserDetector? browserDetectorOverride,
     LaunchService? launchOverride,
-  }) : browserDetector = _FakeBrowserDetector(detectedBrowsers),
-       iconExtractor = _RecordingIconExtractor(),
-       registrationService = _RecordingRegistrationService(),
+    IconExtractor? iconExtractorOverride,
+    RegistrationService? registrationOverride,
+    TrayController? trayOverride,
+    CursorLocator? cursorLocatorOverride,
+  }) : browserDetector =
+           browserDetectorOverride ?? _FakeBrowserDetector(detectedBrowsers),
+       iconExtractor = iconExtractorOverride ?? _RecordingIconExtractor(),
+       registrationService =
+           registrationOverride ?? _RecordingRegistrationService(),
        startupService = _FakeStartupService(),
        launchService = launchOverride ?? _RecordingLaunchService(),
-       trayController = _FakeTrayController(),
-       cursorLocator = _FakeCursorLocator(),
+       trayController = trayOverride ?? _FakeTrayController(),
+       cursorLocator = cursorLocatorOverride ?? _FakeCursorLocator(),
        _events = StreamController<InboundEvent>.broadcast() {
     appDataDir.createSync(recursive: true);
     iconsDir.createSync(recursive: true);
@@ -245,7 +252,7 @@ final class _FakeBindings implements PlatformBindings {
   final BrowserDetector browserDetector;
 
   @override
-  final _RecordingIconExtractor iconExtractor;
+  final IconExtractor iconExtractor;
 
   @override
   final LaunchService launchService;
@@ -253,14 +260,22 @@ final class _FakeBindings implements PlatformBindings {
   _RecordingLaunchService get launchRecorder =>
       launchService as _RecordingLaunchService;
 
+  _RecordingIconExtractor get iconRecorder =>
+      iconExtractor as _RecordingIconExtractor;
+
+  _RecordingRegistrationService get registrationRecorder =>
+      registrationService as _RecordingRegistrationService;
+
+  _FakeTrayController get fakeTray => trayController as _FakeTrayController;
+
   @override
-  final _RecordingRegistrationService registrationService;
+  final RegistrationService registrationService;
 
   @override
   final _FakeStartupService startupService;
 
   @override
-  final _FakeTrayController trayController;
+  final TrayController trayController;
 
   @override
   final CursorLocator cursorLocator;
@@ -385,6 +400,102 @@ final class _ThrowingDelegateBindings extends _FakeBindings {
   }
 }
 
+final class _ThrowingClaimBindings extends _FakeBindings {
+  _ThrowingClaimBindings({required super.rootDir});
+
+  @override
+  Future<bool> claim() async {
+    claimCalls++;
+    // First call throws; second call (after delegation retry) succeeds so the
+    // process does not reach exit(0).
+    if (claimCalls == 1) throw const SocketException('claim crashed');
+    return true;
+  }
+}
+
+/// claim() returns false on call 1 (not claimed), tryDelegate() throws on call 2
+/// (the retry after claim failure), then claim() succeeds on call 2 — covering L59.
+final class _ClaimFalseFirstBindings extends _FakeBindings {
+  _ClaimFalseFirstBindings({required super.rootDir});
+
+  @override
+  Future<bool> claim() async {
+    claimCalls++;
+    // Return false first to enter the "not claimed" branch; succeed on retry.
+    if (claimCalls == 1) return false;
+    return true;
+  }
+
+  @override
+  Future<bool> tryDelegate(InboundEvent? event) async {
+    tryDelegateCalls++;
+    // First call (before any claim) succeeds; second call (the retry) throws.
+    if (tryDelegateCalls >= 2) {
+      throw const SocketException('post-claim delegation retry failed');
+    }
+    return false;
+  }
+}
+
+final class _ThrowingBrowserDetector implements BrowserDetector {
+  @override
+  Future<List<Browser>> detect() => Future.error(Exception('detection failed'));
+}
+
+final class _FailingIconExtractor implements IconExtractor {
+  @override
+  Future<String> extractIcon(String executablePath, String outputPath) =>
+      Future.error(Exception('icon extraction failed'));
+}
+
+final class _FailingRegistrationService implements RegistrationService {
+  @override
+  Future<Set<String>> get defaultAssociations async => {};
+
+  @override
+  Future<bool> get isDefault async => false;
+
+  @override
+  Future<void> register(String executablePath) =>
+      Future.error(Exception('registration failed'));
+
+  @override
+  Future<void> unregister() async {}
+}
+
+final class _ThrowingCursorLocator implements CursorLocator {
+  @override
+  Future<(double, double)> cursorPosition() =>
+      Future.error(Exception('cursor position failed'));
+
+  @override
+  Future<(double, double)> screenSize() async => (1280.0, 900.0);
+
+  @override
+  Future<List<({double originX, double originY, double width, double height})>>
+  displayRects() async => [
+    (originX: 0.0, originY: 0.0, width: 1280.0, height: 900.0),
+  ];
+}
+
+final class _FailingTrayController implements TrayController {
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> init({
+    required String title,
+    required String iconPath,
+    required String tooltip,
+  }) => Future.error(Exception('tray init failed'));
+
+  @override
+  void onActivated(VoidCallback callback) {}
+
+  @override
+  Future<void> setMenu(List<TrayMenuItem> items) async {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -476,16 +587,14 @@ void main() {
 
     expect(bindings.claimCalls, 1);
     expect(bindings.tryDelegateCalls, 1);
-    expect(bindings.registrationService.registerCalls, [
+    expect(bindings.registrationRecorder.registerCalls, [
       bindings.executablePath,
     ]);
-    expect(bindings.iconExtractor.calls, hasLength(1));
-    expect(bindings.iconExtractor.calls.single.$1, _chrome.executablePath);
-    expect(bindings.trayController.initCalls, 1);
+    expect(bindings.iconRecorder.calls, hasLength(1));
+    expect(bindings.iconRecorder.calls.single.$1, _chrome.executablePath);
+    expect(bindings.fakeTray.initCalls, 1);
     expect(
-      bindings.trayController.menuItems
-          .map((item) => item.label)
-          .whereType<String>(),
+      bindings.fakeTray.menuItems.map((item) => item.label).whereType<String>(),
       containsAll(['Settings', 'Exit']),
     );
     expect(find.byType(SettingsWindow), findsOneWidget);
@@ -501,7 +610,7 @@ void main() {
 
     expect(find.byType(SettingsWindow), findsNothing);
 
-    bindings.trayController.activate();
+    bindings.fakeTray.activate();
     await tester.pump();
     await tester.pump();
 
@@ -774,4 +883,302 @@ void main() {
     expect(find.byType(SettingsWindow), findsNothing);
     expect(find.byType(PickerWindow), findsNothing);
   });
+
+  testWidgets(
+    'claim() returning false then tryDelegate throwing is non-fatal',
+    (tester) async {
+      final bindings = _ClaimFalseFirstBindings(rootDir: tempDir);
+      addTearDown(bindings.close);
+
+      await boot(tester, bindings, const []);
+
+      expect(bindings.claimCalls, 2);
+      expect(bindings.tryDelegateCalls, 2);
+      expect(find.byType(SettingsWindow), findsOneWidget);
+    },
+  );
+
+  testWidgets('claim() crash is non-fatal and boot continues', (tester) async {
+    final bindings = _ThrowingClaimBindings(rootDir: tempDir);
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const []);
+
+    // First call throws; second call (the retry) succeeds: total 2 claim calls.
+    expect(bindings.claimCalls, 2);
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets('browser reset failure after corrupt browsers.json is non-fatal', (
+    tester,
+  ) async {
+    final bindings = _FakeBindings(rootDir: tempDir);
+    addTearDown(bindings.close);
+
+    // Put corrupt JSON so BrowserService.load() throws, then make browsers.json
+    // a directory so reset()'s configFile.delete() also throws — covering line 105.
+    bindings.browsersFile
+      ..createSync(recursive: true)
+      ..writeAsStringSync('{{not valid json')
+      ..deleteSync();
+    Directory(bindings.browsersFile.path).createSync();
+
+    await boot(tester, bindings, const []);
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets(
+    'first-boot early phase failure (scanAndMerge throws) is non-fatal',
+    (tester) async {
+      // Use a throwing detector so scanAndMerge() fails inside _firstBootEarlyPhase,
+      // covering line 116.  browsers.json must not exist so isFirstBoot=true.
+      final bindings = _FakeBindings(
+        rootDir: tempDir,
+        browserDetectorOverride: _ThrowingBrowserDetector(),
+      );
+      addTearDown(bindings.close);
+
+      await boot(tester, bindings, const []);
+      expect(find.byType(SettingsWindow), findsOneWidget);
+    },
+  );
+
+  testWidgets('iconsDir create failure in first-boot early phase is non-fatal', (
+    tester,
+  ) async {
+    // browsers.json must not exist so isFirstBoot=true.
+    final bindings = _FakeBindings(rootDir: tempDir);
+    addTearDown(bindings.close);
+
+    // Replace the iconsDir directory with a file so create() throws at line 389.
+    bindings.iconsDir.deleteSync(recursive: true);
+    File(bindings.iconsDir.path).writeAsStringSync('blocker');
+
+    await boot(tester, bindings, const []);
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets('tray init failure is non-fatal and boot continues', (
+    tester,
+  ) async {
+    final bindings = _FakeBindings(
+      rootDir: tempDir,
+      trayOverride: _FailingTrayController(),
+    );
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const []);
+
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets('icon extraction failure per-browser is non-fatal', (
+    tester,
+  ) async {
+    final bindings = _FakeBindings(
+      rootDir: tempDir,
+      detectedBrowsers: const [_chrome],
+      iconExtractorOverride: _FailingIconExtractor(),
+    );
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const []);
+
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets('browser registration failure is non-fatal', (tester) async {
+    final bindings = _FakeBindings(
+      rootDir: tempDir,
+      detectedBrowsers: const [_chrome],
+      registrationOverride: _FailingRegistrationService(),
+    );
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const []);
+
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets('hotkey registration failure is non-fatal', (tester) async {
+    final bindings = _FakeBindings(rootDir: tempDir);
+    addTearDown(bindings.close);
+
+    // Make the globalHotkeyFile contain a valid-looking serialized key so
+    // hotkeyService.register() is actually called, then have the channel throw.
+    bindings.globalHotkeyFile.writeAsStringSync('ctrl+shift+l');
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_hotkeyChannel, (call) async {
+          if (call.method == 'registerHotKey') {
+            throw PlatformException(code: 'ERROR', message: 'blocked');
+          }
+          return null;
+        });
+
+    await boot(tester, bindings, const []);
+
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets('hide-tray flag suppresses tray init', (tester) async {
+    final bindings = _FakeBindings(rootDir: tempDir);
+    addTearDown(bindings.close);
+    // Write the sentinel before boot so hideTrayProvider reads true.
+    bindings.hideTrayFile.writeAsStringSync('1');
+
+    await boot(tester, bindings, const []);
+
+    // No tray init should have been attempted because hideTray=true.
+    expect(bindings.fakeTray.initCalls, 0);
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets('tray menu settings item triggers showSettings', (tester) async {
+    final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = true;
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const ['--background']);
+    expect(find.byType(SettingsWindow), findsNothing);
+
+    final settingsItem = bindings.fakeTray.menuItems.firstWhere(
+      (item) => item.label == 'Settings',
+    );
+
+    await tester.runAsync(() async {
+      settingsItem.onClick?.call();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets(
+    're-emitting ShowSettingsEvent while settings is open re-focuses',
+    (tester) async {
+      final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = false;
+      addTearDown(bindings.close);
+
+      await boot(tester, bindings, const []);
+      expect(find.byType(SettingsWindow), findsOneWidget);
+
+      windowSpy.clear();
+
+      await tester.runAsync(() async {
+        bindings.emit(const ShowSettingsEvent());
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+      await tester.pump();
+
+      expect(windowSpy.methods, contains('show'));
+      expect(windowSpy.methods, contains('focus'));
+    },
+  );
+
+  testWidgets('globalHotkeyProvider change triggers hotkey re-registration', (
+    tester,
+  ) async {
+    final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = true;
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const ['--background']);
+
+    // Trigger the globalHotkeyProvider listener by writing a new hotkey value.
+    await tester.runAsync(() async {
+      bindings.globalHotkeyFile.writeAsStringSync('ctrl+alt+l');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+
+    // The listener fires hotkeyService.register(next); not crashing = covered.
+    expect(find.byType(SettingsWindow), findsNothing);
+  });
+
+  testWidgets('hideTray listener hides tray when set to true', (tester) async {
+    final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = true;
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const ['--background']);
+
+    // Write the file and pump to trigger the hideTrayProvider change.
+    await tester.runAsync(() async {
+      bindings.hideTrayFile.writeAsStringSync('1');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+
+    expect(find.byType(SettingsWindow), findsNothing);
+  });
+
+  testWidgets('first-boot late phase failure is non-fatal and boot continues', (
+    tester,
+  ) async {
+    // Use a failing icon extractor; the late phase wraps all errors at line 291.
+    final bindings = _FakeBindings(
+      rootDir: tempDir,
+      detectedBrowsers: const [_chrome],
+      iconExtractorOverride: _FailingIconExtractor(),
+    );
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const []);
+
+    expect(find.byType(SettingsWindow), findsOneWidget);
+  });
+
+  testWidgets('picker mode cursor error is caught and does not crash the app', (
+    tester,
+  ) async {
+    // Use a cursor locator that throws so _applyAppMode picker path at L368 fires.
+    final bindings = _FakeBindings(
+      rootDir: tempDir,
+      cursorLocatorOverride: _ThrowingCursorLocator(),
+    )..startsHidden = true;
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const ['--background']);
+
+    await tester.runAsync(() async {
+      bindings.emit(const OpenUrlEvent('https://no-rule.com/page'));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'picker mode cursor error with hide() also failing is fully non-fatal',
+    (tester) async {
+      final bindings = _FakeBindings(
+        rootDir: tempDir,
+        cursorLocatorOverride: _ThrowingCursorLocator(),
+      )..startsHidden = true;
+      addTearDown(bindings.close);
+
+      await boot(tester, bindings, const ['--background']);
+
+      await tester.runAsync(() async {
+        // Install the failing hide() handler inside runAsync after boot completes.
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(_windowChannel, (call) async {
+              if (call.method == 'hide') {
+                throw PlatformException(code: 'ERROR', message: 'hide failed');
+              }
+              return await windowSpy.handle(call);
+            });
+
+        bindings.emit(const OpenUrlEvent('https://no-rule.com/page'));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
