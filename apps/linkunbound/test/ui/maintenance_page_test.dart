@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -69,16 +70,28 @@ void main() {
     testWidgets('tapping Export diagnostics shows loading indicator', (
       tester,
     ) async {
-      final f = makeFixtures(dir: tempDir);
+      final exportStarted = Completer<void>();
+      final exportDone = Completer<String>();
+      final f = makeFixtures(
+        dir: tempDir,
+        diagnosticsExporter:
+            ({required Directory appDataDir, required String appVersion}) {
+              exportStarted.complete();
+              return exportDone.future;
+            },
+      );
       await tester.pumpWidget(
         buildTestApp(const MaintenancePage(), overrides: f.overrides),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Export diagnostics'));
       await tester.pump(); // show loading dialog
+      expect(exportStarted.isCompleted, isTrue);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      // Don't pumpAndSettle: the export runs real Process.run on the host
-      // and the spinner animates indefinitely. Verify the dialog opened.
+
+      exportDone.complete('fake.zip');
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
     testWidgets('confirming Reset executes reset and closes dialog', (

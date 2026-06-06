@@ -292,6 +292,15 @@ class GeneralPage extends ConsumerWidget {
                         value: null,
                         child: Text(l10n.globalHotkeyNone),
                       ),
+                      // Guard against a saved hotkey from another OS that isn't
+                      // in the current platform's preset list.
+                      if (hotkey != null &&
+                          HotkeyPreset.defaults
+                              .every((p) => p.serialized != hotkey))
+                        DropdownMenuItem<String?>(
+                          value: hotkey,
+                          child: Text(hotkey),
+                        ),
                       for (final preset in HotkeyPreset.defaults)
                         DropdownMenuItem<String?>(
                           value: preset.serialized,
@@ -445,8 +454,7 @@ class GeneralPage extends ConsumerWidget {
           child: ReorderableListView.builder(
             buildDefaultDragHandles: false,
             itemCount: browsers.length,
-            onReorder: (oldIndex, newIndex) {
-              if (newIndex > oldIndex) newIndex--;
+            onReorderItem: (oldIndex, newIndex) {
               ref.read(browsersProvider.notifier).reorder(oldIndex, newIndex);
             },
             proxyDecorator: (child, index, animation) {
@@ -467,7 +475,7 @@ class GeneralPage extends ConsumerWidget {
               return BrowserTile(
                 key: ValueKey(b.id),
                 name: b.name,
-                iconPath: '${iconsDir.path}/${b.id}.png',
+                iconPath: '${iconsDir.path}${Platform.pathSeparator}${b.id}.png',
                 onTap: () => _showEditBrowserDialog(context, ref, b),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -546,7 +554,7 @@ class GeneralPage extends ConsumerWidget {
       try {
         await iconExtractor.extractIcon(
           browser.executablePath,
-          '${iconsDir.path}/${browser.id}.png',
+          '${iconsDir.path}${Platform.pathSeparator}${browser.id}.png',
         );
       } on Exception {
         // Best-effort icon extraction
@@ -599,8 +607,8 @@ class GeneralPage extends ConsumerWidget {
     await ref.read(browsersProvider.notifier).add(copy);
 
     final iconsDir = ref.read(iconsDirProvider);
-    final sourceIcon = File('${iconsDir.path}/${source.id}.png');
-    final destIcon = File('${iconsDir.path}/$copyId.png');
+    final sourceIcon = File('${iconsDir.path}${Platform.pathSeparator}${source.id}.png');
+    final destIcon = File('${iconsDir.path}${Platform.pathSeparator}$copyId.png');
     if (sourceIcon.existsSync()) {
       await sourceIcon.copy(destIcon.path);
     }
@@ -749,7 +757,7 @@ class GeneralPage extends ConsumerWidget {
   ) async {
     final iconsDir = ref.read(iconsDirProvider);
     final iconSource = customIcon.isNotEmpty ? customIcon : exePath;
-    final iconDest = File('${iconsDir.path}/$browserId.png');
+    final iconDest = File('${iconsDir.path}${Platform.pathSeparator}$browserId.png');
 
     if (customIcon.isNotEmpty && iconDest.existsSync()) {
       await iconDest.delete();
@@ -758,7 +766,7 @@ class GeneralPage extends ConsumerWidget {
     try {
       await ref
           .read(iconExtractorProvider)
-          .extractIcon(iconSource, '${iconsDir.path}/$browserId.png');
+          .extractIcon(iconSource, '${iconsDir.path}${Platform.pathSeparator}$browserId.png');
     } on Exception {
       // Best-effort
     }

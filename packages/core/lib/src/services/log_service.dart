@@ -82,6 +82,13 @@ void initLogging(File logFile, {Level fileLevel = Level.INFO}) {
   });
 }
 
+void disposeLogging() {
+  _logSubscription?.cancel();
+  _logSubscription = null;
+  _logRaf?.closeSync();
+  _logRaf = null;
+}
+
 void _rotateIfNeeded(File logFile) {
   if (!logFile.existsSync()) return;
   if (logFile.lengthSync() < _maxLogSize) return;

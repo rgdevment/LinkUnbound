@@ -12,6 +12,7 @@ void main() {
   });
 
   tearDown(() {
+    disposeLogging();
     Logger.root.clearListeners();
     Logger.root.level = Level.OFF;
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
@@ -92,6 +93,11 @@ void main() {
 
     test(
       'silently swallows FileSystemException when log directory is removed mid-session',
+      // Windows holds an exclusive lock on open files, so deleteSync on the
+      // parent directory fails with errno 32 while the log RAF is still open.
+      skip: Platform.isWindows
+          ? 'Windows does not allow deleting open files (errno 32)'
+          : false,
       () {
         final logFile = File('${tempDir.path}/app.log');
         initLogging(logFile);

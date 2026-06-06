@@ -162,6 +162,9 @@ final class WinPipeServer implements InboundEventServer {
   ReceivePort? _receivePort;
   int _pipeHandle = 0;
 
+  // Guards against double-stop races (e.g. release() + dispose() in tests).
+  bool _stopping = false;
+
   @override
   Stream<InboundEvent> get events {
     if (!_hasListener) {
@@ -218,18 +221,42 @@ final class WinPipeServer implements InboundEventServer {
 
   @override
   Future<void> stop() async {
+    if (_stopping) return;
+    _stopping = true;
+
+    // Step 1: unblock any pending ConnectNamedPipe / ReadFile in the isolate.
     if (_pipeHandle != 0) {
       _NativePipe.cancelIoEx(_pipeHandle, nullptr);
+    }
+
+    // Step 2: kill the isolate and wait for it to actually exit before touching
+    // the handle — closing the handle while the isolate still holds it causes
+    // ERROR_INVALID_HANDLE and undefined behaviour during shutdown.
+    final isolate = _isolate;
+    if (isolate != null) {
+      final exitPort = ReceivePort();
+      isolate.addOnExitListener(exitPort.sendPort);
+      isolate.kill(priority: Isolate.immediate);
+      await exitPort.first
+          .timeout(
+            const Duration(seconds: 1),
+            onTimeout: () => null, // best-effort; proceed regardless
+          )
+          .catchError((_) => null);
+      exitPort.close();
+      _isolate = null;
+    }
+
+    // Step 3: now it is safe to disconnect and close the handle.
+    if (_pipeHandle != 0) {
       _NativePipe.disconnectNamedPipe(_pipeHandle);
       _NativePipe.closeHandle(_pipeHandle);
       _pipeHandle = 0;
     }
 
-    _isolate?.kill(priority: Isolate.immediate);
-    _isolate = null;
     _receivePort?.close();
     _receivePort = null;
-    await _controller.close();
+    if (!_controller.isClosed) await _controller.close();
   }
 
   static void _serverLoop(SendPort sendPort) {

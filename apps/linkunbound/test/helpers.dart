@@ -101,6 +101,7 @@ makeFixtures({
   StartupService? startupService,
   IconExtractor? iconExtractor,
   UpdateInfo? updateInfo,
+  DiagnosticsExporter? diagnosticsExporter,
 }) {
   final tempDir = dir ?? Directory.systemTemp.createTempSync('lu_test_');
   final configFile = File('${tempDir.path}/browsers.json');
@@ -157,6 +158,13 @@ makeFixtures({
       ),
     ),
     updateInfoProvider.overrideWith((ref) async => updateInfo),
+    // The real exporter dumps the registry and opens an Explorer/Finder
+    // window on the host machine.
+    diagnosticsExporterProvider.overrideWithValue(
+      diagnosticsExporter ??
+          ({required Directory appDataDir, required String appVersion}) async =>
+              '${appDataDir.path}${Platform.pathSeparator}fake-diag.zip',
+    ),
   ];
 
   return (

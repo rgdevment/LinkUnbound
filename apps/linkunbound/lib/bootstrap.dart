@@ -61,7 +61,25 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
       _log.severe('Second claim() attempt crashed', e, st);
       claimed = false;
     }
-    if (!claimed) exit(0);
+    if (!claimed) {
+      // Last-resort delegation before giving up: the resident that raced us may
+      // now be ready to receive the pipe message.
+      try {
+        if (await bindings.tryDelegate(bindings.initialEvent)) {
+          exit(0);
+        }
+      } on Object catch (e, st) {
+        _log.warning('Final delegation attempt failed', e, st);
+      }
+      final eventType = bindings.initialEvent?.runtimeType;
+      if (eventType != null) {
+        _log.severe(
+          'Discarding initial event: no resident could be reached '
+          '(type=$eventType)',
+        );
+      }
+      exit(0);
+    }
   }
 
   final browserService = BrowserService(

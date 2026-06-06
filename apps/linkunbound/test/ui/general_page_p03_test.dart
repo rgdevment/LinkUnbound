@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:linkunbound/platform/hotkey_service.dart';
 import 'package:linkunbound/ui/settings/general_page.dart';
 
 import '../helpers.dart';
@@ -100,7 +101,8 @@ void main() {
         addTearDown(tester.view.resetDevicePixelRatio);
 
         // Write hotkey file before makeFixtures reads it via the provider.
-        File('${tempDir.path}/global_hotkey').writeAsStringSync('meta+shift+l');
+        File('${tempDir.path}/global_hotkey')
+            .writeAsStringSync(HotkeyPreset.defaults.first.serialized);
 
         final f = makeFixtures(dir: tempDir);
         await tester.pumpWidget(

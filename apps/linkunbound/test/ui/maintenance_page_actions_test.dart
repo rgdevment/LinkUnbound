@@ -141,7 +141,7 @@ void main() {
     ]);
     expect(iconExtractor.calls, hasLength(1));
     expect(iconExtractor.calls.single.$1, _chrome.executablePath);
-    expect(iconExtractor.calls.single.$2, endsWith('/chrome.png'));
+    expect(iconExtractor.calls.single.$2, endsWith('${Platform.pathSeparator}chrome.png'));
   });
 
   testWidgets('confirming unregister calls registration service', (

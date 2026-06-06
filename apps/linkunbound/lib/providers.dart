@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'platform/macos/mac_diagnostics_service.dart';
+import 'platform/windows/win_diagnostics_service.dart';
+
 StateError _mustOverride() => StateError('Override at startup');
 
 final browserServiceProvider = Provider<BrowserService>(
@@ -40,6 +43,18 @@ final hideTrayFileProvider = Provider<File>((_) => throw _mustOverride());
 final globalHotkeyFileProvider = Provider<File>((_) => throw _mustOverride());
 
 final appDataDirProvider = Provider<Directory>((_) => throw _mustOverride());
+
+typedef DiagnosticsExporter =
+    Future<String> Function({
+      required Directory appDataDir,
+      required String appVersion,
+    });
+
+/// Injectable so widget tests never run the real exporter, which dumps the
+/// registry and opens an Explorer/Finder window on the host.
+final diagnosticsExporterProvider = Provider<DiagnosticsExporter>(
+  (_) => Platform.isMacOS ? exportMacDiagnostics : exportDiagnostics,
+);
 
 /// Async callback that releases platform resources and terminates the process.
 /// Overridden at startup with `bindings.release()` + `exit(0)`.

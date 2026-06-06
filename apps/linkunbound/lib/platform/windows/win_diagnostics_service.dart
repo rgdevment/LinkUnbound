@@ -18,6 +18,7 @@ Future<String> exportDiagnostics({
   required Directory appDataDir,
   required String appVersion,
   void Function(Directory staging)? registryDumper,
+  Future<void> Function(String zipPath)? revealer,
 }) async {
   final timestamp = DateTime.now()
       .toIso8601String()
@@ -53,7 +54,7 @@ Future<String> exportDiagnostics({
     }
 
     try {
-      await Process.run('explorer.exe', ['/select,$zipPath']);
+      await (revealer ?? _revealInExplorer)(zipPath);
     } on ProcessException catch (e) {
       _log.fine('Could not reveal zip in Explorer: ${e.message}');
     }
@@ -69,6 +70,10 @@ Future<String> exportDiagnostics({
       _log.fine('Failed to clean staging dir: $e');
     }
   }
+}
+
+Future<void> _revealInExplorer(String zipPath) async {
+  await Process.run('explorer.exe', ['/select,$zipPath']);
 }
 
 void _writeSystemInfo(

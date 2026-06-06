@@ -172,7 +172,15 @@ final class WindowsBindings implements PlatformBindings {
       // without hitting the TOCTOU race window.
       await _pipeServer.ready.timeout(
         const Duration(seconds: 5),
-        onTimeout: () => _log.warning('Pipe server readiness timeout'),
+        onTimeout: () {
+          // We continue as the resident instance because the picker still works
+          // locally; only cross-process delegation (secondary instances sending
+          // URLs) will silently fail until the pipe eventually becomes ready.
+          _log.severe(
+            'Pipe server readiness timeout: secondary instances will not be '
+            'able to delegate URLs to this instance until the pipe is ready.',
+          );
+        },
       );
     } on Exception catch (e) {
       _log.warning('Pipe server failed to start: $e');

@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../platform/macos/mac_diagnostics_service.dart';
-import '../../platform/windows/win_diagnostics_service.dart';
 import '../../platform/windows/win_package_context.dart';
 import '../../providers.dart';
 import '../shared/widgets/base_dialog.dart';
@@ -75,11 +73,8 @@ class MaintenancePage extends ConsumerWidget {
       final version =
           ref.read(packageInfoProvider).valueOrNull?.version ?? 'unknown';
 
-      if (Platform.isMacOS) {
-        await exportMacDiagnostics(appDataDir: appDataDir, appVersion: version);
-      } else {
-        await exportDiagnostics(appDataDir: appDataDir, appVersion: version);
-      }
+      final exporter = ref.read(diagnosticsExporterProvider);
+      await exporter(appDataDir: appDataDir, appVersion: version);
     } on Object {
       failed = true;
     } finally {
@@ -112,7 +107,7 @@ class MaintenancePage extends ConsumerWidget {
               try {
                 await iconExtractor.extractIcon(
                   browser.executablePath,
-                  '${iconsDir.path}/${browser.id}.png',
+                  '${iconsDir.path}${Platform.pathSeparator}${browser.id}.png',
                 );
               } on Exception {
                 // Best-effort

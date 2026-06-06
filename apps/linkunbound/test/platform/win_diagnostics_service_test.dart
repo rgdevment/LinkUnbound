@@ -48,6 +48,8 @@ void main() {
       appDataDir: appDataDir,
       appVersion: appVersion,
       registryDumper: _stubRegistry,
+      // A real revealer opens an Explorer window per test run.
+      revealer: (_) async {},
     );
 
     setUp(() {

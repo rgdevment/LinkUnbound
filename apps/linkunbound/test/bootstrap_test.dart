@@ -428,6 +428,7 @@ void main() {
         .setMockMethodCallHandler(_hotkeyChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_hotkeyEventChannel, null);
+    disposeLogging();
     if (tempDir.existsSync()) {
       tempDir.deleteSync(recursive: true);
     }
