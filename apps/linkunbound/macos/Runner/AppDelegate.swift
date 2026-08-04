@@ -28,7 +28,11 @@ class AppDelegate: FlutterAppDelegate {
       event?.eventID == AEEventID(kAEOpenApplication)
       && event?.paramDescriptor(forKeyword: AEKeyword(keyAEPropData))?.enumCodeValue
         == OSType(keyAELaunchedAsLogInItem)
-    super.applicationDidFinishLaunching(notification)
+    // No `super` call here: FlutterAppDelegate does not implement
+    // applicationDidFinishLaunching:. The override compiles because the
+    // superclass adopts NSApplicationDelegate, but the objc_msgSendSuper hits
+    // an unimplemented selector and aborts the process during launch — which
+    // is precisely when Launch Services hands us a URL to open.
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

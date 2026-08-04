@@ -18,12 +18,32 @@ final class RegistrationChannel {
       guard let self else { return result(FlutterMethodNotImplemented) }
       switch call.method {
       case "register":
-        self.setHandler(self.ownBundleId)
-        result(nil)
+        // Answer only once the system has actually applied (or refused) the
+        // change, so Dart re-reads the real state instead of a stale one.
+        self.setHandler(self.ownBundleId) { error in
+          if let error {
+            result(
+              FlutterError(
+                code: "registration_failed",
+                message: error.localizedDescription,
+                details: nil))
+          } else {
+            result(nil)
+          }
+        }
       case "unregister":
         // macOS has no "remove default" — fall back to Safari.
-        self.setHandler(self.safariBundleId)
-        result(nil)
+        self.setHandler(self.safariBundleId) { error in
+          if let error {
+            result(
+              FlutterError(
+                code: "unregistration_failed",
+                message: error.localizedDescription,
+                details: nil))
+          } else {
+            result(nil)
+          }
+        }
       case "isDefault":
         result(self.isDefault())
       case "defaultAssociations":
@@ -34,16 +54,56 @@ final class RegistrationChannel {
     }
   }
 
-  private func setHandler(_ bundleId: String) {
-    guard #available(macOS 12.0, *),
-          let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
-    else { return }
+  /// Points the given schemes at `bundleId`, reporting the first failure.
+  ///
+  /// For our own bundle the URL is always `Bundle.main.bundleURL`, never the
+  /// Launch Services lookup: that lookup returns whichever copy LS happens to
+  /// prefer, so with a debug build present it would register a path inside the
+  /// build tree — and the association dies with the next `flutter clean`.
+  private func setHandler(_ bundleId: String, completion: @escaping (Error?) -> Void) {
+    let appURL: URL? =
+      bundleId == ownBundleId
+      ? Bundle.main.bundleURL
+      : NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
 
-    NSWorkspace.shared.setDefaultApplication(at: appURL, toOpenURLsWithScheme: "http") { _ in }
-    NSWorkspace.shared.setDefaultApplication(at: appURL, toOpenURLsWithScheme: "https") { _ in }
+    guard let appURL else {
+      completion(RegistrationError.applicationNotFound(bundleId))
+      return
+    }
+
+    // macOS prompts the user for http/https and the answer can be "no"; the
+    // errors used to be discarded, so Settings reported success either way.
+    let group = DispatchGroup()
+    var firstError: Error?
+    for scheme in ["http", "https"] {
+      group.enter()
+      NSWorkspace.shared.setDefaultApplication(at: appURL, toOpenURLsWithScheme: scheme) { error in
+        if let error, firstError == nil { firstError = error }
+        group.leave()
+      }
+    }
     if let htmlType = UTType("public.html") {
-      // Fire-and-forget async API (no completion handler variant exists).
-      Task { try? await NSWorkspace.shared.setDefaultApplication(at: appURL, toOpen: htmlType) }
+      group.enter()
+      Task {
+        do {
+          try await NSWorkspace.shared.setDefaultApplication(at: appURL, toOpen: htmlType)
+        } catch {
+          if firstError == nil { firstError = error }
+        }
+        group.leave()
+      }
+    }
+    group.notify(queue: .main) { completion(firstError) }
+  }
+
+  enum RegistrationError: LocalizedError {
+    case applicationNotFound(String)
+
+    var errorDescription: String? {
+      switch self {
+      case .applicationNotFound(let bundleId):
+        return "No application found for bundle identifier \(bundleId)"
+      }
     }
   }
 

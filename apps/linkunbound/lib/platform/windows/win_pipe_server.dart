@@ -5,23 +5,40 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
-import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
+
+import 'win_security.dart';
 
 final _log = Logger('WinPipeServer');
 
 const _pipeName = r'\\.\pipe\LinkUnbound';
 const _bufferSize = 4096;
 
+/// Sent by the isolate when the pipe name is already owned by someone else.
+/// Distinct from the handle values, which are always positive.
+const _pipeNameTakenSignal = -1;
+
 const _pipeAccessDuplex = 0x00000003;
 const _pipeTypeByte = 0x00000000;
 const _pipeReadmodeByte = 0x00000000;
 const _pipeWait = 0x00000000;
+// Without this the pipe is reachable over SMB as \\<host>\pipe\LinkUnbound,
+// letting a remote peer inject URLs into this session.
+const _pipeRejectRemoteClients = 0x00000008;
+// Makes CreateNamedPipeW fail if the name is already taken, so a squatter that
+// grabbed it first is detected instead of silently receiving the user's URLs.
+const _fileFlagFirstPipeInstance = 0x00080000;
 const _pipeUnlimitedInstances = 255;
 const _openExisting = 3;
 const _genericWrite = 0x40000000;
 const _invalidHandleValue = -1;
+// Keeps a malicious or buggy server from impersonating this process when we
+// connect as a client.
+const _securitySqosPresent = 0x00100000;
+const _securityIdentification = 0x00010000;
+const _errorAccessDenied = 5;
+const _errorPipeBusy = 231;
 
 typedef _CreateNamedPipeWNative =
     IntPtr Function(
@@ -182,7 +199,8 @@ final class WinPipeServer implements InboundEventServer {
 
   Future<void> get ready => _ready.future;
 
-  @visibleForTesting
+  /// Queues an event as if it had arrived over the pipe, honouring the same
+  /// buffer-until-subscribed rule. Used for the URL carried by argv on launch.
   void pushEvent(InboundEvent event) {
     if (_hasListener) {
       _controller.add(event);
@@ -208,6 +226,14 @@ final class WinPipeServer implements InboundEventServer {
         } on FormatException catch (e) {
           _log.warning('Invalid inbound event: $e');
         }
+      } else if (data == _pipeNameTakenSignal) {
+        // Someone else owns \\.\pipe\LinkUnbound. Delegation from secondary
+        // instances will not reach us; surface it instead of hanging on ready.
+        _log.severe(
+          'Pipe name already owned by another process: this instance cannot '
+          'receive URLs from secondary instances',
+        );
+        if (!_ready.isCompleted) _ready.complete();
       } else if (data is int) {
         // The isolate reports each pipe handle when it starts listening and 0
         // right after closing it, so stop() never cancels a stale handle.
@@ -260,25 +286,39 @@ final class WinPipeServer implements InboundEventServer {
   }
 
   static void _serverLoop(SendPort sendPort) {
+    final security = buildPipeSecurityAttributes();
+    var firstInstance = true;
     while (true) {
       final pipeName = _pipeName.toNativeUtf16();
       final handle = _NativePipe.createNamedPipe(
         pipeName,
-        _pipeAccessDuplex,
-        _pipeTypeByte | _pipeReadmodeByte | _pipeWait,
+        _pipeAccessDuplex | (firstInstance ? _fileFlagFirstPipeInstance : 0),
+        _pipeTypeByte |
+            _pipeReadmodeByte |
+            _pipeWait |
+            _pipeRejectRemoteClients,
         _pipeUnlimitedInstances,
         _bufferSize,
         _bufferSize,
         0,
-        nullptr,
+        security.cast(),
       );
       calloc.free(pipeName);
 
       if (handle == _invalidHandleValue) {
+        final lastError = _getLastError();
+        if (firstInstance &&
+            (lastError == _errorAccessDenied || lastError == _errorPipeBusy)) {
+          // Another process owns the name. Retrying forever would hand every
+          // URL to it, so report and stop serving.
+          sendPort.send(_pipeNameTakenSignal);
+          return;
+        }
         // Back off before retrying to avoid spinning the CPU on persistent errors.
         sleep(const Duration(milliseconds: 50));
         continue;
       }
+      firstInstance = false;
 
       // Signal the main isolate: pipe is created and we're about to block on
       // ConnectNamedPipe — this unblocks claim()'s readiness await.
@@ -345,7 +385,10 @@ final class WinPipeClient implements InboundEventClient {
       0,
       nullptr,
       _openExisting,
-      0,
+      // Named pipes default to SecurityImpersonation, which would let whoever
+      // is listening act as this user. Identification lets the server check
+      // who we are without being able to impersonate us.
+      _securitySqosPresent | _securityIdentification,
       0,
     );
     calloc.free(pipeName);

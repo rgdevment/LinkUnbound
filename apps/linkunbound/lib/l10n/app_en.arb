@@ -1,37 +1,32 @@
 {
   "@@locale": "en",
-
   "exit": "Exit",
   "traySettings": "Settings",
   "copyUrl": "Copy URL",
   "alwaysOpenHere": "Always open here",
-
   "tabGeneral": "General",
   "tabRules": "Rules",
   "tabAbout": "About",
   "tabMaintenance": "Maintenance",
-
   "sectionDefaultBrowser": "DEFAULT BROWSER",
   "isDefaultBrowser": "LinkUnbound is set as the default browser",
   "notDefaultBrowser": "LinkUnbound is not the default browser",
   "setDefault": "Set default",
-
   "sectionStartup": "STARTUP",
   "launchAtStartup": "Launch at system startup",
   "startupManagedByWindows": "Managed by Windows Settings > Startup Apps",
-  "@startupManagedByWindows": {"description": "Tooltip shown when the startup toggle is disabled because the app runs as MSIX and Windows owns that preference."},
-
+  "@startupManagedByWindows": {
+    "description": "Tooltip shown when the startup toggle is disabled because the app runs as MSIX and Windows owns that preference."
+  },
   "sectionLanguage": "LANGUAGE",
   "languageAuto": "Automatic (system)",
   "languageEnglish": "English",
   "languageSpanish": "Spanish",
-
   "sectionAppearance": "APPEARANCE",
   "themeLabel": "Theme",
   "themeSystem": "Automatic (system)",
   "themeLight": "Light",
   "themeDark": "Dark",
-
   "sectionBrowsers": "BROWSERS",
   "addBrowserTooltip": "Add custom browser",
   "refreshBrowsersTooltip": "Refresh browsers",
@@ -41,8 +36,12 @@
   "refreshResult": "{added} added, {removed} removed",
   "@refreshResult": {
     "placeholders": {
-      "added": { "type": "int" },
-      "removed": { "type": "int" }
+      "added": {
+        "type": "int"
+      },
+      "removed": {
+        "type": "int"
+      }
     }
   },
   "refreshNoChanges": "No changes detected",
@@ -57,7 +56,6 @@
   "add": "Add",
   "save": "Save",
   "confirm": "Confirm",
-
   "sectionUrlRules": "URL RULES",
   "noRulesYet": "No rules yet. Rules are created from the browser picker when you check \"Always open here\".",
   "columnDomain": "Domain",
@@ -66,17 +64,20 @@
   "deleteRuleContent": "Remove the rule for \"{domain}\"?",
   "@deleteRuleContent": {
     "placeholders": {
-      "domain": { "type": "String" }
+      "domain": {
+        "type": "String"
+      }
     }
   },
   "delete": "Delete",
   "deleteRuleTooltip": "Delete rule",
-
   "sectionAbout": "ABOUT",
   "appVersion": "Version {version}",
   "@appVersion": {
     "placeholders": {
-      "version": { "type": "String" }
+      "version": {
+        "type": "String"
+      }
     }
   },
   "appDescription": "Open-source browser picker for Windows.",
@@ -91,48 +92,104 @@
   "unregisterTitle": "Unregister LinkUnbound",
   "unregisterContent": "This will remove LinkUnbound from the Windows browser list. You may need to change your default browser in Windows Settings afterwards. Continue?",
   "unregisterAction": "Unregister",
-
   "updateAvailable": "Version {version} available",
   "@updateAvailable": {
     "placeholders": {
-      "version": { "type": "String" }
+      "version": {
+        "type": "String"
+      }
     }
   },
   "updateDownload": "Download",
   "updateAvailableStore": "Version {version} available — check Microsoft Store for the new version",
   "@updateAvailableStore": {
     "placeholders": {
-      "version": { "type": "String" }
+      "version": {
+        "type": "String"
+      }
     }
   },
   "updateTooltip": "New version available — check for updates in Settings",
-
   "sectionSupport": "SUPPORT",
   "donateLabel": "Buy me a coffee",
   "donateDescription": "LinkUnbound is free and always will be. If it saves you time, consider supporting development.",
   "sectionOtherTools": "OTHER TOOLS",
   "otherToolCopyPaste": "CopyPaste",
   "otherToolCopyPasteDescription": "Free, open source clipboard manager for Windows, macOS and Linux. Same philosophy: no ads, no telemetry, everything local.",
-
   "edgeWarningTitle": "Microsoft Edge detected",
   "edgeWarningBody": "Microsoft Teams, Outlook, and other Microsoft 365 apps may open links directly in Edge, ignoring your default browser. This is a Microsoft design decision that LinkUnbound cannot override.",
   "edgeWarningNote": "You can change this behavior from each app's settings. Some organizations enforce Edge through group policies.",
   "edgeWarningDismiss": "Got it, don't show again",
-
   "sectionMaintenance": "MAINTENANCE",
   "exportDiagnosticsLabel": "Export diagnostics",
   "exportDiagnosticsDescription": "Generate a ZIP with system info, registry data, and logs for troubleshooting",
-
   "errorStartupToggle": "Could not change startup setting",
   "errorUnregister": "Could not unregister LinkUnbound",
   "errorExportDiagnostics": "Could not export diagnostics",
   "errorResetConfig": "Could not reset configuration",
-
   "sectionAccessibility": "ACCESSIBILITY",
   "globalHotkeyLabel": "Global shortcut to open settings",
   "globalHotkeyNone": "None (disabled)",
   "hideTrayLabel": "Hide tray / menu bar icon",
   "hideTraySubtitleNoHotkey": "Requires a global shortcut to be configured first",
   "hideTraySubtitleMac": "You can also reach the app by relaunching it from Applications",
-  "hideTraySubtitleWindows": "You can reach the app via its global shortcut"
+  "hideTraySubtitleWindows": "You can reach the app via its global shortcut",
+  "pickerNoBrowsers": "No browsers detected. Open Settings to add one.",
+  "@pickerNoBrowsers": {
+    "description": "Shown in the picker when no browsers are configured"
+  },
+  "edgeProtocolLabel": "Capture links from Microsoft apps",
+  "@edgeProtocolLabel": {
+    "description": "Toggle label for microsoft-edge: protocol capture (Windows only)"
+  },
+  "edgeProtocolDescription": "Teams, Outlook and Start menu search open links through Edge directly, bypassing the default browser. Enable this to let LinkUnbound offer a choice for those links too.",
+  "@edgeProtocolDescription": {
+    "description": "Explains what capturing the microsoft-edge: protocol does"
+  },
+  "pickerPrivateHint": "Shift = private",
+  "@pickerPrivateHint": {
+    "description": "Hint in the picker footer: holding Shift opens a private window"
+  },
+  "alwaysOpenFromApp": "Always open links from {app} here",
+  "@alwaysOpenFromApp": {
+    "description": "Checkbox label when the originating app is known",
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "diagnosticsTitle": "Link capture problem detected",
+  "@diagnosticsTitle": {
+    "description": "Handler self-diagnostics in Settings"
+  },
+  "diagnosticsStaleHandler": "The registered handler points somewhere else, so links will not reach LinkUnbound.",
+  "@diagnosticsStaleHandler": {
+    "description": "Handler self-diagnostics in Settings"
+  },
+  "diagnosticsDevBuild": "Running from a local build, which never registers itself. Install the app to capture links.",
+  "@diagnosticsDevBuild": {
+    "description": "Handler self-diagnostics in Settings"
+  },
+  "diagnosticsRepair": "Repair",
+  "@diagnosticsRepair": {
+    "description": "Handler self-diagnostics in Settings"
+  },
+  "diagnosticsRepaired": "Registration repaired.",
+  "@diagnosticsRepaired": {
+    "description": "Handler self-diagnostics in Settings"
+  },
+  "diagnosticsRepairFailed": "Could not repair the registration.",
+  "@diagnosticsRepairFailed": {
+    "description": "Handler self-diagnostics in Settings"
+  },
+  "ruleFromApp": "Links from {app}",
+  "@ruleFromApp": {
+    "description": "Rule label when scoped to the originating app",
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  }
 }

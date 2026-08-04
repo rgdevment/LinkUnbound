@@ -7,6 +7,7 @@ final class LinkUnboundChannels {
   let browserDetector: BrowserDetectorChannel
   let iconExtractor: IconExtractorChannel
   let registration: RegistrationChannel
+  let sourceApp: SourceAppChannel
   let startup: StartupChannel
   let window: WindowChannel
 
@@ -15,6 +16,7 @@ final class LinkUnboundChannels {
     browserDetector = BrowserDetectorChannel(messenger: messenger)
     iconExtractor = IconExtractorChannel(messenger: messenger)
     registration = RegistrationChannel(messenger: messenger)
+    sourceApp = SourceAppChannel(messenger: messenger)
     startup = StartupChannel(messenger: messenger)
     window = WindowChannel(messenger: messenger)
   }

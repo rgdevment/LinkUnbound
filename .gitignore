@@ -1,6 +1,10 @@
 # Miscellaneous
 *.class
 *.lock
+# Applications must pin their dependency graph: without this, every release is
+# built against whatever `stable` resolves to that day, which makes a runtime
+# regression impossible to bisect.
+!pubspec.lock
 *.log
 *.pyc
 *.swp

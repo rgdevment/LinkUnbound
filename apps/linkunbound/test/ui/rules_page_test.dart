@@ -259,4 +259,79 @@ void main() {
       expect(f.ruleService.rules, isEmpty);
     });
   });
+
+  group('RulesPage rendering — scoped rules', () {
+    testWidgets('an app-scoped rule reads as the app, not as "*"', (
+      tester,
+    ) async {
+      final f = makeFixtures(
+        dir: tempDir,
+        browsers: [_chrome],
+        rules: [
+          const Rule(
+            domain: kAnyDomain,
+            browserId: 'chrome',
+            sourceApp: 'slack',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        buildTestApp(const RulesPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Links from slack'), findsOneWidget);
+      expect(find.text(kAnyDomain), findsNothing);
+      expect(find.byIcon(Icons.apps_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.visibility_off_outlined), findsNothing);
+    });
+
+    testWidgets('a private rule is marked as such', (tester) async {
+      final f = makeFixtures(
+        dir: tempDir,
+        browsers: [_chrome],
+        rules: [
+          const Rule(domain: 'github.com', browserId: 'chrome', private: true),
+        ],
+      );
+      await tester.pumpWidget(
+        buildTestApp(const RulesPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('github.com'), findsOneWidget);
+      expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.apps_outlined), findsNothing);
+    });
+
+    testWidgets('deleting an app-scoped rule names the app in the prompt', (
+      tester,
+    ) async {
+      final f = makeFixtures(
+        dir: tempDir,
+        browsers: [_chrome],
+        rules: [
+          const Rule(
+            domain: kAnyDomain,
+            browserId: 'chrome',
+            sourceApp: 'slack',
+          ),
+          const Rule(domain: 'github.com', browserId: 'chrome'),
+        ],
+      );
+      await tester.pumpWidget(
+        buildTestApp(const RulesPage(), overrides: f.overrides),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Delete rule').first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('slack'), findsWidgets);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      // Only the scoped rule goes: both share nothing but the browser.
+      expect(f.ruleService.rules.single.domain, 'github.com');
+    });
+  });
 }

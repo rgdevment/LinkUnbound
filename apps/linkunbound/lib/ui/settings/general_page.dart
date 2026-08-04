@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
+import 'package:logging/logging.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -11,6 +13,8 @@ import '../../providers.dart';
 import '../shared/widgets/browser_tile.dart';
 import '../shared/widgets/group_card.dart';
 import '../shared/widgets/section_header.dart';
+
+final _log = Logger('GeneralPage');
 
 class GeneralPage extends ConsumerWidget {
   const GeneralPage({super.key});
@@ -48,6 +52,7 @@ class GeneralPage extends ConsumerWidget {
         const SizedBox(height: 20),
         ..._buildDefaultBrowserSection(
           context,
+          ref,
           isDefaultAsync,
           ref.watch(defaultAssociationsProvider),
         ),
@@ -57,6 +62,8 @@ class GeneralPage extends ConsumerWidget {
         ],
         const SizedBox(height: 20),
         ..._buildStartupSection(context, ref, isStartupAsync),
+        ..._buildInternalLinksSection(context, ref),
+        ..._buildDiagnosticsSection(context, ref),
         const SizedBox(height: 20),
         ..._buildAccessibilitySection(context, ref),
         const SizedBox(height: 20),
@@ -67,8 +74,41 @@ class GeneralPage extends ConsumerWidget {
     );
   }
 
+  /// Re-applies the shell registration, then sends the user to the OS picker.
+  ///
+  /// The button used to only open system settings. That is useless when the
+  /// recorded handler points at a stale path — the OS then has nothing valid
+  /// to offer — so the registration is repaired first.
+  static Future<void> _makeDefault(WidgetRef ref) async {
+    final registration = ref.read(registrationServiceProvider);
+    try {
+      await registration.register(ref.read(executablePathProvider));
+    } on Object catch (e, st) {
+      _log.warning('Re-registration from Settings failed', e, st);
+    }
+    ref
+      ..invalidate(isDefaultBrowserProvider)
+      ..invalidate(defaultAssociationsProvider);
+
+    // On macOS `register()` already triggers the system confirmation dialog;
+    // only open the settings pane when it did not take effect.
+    if (Platform.isMacOS && await registration.isDefault) return;
+
+    final target = Platform.isMacOS
+        // Ventura moved the default browser setting out of the legacy
+        // "General" preference pane and into Desktop & Dock.
+        ? 'x-apple.systempreferences:com.apple.Desktop-Settings.extension'
+        : 'ms-settings:defaultapps?registeredAppUser=LinkUnbound';
+    try {
+      await launchUrl(Uri.parse(target));
+    } on Object catch (e, st) {
+      _log.warning('Could not open system default-apps settings', e, st);
+    }
+  }
+
   List<Widget> _buildDefaultBrowserSection(
     BuildContext context,
+    WidgetRef ref,
     AsyncValue<bool> isDefaultAsync,
     AsyncValue<Set<String>> associationsAsync,
   ) {
@@ -102,13 +142,7 @@ class GeneralPage extends ConsumerWidget {
                 ),
                 if (!isDefault)
                   TextButton(
-                    onPressed: () => launchUrl(
-                      Uri.parse(
-                        Platform.isMacOS
-                            ? 'x-apple.systempreferences:com.apple.preference.general'
-                            : 'ms-settings:defaultapps?registeredAppUser=LinkUnbound',
-                      ),
-                    ),
+                    onPressed: () => unawaited(_makeDefault(ref)),
                     child: Text(l10n.setDefault),
                   ),
               ],
@@ -206,6 +240,123 @@ class GeneralPage extends ConsumerWidget {
                 },
                 child: Text(l10n.edgeWarningDismiss),
               ),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  /// Surfaces a broken registration and offers to fix it.
+  ///
+  /// The failure this catches — handler recorded at a path that no longer
+  /// exists — is invisible otherwise: the app looks fine, links just stop
+  /// arriving, and nothing in the UI hints at why.
+  List<Widget> _buildDiagnosticsSection(BuildContext context, WidgetRef ref) {
+    final diagnostics = ref.watch(handlerDiagnosticsProvider).valueOrNull;
+    if (diagnostics == null || diagnostics.isHealthy) return const [];
+    if (diagnostics.commandMatchesExecutable &&
+        !diagnostics.runningFromDevBuild) {
+      // Only "not the default browser", which the section above already says.
+      return const [];
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+    final colors = Theme.of(context).colorScheme;
+    final message = diagnostics.runningFromDevBuild
+        ? l10n.diagnosticsDevBuild
+        : l10n.diagnosticsStaleHandler;
+
+    return [
+      const SizedBox(height: 20),
+      SectionHeader(label: l10n.diagnosticsTitle),
+      GroupCard(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, size: 20, color: colors.error),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            if (diagnostics.canRepair)
+              TextButton(
+                onPressed: () => unawaited(_repair(context, ref)),
+                child: Text(l10n.diagnosticsRepair),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  static Future<void> _repair(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    var ok = true;
+    try {
+      await ref
+          .read(registrationServiceProvider)
+          .register(ref.read(executablePathProvider));
+    } on Object catch (e, st) {
+      ok = false;
+      _log.warning('Repair from Settings failed', e, st);
+    }
+    ref
+      ..invalidate(handlerDiagnosticsProvider)
+      ..invalidate(isDefaultBrowserProvider)
+      ..invalidate(defaultAssociationsProvider);
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? l10n.diagnosticsRepaired : l10n.diagnosticsRepairFailed,
+        ),
+      ),
+    );
+  }
+
+  /// Windows-only toggle for `microsoft-edge:` interception.
+  ///
+  /// Hidden on macOS (no such scheme) and under MSIX, where a package cannot
+  /// claim a protocol owned by another package.
+  List<Widget> _buildInternalLinksSection(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(edgeProtocolSupportedProvider)) return const [];
+    final l10n = AppLocalizations.of(context)!;
+    final captureAsync = ref.watch(edgeProtocolCaptureProvider);
+
+    return [
+      const SizedBox(height: 20),
+      SectionHeader(label: l10n.edgeProtocolLabel),
+      GroupCard(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                l10n.edgeProtocolDescription,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Switch(
+              value: captureAsync.valueOrNull ?? false,
+              onChanged: (enabled) async {
+                try {
+                  await ref
+                      .read(registrationServiceProvider)
+                      .setEdgeProtocolCapture(
+                        enabled,
+                        ref.read(executablePathProvider),
+                      );
+                } on Object catch (e, st) {
+                  _log.warning('Edge protocol toggle failed', e, st);
+                } finally {
+                  ref.invalidate(edgeProtocolCaptureProvider);
+                }
+              },
             ),
           ],
         ),

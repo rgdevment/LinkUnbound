@@ -316,4 +316,49 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get hideTraySubtitleWindows =>
       'Puedes abrir la app mediante su atajo global';
+
+  @override
+  String get pickerNoBrowsers =>
+      'No se detectaron navegadores. Abre Ajustes para añadir uno.';
+
+  @override
+  String get edgeProtocolLabel =>
+      'Capturar enlaces de aplicaciones de Microsoft';
+
+  @override
+  String get edgeProtocolDescription =>
+      'Teams, Outlook y la búsqueda del menú Inicio abren los enlaces directamente en Edge, ignorando el navegador predeterminado. Actívalo para que LinkUnbound también ofrezca elegir en esos enlaces.';
+
+  @override
+  String get pickerPrivateHint => 'Mayús = privada';
+
+  @override
+  String alwaysOpenFromApp(String app) {
+    return 'Abrir siempre aquí los enlaces de $app';
+  }
+
+  @override
+  String get diagnosticsTitle => 'Problema de captura de enlaces detectado';
+
+  @override
+  String get diagnosticsStaleHandler =>
+      'El manejador registrado apunta a otra ubicación, así que los enlaces no llegarán a LinkUnbound.';
+
+  @override
+  String get diagnosticsDevBuild =>
+      'Se está ejecutando una compilación local, que nunca se registra. Instala la aplicación para capturar enlaces.';
+
+  @override
+  String get diagnosticsRepair => 'Reparar';
+
+  @override
+  String get diagnosticsRepaired => 'Registro reparado.';
+
+  @override
+  String get diagnosticsRepairFailed => 'No se pudo reparar el registro.';
+
+  @override
+  String ruleFromApp(String app) {
+    return 'Enlaces de $app';
+  }
 }

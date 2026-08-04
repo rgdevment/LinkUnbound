@@ -43,34 +43,78 @@ final class RuleService {
     );
   }
 
+  /// Rules are keyed by domain *and* originating app, so "github.com from
+  /// Slack" and "github.com from anywhere" can coexist.
   void addRule(Rule rule) {
-    _rules = [..._rules.where((r) => r.domain != rule.domain), rule];
-  }
-
-  void removeRule(String domain) {
-    _rules = _rules.where((r) => r.domain != domain).toList();
-  }
-
-  void updateRule(String domain, {required String browserId}) {
     _rules = [
-      for (final r in _rules)
-        if (r.domain == domain) r.copyWith(browserId: browserId) else r,
+      ..._rules.where(
+        (r) => !(r.domain == rule.domain && r.sourceApp == rule.sourceApp),
+      ),
+      rule,
     ];
   }
 
-  String? lookupBrowser(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null || uri.host.isEmpty) return null;
-    return _lookupHierarchical(uri.host);
+  void removeRule(String domain, {String? sourceApp}) {
+    _rules = _rules
+        .where((r) => !(r.domain == domain && r.sourceApp == sourceApp))
+        .toList();
   }
 
-  String? _lookupHierarchical(String host) {
-    final exact = _rules.where((r) => r.domain == host).firstOrNull;
-    if (exact != null) return exact.browserId;
+  void updateRule(
+    String domain, {
+    required String browserId,
+    String? sourceApp,
+    bool? private,
+  }) {
+    _rules = [
+      for (final r in _rules)
+        if (r.domain == domain && r.sourceApp == sourceApp)
+          r.copyWith(browserId: browserId, private: private)
+        else
+          r,
+    ];
+  }
 
-    final dotIndex = host.indexOf('.');
-    if (dotIndex < 0 || dotIndex == host.length - 1) return null;
+  String? lookupBrowser(String url, {String? sourceApp}) =>
+      lookupRule(url, sourceApp: sourceApp)?.browserId;
 
-    return _lookupHierarchical(host.substring(dotIndex + 1));
+  /// Finds the rule that governs [url] when opened from [sourceApp].
+  ///
+  /// A rule naming the originating app always wins over one that does not,
+  /// even if the latter matches the domain more precisely: "everything from
+  /// Slack in Brave" is a deliberate statement about the source, and a generic
+  /// domain rule should not silently override it.
+  Rule? lookupRule(String url, {String? sourceApp}) {
+    final uri = Uri.tryParse(url);
+    final host = uri?.host ?? '';
+    final app = sourceApp?.toLowerCase();
+
+    if (app != null) {
+      final scoped = _rules.where((r) => r.sourceApp?.toLowerCase() == app);
+      final byDomain = _matchHost(scoped, host);
+      if (byDomain != null) return byDomain;
+      final anyDomain = scoped.where((r) => r.matchesAnyDomain).firstOrNull;
+      if (anyDomain != null) return anyDomain;
+    }
+
+    final unscoped = _rules.where((r) => r.sourceApp == null);
+    final byDomain = _matchHost(unscoped, host);
+    if (byDomain != null) return byDomain;
+    return unscoped.where((r) => r.matchesAnyDomain).firstOrNull;
+  }
+
+  /// Walks up the domain hierarchy: a rule for `example.com` also covers
+  /// `docs.example.com`.
+  Rule? _matchHost(Iterable<Rule> candidates, String host) {
+    if (host.isEmpty) return null;
+    var current = host;
+    while (true) {
+      final exact = candidates.where((r) => r.domain == current).firstOrNull;
+      if (exact != null) return exact;
+
+      final dotIndex = current.indexOf('.');
+      if (dotIndex < 0 || dotIndex == current.length - 1) return null;
+      current = current.substring(dotIndex + 1);
+    }
   }
 }

@@ -116,4 +116,48 @@ void main() {
       expect(redactPath(''), '<empty>');
     });
   });
+
+  group('scheme casing and UNC hardening', () {
+    late Directory tmp;
+
+    setUp(() async {
+      tmp = await Directory.systemTemp.createTemp('lu_local_file_sec_');
+    });
+
+    tearDown(() async {
+      if (tmp.existsSync()) await tmp.delete(recursive: true);
+    });
+
+    test('looksLikeLocalFile matches an uppercase FILE scheme', () {
+      // Uri lowercases the scheme, so an uppercase argument passed the inbound
+      // check but skipped this guard — and with it the extension allowlist.
+      expect(looksLikeLocalFile('FILE:///C:/tmp/page.html'), isTrue);
+      expect(looksLikeLocalFile('File:///tmp/page.html'), isTrue);
+    });
+
+    test('looksLikeLocalFile still rejects web URLs', () {
+      expect(looksLikeLocalFile('https://example.com'), isFalse);
+      expect(looksLikeLocalFile('http://example.com/a.html'), isFalse);
+    });
+
+    test('resolveLocalWebFile rejects UNC paths', () {
+      // Probing a UNC path makes Windows authenticate to the remote host,
+      // leaking a NetNTLMv2 hash before the picker is even shown.
+      expect(
+        resolveLocalWebFile('file://attacker.example.com/s/x.html'),
+        isNull,
+      );
+      expect(
+        resolveLocalWebFile('FILE://attacker.example.com/s/x.html'),
+        isNull,
+      );
+    });
+
+    test('resolveLocalWebFile applies the extension allowlist regardless of '
+        'scheme casing', () {
+      final f = File('${tmp.path}/secret.key')..writeAsStringSync('x');
+      final upper = Uri.file(f.path).toString().replaceFirst('file:', 'FILE:');
+      expect(resolveLocalWebFile(upper), isNull);
+    });
+  });
 }

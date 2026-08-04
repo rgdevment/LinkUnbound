@@ -136,6 +136,28 @@ final class _RecordingRegistrationService implements RegistrationService {
   }
 
   @override
+  Future<void> ensureRegistered(String executablePath) =>
+      register(executablePath);
+
+  @override
+  Future<HandlerDiagnostics> diagnose(String executablePath) async =>
+      const HandlerDiagnostics(
+        isDefaultBrowser: false,
+        commandMatchesExecutable: true,
+        runningFromDevBuild: false,
+        isPackaged: false,
+      );
+
+  @override
+  Future<void> setEdgeProtocolCapture(
+    bool enabled,
+    String executablePath,
+  ) async {}
+
+  @override
+  Future<bool> get capturesEdgeProtocol async => false;
+
+  @override
   Future<void> unregister() async {}
 }
 
@@ -151,19 +173,28 @@ final class _FakeStartupService implements StartupService {
 }
 
 final class _RecordingLaunchService implements LaunchService {
-  final List<({String executablePath, String url, List<String> extraArgs})>
+  final List<
+    ({
+      String executablePath,
+      String url,
+      List<String> extraArgs,
+      List<String> privateArgs,
+    })
+  >
   calls = [];
 
   @override
   Future<void> launch(
     String executablePath,
     String url,
-    List<String> extraArgs,
-  ) async {
+    List<String> extraArgs, {
+    List<String> privateArgs = const [],
+  }) async {
     calls.add((
       executablePath: executablePath,
       url: url,
       extraArgs: List<String>.from(extraArgs),
+      privateArgs: List<String>.from(privateArgs),
     ));
   }
 }
@@ -389,8 +420,9 @@ final class _FailingLaunchService implements LaunchService {
   Future<void> launch(
     String executablePath,
     String url,
-    List<String> extraArgs,
-  ) => Future.error(Exception('launch failed'));
+    List<String> extraArgs, {
+    List<String> privateArgs = const [],
+  }) => Future.error(Exception('launch failed'));
 }
 
 final class _ThrowingDelegateBindings extends _FakeBindings {
@@ -461,6 +493,28 @@ final class _FailingRegistrationService implements RegistrationService {
   @override
   Future<void> register(String executablePath) =>
       Future.error(Exception('registration failed'));
+
+  @override
+  Future<void> ensureRegistered(String executablePath) =>
+      register(executablePath);
+
+  @override
+  Future<HandlerDiagnostics> diagnose(String executablePath) async =>
+      const HandlerDiagnostics(
+        isDefaultBrowser: false,
+        commandMatchesExecutable: true,
+        runningFromDevBuild: false,
+        isPackaged: false,
+      );
+
+  @override
+  Future<void> setEdgeProtocolCapture(
+    bool enabled,
+    String executablePath,
+  ) async {}
+
+  @override
+  Future<bool> get capturesEdgeProtocol async => false;
 
   @override
   Future<void> unregister() async {}
@@ -783,6 +837,9 @@ void main() {
 
       windowSpy.clear();
 
+      // Mode transitions run through a serialised queue: the continuation is
+      // scheduled on the test zone, so it needs a pump to start, and each
+      // window call is a channel round-trip needing another.
       await tester.runAsync(() async {
         bindings.emit(const ShowSettingsEvent());
         await Future<void>.delayed(const Duration(milliseconds: 150));
@@ -1184,4 +1241,131 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('a second link while the picker is up re-shows it', (
+    tester,
+  ) async {
+    // Returning early on a same-mode transition used to make the app go deaf
+    // to every subsequent link once the picker was open.
+    final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = true;
+    addTearDown(bindings.close);
+    await tester.runAsync(() => bindings.seed(browsers: const [_chrome]));
+
+    await boot(tester, bindings, const ['--background']);
+    await tester.runAsync(() async {
+      bindings.emit(const OpenUrlEvent('https://first.example/page'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(PickerWindow), findsOneWidget);
+
+    windowSpy.clear();
+    await tester.runAsync(() async {
+      bindings.emit(const OpenUrlEvent('https://second.example/page'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(PickerWindow), findsOneWidget);
+    // The window is repositioned and re-shown rather than left where it was.
+    // window_manager routes both setPosition and setSize through setBounds.
+    expect(windowSpy.methods, contains('show'));
+    expect(windowSpy.methods, contains('setBounds'));
+  });
+
+  testWidgets('a non-launchable URL never reaches a browser', (tester) async {
+    // Inbound events arrive over IPC from any local process. A Chromium switch
+    // is not a URL, but handed through as argv it runs an arbitrary binary.
+    final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = true;
+    addTearDown(bindings.close);
+    await tester.runAsync(() => bindings.seed(browsers: const [_chrome]));
+
+    await boot(tester, bindings, const ['--background']);
+    await tester.runAsync(() async {
+      bindings.emit(const OpenUrlEvent('--gpu-launcher=calc.exe'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(PickerWindow), findsNothing);
+    expect(bindings.launchRecorder.calls, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a rule scoped to the originating app is applied', (
+    tester,
+  ) async {
+    final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = true;
+    addTearDown(bindings.close);
+    await tester.runAsync(
+      () => bindings.seed(
+        browsers: const [_chrome],
+        rules: const [
+          Rule(domain: kAnyDomain, browserId: 'chrome', sourceApp: 'slack'),
+        ],
+      ),
+    );
+
+    await boot(tester, bindings, const ['--background']);
+    await tester.runAsync(() async {
+      bindings.emit(
+        const OpenUrlEvent('https://anything.example/x', sourceApp: 'slack'),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(PickerWindow), findsNothing);
+    expect(
+      bindings.launchRecorder.calls.single.url,
+      'https://anything.example/x',
+    );
+  });
+
+  testWidgets('a private rule launches the browser privately', (tester) async {
+    final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = true;
+    addTearDown(bindings.close);
+    await tester.runAsync(
+      () => bindings.seed(
+        browsers: const [_chrome],
+        rules: const [
+          Rule(domain: 'example.com', browserId: 'chrome', private: true),
+        ],
+      ),
+    );
+
+    await boot(tester, bindings, const ['--background']);
+    await tester.runAsync(() async {
+      bindings.emit(const OpenUrlEvent('https://example.com/docs'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump();
+
+    expect(bindings.launchRecorder.calls.single.privateArgs, ['--incognito']);
+  });
+
+  testWidgets('an unmatched link carries its origin into the picker', (
+    tester,
+  ) async {
+    final bindings = _FakeBindings(rootDir: tempDir)..startsHidden = true;
+    addTearDown(bindings.close);
+    await tester.runAsync(() => bindings.seed(browsers: const [_chrome]));
+
+    await boot(tester, bindings, const ['--background']);
+    await tester.runAsync(() async {
+      bindings.emit(
+        const OpenUrlEvent('https://no-rule.example/x', sourceApp: 'slack'),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump();
+    await tester.pump();
+
+    // The footer offers a rule about the app, not about the domain.
+    expect(find.text('Always open links from slack here'), findsOneWidget);
+  });
 }

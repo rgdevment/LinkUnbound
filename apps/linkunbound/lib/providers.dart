@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'platform/macos/mac_diagnostics_service.dart';
 import 'platform/windows/win_diagnostics_service.dart';
+import 'platform/windows/win_package_context.dart';
 
 StateError _mustOverride() => StateError('Override at startup');
 
@@ -46,6 +47,12 @@ final hideTrayFileProvider = Provider<File>((_) => throw _mustOverride());
 final globalHotkeyFileProvider = Provider<File>((_) => throw _mustOverride());
 
 final appDataDirProvider = Provider<Directory>((_) => throw _mustOverride());
+
+/// Path of the running executable, overridden at startup from the platform
+/// bindings. Defaults to the real value so widget tests need no override.
+final executablePathProvider = Provider<String>(
+  (_) => Platform.resolvedExecutable,
+);
 
 typedef DiagnosticsExporter =
     Future<String> Function({
@@ -136,9 +143,13 @@ final class ThemeModeNotifier extends Notifier<ThemeMode> {
 enum AppMode { hidden, settings, picker }
 
 final class AppState {
-  AppState({this.mode = AppMode.hidden, this.pendingUrl});
+  AppState({this.mode = AppMode.hidden, this.pendingUrl, this.pendingOrigin});
   final AppMode mode;
   final String? pendingUrl;
+
+  /// App the pending link came from, when it could be determined. Lets the
+  /// picker offer "always open links from this app here".
+  final String? pendingOrigin;
 }
 
 final appStateProvider = NotifierProvider<AppStateNotifier, AppState>(
@@ -151,8 +162,11 @@ final class AppStateNotifier extends Notifier<AppState> {
 
   void showSettings() => state = AppState(mode: AppMode.settings);
 
-  void showPicker(String url) =>
-      state = AppState(mode: AppMode.picker, pendingUrl: url);
+  void showPicker(String url, {String? origin}) => state = AppState(
+    mode: AppMode.picker,
+    pendingUrl: url,
+    pendingOrigin: origin,
+  );
 
   void hide() => state = AppState();
 }
@@ -209,16 +223,20 @@ final class RulesNotifier extends Notifier<List<Rule>> {
   @override
   List<Rule> build() => ref.read(ruleServiceProvider).rules;
 
-  Future<void> updateRule(String domain, {required String browserId}) async {
+  Future<void> updateRule(
+    String domain, {
+    required String browserId,
+    String? sourceApp,
+  }) async {
     final service = ref.read(ruleServiceProvider);
-    service.updateRule(domain, browserId: browserId);
+    service.updateRule(domain, browserId: browserId, sourceApp: sourceApp);
     await service.save();
     state = service.rules;
   }
 
-  Future<void> removeRule(String domain) async {
+  Future<void> removeRule(String domain, {String? sourceApp}) async {
     final service = ref.read(ruleServiceProvider);
-    service.removeRule(domain);
+    service.removeRule(domain, sourceApp: sourceApp);
     await service.save();
     state = service.rules;
   }
@@ -236,6 +254,30 @@ final defaultAssociationsProvider = FutureProvider.autoDispose<Set<String>>((
 
 final isStartupEnabledProvider = FutureProvider.autoDispose<bool>((ref) {
   return ref.read(startupServiceProvider).isEnabled;
+});
+
+/// Why link capture may be broken, for the self-diagnostics card in Settings.
+final handlerDiagnosticsProvider =
+    FutureProvider.autoDispose<HandlerDiagnostics>((ref) {
+      return ref
+          .read(registrationServiceProvider)
+          .diagnose(ref.read(executablePathProvider));
+    });
+
+/// Whether intercepting `microsoft-edge:` can be offered at all: only Windows
+/// has the scheme, and an MSIX package cannot claim a protocol owned by another
+/// package.
+///
+/// A provider instead of an inline platform check so the setting is reachable
+/// from a test on any host — the coverage run happens on Linux.
+final edgeProtocolSupportedProvider = Provider<bool>(
+  (_) => Platform.isWindows && !isRunningInMsix(),
+);
+
+/// Whether `microsoft-edge:` links (Teams, Outlook, Start search) are being
+/// intercepted. Always false outside Windows.
+final edgeProtocolCaptureProvider = FutureProvider.autoDispose<bool>((ref) {
+  return ref.read(registrationServiceProvider).capturesEdgeProtocol;
 });
 
 final packageInfoProvider = FutureProvider<PackageInfo>((ref) {

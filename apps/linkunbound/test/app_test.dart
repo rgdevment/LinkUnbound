@@ -108,8 +108,8 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SettingsWindow), findsOneWidget);
-    expect(windowSpy.methods, contains('show'));
-    expect(windowSpy.methods, contains('focus'));
+    // Showing and focusing is bootstrap's job now — driving the window from
+    // here too raced the serialised transition queue. See bootstrap_test.
   });
 
   testWidgets('immediate blur after showing picker is ignored', (tester) async {

@@ -123,7 +123,7 @@ Future<void> _writeLaunchServicesDump(Directory staging) async {
 }
 
 void _copyDataSnapshots(Directory appDataDir, Directory staging) {
-  for (final name in const ['browsers.json', 'rules.json', 'locale.json']) {
+  for (final name in const ['browsers.json', 'rules.json', 'locale']) {
     final src = File('${appDataDir.path}/$name');
     if (src.existsSync()) {
       try {
@@ -136,7 +136,7 @@ void _copyDataSnapshots(Directory appDataDir, Directory staging) {
 }
 
 void _copyLogTail(Directory appDataDir, Directory staging) {
-  final logFile = File('${appDataDir.path}/linkunbound.log');
+  final logFile = File('${appDataDir.path}/navigate.log');
   if (!logFile.existsSync()) return;
 
   try {
@@ -145,7 +145,7 @@ void _copyLogTail(Directory appDataDir, Directory staging) {
         ? lines.sublist(lines.length - _maxLogLines)
         : lines;
     File(
-      '${staging.path}/linkunbound.log',
+      '${staging.path}/navigate.log',
     ).writeAsStringSync('${tail.join('\n')}\n');
   } on Exception catch (e) {
     _log.fine('Failed to copy log tail: $e');

@@ -147,7 +147,7 @@ void main() {
       expect(find.byType(PickerWindow), findsNothing);
     });
 
-    testWidgets('onWindowFocus marks picker ready before timer fires', (
+    testWidgets('focus does not arm the blur guard before the grace period', (
       tester,
     ) async {
       final (:container, :tempDir) = _buildApp(tester);
@@ -171,14 +171,17 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // Focus fires before the 350ms fallback — should mark ready.
+      // Showing a window generates its own focus/blur pair. Arming the guard
+      // on that focus closed the picker immediately, before the user could
+      // click anything — only the grace timer may arm it.
       // ignore: avoid_dynamic_calls
       appState.onWindowFocus();
       // ignore: avoid_dynamic_calls
       appState.onWindowBlur();
       await tester.pump();
 
-      expect(container.read(appStateProvider).mode, AppMode.hidden);
+      expect(container.read(appStateProvider).mode, AppMode.picker);
+      expect(find.byType(PickerWindow), findsOneWidget);
     });
 
     testWidgets('blur in settings mode does nothing', (tester) async {

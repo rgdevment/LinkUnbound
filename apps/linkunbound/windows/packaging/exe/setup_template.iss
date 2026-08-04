@@ -93,7 +93,13 @@ Root: HKCU; Subkey: "SOFTWARE\LinkUnbound"; Flags: uninsdeletekey dontcreatekey
 Root: HKCU; Subkey: "SOFTWARE\RegisteredApplications"; ValueName: "LinkUnbound"; Flags: uninsdeletevalue dontcreatekey
 
 [Run]
-Filename: "{app}\{{EXECUTABLE_NAME}}"; Description: "{cm:LaunchProgram,{{DISPLAY_NAME}}}"; Flags: nowait postinstall skipifsilent
+; runasoriginaluser is mandatory here: the installer requires admin, and without
+; it the app inherits the elevated token. Its single-instance mutex and IPC pipe
+; would then live at high integrity, unreachable from the medium-integrity
+; processes that actually open links (Slack, Teams, Explorer) — every click
+; would be silently dropped. It also keeps per-user registry writes in the
+; signed-in user's hive rather than the admin's.
+Filename: "{app}\{{EXECUTABLE_NAME}}"; Description: "{cm:LaunchProgram,{{DISPLAY_NAME}}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
 const
