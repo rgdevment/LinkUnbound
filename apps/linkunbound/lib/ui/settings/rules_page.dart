@@ -62,14 +62,25 @@ class RulesPage extends ConsumerWidget {
                 ...rules.map(
                   (rule) => RuleRow(
                     domain: rule.domain,
+                    sourceApp: rule.sourceApp,
+                    private: rule.private,
                     browserName: _browserName(rule.browserId, browsers),
                     browsers: browserList,
                     onBrowserChanged: (browserId) {
                       ref
                           .read(rulesProvider.notifier)
-                          .updateRule(rule.domain, browserId: browserId);
+                          .updateRule(
+                            rule.domain,
+                            browserId: browserId,
+                            sourceApp: rule.sourceApp,
+                          );
                     },
-                    onDelete: () => _confirmDelete(context, ref, rule.domain),
+                    onDelete: () => _confirmDelete(
+                      context,
+                      ref,
+                      rule.domain,
+                      sourceApp: rule.sourceApp,
+                    ),
                   ),
                 ),
               ],
@@ -86,17 +97,24 @@ class RulesPage extends ConsumerWidget {
     return browserId;
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, String domain) {
+  void _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    String domain, {
+    String? sourceApp,
+  }) {
     final l10n = AppLocalizations.of(context)!;
     showDialog<void>(
       context: context,
       builder: (ctx) => BaseDialog(
         title: l10n.deleteRuleTitle,
-        content: l10n.deleteRuleContent(domain),
+        content: l10n.deleteRuleContent(sourceApp ?? domain),
         confirmLabel: l10n.delete,
         confirmColor: Theme.of(ctx).colorScheme.error,
         onConfirm: () {
-          ref.read(rulesProvider.notifier).removeRule(domain);
+          ref
+              .read(rulesProvider.notifier)
+              .removeRule(domain, sourceApp: sourceApp);
           Navigator.of(ctx).pop();
         },
       ),

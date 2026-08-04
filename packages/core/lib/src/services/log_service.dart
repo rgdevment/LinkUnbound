@@ -10,7 +10,15 @@ StreamSubscription<LogRecord>? _logSubscription;
 // Kept open for the session lifetime to avoid reopening the fd on every record.
 RandomAccessFile? _logRaf;
 
-final _urlPattern = RegExp(r'https?://[^\s,\]\)]+', caseSensitive: false);
+// Any scheme, not just http(s): an unrecognised scheme is exactly the case
+// worth redacting. `file://` is excluded so the path pattern below handles it,
+// which redacts the filesystem path rather than the URL shape.
+// The lookbehind matters: without it the engine simply starts one character
+// later and matches `ile://` out of `file://`, defeating the exclusion.
+final _urlPattern = RegExp(
+  r'(?<![a-z])(?!file://)[a-z][a-z0-9+.\-]*://[^\s,\]\)]+',
+  caseSensitive: false,
+);
 final _filePathPattern = RegExp(
   r'file:///[a-zA-Z]:[\\/][^\s,\]\)]*|[a-zA-Z]:\\[^\s,\]\)]*',
   caseSensitive: false,
@@ -57,13 +65,16 @@ void initLogging(File logFile, {Level fileLevel = Level.INFO}) {
   _logSubscription = Logger.root.onRecord.listen((record) {
     if (record.level < fileLevel) return;
     final message = redactUrls(record.message);
+    // `error` and `stackTrace` must be redacted too: a ProcessException prints
+    // the full command line, which for a failed browser launch is the user's
+    // URL verbatim — exactly what PRIVACY.md promises never reaches the disk.
     final line =
         '${record.time.toIso8601String()} '
         '[${record.level.name}] '
         '${record.loggerName}: '
         '$message'
-        '${record.error != null ? '\n  ${record.error}' : ''}'
-        '${record.stackTrace != null ? '\n  ${record.stackTrace}' : ''}';
+        '${record.error != null ? '\n  ${redactUrls('${record.error}')}' : ''}'
+        '${record.stackTrace != null ? '\n  ${redactUrls('${record.stackTrace}')}' : ''}';
     if (useStderr) {
       try {
         stderr.writeln(line);

@@ -55,6 +55,9 @@ final class BrowserDetectorChannel {
       "/Applications/",
       "/System/Applications/",
       "/System/Volumes/Preboot/",
+      // Safari ships from a cryptex on macOS 13+, so without this it is
+      // filtered out and users with no other browser get an empty picker.
+      "/System/Cryptexes/App/System/Applications/",
       NSString("~/Applications/").expandingTildeInPath + "/",
     ]
 

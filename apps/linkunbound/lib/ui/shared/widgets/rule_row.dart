@@ -9,6 +9,8 @@ class RuleRow extends StatelessWidget {
     required this.browsers,
     required this.onBrowserChanged,
     required this.onDelete,
+    this.sourceApp,
+    this.private = false,
     super.key,
   });
 
@@ -18,9 +20,17 @@ class RuleRow extends StatelessWidget {
   final void Function(String browserId) onBrowserChanged;
   final VoidCallback onDelete;
 
+  /// Origin the rule is scoped to, when it targets an app rather than a domain.
+  final String? sourceApp;
+  final bool private;
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+    // An app-scoped rule reads as the app name; showing the literal "*" it is
+    // stored under would be meaningless to the user.
+    final label = sourceApp != null ? l10n.ruleFromApp(sourceApp!) : domain;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -28,10 +38,32 @@ class RuleRow extends StatelessWidget {
         children: [
           Expanded(
             flex: 3,
-            child: Text(
-              domain,
-              style: Theme.of(context).textTheme.bodyMedium,
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                if (sourceApp != null) ...[
+                  Icon(
+                    Icons.apps_outlined,
+                    size: 14,
+                    color: colors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (private) ...[
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.visibility_off_outlined,
+                    size: 14,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(width: 12),

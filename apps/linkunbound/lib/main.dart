@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:linkunbound_core/linkunbound_core.dart';
 
 import 'bootstrap.dart';
 import 'platform/macos/macos_bindings.dart';
@@ -37,6 +38,8 @@ Future<void> main(List<String> args) async {
   );
 }
 
+const _maxCrashLogSize = 256 * 1024;
+
 void _writeStartupCrashLog(String source, Object error, StackTrace? stack) {
   try {
     final String base;
@@ -52,9 +55,16 @@ void _writeStartupCrashLog(String source, Object error, StackTrace? stack) {
     final dir = Platform.isWindows ? '$base\\LinkUnbound' : '$base/LinkUnbound';
     Directory(dir).createSync(recursive: true);
     final file = File('$dir${Platform.pathSeparator}startup_crash.log');
+    // Bounded like navigate.log: this file is append-only and a repeating
+    // failure (a browser whose path went stale) would otherwise grow forever.
+    if (file.existsSync() && file.lengthSync() > _maxCrashLogSize) {
+      file.deleteSync();
+    }
     final now = DateTime.now().toIso8601String();
+    // Redacted like every other sink: a ProcessException carries the full
+    // command line, i.e. the user's URL.
     file.writeAsStringSync(
-      '[$now] $source: $error\n$stack\n\n',
+      '[$now] $source: ${redactUrls('$error')}\n${redactUrls('$stack')}\n\n',
       mode: FileMode.append,
     );
   } on Object {

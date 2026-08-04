@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:linkunbound/platform/windows/win_package_context.dart';
 import 'package:linkunbound/platform/windows/win_registration_service.dart';
 
 void main() {
@@ -94,6 +95,41 @@ void main() {
 
     test('includes pdf file extension', () {
       expect(winRegistrationUserChoiceKeys, contains('.pdf'));
+    });
+  });
+
+  group('isDevBuildPath', () {
+    test('flags a Flutter build tree', () {
+      // A build tree must never own the registration: it disappears on
+      // `flutter clean` and the dead ProgId then shadows the real install.
+      expect(
+        isDevBuildPath(
+          r'D:\Code\LinkUnbound\apps\linkunbound\build\windows'
+          r'\x64\runner\Release\linkunbound.exe',
+        ),
+        isTrue,
+      );
+    });
+
+    test('accepts forward slashes and mixed case', () {
+      expect(
+        isDevBuildPath('D:/Code/App/Build/Windows/x64/Runner/app.exe'),
+        isTrue,
+      );
+    });
+
+    test('does not flag a real installation', () {
+      expect(
+        isDevBuildPath(r'C:\Program Files\LinkUnbound\linkunbound.exe'),
+        isFalse,
+      );
+      expect(
+        isDevBuildPath(
+          r'C:\Program Files\WindowsApps\rgdevment.LinkUnbound_1.0'
+          r'\linkunbound.exe',
+        ),
+        isFalse,
+      );
     });
   });
 }

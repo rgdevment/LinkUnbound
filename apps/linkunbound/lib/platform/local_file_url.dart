@@ -24,7 +24,10 @@ String? resolveLocalWebFile(String raw) {
 }
 
 bool looksLikeLocalFile(String raw) {
-  if (raw.startsWith('file://')) return true;
+  // Scheme comparison must be case-insensitive: `Uri` lowercases the scheme,
+  // so a `FILE://` argument passes the inbound scheme check yet would skip
+  // this guard — and with it the extension allowlist — if matched literally.
+  if (Uri.tryParse(raw)?.scheme.toLowerCase() == 'file') return true;
   if (Platform.isWindows && _windowsAbsPath.hasMatch(raw)) return true;
   return false;
 }
@@ -40,14 +43,20 @@ String redactPath(String path) {
 }
 
 String? _toFilesystemPath(String raw) {
-  if (raw.startsWith('file://')) {
-    final uri = Uri.tryParse(raw);
-    if (uri == null || uri.scheme != 'file') return null;
+  final uri = Uri.tryParse(raw);
+  if (uri != null && uri.scheme.toLowerCase() == 'file') {
+    // `file://host/share/x.html` becomes a UNC path, and merely probing it
+    // makes Windows authenticate against `host`, leaking a NetNTLMv2 hash to
+    // an attacker-chosen server before the picker is even shown.
+    if (uri.host.isNotEmpty) return null;
+    final String path;
     try {
-      return uri.toFilePath();
+      path = uri.toFilePath();
     } on UnsupportedError {
       return null;
     }
+    if (path.startsWith(r'\\') || path.startsWith('//')) return null;
+    return path;
   }
 
   if (Platform.isWindows && _windowsAbsPath.hasMatch(raw)) return raw;

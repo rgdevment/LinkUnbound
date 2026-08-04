@@ -74,6 +74,7 @@ All data is stored locally under your user profile.
 | Browsers | `%LOCALAPPDATA%\LinkUnbound\browsers.json`       |
 | Rules    | `%LOCALAPPDATA%\LinkUnbound\rules.json`          |
 | Log      | `%LOCALAPPDATA%\LinkUnbound\navigate.log`        |
+| Crash log | `%LOCALAPPDATA%\LinkUnbound\startup_crash.log`  |
 | Icons    | `%LOCALAPPDATA%\LinkUnbound\icons\`              |
 
 **macOS** — `~/Library/Application Support/LinkUnbound/`:
@@ -83,6 +84,7 @@ All data is stored locally under your user profile.
 | Browsers | `~/Library/Application Support/LinkUnbound/browsers.json`        |
 | Rules    | `~/Library/Application Support/LinkUnbound/rules.json`           |
 | Log      | `~/Library/Application Support/LinkUnbound/navigate.log`         |
+| Crash log | `~/Library/Application Support/LinkUnbound/startup_crash.log`   |
 | Icons    | `~/Library/Application Support/LinkUnbound/icons/`               |
 
 These folders are protected by your operating system's user account permissions. Other users on the same computer cannot access them under normal conditions.
@@ -196,6 +198,8 @@ URLs are redacted **at write time** — before they ever reach the log file on d
 - `http://internal.company.net/app` → `http://<redacted>/2 segments`
 
 This means the `navigate.log` file on your machine never contains real URLs. The diagnostics export simply copies the last 200 lines of this already-redacted log.
+
+Redaction covers the whole log record, including attached error objects and stack traces. This matters because a failed browser launch raises an error whose text embeds the full command line — that is, the URL. The same redaction is applied to `startup_crash.log`, a separate file written only when the app fails during startup; it is capped in size and is safe to delete at any time.
 
 ---
 

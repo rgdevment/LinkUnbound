@@ -299,5 +299,27 @@ final class _ThrowingRegistrationService implements RegistrationService {
   Future<void> register(String executablePath) async {}
 
   @override
+  Future<void> ensureRegistered(String executablePath) =>
+      register(executablePath);
+
+  @override
+  Future<HandlerDiagnostics> diagnose(String executablePath) async =>
+      const HandlerDiagnostics(
+        isDefaultBrowser: false,
+        commandMatchesExecutable: true,
+        runningFromDevBuild: false,
+        isPackaged: false,
+      );
+
+  @override
+  Future<void> setEdgeProtocolCapture(
+    bool enabled,
+    String executablePath,
+  ) async {}
+
+  @override
+  Future<bool> get capturesEdgeProtocol async => false;
+
+  @override
   Future<void> unregister() => Future.error(Exception('unregister failed'));
 }

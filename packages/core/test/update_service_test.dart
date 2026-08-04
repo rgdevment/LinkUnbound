@@ -103,7 +103,7 @@ void main() {
     test('fields are accessible after construction', () {
       const info = UpdateInfo(
         latestVersion: '1.0.0',
-        releaseUrl: 'https://example.com',
+        releaseUrl: 'https://github.com/o/r/releases/tag/x',
       );
       expect(info.latestVersion, isNotEmpty);
       expect(info.releaseUrl, isNotEmpty);
@@ -147,10 +147,39 @@ void main() {
       expect(result.releaseUrl, 'https://github.com/o/r/releases/tag/v2.0.0');
     });
 
+    test('returns null when html_url is not a github.com URL', () async {
+      // The release URL is handed to the shell, so an untrusted host must not
+      // survive the parse even if the version looks newer.
+      final result = await _check(
+        status: 200,
+        body: {
+          'tag_name': 'v2.0.0',
+          'html_url': 'https://evil.example.com/payload.exe',
+        },
+        current: '1.0.0',
+      );
+      expect(result, isNull);
+    });
+
+    test('returns null when html_url uses a non-https scheme', () async {
+      final result = await _check(
+        status: 200,
+        body: {
+          'tag_name': 'v2.0.0',
+          'html_url': 'file://attacker/share/payload.exe',
+        },
+        current: '1.0.0',
+      );
+      expect(result, isNull);
+    });
+
     test('strips v prefix from tag_name', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': 'v1.5.0', 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': 'v1.5.0',
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '1.0.0',
       );
       expect(result!.latestVersion, '1.5.0');
@@ -159,7 +188,10 @@ void main() {
     test('accepts tag_name without v prefix', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': '1.5.0', 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': '1.5.0',
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '1.0.0',
       );
       expect(result!.latestVersion, '1.5.0');
@@ -168,7 +200,10 @@ void main() {
     test('returns null when version is equal to current', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': 'v1.0.0', 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': 'v1.0.0',
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '1.0.0',
       );
       expect(result, isNull);
@@ -177,7 +212,10 @@ void main() {
     test('returns null when latest is older than current', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': 'v0.9.9', 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': 'v0.9.9',
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '1.0.0',
       );
       expect(result, isNull);
@@ -191,7 +229,10 @@ void main() {
     test('returns null when tag_name is null', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': null, 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': null,
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '1.0.0',
       );
       expect(result, isNull);
@@ -209,7 +250,10 @@ void main() {
     test('minor version bump triggers update', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': 'v1.1.0', 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': 'v1.1.0',
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '1.0.9',
       );
       expect(result, isNotNull);
@@ -218,7 +262,10 @@ void main() {
     test('patch version bump triggers update', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': 'v1.0.1', 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': 'v1.0.1',
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '1.0.0',
       );
       expect(result, isNotNull);
@@ -227,7 +274,10 @@ void main() {
     test('major rollback returns null', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': 'v2.0.0', 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': 'v2.0.0',
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '3.0.0',
       );
       expect(result, isNull);
@@ -236,7 +286,10 @@ void main() {
     test('minor rollback returns null', () async {
       final result = await _check(
         status: 200,
-        body: {'tag_name': 'v1.0.0', 'html_url': 'https://example.com'},
+        body: {
+          'tag_name': 'v1.0.0',
+          'html_url': 'https://github.com/o/r/releases/tag/x',
+        },
         current: '1.1.0',
       );
       expect(result, isNull);

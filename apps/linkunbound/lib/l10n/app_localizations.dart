@@ -655,6 +655,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You can reach the app via its global shortcut'**
   String get hideTraySubtitleWindows;
+
+  /// Shown in the picker when no browsers are configured
+  ///
+  /// In en, this message translates to:
+  /// **'No browsers detected. Open Settings to add one.'**
+  String get pickerNoBrowsers;
+
+  /// Toggle label for microsoft-edge: protocol capture (Windows only)
+  ///
+  /// In en, this message translates to:
+  /// **'Capture links from Microsoft apps'**
+  String get edgeProtocolLabel;
+
+  /// Explains what capturing the microsoft-edge: protocol does
+  ///
+  /// In en, this message translates to:
+  /// **'Teams, Outlook and Start menu search open links through Edge directly, bypassing the default browser. Enable this to let LinkUnbound offer a choice for those links too.'**
+  String get edgeProtocolDescription;
+
+  /// Hint in the picker footer: holding Shift opens a private window
+  ///
+  /// In en, this message translates to:
+  /// **'Shift = private'**
+  String get pickerPrivateHint;
+
+  /// Checkbox label when the originating app is known
+  ///
+  /// In en, this message translates to:
+  /// **'Always open links from {app} here'**
+  String alwaysOpenFromApp(String app);
+
+  /// Handler self-diagnostics in Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Link capture problem detected'**
+  String get diagnosticsTitle;
+
+  /// Handler self-diagnostics in Settings
+  ///
+  /// In en, this message translates to:
+  /// **'The registered handler points somewhere else, so links will not reach LinkUnbound.'**
+  String get diagnosticsStaleHandler;
+
+  /// Handler self-diagnostics in Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Running from a local build, which never registers itself. Install the app to capture links.'**
+  String get diagnosticsDevBuild;
+
+  /// Handler self-diagnostics in Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Repair'**
+  String get diagnosticsRepair;
+
+  /// Handler self-diagnostics in Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Registration repaired.'**
+  String get diagnosticsRepaired;
+
+  /// Handler self-diagnostics in Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Could not repair the registration.'**
+  String get diagnosticsRepairFailed;
+
+  /// Rule label when scoped to the originating app
+  ///
+  /// In en, this message translates to:
+  /// **'Links from {app}'**
+  String ruleFromApp(String app);
 }
 
 class _AppLocalizationsDelegate

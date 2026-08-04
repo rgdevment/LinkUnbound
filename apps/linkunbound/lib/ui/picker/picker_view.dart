@@ -13,9 +13,13 @@ import '../../providers.dart';
 final _log = Logger('PickerView');
 
 class PickerView extends ConsumerStatefulWidget {
-  const PickerView({required this.url, super.key});
+  const PickerView({required this.url, this.origin, super.key});
 
   final String url;
+
+  /// App the link came from, when known. Turns "always open" into a rule about
+  /// the originating app rather than the domain.
+  final String? origin;
 
   @override
   ConsumerState<PickerView> createState() => _PickerViewState();
@@ -23,6 +27,38 @@ class PickerView extends ConsumerStatefulWidget {
 
 class _PickerViewState extends ConsumerState<PickerView> {
   bool _alwaysOpen = false;
+  bool _privateIntent = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Shift may already be down when the picker appears — the user holds it
+    // before clicking, not after — so seed from the current keyboard state
+    // instead of waiting for a key event that will never come.
+    _privateIntent = _shiftIsDown();
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
+    super.dispose();
+  }
+
+  static bool _shiftIsDown() =>
+      HardwareKeyboard.instance.logicalKeysPressed.any(
+        (k) =>
+            k == LogicalKeyboardKey.shiftLeft ||
+            k == LogicalKeyboardKey.shiftRight,
+      );
+
+  bool _onKeyEvent(KeyEvent event) {
+    final down = _shiftIsDown();
+    if (down != _privateIntent && mounted) {
+      setState(() => _privateIntent = down);
+    }
+    return false; // never consume: the shortcut handler below still needs it
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,27 +98,48 @@ class _PickerViewState extends ConsumerState<PickerView> {
           _UrlHeader(url: widget.url, domain: domain, isLocalFile: isLocalFile),
           Divider(height: 0.5, color: colors.outline.withAlpha(50)),
           Expanded(
-            // Scrollbar appears when browsers > maxVisible (6); shortcuts 1-9
-            // still work for off-screen rows — the scrollbar signals that.
-            child: Scrollbar(
-              thumbVisibility: browsers.length > 6,
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: browsers.length,
-                itemBuilder: (context, index) => _BrowserRow(
-                  browser: browsers[index],
-                  iconPath:
-                      '${iconsDir.path}${Platform.pathSeparator}${browsers[index].id}.png',
-                  shortcut: index < 9 ? '${index + 1}' : null,
-                  onTap: () => _launch(browsers[index], iconsDir),
-                ),
-              ),
-            ),
+            // An empty list would otherwise render as a blank window, which
+            // reads as "the app is broken" rather than "detection found
+            // nothing".
+            child: browsers.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        AppLocalizations.of(context)!.pickerNoBrowsers,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  )
+                // Scrollbar appears when browsers > maxVisible (6); shortcuts
+                // 1-9 still work for off-screen rows — the scrollbar signals
+                // that.
+                : Scrollbar(
+                    thumbVisibility: browsers.length > 6,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: browsers.length,
+                      itemBuilder: (context, index) => _BrowserRow(
+                        browser: browsers[index],
+                        iconPath:
+                            '${iconsDir.path}${Platform.pathSeparator}${browsers[index].id}.png',
+                        shortcut: index < 9 ? '${index + 1}' : null,
+                        // Only browsers that actually take a private-window
+                        // switch show the badge; Safari has none.
+                        private:
+                            _privateIntent && browsers[index].canOpenPrivately,
+                        onTap: () => _launch(browsers[index], iconsDir),
+                      ),
+                    ),
+                  ),
           ),
           Divider(height: 0.5, color: colors.outline.withAlpha(50)),
           _AlwaysOpenFooter(
             value: _alwaysOpen,
             onChanged: (v) => setState(() => _alwaysOpen = v),
+            originLabel: widget.origin,
+            showPrivateHint: browsers.any((b) => b.canOpenPrivately),
           ),
         ],
       ),
@@ -90,14 +147,44 @@ class _PickerViewState extends ConsumerState<PickerView> {
   }
 
   void _launch(Browser browser, Directory iconsDir) {
+    final private = _privateIntent && browser.canOpenPrivately;
     final launchService = ref.read(launchServiceProvider);
-    launchService.launch(browser.executablePath, widget.url, browser.extraArgs);
+    // A browser that was uninstalled or moved makes Process.start throw. Left
+    // unhandled, that future escaped to the zone guard and was recorded as a
+    // crash — with the full URL in the report — while the user just saw the
+    // picker close and nothing open.
+    unawaited(
+      launchService
+          .launch(
+            browser.executablePath,
+            widget.url,
+            browser.extraArgs,
+            privateArgs: private ? browser.resolvedPrivateArgs : const [],
+          )
+          .catchError((Object e, StackTrace st) {
+            _log.severe('Launch failed for ${browser.name}: ${e.runtimeType}');
+          }),
+    );
 
     if (_alwaysOpen) {
       final ruleService = ref.read(ruleServiceProvider);
       final uri = Uri.tryParse(widget.url);
-      if (uri != null && uri.host.isNotEmpty) {
-        ruleService.addRule(Rule(domain: uri.host, browserId: browser.id));
+      final origin = widget.origin;
+      // With a known origin the rule is scoped to it and covers every domain:
+      // "links from Slack open here" is what the user is expressing by ticking
+      // the box on a link that arrived from Slack.
+      final rule = origin != null
+          ? Rule(
+              domain: kAnyDomain,
+              browserId: browser.id,
+              sourceApp: origin,
+              private: private,
+            )
+          : (uri != null && uri.host.isNotEmpty)
+          ? Rule(domain: uri.host, browserId: browser.id, private: private)
+          : null;
+      if (rule != null) {
+        ruleService.addRule(rule);
         unawaited(
           ruleService.save().catchError((Object e, StackTrace st) {
             _log.warning('Failed to persist always-open rule', e, st);
@@ -232,12 +319,16 @@ class _BrowserRow extends StatefulWidget {
     required this.iconPath,
     required this.onTap,
     this.shortcut,
+    this.private = false,
   });
 
   final Browser browser;
   final String iconPath;
   final VoidCallback onTap;
   final String? shortcut;
+
+  /// Shows the private-window badge; driven by the Shift key being held.
+  final bool private;
 
   @override
   State<_BrowserRow> createState() => _BrowserRowState();
@@ -277,6 +368,14 @@ class _BrowserRowState extends State<_BrowserRow> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (widget.private) ...[
+                Icon(
+                  Icons.visibility_off_outlined,
+                  size: 14,
+                  color: colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+              ],
               if (widget.shortcut != null)
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -305,14 +404,27 @@ class _BrowserRowState extends State<_BrowserRow> {
 }
 
 class _AlwaysOpenFooter extends ConsumerWidget {
-  const _AlwaysOpenFooter({required this.value, required this.onChanged});
+  const _AlwaysOpenFooter({
+    required this.value,
+    required this.onChanged,
+    this.originLabel,
+    this.showPrivateHint = false,
+  });
   final bool value;
   final ValueChanged<bool> onChanged;
+
+  /// Display name of the originating app, when known.
+  final String? originLabel;
+  final bool showPrivateHint;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final hasUpdate = ref.watch(updateInfoProvider).valueOrNull != null;
+    final label = originLabel == null
+        ? l10n.alwaysOpenHere
+        : l10n.alwaysOpenFromApp(originLabel!);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -333,11 +445,24 @@ class _AlwaysOpenFooter extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            AppLocalizations.of(context)!.alwaysOpenHere,
-            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           const Spacer(),
+          if (showPrivateHint) ...[
+            Text(
+              l10n.pickerPrivateHint,
+              style: TextStyle(
+                fontSize: 11,
+                color: colors.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           if (hasUpdate) const _UpdateDot(),
         ],
       ),

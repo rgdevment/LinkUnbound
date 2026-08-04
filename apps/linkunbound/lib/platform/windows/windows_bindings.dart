@@ -15,6 +15,7 @@ import 'win_instance.dart';
 import 'win_launch_service.dart';
 import 'win_pipe_server.dart';
 import 'win_registration_service.dart';
+import 'win_source_app.dart';
 import 'win_startup_service.dart';
 import 'windows_tray_controller.dart';
 
@@ -136,16 +137,13 @@ final class WindowsBindings implements PlatformBindings {
   @override
   Stream<InboundEvent> get inboundEvents {
     final initial = initialEvent;
-    if (initial == null) return _pipeServer.events;
-    return _prependInitial(initial, _pipeServer.events);
-  }
-
-  static Stream<InboundEvent> _prependInitial(
-    InboundEvent first,
-    Stream<InboundEvent> rest,
-  ) async* {
-    yield first;
-    yield* rest;
+    // Push into the server's own buffer instead of wrapping the stream. An
+    // `async*` wrapper evaluated `_pipeServer.events` eagerly — which marks
+    // the buffer as drained — but only subscribed to the broadcast controller
+    // a microtask later, so anything flushed in between was dropped on the
+    // floor. That window is exactly a cold start handling a link.
+    if (initial != null) _pipeServer.pushEvent(initial);
+    return _pipeServer.events;
   }
 
   @override
@@ -210,15 +208,46 @@ final class WindowsBindings implements PlatformBindings {
 
   static InboundEvent? _parseInitialEvent(List<String> args) {
     for (final arg in args) {
+      if (arg.startsWith('--')) continue;
       final resolved = stripEdgeProtocol(arg);
-      final uri = Uri.tryParse(resolved);
-      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-        return OpenUrlEvent(resolved);
+      final lower = resolved.toLowerCase();
+      // Textual check first: Uri.tryParse returns null for URLs that are
+      // malformed but perfectly real (unescaped brackets or stray `%` show up
+      // routinely in Teams and SharePoint links), and those were silently
+      // dropped.
+      if (lower.startsWith('http://') || lower.startsWith('https://')) {
+        return OpenUrlEvent(resolved, sourceApp: _sourceApp());
       }
-      if (uri != null && uri.scheme == 'file') return OpenUrlEvent(arg);
-      if (_windowsAbsPath.hasMatch(arg)) return OpenUrlEvent(arg);
+      final uri = Uri.tryParse(resolved);
+      if (uri != null && uri.scheme.toLowerCase() == 'file') {
+        return OpenUrlEvent(resolved, sourceApp: _sourceApp());
+      }
+      if (_windowsAbsPath.hasMatch(arg)) {
+        return OpenUrlEvent(arg, sourceApp: _sourceApp());
+      }
+      // Without this line a dropped link leaves no trace at all, which is why
+      // the failure was so hard to diagnose in the field.
+      _log.warning(
+        'Ignoring unrecognised launch argument (scheme=${uri?.scheme})',
+      );
     }
     return null;
+  }
+
+  /// The app that asked the shell to open this link.
+  ///
+  /// Only meaningful in the process the shell just launched: once the URL is
+  /// delegated to the resident instance over the pipe, that instance's parent
+  /// is unrelated. Hence resolving it here, at parse time, and shipping it
+  /// inside the event.
+  static String? _sourceApp() {
+    final name = parentProcessName();
+    // The shell itself is not a useful origin to write rules against.
+    if (name == null ||
+        const {'explorer', 'cmd', 'powershell'}.contains(name)) {
+      return null;
+    }
+    return name;
   }
 
   static void _migrateFromRoamingIfNeeded(Directory newDir) {

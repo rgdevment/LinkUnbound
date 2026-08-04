@@ -13,6 +13,7 @@ import 'l10n/app_localizations.dart';
 import 'platform/cursor_locator.dart' show findDisplayForPoint;
 import 'platform/hotkey_service.dart';
 import 'platform/local_file_url.dart';
+import 'platform/macos/mac_source_app.dart';
 import 'platform/macos/mac_window_channel.dart';
 import 'platform/platform_bindings.dart';
 import 'platform/tray_controller.dart';
@@ -31,6 +32,18 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
   initLogging(bindings.logFile);
 
   _log.info('LinkUnbound starting (msix=${isRunningInMsix()})');
+
+  // Before delegating: a process that hands its URL to the resident instance
+  // exits within milliseconds, so anything done afterwards would never run for
+  // it. Repairing the registration here means *any* launch fixes a stale or
+  // hijacked handler, even when this process is only a courier.
+  try {
+    await bindings.registrationService.ensureRegistered(
+      bindings.executablePath,
+    );
+  } on Object catch (e, st) {
+    _log.warning('Registration reconciliation failed (non-fatal)', e, st);
+  }
 
   try {
     if (await bindings.tryDelegate(bindings.initialEvent)) {
@@ -93,7 +106,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
   );
   final ruleService = RuleService(rulesFile: bindings.rulesFile);
 
-  final isFirstBoot = !bindings.browsersFile.existsSync();
+  var isFirstBoot = !bindings.browsersFile.existsSync();
 
   try {
     await browserService.load();
@@ -101,6 +114,10 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     _log.severe('Browser config corrupted, resetting', e, st);
     try {
       await browserService.reset();
+      // reset() leaves the list empty. Without re-scanning, the picker would
+      // render an empty window for the rest of this install — the flag was
+      // computed before the reset, so it says "not first boot".
+      isFirstBoot = true;
     } on Object catch (e, st) {
       _log.warning('Browser reset failed', e, st);
     }
@@ -126,6 +143,10 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
   try {
     await windowManager.ensureInitialized();
     await windowManager.setPreventClose(true);
+    // The callback form of waitUntilReadyToShow is a plain VoidCallback: an
+    // async body is *not* awaited, so its channel calls would still be in
+    // flight while the first inbound URL is already repositioning the window.
+    // Sequencing it here keeps setup and the first mode transition ordered.
     await windowManager.waitUntilReadyToShow(
       const WindowOptions(
         titleBarStyle: TitleBarStyle.hidden,
@@ -136,19 +157,17 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
         // to render a transparent frame and crash the Flutter engine.
         backgroundColor: Color(0xFF1E1E1E),
       ),
-      () async {
-        await windowManager.setSkipTaskbar(true);
-        if (!Platform.isMacOS) {
-          try {
-            await windowManager.setHasShadow(false);
-          } on Object catch (e) {
-            _log.fine('setHasShadow not supported: $e');
-          }
-          await windowManager.setPosition(const Offset(-9999, -9999));
-          await windowManager.hide();
-        }
-      },
     );
+    await windowManager.setSkipTaskbar(true);
+    if (!Platform.isMacOS) {
+      try {
+        await windowManager.setHasShadow(false);
+      } on Object catch (e) {
+        _log.fine('setHasShadow not supported: $e');
+      }
+      await windowManager.setPosition(const Offset(-9999, -9999));
+      await windowManager.hide();
+    }
   } on Object catch (e, st) {
     _log.severe('Window manager init failed', e, st);
   }
@@ -174,6 +193,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
       hideTrayFileProvider.overrideWithValue(bindings.hideTrayFile),
       globalHotkeyFileProvider.overrideWithValue(bindings.globalHotkeyFile),
       appDataDirProvider.overrideWithValue(bindings.appDataDir),
+      executablePathProvider.overrideWithValue(bindings.executablePath),
       exitAppProvider.overrideWithValue(() async {
         try {
           await hotkeyService.dispose();
@@ -192,12 +212,49 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
 
   final macWindow = Platform.isMacOS ? MacWindowChannel() : null;
 
-  container.listen<AppState>(appStateProvider, (prev, next) async {
+  // Riverpod does not await listeners, and each transition issues a dozen
+  // platform round-trips. Two overlapping transitions (hidden → settings →
+  // picker on a cold start) would interleave setSize/center/show and leave the
+  // window in an indeterminate geometry, so only one runs at a time.
+  //
+  // Deliberately not a chain of `then()` on a long-lived future: that would
+  // pin every later transition to the zone bootstrap started in, and one
+  // wedged transition would block the app's response to links forever. Instead
+  // a re-entrancy flag drains whatever state is current when the running
+  // transition finishes.
+  AppState? applied;
+  var applying = false;
+
+  Future<void> drainModeChanges() async {
+    if (applying) return;
+    applying = true;
     try {
-      await _applyAppMode(prev, next, container, bindings, macWindow);
-    } on Object catch (e, st) {
-      _log.warning('App mode transition failed', e, st);
+      var target = container.read(appStateProvider);
+      while (!identical(target, applied)) {
+        final previous = applied;
+        applied = target;
+        try {
+          // A transition that never completes must not deafen the app to
+          // every link that follows.
+          await _applyAppMode(
+            previous,
+            target,
+            container,
+            bindings,
+            macWindow,
+          ).timeout(const Duration(seconds: 10));
+        } on Object catch (e, st) {
+          _log.warning('App mode transition failed', e, st);
+        }
+        target = container.read(appStateProvider);
+      }
+    } finally {
+      applying = false;
     }
+  }
+
+  container.listen<AppState>(appStateProvider, (prev, next) {
+    unawaited(drainModeChanges());
   });
 
   // Subscribe to inbound events before runApp so no event is dropped while
@@ -207,8 +264,8 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     (event) {
       try {
         switch (event) {
-          case OpenUrlEvent(:final url):
-            _handleUrl(url, container);
+          case OpenUrlEvent(:final url, :final sourceApp):
+            unawaited(_handleUrl(url, container, sourceApp: sourceApp));
           case ShowSettingsEvent():
             container.read(appStateProvider.notifier).showSettings();
         }
@@ -227,6 +284,9 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     if (bindings.startsHidden) return;
+    // A launch that carries a URL is a link click, not a request to open
+    // Settings; opening it anyway queues a settings→picker transition pair.
+    if (bindings.initialEvent is OpenUrlEvent) return;
     if (container.read(appStateProvider).mode != AppMode.hidden) return;
     container.read(appStateProvider.notifier).showSettings();
   });
@@ -283,9 +343,6 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
           browserService: browserService,
           iconExtractor: bindings.iconExtractor,
           iconsDir: bindings.iconsDir,
-          registrationService: bindings.registrationService,
-          executablePath: bindings.executablePath,
-          skipRegistration: isRunningInMsix(),
           container: container,
         );
       } on Object catch (e, st) {
@@ -306,10 +363,18 @@ Future<void> _applyAppMode(
   MacWindowChannel? macWindow,
 ) async {
   if (prev?.mode == next.mode) {
-    if (next.mode == AppMode.settings) {
-      await windowManager.show();
-      await windowManager.focus();
-      await macWindow?.activate();
+    switch (next.mode) {
+      case AppMode.settings:
+        await windowManager.show();
+        await windowManager.focus();
+        await macWindow?.activate();
+      case AppMode.picker:
+        // A second link while the picker is already up must reposition and
+        // re-show it. Returning early here used to make the app go deaf to
+        // every subsequent link once a transition had failed mid-way.
+        await _showPicker(container, bindings, macWindow);
+      case AppMode.hidden:
+        break;
     }
     return;
   }
@@ -333,49 +398,76 @@ Future<void> _applyAppMode(
       await windowManager.focus();
       await macWindow?.activate();
     case AppMode.picker:
-      try {
-        await macWindow?.setPickerMode();
-        final browsers = container.read(browsersProvider);
-        final winSize = PickerLayout.windowSize(browsers.length);
-        // Fetch cursor and display list concurrently, then hit-test locally so
-        // both reads observe the same cursor position.
-        final (cursorResult, rects) = await (
-          bindings.cursorLocator.cursorPosition(),
-          bindings.cursorLocator.displayRects(),
-        ).wait;
-        final (cursorX, cursorY) = cursorResult;
-        final (originX, originY, displayW, displayH) = findDisplayForPoint(
-          cursorX,
-          cursorY,
-          rects,
-        );
-        final x = (cursorX - winSize.width / 2).clamp(
-          originX + 8.0,
-          originX + displayW - winSize.width - 8,
-        );
-        final y = (cursorY + 16).clamp(
-          originY + 8.0,
-          originY + displayH - winSize.height - 8,
-        );
-        await windowManager.setSize(winSize);
-        // Position before show() to prevent the ghost-flash at the old position.
-        await windowManager.setPosition(Offset(x, y));
-        await windowManager.setSkipTaskbar(true);
-        await windowManager.setAlwaysOnTop(true);
-        await windowManager.show();
-        if (!Platform.isMacOS) await windowManager.focus();
-        await macWindow?.activate();
-      } on Object catch (e, st) {
-        _log.warning('Picker transition failed, hiding to safe state', e, st);
-        try {
-          await windowManager.hide();
-        } on Object catch (hideErr) {
-          _log.warning('hide() after picker failure also failed: $hideErr');
-        }
-        rethrow;
-      }
+      await _showPicker(container, bindings, macWindow);
   }
 }
+
+/// Sizes and positions the picker under the cursor, then shows it.
+///
+/// Any failure here returns the app to a consistent state — window hidden and
+/// mode set back to hidden — instead of leaving the state machine parked in
+/// `picker` with nothing on screen, which used to make every later link a
+/// no-op for the rest of the session.
+Future<void> _showPicker(
+  ProviderContainer container,
+  PlatformBindings bindings,
+  MacWindowChannel? macWindow,
+) async {
+  try {
+    await macWindow?.setPickerMode();
+    final browsers = container.read(browsersProvider);
+    final winSize = PickerLayout.windowSize(browsers.length);
+    // Fetch cursor and display list concurrently, then hit-test locally so
+    // both reads observe the same cursor position.
+    final (cursorResult, rects) = await (
+      bindings.cursorLocator.cursorPosition(),
+      bindings.cursorLocator.displayRects(),
+    ).wait;
+    final (cursorX, cursorY) = cursorResult;
+    final (originX, originY, displayW, displayH) = findDisplayForPoint(
+      cursorX,
+      cursorY,
+      rects,
+    );
+    final x = _clampToRange(
+      cursorX - winSize.width / 2,
+      originX + 8.0,
+      originX + displayW - winSize.width - 8,
+    );
+    final y = _clampToRange(
+      cursorY + 16,
+      originY + 8.0,
+      originY + displayH - winSize.height - 8,
+    );
+    await windowManager.setSize(winSize);
+    // Position before show() to prevent the ghost-flash at the old position.
+    await windowManager.setPosition(Offset(x, y));
+    await windowManager.setSkipTaskbar(true);
+    await windowManager.setAlwaysOnTop(true);
+    await windowManager.show();
+    if (!Platform.isMacOS) await windowManager.focus();
+    await macWindow?.activate();
+    // Re-apply the size once the window is actually on screen: a resize issued
+    // while hidden can leave the engine surface at the previous dimensions,
+    // which renders as a correctly framed but empty window.
+    await windowManager.setSize(winSize);
+  } on Object catch (e, st) {
+    _log.warning('Picker transition failed, returning to hidden', e, st);
+    try {
+      await windowManager.hide();
+    } on Object catch (hideErr) {
+      _log.warning('hide() after picker failure also failed: $hideErr');
+    }
+    container.read(appStateProvider.notifier).hide();
+    rethrow;
+  }
+}
+
+/// `num.clamp` throws when the upper bound falls below the lower one, which
+/// happens on small or heavily scaled displays where the picker is taller than
+/// the work area. Pinning to the lower bound keeps the window on screen.
+double _clampToRange(double value, double lower, double upper) =>
+    upper < lower ? lower : value.clamp(lower, upper).toDouble();
 
 /// Runs before runApp: scan detected browsers and create the icons directory
 /// so browsersProvider has data for the first frame.
@@ -391,16 +483,15 @@ Future<void> _firstBootEarlyPhase({
   }
 }
 
-/// Runs after runApp: extract icons concurrently and register the app.
+/// Runs after runApp: extract icons concurrently.
 /// The picker renders with fallback icons until extraction completes.
+/// Registration is not done here — it is reconciled on every launch during
+/// bootstrap, before the first frame.
 Future<void> _firstBootLatePhase({
   required BrowserService browserService,
   required IconExtractor iconExtractor,
   required Directory iconsDir,
-  required RegistrationService registrationService,
-  required String executablePath,
   required ProviderContainer container,
-  bool skipRegistration = false,
 }) async {
   // Extract all icons concurrently; swallow per-item errors as before.
   await Future.wait(
@@ -418,19 +509,14 @@ Future<void> _firstBootLatePhase({
   // Invalidate browsersProvider so the picker picks up freshly extracted icons.
   container.invalidate(browsersProvider);
 
-  if (skipRegistration) {
-    _log.info('Skipping browser registration in MSIX context');
-  } else {
-    try {
-      await registrationService.register(executablePath);
-    } on Object catch (e, st) {
-      _log.warning('Browser registration failed (non-fatal)', e, st);
-    }
-  }
   _log.info('First boot complete: ${browserService.browsers.length} browsers');
 }
 
-void _handleUrl(String url, ProviderContainer container) {
+Future<void> _handleUrl(
+  String url,
+  ProviderContainer container, {
+  String? sourceApp,
+}) async {
   if (looksLikeLocalFile(url)) {
     final resolved = resolveLocalWebFile(url);
     if (resolved == null) {
@@ -443,16 +529,35 @@ void _handleUrl(String url, ProviderContainer container) {
   }
 
   final resolved = unwrapSafeLink(url);
-  final ruleService = container.read(ruleServiceProvider);
-  final matchedBrowserId = ruleService.lookupBrowser(resolved);
+  // Inbound events arrive over IPC from any local process, so the scheme is
+  // untrusted here. A string like `--gpu-launcher=…` is not a URL but would be
+  // handed to the browser as argv and executed as a switch.
+  if (!isLaunchableUrl(resolved)) {
+    _log.warning('Rejected URL with non-launchable scheme');
+    return;
+  }
 
-  if (matchedBrowserId != null) {
+  // macOS cannot tell us who opened the link, so the frontmost app stands in
+  // for it. Resolved here rather than in the event because it has to be read
+  // as close to the click as possible to still be accurate.
+  final origin = sourceApp ?? (Platform.isMacOS ? await _macSourceApp() : null);
+  if (origin != null) _log.fine('Link originated from $origin');
+
+  final ruleService = container.read(ruleServiceProvider);
+  final rule = ruleService.lookupRule(resolved, sourceApp: origin);
+
+  if (rule != null) {
     final browsers = container.read(browserServiceProvider).browsers;
-    final browser = browsers.where((b) => b.id == matchedBrowserId).firstOrNull;
+    final browser = browsers.where((b) => b.id == rule.browserId).firstOrNull;
     if (browser != null) {
       final launch = container
           .read(launchServiceProvider)
-          .launch(browser.executablePath, resolved, browser.extraArgs);
+          .launch(
+            browser.executablePath,
+            resolved,
+            browser.extraArgs,
+            privateArgs: rule.private ? browser.resolvedPrivateArgs : const [],
+          );
       unawaited(
         launch.catchError((Object e, StackTrace st) {
           _log.severe('Launch failed for ${browser.name}', e, st);
@@ -463,7 +568,18 @@ void _handleUrl(String url, ProviderContainer container) {
     }
   }
 
-  container.read(appStateProvider.notifier).showPicker(resolved);
+  container
+      .read(appStateProvider.notifier)
+      .showPicker(resolved, origin: origin);
+}
+
+Future<String?> _macSourceApp() async {
+  try {
+    return (await frontmostApp())?.id;
+  } on Object catch (e) {
+    _log.fine('Frontmost app lookup failed: $e');
+    return null;
+  }
 }
 
 String _redactForLog(String raw) {

@@ -136,6 +136,28 @@ final class _RecordingRegistrationService implements RegistrationService {
   }
 
   @override
+  Future<void> ensureRegistered(String executablePath) =>
+      register(executablePath);
+
+  @override
+  Future<HandlerDiagnostics> diagnose(String executablePath) async =>
+      const HandlerDiagnostics(
+        isDefaultBrowser: false,
+        commandMatchesExecutable: true,
+        runningFromDevBuild: false,
+        isPackaged: false,
+      );
+
+  @override
+  Future<void> setEdgeProtocolCapture(
+    bool enabled,
+    String executablePath,
+  ) async {}
+
+  @override
+  Future<bool> get capturesEdgeProtocol async => false;
+
+  @override
   Future<void> unregister() async {}
 }
 
@@ -158,8 +180,9 @@ final class _RecordingLaunchService implements LaunchService {
   Future<void> launch(
     String executablePath,
     String url,
-    List<String> extraArgs,
-  ) async {
+    List<String> extraArgs, {
+    List<String> privateArgs = const [],
+  }) async {
     calls.add((
       executablePath: executablePath,
       url: url,
@@ -389,8 +412,9 @@ final class _FailingLaunchService implements LaunchService {
   Future<void> launch(
     String executablePath,
     String url,
-    List<String> extraArgs,
-  ) => Future.error(Exception('launch failed'));
+    List<String> extraArgs, {
+    List<String> privateArgs = const [],
+  }) => Future.error(Exception('launch failed'));
 }
 
 final class _ThrowingDelegateBindings extends _FakeBindings {
@@ -461,6 +485,28 @@ final class _FailingRegistrationService implements RegistrationService {
   @override
   Future<void> register(String executablePath) =>
       Future.error(Exception('registration failed'));
+
+  @override
+  Future<void> ensureRegistered(String executablePath) =>
+      register(executablePath);
+
+  @override
+  Future<HandlerDiagnostics> diagnose(String executablePath) async =>
+      const HandlerDiagnostics(
+        isDefaultBrowser: false,
+        commandMatchesExecutable: true,
+        runningFromDevBuild: false,
+        isPackaged: false,
+      );
+
+  @override
+  Future<void> setEdgeProtocolCapture(
+    bool enabled,
+    String executablePath,
+  ) async {}
+
+  @override
+  Future<bool> get capturesEdgeProtocol async => false;
 
   @override
   Future<void> unregister() async {}
@@ -783,6 +829,9 @@ void main() {
 
       windowSpy.clear();
 
+      // Mode transitions run through a serialised queue: the continuation is
+      // scheduled on the test zone, so it needs a pump to start, and each
+      // window call is a channel round-trip needing another.
       await tester.runAsync(() async {
         bindings.emit(const ShowSettingsEvent());
         await Future<void>.delayed(const Duration(milliseconds: 150));

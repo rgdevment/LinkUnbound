@@ -35,7 +35,11 @@ class MacStartupService implements StartupService {
     try {
       final result = await _channel.invokeMethod<bool>('isLoginItemLaunch');
       return result ?? false;
-    } on PlatformException catch (e, st) {
+      // Catches Object, not PlatformException: this runs before bootstrap, and
+      // if the channel is not registered yet the MissingPluginException would
+      // escape MacOsBindings.create() and kill the launch outright — no window,
+      // no tray, no link handling.
+    } on Object catch (e, st) {
       _log.warning('isLoginItemLaunch check failed', e, st);
       return false;
     }

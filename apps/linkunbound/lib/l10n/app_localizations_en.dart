@@ -310,4 +310,48 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get hideTraySubtitleWindows =>
       'You can reach the app via its global shortcut';
+
+  @override
+  String get pickerNoBrowsers =>
+      'No browsers detected. Open Settings to add one.';
+
+  @override
+  String get edgeProtocolLabel => 'Capture links from Microsoft apps';
+
+  @override
+  String get edgeProtocolDescription =>
+      'Teams, Outlook and Start menu search open links through Edge directly, bypassing the default browser. Enable this to let LinkUnbound offer a choice for those links too.';
+
+  @override
+  String get pickerPrivateHint => 'Shift = private';
+
+  @override
+  String alwaysOpenFromApp(String app) {
+    return 'Always open links from $app here';
+  }
+
+  @override
+  String get diagnosticsTitle => 'Link capture problem detected';
+
+  @override
+  String get diagnosticsStaleHandler =>
+      'The registered handler points somewhere else, so links will not reach LinkUnbound.';
+
+  @override
+  String get diagnosticsDevBuild =>
+      'Running from a local build, which never registers itself. Install the app to capture links.';
+
+  @override
+  String get diagnosticsRepair => 'Repair';
+
+  @override
+  String get diagnosticsRepaired => 'Registration repaired.';
+
+  @override
+  String get diagnosticsRepairFailed => 'Could not repair the registration.';
+
+  @override
+  String ruleFromApp(String app) {
+    return 'Links from $app';
+  }
 }

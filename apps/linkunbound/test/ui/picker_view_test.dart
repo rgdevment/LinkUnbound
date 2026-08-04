@@ -119,7 +119,8 @@ void main() {
   });
 
   group('PickerView — browser list', () {
-    testWidgets('shows empty list when no browsers', (tester) async {
+    testWidgets('shows an explanation instead of a blank window when no '
+        'browsers', (tester) async {
       final f = makeFixtures(dir: tempDir);
       await tester.pumpWidget(
         buildTestApp(
@@ -128,7 +129,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(ListView), findsOneWidget);
+      // An empty ListView renders as an empty window, which reads as a broken
+      // app rather than "no browsers were detected".
+      expect(find.byType(ListView), findsNothing);
+      expect(
+        find.text('No browsers detected. Open Settings to add one.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('shows browser names when browsers provided', (tester) async {

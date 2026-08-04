@@ -32,7 +32,8 @@
 			A1B2C30000000000000050 /* RegistrationChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C30000000000000051 /* RegistrationChannel.swift */; };
 			A1B2C30000000000000060 /* StartupChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C30000000000000061 /* StartupChannel.swift */; };
 			A1B2C30000000000000070 /* LinkUnboundChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C30000000000000071 /* LinkUnboundChannels.swift */; };
-			A1B2C30000000000000080 /* WindowChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C30000000000000081 /* WindowChannel.swift */; };		3FC8CBCC463B3627C59F4107 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 500F6A1F28F0CB19E067FBF2 /* Pods_Runner.framework */; };
+			A1B2C30000000000000080 /* WindowChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C30000000000000081 /* WindowChannel.swift */; };
+			A1B2C30000000000000090 /* SourceAppChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C30000000000000091 /* SourceAppChannel.swift */; };		3FC8CBCC463B3627C59F4107 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 500F6A1F28F0CB19E067FBF2 /* Pods_Runner.framework */; };
 		DC236B3B7CC7FCC9916A8FAF /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22348279A947D0F510AF2D95 /* Pods_RunnerTests.framework */; };
 /* End PBXBuildFile section */
 
@@ -83,7 +84,8 @@
 			A1B2C30000000000000051 /* RegistrationChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegistrationChannel.swift; sourceTree = "<group>"; };
 			A1B2C30000000000000061 /* StartupChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupChannel.swift; sourceTree = "<group>"; };
 			A1B2C30000000000000071 /* LinkUnboundChannels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkUnboundChannels.swift; sourceTree = "<group>"; };
-			A1B2C30000000000000081 /* WindowChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowChannel.swift; sourceTree = "<group>"; };		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
+			A1B2C30000000000000081 /* WindowChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowChannel.swift; sourceTree = "<group>"; };
+			A1B2C30000000000000091 /* SourceAppChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceAppChannel.swift; sourceTree = "<group>"; };		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
 		33CEB47422A05771004F2AC0 /* Flutter-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Release.xcconfig"; sourceTree = "<group>"; };
 		33CEB47722A0578A004F2AC0 /* Flutter-Generated.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Flutter-Generated.xcconfig"; path = "ephemeral/Flutter-Generated.xcconfig"; sourceTree = "<group>"; };
 		33E51913231747F40026EE4D /* DebugProfile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DebugProfile.entitlements; sourceTree = "<group>"; };
@@ -206,6 +208,7 @@
 				A1B2C30000000000000061 /* StartupChannel.swift */,
 				A1B2C30000000000000071 /* LinkUnboundChannels.swift */,
 				A1B2C30000000000000081 /* WindowChannel.swift */,
+				A1B2C30000000000000091 /* SourceAppChannel.swift */,
 			);
 			path = Channels;
 			sourceTree = "<group>";
@@ -470,6 +473,7 @@
 				A1B2C30000000000000060 /* StartupChannel.swift in Sources */,
 				A1B2C30000000000000070 /* LinkUnboundChannels.swift in Sources */,
 				A1B2C30000000000000080 /* WindowChannel.swift in Sources */,
+				A1B2C30000000000000090 /* SourceAppChannel.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 			);

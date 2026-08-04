@@ -110,4 +110,50 @@ void main() {
       expect(unwrapSafeLink(malformed), malformed);
     });
   });
+
+  group('isLaunchableUrl', () {
+    test('accepts http and https', () {
+      expect(isLaunchableUrl('http://example.com'), isTrue);
+      expect(isLaunchableUrl('https://example.com/a?b=1'), isTrue);
+    });
+
+    test('accepts file URLs', () {
+      expect(isLaunchableUrl('file:///C:/tmp/page.html'), isTrue);
+    });
+
+    test('rejects Chromium switches disguised as URLs', () {
+      // These would be handed to the browser as argv and executed as switches.
+      expect(isLaunchableUrl('--gpu-launcher=calc.exe'), isFalse);
+      expect(isLaunchableUrl('--utility-cmd-prefix=calc.exe'), isFalse);
+      expect(isLaunchableUrl('-foo'), isFalse);
+      expect(isLaunchableUrl('/prefetch:1'), isFalse);
+    });
+
+    test('rejects dangerous schemes', () {
+      expect(isLaunchableUrl('javascript:alert(1)'), isFalse);
+      expect(isLaunchableUrl('data:text/html,<script>'), isFalse);
+      expect(isLaunchableUrl('vbscript:msgbox'), isFalse);
+    });
+
+    test('rejects empty and unparseable input', () {
+      expect(isLaunchableUrl(''), isFalse);
+      expect(isLaunchableUrl('not a url'), isFalse);
+    });
+
+    test('is case-insensitive on the scheme', () {
+      expect(isLaunchableUrl('HTTPS://example.com'), isTrue);
+      expect(isLaunchableUrl('FILE:///C:/tmp/a.html'), isTrue);
+    });
+  });
+
+  group('unwrapSafeLink double encoding', () {
+    test('does not decode the inner URL a second time', () {
+      // %2520 must stay a literal "%20" in the destination, not become a space.
+      const inner = 'https://example.com/a%2520b';
+      final wrapped =
+          'https://nam12.safelinks.protection.outlook.com/'
+          '?url=${Uri.encodeComponent(inner)}';
+      expect(unwrapSafeLink(wrapped), inner);
+    });
+  });
 }

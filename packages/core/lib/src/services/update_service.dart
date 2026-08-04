@@ -15,8 +15,8 @@ final class UpdateService {
   final String repo;
 
   Future<UpdateInfo?> checkForUpdate(String currentVersion) async {
+    final client = HttpClient();
     try {
-      final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 5);
 
       final request = await client.getUrl(
@@ -26,18 +26,19 @@ final class UpdateService {
       request.headers.set('User-Agent', 'LinkUnbound/$currentVersion');
 
       final response = await request.close();
-      if (response.statusCode != 200) {
-        client.close();
-        return null;
-      }
+      if (response.statusCode != 200) return null;
 
       final body = await response.transform(utf8.decoder).join();
-      client.close();
 
-      final json = jsonDecode(body) as Map<String, dynamic>;
-      final tagName = json['tag_name'] as String?;
-      final htmlUrl = json['html_url'] as String?;
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) return null;
+      final tagName = decoded['tag_name'] as String?;
+      final htmlUrl = decoded['html_url'] as String?;
       if (tagName == null || htmlUrl == null) return null;
+      // The release URL ends up in a shell "open" call, so it must not be
+      // taken on trust from the response body: a compromised or intercepted
+      // endpoint could otherwise point it at an executable.
+      if (!isTrustedReleaseUrl(htmlUrl)) return null;
 
       final version = tagName.startsWith('v') ? tagName.substring(1) : tagName;
 
@@ -46,7 +47,18 @@ final class UpdateService {
       return UpdateInfo(latestVersion: version, releaseUrl: htmlUrl);
     } on Exception {
       return null;
+    } finally {
+      // Previously leaked on every error path.
+      client.close();
     }
+  }
+
+  /// True only for HTTPS URLs served by github.com itself.
+  static bool isTrustedReleaseUrl(String raw) {
+    final uri = Uri.tryParse(raw);
+    if (uri == null || uri.scheme != 'https') return false;
+    final host = uri.host.toLowerCase();
+    return host == 'github.com' || host.endsWith('.github.com');
   }
 
   static bool _isNewer(String latest, String current) {

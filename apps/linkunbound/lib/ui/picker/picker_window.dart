@@ -4,9 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'picker_view.dart';
 
 class PickerWindow extends ConsumerStatefulWidget {
-  const PickerWindow({required this.url, super.key});
+  const PickerWindow({required this.url, this.origin, super.key});
 
   final String url;
+
+  /// App the link came from, forwarded to the picker so "always open" can be
+  /// scoped to it.
+  final String? origin;
 
   @override
   ConsumerState<PickerWindow> createState() => _PickerWindowState();
@@ -50,7 +54,7 @@ class _PickerWindowState extends ConsumerState<PickerWindow>
         child: ScaleTransition(
           scale: _scaleAnim,
           alignment: Alignment.topCenter,
-          child: PickerView(url: widget.url),
+          child: PickerView(url: widget.url, origin: widget.origin),
         ),
       ),
     );

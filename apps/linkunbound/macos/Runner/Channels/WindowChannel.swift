@@ -32,8 +32,14 @@ final class WindowChannel {
     }
   }
 
+  /// The Flutter window, resolved through the delegate outlet.
+  ///
+  /// `NSApp.windows.first` was unreliable: the tray plugin creates an
+  /// `NSStatusItem` whose backing window also lives in that array and the
+  /// order is undocumented, so picker/settings styling and activation could be
+  /// applied to the status bar window while the real one stayed hidden.
   private static func mainWindow() -> NSWindow? {
-    NSApplication.shared.windows.first
+    (NSApp.delegate as? AppDelegate)?.mainFlutterWindow ?? NSApp.windows.first
   }
 
   private static func applyPickerMode() {

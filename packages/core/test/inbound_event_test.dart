@@ -48,5 +48,35 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
+
+    // Anything arriving over IPC is untrusted. These used to raise TypeError,
+    // which is not a FormatException, so it escaped the caller's catch and was
+    // recorded as a crash instead of a discarded message.
+    test('non-object JSON throws FormatException', () {
+      expect(() => InboundEvent.decode('[]'), throwsA(isA<FormatException>()));
+      expect(() => InboundEvent.decode('5'), throwsA(isA<FormatException>()));
+      expect(
+        () => InboundEvent.decode('"text"'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('open_url with a non-string url throws FormatException', () {
+      expect(
+        () => InboundEvent.decode('{"action":"open_url","url":1}'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => InboundEvent.decode('{"action":"open_url"}'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('malformed JSON throws FormatException', () {
+      expect(
+        () => InboundEvent.decode('{not json'),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 }

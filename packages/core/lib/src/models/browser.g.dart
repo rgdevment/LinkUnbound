@@ -15,6 +15,9 @@ Browser _$BrowserFromJson(Map<String, dynamic> json) => Browser(
       (json['extraArgs'] as List<dynamic>?)?.map((e) => e as String).toList() ??
       const [],
   isCustom: json['isCustom'] as bool? ?? false,
+  privateArgs: (json['privateArgs'] as List<dynamic>?)
+      ?.map((e) => e as String)
+      .toList(),
 );
 
 Map<String, dynamic> _$BrowserToJson(Browser instance) => <String, dynamic>{
@@ -24,4 +27,5 @@ Map<String, dynamic> _$BrowserToJson(Browser instance) => <String, dynamic>{
   'iconPath': instance.iconPath,
   'extraArgs': instance.extraArgs,
   'isCustom': instance.isCustom,
+  'privateArgs': instance.privateArgs,
 };
