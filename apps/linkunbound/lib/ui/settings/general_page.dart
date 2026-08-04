@@ -9,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../platform/hotkey_service.dart';
-import '../../platform/windows/win_package_context.dart';
 import '../../providers.dart';
 import '../shared/widgets/browser_tile.dart';
 import '../shared/widgets/group_card.dart';
@@ -324,7 +323,7 @@ class GeneralPage extends ConsumerWidget {
   /// Hidden on macOS (no such scheme) and under MSIX, where a package cannot
   /// claim a protocol owned by another package.
   List<Widget> _buildInternalLinksSection(BuildContext context, WidgetRef ref) {
-    if (!Platform.isWindows || isRunningInMsix()) return const [];
+    if (!ref.watch(edgeProtocolSupportedProvider)) return const [];
     final l10n = AppLocalizations.of(context)!;
     final captureAsync = ref.watch(edgeProtocolCaptureProvider);
 

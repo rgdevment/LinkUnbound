@@ -12,13 +12,34 @@ final class FakeRegistrationService implements RegistrationService {
   FakeRegistrationService({
     this.isDefaultValue = false,
     Set<String>? associations,
+    this.diagnostics = const HandlerDiagnostics(
+      isDefaultBrowser: false,
+      commandMatchesExecutable: true,
+      runningFromDevBuild: false,
+      isPackaged: false,
+    ),
+    this.registerThrows = false,
+    this.edgeCaptureThrows = false,
+    this.capturesEdgeProtocolValue = false,
   }) : _associations = associations;
 
   final bool isDefaultValue;
   final Set<String>? _associations;
+  final HandlerDiagnostics diagnostics;
+  final bool registerThrows;
+  final bool edgeCaptureThrows;
+  final bool capturesEdgeProtocolValue;
+
+  /// Executable paths passed to [register], so a test can assert the repair
+  /// actually re-registered rather than only refreshing the UI.
+  final List<String> registrations = [];
+  final List<bool> edgeCaptureCalls = [];
 
   @override
-  Future<void> register(String executablePath) async {}
+  Future<void> register(String executablePath) async {
+    registrations.add(executablePath);
+    if (registerThrows) throw StateError('registration denied');
+  }
 
   @override
   Future<void> ensureRegistered(String executablePath) =>
@@ -26,21 +47,19 @@ final class FakeRegistrationService implements RegistrationService {
 
   @override
   Future<HandlerDiagnostics> diagnose(String executablePath) async =>
-      const HandlerDiagnostics(
-        isDefaultBrowser: false,
-        commandMatchesExecutable: true,
-        runningFromDevBuild: false,
-        isPackaged: false,
-      );
+      diagnostics;
 
   @override
   Future<void> setEdgeProtocolCapture(
     bool enabled,
     String executablePath,
-  ) async {}
+  ) async {
+    edgeCaptureCalls.add(enabled);
+    if (edgeCaptureThrows) throw StateError('registry write denied');
+  }
 
   @override
-  Future<bool> get capturesEdgeProtocol async => false;
+  Future<bool> get capturesEdgeProtocol async => capturesEdgeProtocolValue;
 
   @override
   Future<void> unregister() async {}
@@ -68,7 +87,14 @@ final class FakeStartupService implements StartupService {
 }
 
 final class FakeLaunchService implements LaunchService {
+  FakeLaunchService({this.throws = false});
+
+  /// Simulates a browser that was uninstalled or moved, which makes the real
+  /// `Process.start` throw.
+  final bool throws;
+
   final List<String> launches = [];
+  final List<List<String>> privateArgsPerLaunch = [];
 
   @override
   Future<void> launch(
@@ -78,6 +104,8 @@ final class FakeLaunchService implements LaunchService {
     List<String> privateArgs = const [],
   }) async {
     launches.add(executablePath);
+    privateArgsPerLaunch.add(privateArgs);
+    if (throws) throw ProcessException(executablePath, [url], 'not found');
   }
 }
 
@@ -120,11 +148,13 @@ makeFixtures({
   List<Rule> rules = const [],
   bool isDefault = false,
   Set<String>? associations,
+  RegistrationService? registrationService,
   bool isStartupEnabled = false,
   StartupService? startupService,
   IconExtractor? iconExtractor,
   UpdateInfo? updateInfo,
   DiagnosticsExporter? diagnosticsExporter,
+  FakeLaunchService? launchService,
 }) {
   final tempDir = dir ?? Directory.systemTemp.createTempSync('lu_test_');
   final configFile = File('${tempDir.path}/browsers.json');
@@ -149,21 +179,22 @@ makeFixtures({
     ruleService.addRule(r);
   }
 
-  final launchService = FakeLaunchService();
+  final launch = launchService ?? FakeLaunchService();
 
   final overrides = <Override>[
     browserServiceProvider.overrideWithValue(browserService),
     ruleServiceProvider.overrideWithValue(ruleService),
     registrationServiceProvider.overrideWithValue(
-      FakeRegistrationService(
-        isDefaultValue: isDefault,
-        associations: associations,
-      ),
+      registrationService ??
+          FakeRegistrationService(
+            isDefaultValue: isDefault,
+            associations: associations,
+          ),
     ),
     startupServiceProvider.overrideWithValue(
       startupService ?? FakeStartupService(isEnabledValue: isStartupEnabled),
     ),
-    launchServiceProvider.overrideWithValue(launchService),
+    launchServiceProvider.overrideWithValue(launch),
     iconExtractorProvider.overrideWithValue(
       iconExtractor ?? FakeIconExtractor(),
     ),
@@ -196,7 +227,7 @@ makeFixtures({
     overrides: overrides,
     browserService: browserService,
     ruleService: ruleService,
-    launchService: launchService,
+    launchService: launch,
     tempDir: tempDir,
   );
 }

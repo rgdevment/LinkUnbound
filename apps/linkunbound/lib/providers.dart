@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'platform/macos/mac_diagnostics_service.dart';
 import 'platform/windows/win_diagnostics_service.dart';
+import 'platform/windows/win_package_context.dart';
 
 StateError _mustOverride() => StateError('Override at startup');
 
@@ -262,6 +263,16 @@ final handlerDiagnosticsProvider =
           .read(registrationServiceProvider)
           .diagnose(ref.read(executablePathProvider));
     });
+
+/// Whether intercepting `microsoft-edge:` can be offered at all: only Windows
+/// has the scheme, and an MSIX package cannot claim a protocol owned by another
+/// package.
+///
+/// A provider instead of an inline platform check so the setting is reachable
+/// from a test on any host — the coverage run happens on Linux.
+final edgeProtocolSupportedProvider = Provider<bool>(
+  (_) => Platform.isWindows && !isRunningInMsix(),
+);
 
 /// Whether `microsoft-edge:` links (Teams, Outlook, Start search) are being
 /// intercepted. Always false outside Windows.

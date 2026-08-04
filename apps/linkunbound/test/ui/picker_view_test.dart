@@ -695,4 +695,171 @@ void main() {
       expect(find.text('Google Chrome'), findsOneWidget);
     });
   });
+
+  group('PickerView — private mode', () {
+    /// Holds Shift for the duration of the test. The picker reads
+    /// [HardwareKeyboard] directly, so the key has to stay physically down
+    /// rather than be sent as a one-shot event.
+    Future<void> holdShift(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      addTearDown(() => tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft));
+    }
+
+    testWidgets('Shift marks the rows that can open privately', (tester) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.visibility_off_outlined), findsNothing);
+
+      await holdShift(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
+    });
+
+    testWidgets('Shift is seeded from the keyboard state on open', (
+      tester,
+    ) async {
+      // The user holds Shift *before* clicking the link, so the key event that
+      // would arm the intent has already happened by the time we build.
+      await holdShift(tester);
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
+    });
+
+    testWidgets('launching with Shift passes the private switch', (
+      tester,
+    ) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await holdShift(tester);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Google Chrome'));
+      await tester.pumpAndSettle();
+
+      expect(f.launchService.privateArgsPerLaunch.single, ['--incognito']);
+    });
+
+    testWidgets('launching without Shift passes no switch', (tester) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Google Chrome'));
+      await tester.pumpAndSettle();
+
+      expect(f.launchService.privateArgsPerLaunch.single, isEmpty);
+    });
+
+    testWidgets('a browser that fails to start does not surface as a crash', (
+      tester,
+    ) async {
+      // Unhandled, this future reached the zone guard and was filed as a crash
+      // report carrying the full URL.
+      final f = makeFixtures(
+        dir: tempDir,
+        browsers: [_chrome],
+        launchService: FakeLaunchService(throws: true),
+      );
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Google Chrome'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(f.launchService.launches, ['chrome.exe']);
+    });
+  });
+
+  group('PickerView — origin-scoped rules', () {
+    testWidgets('the footer names the originating app', (tester) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com', origin: 'slack'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Always open links from slack here'), findsOneWidget);
+      expect(find.text('Always open here'), findsNothing);
+    });
+
+    testWidgets('always-open with a known origin scopes the rule to the app', (
+      tester,
+    ) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com', origin: 'slack'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Google Chrome'));
+      await tester.pumpAndSettle();
+
+      final rule = f.ruleService.rules.single;
+      expect(rule.sourceApp, 'slack');
+      expect(rule.domain, kAnyDomain);
+      expect(rule.private, isFalse);
+    });
+
+    testWidgets('always-open without an origin falls back to the domain', (
+      tester,
+    ) async {
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com/a'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Google Chrome'));
+      await tester.pumpAndSettle();
+
+      final rule = f.ruleService.rules.single;
+      expect(rule.sourceApp, isNull);
+      expect(rule.domain, 'example.com');
+    });
+  });
 }

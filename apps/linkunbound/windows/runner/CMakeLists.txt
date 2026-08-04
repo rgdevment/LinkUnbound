@@ -21,6 +21,15 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
+# Raise this target (and only this one) to C++20.
+#
+# startup_task_channel.cpp uses C++/WinRT, and <winrt/base.h> picks its
+# coroutine header from __cpp_lib_coroutine: under C++17 that macro is absent
+# and it falls back to <experimental/coroutine>, which MSVC 14.51 rejects with a
+# hard static_assert (STL1011). The plugins keep C++17 — none of them include
+# C++/WinRT, so there is no reason to move them.
+target_compile_features(${BINARY_NAME} PRIVATE cxx_std_20)
+
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")

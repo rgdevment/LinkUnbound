@@ -52,6 +52,21 @@ void main() {
       service.updateRule('a.com', browserId: 'firefox');
       expect(service.rules.first.browserId, 'firefox');
     });
+
+    test('updateRule leaves the other rules untouched', () {
+      service
+        ..addRule(const Rule(domain: 'a.com', browserId: 'chrome'))
+        ..addRule(const Rule(domain: 'b.com', browserId: 'edge'))
+        ..updateRule('a.com', browserId: 'firefox');
+      expect(service.rules.map((r) => r.browserId), ['firefox', 'edge']);
+    });
+
+    test('updateRule toggles the private flag', () {
+      service
+        ..addRule(const Rule(domain: 'a.com', browserId: 'chrome'))
+        ..updateRule('a.com', browserId: 'chrome', private: true);
+      expect(service.rules.single.private, isTrue);
+    });
   });
 
   group('lookupBrowser (hierarchical)', () {
