@@ -152,7 +152,7 @@ jobs:
                   	  desc "${CASK_DESC}"
                   	  homepage "https://github.com/${{ github.repository }}"
 
-                  	  depends_on macos: ">= :ventura"
+                  	  depends_on macos: :ventura
 
                   	  app "LinkUnbound.app"
 
