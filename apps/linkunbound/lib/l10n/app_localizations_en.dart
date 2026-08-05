@@ -176,10 +176,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get appDescription => 'Open-source browser picker for Windows.';
+  String get appDescription =>
+      'Open-source browser picker for Windows and macOS.';
 
   @override
-  String get mitLicense => 'GPL-3.0 License';
+  String get licenseName => 'GPL-3.0 License';
 
   @override
   String get resetConfigLabel => 'Reset configuration';
@@ -314,6 +315,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get pickerNoBrowsers =>
       'No browsers detected. Open Settings to add one.';
+
+  @override
+  String get sectionInternalLinks => 'INTERNAL LINKS';
 
   @override
   String get edgeProtocolLabel => 'Capture links from Microsoft apps';

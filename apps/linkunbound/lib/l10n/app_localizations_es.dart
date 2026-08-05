@@ -180,10 +180,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get appDescription =>
-      'Selector de navegadores de código abierto para Windows.';
+      'Selector de navegadores de código abierto para Windows y macOS.';
 
   @override
-  String get mitLicense => 'Licencia GPL-3.0';
+  String get licenseName => 'Licencia GPL-3.0';
 
   @override
   String get resetConfigLabel => 'Restablecer configuración';
@@ -320,6 +320,9 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get pickerNoBrowsers =>
       'No se detectaron navegadores. Abre Ajustes para añadir uno.';
+
+  @override
+  String get sectionInternalLinks => 'ENLACES INTERNOS';
 
   @override
   String get edgeProtocolLabel =>

@@ -1,39 +1,42 @@
-<!-- 
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# linkunbound_core
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages). 
+Platform-agnostic core of [LinkUnbound](../../README.md): the models, services
+and platform contracts that decide **which browser opens a link**, with no
+Flutter and no `dart:ui` dependency.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages). 
--->
+Everything here is pure Dart so it can be unit tested without a window, an
+operating system handler, or a running app. The Flutter application and the
+per-OS implementations live in [`apps/linkunbound`](../../apps/linkunbound).
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+## What lives here
 
-## Features
+| Area | Contents |
+| :--- | :--- |
+| `models/` | `Browser`, `BrowserConfig`, `Rule` |
+| `services/` | Browser detection and persistence, rule matching, launching, logging, update checks |
+| `platform/` | Abstract contracts each OS implements: registration, startup, inbound events, diagnostics |
+| `url_utils.dart` | URL unwrapping, redaction and the launchability gate |
+| `private_mode.dart` | The private-window switch each browser family expects |
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+## Two rules that shape this package
 
-## Getting started
+**No Flutter imports.** If something needs a `BuildContext`, a channel or a
+window, it belongs in the app, not here. This is what keeps the test suite fast
+and the logic verifiable in isolation.
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+**The URL is untrusted.** Inbound events arrive over IPC from any local
+process, so `isLaunchableUrl` is the single gate every URL passes before
+reaching `Process.start`. Anything that starts with `-` is a browser switch,
+not a link.
 
-## Usage
+## Tests
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder. 
-
-```dart
-const like = 'sample';
+```sh
+cd packages/core
+dart test
 ```
 
-## Additional information
+## Licence
 
-TODO: Tell users more about the package: where to find more information, how to 
-contribute to the package, how to file issues, what response they can expect 
-from the package authors, and more.
+GPL-3.0, with commercial terms available — see [LICENSE](../../LICENSE) and
+[COMMERCIAL.md](../../COMMERCIAL.md).

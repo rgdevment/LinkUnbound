@@ -419,14 +419,14 @@ abstract class AppLocalizations {
   /// No description provided for @appDescription.
   ///
   /// In en, this message translates to:
-  /// **'Open-source browser picker for Windows.'**
+  /// **'Open-source browser picker for Windows and macOS.'**
   String get appDescription;
 
-  /// No description provided for @mitLicense.
+  /// No description provided for @licenseName.
   ///
   /// In en, this message translates to:
   /// **'GPL-3.0 License'**
-  String get mitLicense;
+  String get licenseName;
 
   /// No description provided for @resetConfigLabel.
   ///
@@ -661,6 +661,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No browsers detected. Open Settings to add one.'**
   String get pickerNoBrowsers;
+
+  /// Settings section header for Microsoft internal link capture
+  ///
+  /// In en, this message translates to:
+  /// **'INTERNAL LINKS'**
+  String get sectionInternalLinks;
 
   /// Toggle label for microsoft-edge: protocol capture (Windows only)
   ///

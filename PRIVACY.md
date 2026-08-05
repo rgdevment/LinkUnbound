@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** April 21, 2026
+**Last updated:** August 4, 2026
 
 ---
 
@@ -42,10 +42,35 @@ LinkUnbound stores only what it needs to function:
 
 ### Domain Rules
 
-| Data       | Purpose                                          | Format |
-| :--------- | :----------------------------------------------- | :----- |
-| Domain     | Match URLs to a browser (e.g., `github.com`)     | JSON   |
-| Browser ID | Which browser opens that domain                  | JSON   |
+| Data            | Purpose                                             | Format |
+| :-------------- | :-------------------------------------------------- | :----- |
+| Domain          | Match URLs to a browser (e.g., `github.com`)        | JSON   |
+| Browser ID      | Which browser opens that domain                     | JSON   |
+| Originating app | Scope the rule to the app a link came from          | JSON   |
+| Private flag    | Whether the rule opens the link in a private window | JSON   |
+
+### Originating Application
+
+To offer "always open links from this app here", LinkUnbound has to know which
+application asked the system to open the link. It is read like this:
+
+| Platform | How the origin is determined                     | Reliability |
+| :------- | :----------------------------------------------- | :---------- |
+| Windows  | Parent process of the process the shell launched | Accurate    |
+| macOS    | The application in the foreground at that moment | Approximate |
+
+macOS does not report which application opened a link, so the foreground app stands in for it. An app-scoped rule is only written when you tick "always open" on a link whose origin is known.
+
+What this means in practice:
+
+- **Only the application name is read.** Not its windows, not its title, not
+  its contents. `explorer`, `cmd` and `powershell` are discarded, since they
+  are the shell itself rather than an app worth writing a rule about.
+- **It is read at the moment a link arrives**, not continuously. LinkUnbound
+  does not watch which applications you use.
+- **It reaches the disk only if you ask it to.** The name is used in memory to
+  match rules and to label the picker. It is written to `rules.json` only when
+  you tick "always open" on a link whose origin is known.
 
 ### Navigation Log
 
@@ -115,9 +140,12 @@ LinkUnbound makes **one type of network request**:
 | **URL**       | `https://api.github.com/repos/rgdevment/LinkUnbound/releases/latest`     |
 | **Method**    | GET (read-only)                                                          |
 | **Data sent** | Standard HTTP headers only — no user data                                |
-| **Frequency** | Once per application launch                                              |
+| **Frequency** | At most once every 6 hours                                               |
 | **Timeout**   | 5 seconds                                                                |
 | **On failure**| Silent — the app continues working normally                              |
+
+The resident process is long-lived, so the check happens on that interval
+rather than only once at launch.
 
 **Important:**
 
@@ -152,7 +180,7 @@ For Microsoft's own privacy practices, refer to [Microsoft's Privacy Statement](
 Settings → **Maintenance** tab provides:
 
 - **Reset configuration** — clears all browsers, rules, and icons, then re-scans installed browsers.
-- **Unregister** — removes LinkUnbound's browser registration from Windows.
+- **Unregister** — removes LinkUnbound's browser registration from the system: the registry entries on Windows, the Launch Services association on macOS.
 
 ### Complete Removal
 
@@ -165,7 +193,7 @@ Settings → **Maintenance** tab provides:
 
 1. Drag `LinkUnbound.app` from `/Applications` to the Trash (or `brew uninstall --cask linkunbound`).
 2. Delete the data folder: `~/Library/Application Support/LinkUnbound/`
-3. Optional: remove preferences (`~/Library/Preferences/cl.apirest.linkunbound.plist`) and saved app state (`~/Library/Saved Application State/cl.apirest.linkunbound.savedState/`).
+3. Optional: remove preferences (`~/Library/Preferences/com.rgdevment.linkunbound.plist`) and saved app state (`~/Library/Saved Application State/com.rgdevment.linkunbound.savedState/`).
 
 After these steps, no LinkUnbound data remains on your system.
 
@@ -177,18 +205,25 @@ LinkUnbound includes an optional **Export diagnostics** feature (Settings → Ma
 
 ### What the ZIP Contains
 
-| File              | Content                                                                                       |
-| :---------------- | :-------------------------------------------------------------------------------------------- |
-| `system_info.txt` | OS version, locale, app version, executable path, data files                                  |
-| `registry.txt`    | LinkUnbound's own Windows registry entries (Windows only)                                     |
-| `navigate.log`    | Last 200 lines of the navigation log (URLs already redacted)                                  |
+| File                  | Content                                                                   |
+| :-------------------- | :------------------------------------------------------------------------ |
+| `system_info.txt`     | OS version, locale, app version, executable path, data files              |
+| `registry.txt`        | Windows only — LinkUnbound's own registry entries, those three keys alone |
+| `launch_services.txt` | macOS only — the system's URL-handler associations (see the note below)   |
+| `navigate.log`        | Last 200 lines of the navigation log (URLs already redacted)              |
 
 ### What the ZIP Does NOT Contain
 
 - **Browser list** (`browsers.json`) — not included
-- **Domain rules** (`rules.json`) — not included
+- **Domain rules** (`rules.json`) — not included, so no originating app names leave your machine through the export
 - **Icons** — not included
 - **Actual URLs** — URLs are redacted at the source (log writing), not at export time
+
+**Worth knowing before you share one:** on macOS the export includes
+`launch_services.txt`, which lists which application your system uses to open
+each URL scheme and file type. That is information about your machine rather
+than about your browsing, but it does name other software you have installed.
+Open the ZIP and look before attaching it to a public issue.
 
 ### URL Redaction
 

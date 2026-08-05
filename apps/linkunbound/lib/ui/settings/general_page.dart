@@ -329,15 +329,29 @@ class GeneralPage extends ConsumerWidget {
 
     return [
       const SizedBox(height: 20),
-      SectionHeader(label: l10n.edgeProtocolLabel),
+      // A short uppercase header with the explanation inside the card, like
+      // every other section. Using the full sentence as the header made this
+      // one read as a stray paragraph among NAVEGADORES, INICIO and the rest.
+      SectionHeader(label: l10n.sectionInternalLinks),
       GroupCard(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Text(
-                l10n.edgeProtocolDescription,
-                style: Theme.of(context).textTheme.bodySmall,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.edgeProtocolLabel,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  Text(
+                    l10n.edgeProtocolDescription,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 12),

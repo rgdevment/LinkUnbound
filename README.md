@@ -101,6 +101,10 @@ This isn't a company product or a startup. I'm a solo developer who got tired of
 - **Resolves redirects** and Microsoft SafeLinks before matching rules
 - **Runs silently** in the system tray (or menu bar on macOS) — launches on startup, stays out of the way
 - **Detects installed browsers** automatically — or add custom ones manually
+- **Opens in a private window** — hold Shift while picking, using the switch each browser family expects
+- **Routes by originating app** — "everything from Slack in Brave", not only by domain
+- **Captures links from Microsoft apps** (Windows, opt-in) — Teams, Outlook and Start menu search wrap links in an Edge-only scheme that ignores the default browser
+- **Tells you when capture is broken** — Settings explains why and offers a one-click repair
 - **Supports multiple languages** — English and Spanish, with automatic detection
 
 ---
@@ -198,16 +202,21 @@ Since LinkUnbound is an independent open source project, the installer uses a se
 
 **Settings (tray):** double-click the tray icon or right-click → Settings. Four tabs:
 
-- **General** — browsers, default browser status, startup toggle, language
-- **Rules** — all domain rules, change browser per rule, delete rules
-- **About** — version, license, update notifications, support links
+- **General** — browsers, default browser status, startup toggle, language, internal-link capture, self-diagnostics
+- **Rules** — every rule, change browser per rule, delete rules
 - **Maintenance** — export diagnostics, reset configuration, unregister
+- **About** — version, license, update notifications, support links
 
 ---
 
 ## Domain Rules
 
 Rules match hierarchically. A rule for `google.com` covers `mail.google.com`, `drive.google.com`, etc., unless a more specific subdomain rule exists.
+
+A rule can also be scoped to the application a link came from, covering every
+domain: "links from Slack open in Brave". An app-scoped rule wins over a domain
+rule, even a more specific one — naming the origin is a deliberate statement,
+and a generic domain rule should not override it silently.
 
 Rules are created from the picker ("Always open here") and managed in the Rules tab.
 
@@ -220,16 +229,16 @@ One binary, two modes:
 - `linkunbound` (no args) → settings + tray/menu bar (resident process)
 - `linkunbound "https://..."` (link click) → routes the URL to the resident process and exits, or operates standalone
 
-**Windows.** A named pipe (`\\.\pipe\LinkUnbound`) links second instances to the resident process. A Windows mutex prevents duplicate residents. Default-browser registration goes through `IApplicationAssociationRegistration`.
+**Windows.** A named pipe (`\\.\pipe\LinkUnbound`) links second instances to the resident process. A Windows mutex prevents duplicate residents. Registration writes the app's own ProgId, `RegisteredApplications` and `StartMenuInternet` keys, and is reconciled on every launch; Windows itself owns the final choice through `UserChoice`, which no application may write.
 
-**macOS.** Single-instance launching is handled by Launch Services; URLs arrive through `application:openURLs:` (Apple Events) which are forwarded to Dart via a `MethodChannel`. Default-browser registration uses `LSSetDefaultHandlerForURLScheme`. The app runs as `LSUIElement` so it lives in the menu bar instead of the Dock.
+**macOS.** Single-instance launching is handled by Launch Services; URLs arrive through `application:openURLs:` (Apple Events) which are forwarded to Dart via a `MethodChannel`. Default-browser registration uses `NSWorkspace.setDefaultApplication`. The app runs as `LSUIElement` so it lives in the menu bar instead of the Dock.
 
 ---
 
 ## FAQ
 
 **Is LinkUnbound free?**
-Yes. Completely free and open source. No premium tiers, no subscriptions, no paywalls — ever.
+Yes. Completely free and open source. No premium tiers, no subscriptions, no paywalls — ever. That covers using it anywhere, including across a company. Only redistributing it inside a product of your own needs [separate terms](COMMERCIAL.md).
 
 **Does it track my browsing?**
 No. LinkUnbound does not track or transmit anything. URLs are processed in memory and automatically redacted before being written to the navigation log — the log file never contains actual URLs, only privacy-safe placeholders.
@@ -302,6 +311,14 @@ Copyright (C) 2026 Mario Hidalgo G. (rgdevment)
 This program comes with ABSOLUTELY NO WARRANTY.
 This is free software, and you are welcome to redistribute it under certain conditions.
 Distributed under the **GNU General Public License v3.0**. See [LICENSE](LICENSE) for details.
+
+LinkUnbound is dual licensed. The GPL-3.0 covers everyone using, deploying,
+auditing or forking it — which is almost everybody, and it costs nothing.
+Redistributing it, or shipping it inside a product you distribute, needs
+separate terms: see [COMMERCIAL.md](COMMERCIAL.md).
+
+Contributions require a one-time [CLA](CLA.md); you keep the copyright on your
+work.
 
 ---
 

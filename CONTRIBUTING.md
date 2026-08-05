@@ -8,7 +8,9 @@ Thank you for considering contributing to **LinkUnbound**. Whether it's your fir
 
 **LinkUnbound** is a personal project shared with the community. It was created by a single developer ([@rgdevment](https://github.com/rgdevment)) to solve a daily frustration: choosing which browser opens a link shouldn't require a computer science degree.
 
-This is not a commercial product. There is no premium version, no monetization, no business plan. It's free software, built for and shared with the community.
+There is no premium version and no feature is ever held back: what you install is the whole application. LinkUnbound is free software, built for and shared with the community.
+
+It is also dual licensed. Anyone who wants to redistribute it inside a product of their own needs [separate terms](COMMERCIAL.md) — that is what funds the time spent on it, and it never comes at the expense of the free edition.
 
 We believe in:
 
@@ -158,27 +160,44 @@ LinkUnbound uses Flutter's standard ARB-based localization.
 
 ## License and Rights
 
-By contributing to LinkUnbound, you agree that your contributions will be licensed under the **GNU General Public License v3.0 (GPLv3)**.
+LinkUnbound is released under the **GNU General Public License v3.0
+(GPL-3.0)** and offered under separate [commercial terms](COMMERCIAL.md) to
+organisations that cannot comply with it. Your contributions are licensed the
+same way.
 
 ### Contributor License Agreement
 
-To protect the project long-term, by submitting a Pull Request:
+Because of that dual model, every contributor signs a one-time
+[CLA](CLA.md) before their code can be merged. Offering commercial terms
+requires the right to license the whole codebase that way, and that right has
+to come from each author explicitly.
 
-> **You grant Mario Hidalgo G. (rgdevment) a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, modify, sublicense, and distribute your contribution.**
+**You keep the copyright on your work.** The CLA is a licence you grant, not a
+transfer of ownership.
 
-**What this means:**
+The first time you open a Pull Request, a bot asks you to sign. Reply on that
+Pull Request with exactly:
 
-- You keep the copyright of your code — you are always recognized as the author.
-- Your contribution stays open source in this repository under GPLv3 forever.
-- The community version will never disappear.
+```text
+I have read the CLA Document and I hereby sign the CLA
+```
 
-**What we will NOT do:**
+That is it — every later Pull Request from the same account is covered.
 
-- Close the current or future community version.
-- Remove your contributions from the open source project.
-- Stop giving credit to contributors.
+**In return, the project commits that:**
 
-If you don't agree, you can still use LinkUnbound, report bugs, suggest features, fork under GPLv3, and contribute in other ways.
+- The community edition stays available under the GPL-3.0.
+- Your contribution is never removed from the open source project to make it
+  exclusive to a commercial edition.
+- Your authorship is preserved; history is not rewritten to erase it.
+- No release already published is ever retroactively withdrawn.
+
+Read [CLA.md](CLA.md) for the full text — it is short, and worth the two
+minutes before you sign it.
+
+If you would rather not sign, you can still use LinkUnbound, report bugs,
+request features, discuss design, and fork the project under the GPL-3.0.
+Only merging code into this repository requires the agreement.
 
 ---
 

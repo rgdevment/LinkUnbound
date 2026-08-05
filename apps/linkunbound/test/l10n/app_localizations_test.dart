@@ -57,7 +57,7 @@ void _expectAllMessages(AppLocalizations l10n) {
     l10n.deleteRuleTooltip,
     l10n.sectionAbout,
     l10n.appDescription,
-    l10n.mitLicense,
+    l10n.licenseName,
     l10n.resetConfigLabel,
     l10n.resetConfigDescription,
     l10n.unregisterLabel,

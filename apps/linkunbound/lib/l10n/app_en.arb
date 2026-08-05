@@ -80,8 +80,8 @@
       }
     }
   },
-  "appDescription": "Open-source browser picker for Windows.",
-  "mitLicense": "GPL-3.0 License",
+  "appDescription": "Open-source browser picker for Windows and macOS.",
+  "licenseName": "GPL-3.0 License",
   "resetConfigLabel": "Reset configuration",
   "resetConfigDescription": "Clear all browsers and rules, then re-scan",
   "unregisterLabel": "Unregister LinkUnbound",
@@ -137,6 +137,10 @@
   "pickerNoBrowsers": "No browsers detected. Open Settings to add one.",
   "@pickerNoBrowsers": {
     "description": "Shown in the picker when no browsers are configured"
+  },
+  "sectionInternalLinks": "INTERNAL LINKS",
+  "@sectionInternalLinks": {
+    "description": "Settings section header for Microsoft internal link capture"
   },
   "edgeProtocolLabel": "Capture links from Microsoft apps",
   "@edgeProtocolLabel": {

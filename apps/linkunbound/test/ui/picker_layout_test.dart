@@ -15,7 +15,7 @@ void main() {
       final size2 = PickerLayout.windowSize(2);
       expect(
         size2.height - size1.height,
-        closeTo(PickerLayout.rowHeight, 0.001),
+        closeTo(PickerLayout.rowHeight(), 0.001),
       );
     });
 
@@ -32,10 +32,53 @@ void main() {
       }
     });
 
-    test('single browser height equals overhead + one row + chrome', () {
+    test('leaves room for the header, footer and list padding', () {
+      // Header 54 + dividers 1 + list padding 8 + footer 34 = 97, plus the
+      // 9px of window chrome. Asserted as a whole so a change to any of the
+      // pieces has to be a deliberate one.
       final size = PickerLayout.windowSize(1);
-      // height = _overhead + 1 * rowHeight + _chromeH
-      expect(size.height, closeTo(100.0 + PickerLayout.rowHeight + 9.0, 0.001));
+      expect(
+        size.height,
+        closeTo(97.0 + PickerLayout.rowHeight() + 9.0, 0.001),
+      );
+    });
+  });
+
+  group('PickerLayout text scaling', () {
+    test('rowHeight is unchanged while the icon still dominates', () {
+      // The 28px icon is taller than a 15px line until roughly 1.8x, so the
+      // rows must not grow before that or the picker gains dead space.
+      expect(PickerLayout.rowHeight(1.25), equals(PickerLayout.rowHeight()));
+    });
+
+    test('rowHeight grows once the text outgrows the icon', () {
+      expect(
+        PickerLayout.rowHeight(2.0),
+        greaterThan(PickerLayout.rowHeight()),
+      );
+    });
+
+    test('the window gets taller as the system text size grows', () {
+      // Without this the footer is simply clipped: the window keeps its
+      // 100%-scale height while every line inside it gets taller.
+      final normal = PickerLayout.windowSize(3);
+      final large = PickerLayout.windowSize(3, textScale: 1.5);
+      expect(large.height, greaterThan(normal.height));
+      expect(large.width, equals(normal.width));
+    });
+
+    test('scaling is clamped so the window cannot outgrow the screen', () {
+      final atCap = PickerLayout.windowSize(6, textScale: 2.0);
+      final beyond = PickerLayout.windowSize(6, textScale: 4.0);
+      expect(beyond.height, equals(atCap.height));
+    });
+
+    test('a scale below 1 never shrinks the window', () {
+      // Some platforms report 0 before the first metrics update.
+      expect(
+        PickerLayout.windowSize(3, textScale: 0).height,
+        equals(PickerLayout.windowSize(3).height),
+      );
     });
   });
 }

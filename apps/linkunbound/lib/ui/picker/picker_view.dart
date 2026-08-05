@@ -425,6 +425,11 @@ class _AlwaysOpenFooter extends ConsumerWidget {
     final label = originLabel == null
         ? l10n.alwaysOpenHere
         : l10n.alwaysOpenFromApp(originLabel!);
+    // The hint only teaches a shortcut; the label states what ticking the box
+    // will do. When the label names an app it is long enough that keeping both
+    // ellipsised each of them and neither could be read, so the hint steps
+    // aside.
+    final showHint = showPrivateHint && originLabel == null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -445,15 +450,18 @@ class _AlwaysOpenFooter extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Flexible(
+          // Expanded, not Flexible beside a Spacer: the Spacer claimed an
+          // equal share of the free width, leaving the label half the room it
+          // needed and ellipsising it to "Abrir siemp…".
+          Expanded(
             child: Text(
               label,
               style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const Spacer(),
-          if (showPrivateHint) ...[
+          if (showHint) ...[
+            const SizedBox(width: 8),
             Text(
               l10n.pickerPrivateHint,
               style: TextStyle(

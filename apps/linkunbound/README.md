@@ -15,7 +15,7 @@ flutter run -d macos     # macOS 13+ + Xcode 15+
 ## Tests and analysis
 
 ```sh
-flutter test                                # 208+ widget/unit tests
+flutter test                                # widget/unit tests for the app layer
 dart analyze --fatal-infos                  # zero issues
 flutter test --coverage                     # generates coverage/lcov.info
 ```
@@ -32,19 +32,19 @@ lib/
   platform/
     platform_bindings.dart # abstract contract per OS
     windows/               # named pipe + registry + tray (Win32)
-    macos/                 # Apple Events + LSSetDefaultHandlerForURLScheme + LSUIElement
+    macos/                 # Apple Events + Launch Services + LSUIElement
   ui/
     picker/                # floating browser picker
-    settings/              # General, Rules, About, Maintenance tabs
+    settings/              # General, Rules, Maintenance, About tabs
     shared/                # theme + reusable widgets
 test/                      # widget + unit tests for the app layer
 ```
 
 ## Platform notes
 
-**Windows.** Default-browser registration via `IApplicationAssociationRegistration`. Single-instance + IPC via a named pipe (`\\.\pipe\LinkUnbound`). Tray icon via `tray_manager`. Native packaging in `windows/packaging/{exe,msix}`.
+**Windows.** Default-browser registration writes the app's own ProgId, `RegisteredApplications` and `StartMenuInternet` keys, reconciled on every launch; `UserChoice` stays under Windows' control. Single-instance + IPC via a named pipe (`\\.\pipe\LinkUnbound`). Tray icon via `tray_manager`. Native packaging in `windows/packaging/{exe,msix}`.
 
-**macOS.** Default-browser registration via `LSSetDefaultHandlerForURLScheme`. URL events delivered through `application:openURLs:` and forwarded to Dart via `MethodChannel`. The app runs as `LSUIElement` (menu bar only, no Dock icon). Native sources live in `macos/Runner/`. Distribution is signed/notarized via `scripts/macos/release.sh` and shipped through the `rgdevment/tap` Homebrew cask.
+**macOS.** Default-browser registration via `NSWorkspace.setDefaultApplication`. URL events delivered through `application:openURLs:` and forwarded to Dart via `MethodChannel`. The app runs as `LSUIElement` (menu bar only, no Dock icon). Native sources live in `macos/Runner/`. Distribution is signed/notarized via `scripts/macos/release.sh` and shipped through the `rgdevment/tap` Homebrew cask.
 
 ## Edit native code
 

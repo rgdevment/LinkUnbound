@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -416,7 +417,13 @@ Future<void> _showPicker(
   try {
     await macWindow?.setPickerMode();
     final browsers = container.read(browsersProvider);
-    final winSize = PickerLayout.windowSize(browsers.length);
+    // Read the system text size here rather than baking in 1.0: the window is
+    // sized before its content is laid out, so an accessibility setting the
+    // layout knows nothing about would push the footer outside the frame.
+    final winSize = PickerLayout.windowSize(
+      browsers.length,
+      textScale: PlatformDispatcher.instance.textScaleFactor,
+    );
     // Fetch cursor and display list concurrently, then hit-test locally so
     // both reads observe the same cursor position.
     final (cursorResult, rects) = await (

@@ -77,7 +77,7 @@ Subject: `[SECURITY] Brief description of the issue`
 - Description of the vulnerability
 - Impact — what could an attacker do?
 - Steps to reproduce
-- LinkUnbound version and Windows version
+- LinkUnbound version, and your OS and version (Windows 10/11 or macOS)
 - Proof of concept (optional)
 - Suggested fix (optional)
 

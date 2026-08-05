@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:linkunbound_core/linkunbound_core.dart';
 
+import 'package:linkunbound/ui/picker/picker_layout.dart';
 import 'package:linkunbound/ui/picker/picker_view.dart';
 
 import '../helpers.dart';
@@ -838,6 +839,61 @@ void main() {
       expect(rule.sourceApp, 'slack');
       expect(rule.domain, kAnyDomain);
       expect(rule.private, isFalse);
+    });
+
+    testWidgets('the label takes every pixel the hint leaves', (tester) async {
+      // Regression: a Spacer sat between the label and the hint and claimed an
+      // equal share of the free width, halving the label's slot and rendering
+      // "Abrir siempre aqui" as "Abrir siemp...". Asserted on layout geometry
+      // rather than text width, which depends on the test font.
+      tester.view.physicalSize = const Size(PickerLayout.width, 400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final label = tester.getRect(find.text('Always open here'));
+      final hint = tester.getRect(find.text('Shift = private'));
+      // Only the 8px gap may separate them; anything more is space the label
+      // was entitled to.
+      expect(label.right + 8, closeTo(hint.left, 0.5));
+    });
+
+    testWidgets('the private hint yields to the longer app-scoped label', (
+      tester,
+    ) async {
+      // Both compete for the same row. The label says what ticking the box
+      // does, so the hint is the one that goes.
+      tester.view.physicalSize = const Size(PickerLayout.width, 400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final f = makeFixtures(dir: tempDir, browsers: [_chrome]);
+      await tester.pumpWidget(
+        buildTestApp(
+          const PickerView(url: 'https://example.com', origin: 'slack'),
+          overrides: f.overrides,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Shift = private'), findsNothing);
+      final label = tester.getRect(
+        find.text('Always open links from slack here'),
+      );
+      final checkbox = tester.getRect(find.byType(Checkbox));
+      // The label now spans from the checkbox to the footer's right padding.
+      expect(label.left, closeTo(checkbox.right + 8, 0.5));
+      expect(label.right, closeTo(PickerLayout.width - 14, 0.5));
     });
 
     testWidgets('always-open without an origin falls back to the domain', (

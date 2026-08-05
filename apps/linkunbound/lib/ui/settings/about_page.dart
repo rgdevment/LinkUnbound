@@ -46,7 +46,7 @@ class AboutPage extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                l10n.mitLicense,
+                l10n.licenseName,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

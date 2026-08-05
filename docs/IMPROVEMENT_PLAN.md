@@ -1,23 +1,30 @@
 # LinkUnbound — Improvement Plan (Windows + macOS)
 
-> **Estado (2026-06-06):** Fases 1-4 implementadas, re-auditadas por un reviewer
-> independiente y con los hallazgos Critical/Important corregidos.
-> `flutter analyze` limpio; suite completa verde (364 pass / 16 skip / 0 fail).
+> **Documento histórico (cerrado el 2026-08-04).** Las seis fases se
+> implementaron. Se conserva porque cada ítem cita el archivo y la línea del
+> hallazgo original, lo que sigue siendo útil para entender por qué el código
+> quedó como quedó — pero **ya no es un plan vivo y no refleja el estado
+> actual**. La referencia vigente sobre captura de enlaces es
+> [`LINK_CAPTURE.md`](LINK_CAPTURE.md).
 >
 > | Fase | Contenido | Estado |
 > |---|---|---|
-> | 1 | macOS UX: sin botón Exit, titlebar nativa en Settings, activation policy, Cmd+W | ✅ Verificada en vivo en macOS |
-> | 2 | Estabilidad Windows: TOCTOU, pipe busy-spin, buffering, migración | ✅ + fixes post-review (sentinel de handle, 2.º claim, migración en isolate, cliente write-only) — **pendiente prueba en Windows real** |
-> | 3 | Latencia picker: cold start, round-trips, multi-monitor, IO en build | ✅ + fix post-review (hit-test local con un solo read de cursor) — **pendiente prueba multi-monitor** |
-> | 4 | Ocultar tray + hotkey global + arranque silencioso por login item | ✅ (detección por Apple Event, no PPID) — **pendiente prueba manual de hotkey y login item en ambos SO** |
-> | 5 | Pulido: blur unificado, foco/Esc picker, tema claro/sistema, debounce de registro, log con IOSink, ProgId exacto, TTL de updates, deuda menor | ✅ (396 pass app + 124 core / 0 fail) — **pendiente revisión visual del tema claro y prueba en Windows real**. P2.10 (notificaciones) diferido. |
-> | 6 | Icono/branding | ⬜ Pendiente (al final) |
+> | 1 | macOS UX: sin botón Exit, titlebar nativa en Settings, activation policy, Cmd+W | ✅ |
+> | 2 | Estabilidad Windows: TOCTOU, pipe busy-spin, buffering, migración | ✅ Probada en Windows real |
+> | 3 | Latencia picker: cold start, round-trips, multi-monitor, IO en build | ✅ Probada en multi-monitor |
+> | 4 | Ocultar tray + hotkey global + arranque silencioso por login item | ✅ |
+> | 5 | Pulido: blur unificado, foco/Esc picker, tema claro/sistema, debounce de registro, log con IOSink, ProgId exacto, TTL de updates | ✅ P2.10 (notificaciones) diferido |
+> | 6 | Icono/branding | ✅ |
 >
-> Follow-ups menores aceptados del review (no bloqueantes): foco de teclado del
-> picker bajo activation policy accessory (se aborda con P2.4 en Fase 5); test
-> del callback de hotkey no simula el disparo real; `serialize()` de hotkey no
-> garantiza orden estable de modificadores; cobertura del delete-after-copy en
-> la migración.
+> Lo hecho después de cerrar este plan no está recogido aquí: la reparación de
+> la captura de enlaces en ambos sistemas, el endurecimiento del pipe y de la
+> validación de URLs, y las funciones de modo privado, reglas por aplicación de
+> origen, autodiagnóstico y captura del esquema `microsoft-edge:`. Todo ello
+> está documentado en `LINK_CAPTURE.md` y en el historial de git.
+>
+> Las cifras de tests que aparecen más abajo en el cuerpo corresponden al
+> momento de cada fase y hoy se quedan cortas: la suite está en 526 tests de app
+> y 168 de core.
 
 > Generado a partir de una auditoría completa del código (UI, performance, integración
 > nativa Windows/macOS). Cada ítem referencia archivo y línea del hallazgo.
