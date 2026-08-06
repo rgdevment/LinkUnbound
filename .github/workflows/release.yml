@@ -129,12 +129,16 @@ jobs:
                   DMG_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${DMG_NAME}"
 
                   echo "Downloading DMG to compute SHA256..."
+                  DOWNLOADED=""
                   for attempt in 1 2 3 4 5; do
-                    curl -fSL -o "/tmp/${DMG_NAME}" "${DMG_URL}" && break
+                    if curl -fSL -o "/tmp/${DMG_NAME}" "${DMG_URL}"; then
+                      DOWNLOADED=1
+                      break
+                    fi
                     echo "Asset not downloadable yet (attempt ${attempt}/5); retrying..."
                     sleep $((attempt * 10))
                   done
-                  if [[ ! -s "/tmp/${DMG_NAME}" ]]; then
+                  if [[ -z "$DOWNLOADED" || ! -s "/tmp/${DMG_NAME}" ]]; then
                     echo "Could not download ${DMG_NAME}"
                     exit 1
                   fi
@@ -278,12 +282,16 @@ jobs:
                     NAME="linkunbound"; SUFFIX=""
                   fi
 
+                  DOWNLOADED=""
                   for attempt in 1 2 3 4 5; do
-                    curl -fSL -o "/tmp/${SETUP}" "${BASE}/${SETUP}" && break
+                    if curl -fSL -o "/tmp/${SETUP}" "${BASE}/${SETUP}"; then
+                      DOWNLOADED=1
+                      break
+                    fi
                     echo "Asset not downloadable yet (attempt ${attempt}/5); retrying..."
                     sleep $((attempt * 10))
                   done
-                  if [[ ! -s "/tmp/${SETUP}" ]]; then
+                  if [[ -z "$DOWNLOADED" || ! -s "/tmp/${SETUP}" ]]; then
                     echo "Could not download ${SETUP} from ${BASE}"
                     exit 1
                   fi
