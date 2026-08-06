@@ -15,15 +15,26 @@ String stripEdgeProtocol(String raw) {
   return raw;
 }
 
+const _safeLinkHosts = {
+  'statics.teams.cdn.office.net',
+  'teams.public.onecdn.static.microsoft',
+};
+
+const _safeLinkPath = '/evergreen-assets/safelinks/';
+
+bool _servesSafeLinks(Uri uri) {
+  final host = uri.host.toLowerCase();
+  if (host.endsWith('.safelinks.protection.outlook.com')) return true;
+  if (_safeLinkHosts.contains(host)) return true;
+  return uri.path.toLowerCase().startsWith(_safeLinkPath) &&
+      (host.endsWith('.microsoft') || host.endsWith('.office.net'));
+}
+
 String unwrapSafeLink(String raw) {
   final uri = Uri.tryParse(raw);
   if (uri == null) return raw;
 
-  final host = uri.host.toLowerCase();
-  final isSafeLink =
-      host.endsWith('.safelinks.protection.outlook.com') ||
-      host == 'statics.teams.cdn.office.net';
-  if (!isSafeLink) return raw;
+  if (!_servesSafeLinks(uri)) return raw;
 
   // `queryParameters` already percent-decodes; decoding again would resolve a
   // double-encoded `%2520` into a real character and change the destination.
