@@ -46,6 +46,11 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     _log.warning('Registration reconciliation failed (non-fatal)', e, st);
   }
 
+  if (args.contains('--register')) {
+    _log.info('Registration-only run; exiting without starting the UI');
+    _exitAfterFlush();
+  }
+
   try {
     if (await bindings.tryDelegate(bindings.initialEvent)) {
       _exitAfterFlush();
