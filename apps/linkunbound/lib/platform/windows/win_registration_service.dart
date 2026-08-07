@@ -151,9 +151,17 @@ final class WinRegistrationService implements RegistrationService {
     _deleteKeyTree(r'Software\Classes\LinkUnboundURL');
     _deleteKeyTree(r'Software\Clients\StartMenuInternet\LinkUnbound');
     _deleteKeyTree(r'Software\LinkUnbound');
+    _removeEdgeProtocolCapture();
     _removeRegisteredApplication();
     _removeOpenWithProgIds();
     _notifyShell();
+  }
+
+  void _removeEdgeProtocolCapture() {
+    _deleteKeyTree(r'Software\Classes\LinkUnboundEdgeProto');
+    if (_ownsEdgeProtocol) {
+      _deleteKeyTree(_edgeProtocolPath);
+    }
   }
 
   /// The `shell\open\command` value currently recorded for our ProgId, or null
@@ -200,10 +208,15 @@ final class WinRegistrationService implements RegistrationService {
       }
       final quotedExe = '"${executablePath.replaceAll('/', '\\')}"';
       _writeEdgeProtocolProgId(quotedExe);
+      if (_edgeProtocolOverriddenByUserChoice) {
+        _log.warning(
+          'Edge protocol keys written but a UserChoice association overrides '
+          'them: packaged callers such as Teams will not reach the picker',
+        );
+      }
       _log.info('Edge protocol capture enabled');
     } else {
-      _deleteKeyTree(r'Software\Classes\LinkUnboundEdgeProto');
-      _deleteKeyTree(r'Software\Classes\microsoft-edge');
+      _removeEdgeProtocolCapture();
       _log.info('Edge protocol capture disabled');
     }
     _notifyShell();
@@ -212,10 +225,20 @@ final class WinRegistrationService implements RegistrationService {
   @override
   Future<bool> get capturesEdgeProtocol async {
     if (isRunningInMsix()) return false;
+    return _ownsEdgeProtocol && !_edgeProtocolOverriddenByUserChoice;
+  }
+
+  static const _edgeProtocolPath = r'Software\Classes\microsoft-edge';
+
+  static const _edgeProtocolUserChoicePath =
+      r'Software\Microsoft\Windows\Shell\Associations\UrlAssociations'
+      r'\microsoft-edge\UserChoice';
+
+  bool get _ownsEdgeProtocol {
     try {
       final key = Registry.openPath(
         RegistryHive.currentUser,
-        path: r'Software\Classes\microsoft-edge\shell\open\command',
+        path: '$_edgeProtocolPath\\shell\\open\\command',
       );
       final command = key.getValueAsString('');
       key.close();
@@ -223,6 +246,11 @@ final class WinRegistrationService implements RegistrationService {
     } on Exception {
       return false;
     }
+  }
+
+  bool get _edgeProtocolOverriddenByUserChoice {
+    final progId = _readUserChoiceProgId(_edgeProtocolUserChoicePath);
+    return progId != null && !progIdMatchesLinkUnbound(progId);
   }
 
   void _writeEdgeProtocolProgId(String quotedExe) {

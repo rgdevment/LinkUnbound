@@ -472,6 +472,33 @@ final class _ClaimFalseFirstBindings extends _FakeBindings {
   }
 }
 
+final class _ExitSignal implements Exception {
+  const _ExitSignal();
+}
+
+Never _signalExit() => throw const _ExitSignal();
+
+final class _UnclaimableBindings extends _FakeBindings {
+  _UnclaimableBindings({required super.rootDir, this.delegateOnCall = 0});
+
+  final int delegateOnCall;
+
+  @override
+  InboundEvent? get initialEvent => const OpenUrlEvent('https://example.com');
+
+  @override
+  Future<bool> claim() async {
+    claimCalls++;
+    return false;
+  }
+
+  @override
+  Future<bool> tryDelegate(InboundEvent? event) async {
+    tryDelegateCalls++;
+    return tryDelegateCalls == delegateOnCall;
+  }
+}
+
 final class _ThrowingBrowserDetector implements BrowserDetector {
   @override
   Future<List<Browser>> detect() => Future.error(Exception('detection failed'));
@@ -608,15 +635,9 @@ void main() {
     _FakeBindings bindings,
     List<String> args,
   ) async {
-    // bootstrap() performs real dart:io and platform-channel operations
-    // (file reads, tray init, AppLocalizations.delegate.load, runApp) that
-    // need the real event loop.  tester.runAsync escapes FakeAsync so those
-    // futures can complete, then we pump to process widget frames.
-    // The extra runAsync gives post-frame callbacks (tray init, icon
-    // extraction) time to complete before we assert on their side effects.
     await tester.runAsync(() async {
       await HttpOverrides.runZoned(
-        () => bootstrap(bindings, args),
+        () => bootstrap(bindings, args, exitProcess: _signalExit),
         createHttpClient: (_) => _FailingHttpClient(),
       );
     });
@@ -629,6 +650,25 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
+  }
+
+  Future<Object?> bootUntilExit(
+    WidgetTester tester,
+    _FakeBindings bindings,
+    List<String> args,
+  ) async {
+    Object? thrown;
+    await tester.runAsync(() async {
+      try {
+        await HttpOverrides.runZoned(
+          () => bootstrap(bindings, args, exitProcess: _signalExit),
+          createHttpClient: (_) => _FailingHttpClient(),
+        );
+      } on _ExitSignal catch (e) {
+        thrown = e;
+      }
+    });
+    return thrown;
   }
 
   testWidgets('first boot scans browsers, extracts icons, and opens settings', (
@@ -1365,7 +1405,105 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // The footer offers a rule about the app, not about the domain.
     expect(find.text('Always open links from slack here'), findsOneWidget);
+  });
+
+  testWidgets('--register reconciles the handler and exits before the UI', (
+    tester,
+  ) async {
+    final bindings = _FakeBindings(rootDir: tempDir);
+    addTearDown(bindings.close);
+
+    final exited = await bootUntilExit(tester, bindings, const ['--register']);
+
+    expect(exited, isA<_ExitSignal>());
+    expect(bindings.registrationRecorder.registerCalls, [
+      bindings.executablePath,
+    ]);
+    expect(bindings.tryDelegateCalls, 0);
+    expect(bindings.claimCalls, 0);
+    expect(find.byType(SettingsWindow), findsNothing);
+  });
+
+  testWidgets('a delegated launch exits without claiming the mutex', (
+    tester,
+  ) async {
+    final bindings = _UnclaimableBindings(rootDir: tempDir, delegateOnCall: 1);
+    addTearDown(bindings.close);
+
+    final exited = await bootUntilExit(tester, bindings, const []);
+
+    expect(exited, isA<_ExitSignal>());
+    expect(bindings.tryDelegateCalls, 1);
+    expect(bindings.claimCalls, 0);
+  });
+
+  testWidgets('delegation retry after a lost claim exits', (tester) async {
+    final bindings = _UnclaimableBindings(rootDir: tempDir, delegateOnCall: 2);
+    addTearDown(bindings.close);
+
+    final exited = await bootUntilExit(tester, bindings, const []);
+
+    expect(exited, isA<_ExitSignal>());
+    expect(bindings.claimCalls, 1);
+    expect(bindings.tryDelegateCalls, 2);
+  });
+
+  testWidgets('last-resort delegation exits after two failed claims', (
+    tester,
+  ) async {
+    final bindings = _UnclaimableBindings(rootDir: tempDir, delegateOnCall: 3);
+    addTearDown(bindings.close);
+
+    final exited = await bootUntilExit(tester, bindings, const []);
+
+    expect(exited, isA<_ExitSignal>());
+    expect(bindings.claimCalls, 2);
+    expect(bindings.tryDelegateCalls, 3);
+    expect(
+      bindings.logFile.readAsStringSync(),
+      isNot(contains('Discarding initial event')),
+    );
+  });
+
+  testWidgets('an unreachable resident drops the initial event and exits', (
+    tester,
+  ) async {
+    final bindings = _UnclaimableBindings(rootDir: tempDir);
+    addTearDown(bindings.close);
+
+    final exited = await bootUntilExit(tester, bindings, const []);
+
+    expect(exited, isA<_ExitSignal>());
+    expect(bindings.claimCalls, 2);
+    expect(bindings.tryDelegateCalls, 3);
+    expect(
+      bindings.logFile.readAsStringSync(),
+      contains('Discarding initial event'),
+    );
+  });
+
+  testWidgets('tray exit releases the instance and exits', (tester) async {
+    final bindings = _FakeBindings(rootDir: tempDir);
+    addTearDown(bindings.close);
+
+    await boot(tester, bindings, const []);
+
+    final exitItem = bindings.fakeTray.menuItems.firstWhere(
+      (item) => item.label == 'Exit',
+    );
+
+    // onClick is a VoidCallback wrapping an async body: the signal surfaces as
+    // an unhandled asynchronous error, not a synchronous throw.
+    Object? captured;
+    await tester.runAsync(() async {
+      await runZonedGuarded(() async {
+        exitItem.onClick!();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }, (error, stack) => captured ??= error);
+    });
+
+    expect(captured, isA<_ExitSignal>());
+    expect(bindings.releaseCalls, 1);
   });
 }

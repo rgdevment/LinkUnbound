@@ -29,15 +29,15 @@ Never _exitAfterFlush() {
   exit(0);
 }
 
-Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
+Future<void> bootstrap(
+  PlatformBindings bindings,
+  List<String> args, {
+  Never Function() exitProcess = _exitAfterFlush,
+}) async {
   initLogging(bindings.logFile);
 
   _log.info('LinkUnbound starting (msix=${isRunningInMsix()})');
 
-  // Before delegating: a process that hands its URL to the resident instance
-  // exits within milliseconds, so anything done afterwards would never run for
-  // it. Repairing the registration here means *any* launch fixes a stale or
-  // hijacked handler, even when this process is only a courier.
   try {
     await bindings.registrationService.ensureRegistered(
       bindings.executablePath,
@@ -46,13 +46,21 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     _log.warning('Registration reconciliation failed (non-fatal)', e, st);
   }
 
-  try {
-    if (await bindings.tryDelegate(bindings.initialEvent)) {
-      _exitAfterFlush();
-    }
-  } on Object catch (e, st) {
-    _log.warning('Delegation check failed', e, st);
+  if (args.contains('--register')) {
+    _log.info('Registration-only run; exiting without starting the UI');
+    exitProcess();
   }
+
+  Future<bool> delegate(String failureMessage) async {
+    try {
+      return await bindings.tryDelegate(bindings.initialEvent);
+    } on Object catch (e, st) {
+      _log.warning(failureMessage, e, st);
+      return false;
+    }
+  }
+
+  if (await delegate('Delegation check failed')) exitProcess();
 
   bool claimed;
   try {
@@ -63,17 +71,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
   }
 
   if (!claimed) {
-    // claim() returned false means the mutex was held; the resident's pipe is
-    // now guaranteed to be listening (claim waits for readiness). Retry once.
-    try {
-      if (await bindings.tryDelegate(bindings.initialEvent)) {
-        _exitAfterFlush();
-      }
-    } on Object catch (e, st) {
-      _log.warning('Post-claim delegation retry failed', e, st);
-    }
-    // Delegation failed again: the resident may have exited in between. Make
-    // one last attempt to become the resident before dropping the event.
+    if (await delegate('Post-claim delegation retry failed')) exitProcess();
     try {
       claimed = await bindings.claim();
     } on Object catch (e, st) {
@@ -81,15 +79,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
       claimed = false;
     }
     if (!claimed) {
-      // Last-resort delegation before giving up: the resident that raced us may
-      // now be ready to receive the pipe message.
-      try {
-        if (await bindings.tryDelegate(bindings.initialEvent)) {
-          _exitAfterFlush();
-        }
-      } on Object catch (e, st) {
-        _log.warning('Final delegation attempt failed', e, st);
-      }
+      if (await delegate('Final delegation attempt failed')) exitProcess();
       final eventType = bindings.initialEvent?.runtimeType;
       if (eventType != null) {
         _log.severe(
@@ -97,7 +87,7 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
           '(type=$eventType)',
         );
       }
-      _exitAfterFlush();
+      exitProcess();
     }
   }
 
@@ -115,9 +105,6 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     _log.severe('Browser config corrupted, resetting', e, st);
     try {
       await browserService.reset();
-      // reset() leaves the list empty. Without re-scanning, the picker would
-      // render an empty window for the rest of this install — the flag was
-      // computed before the reset, so it says "not first boot".
       isFirstBoot = true;
     } on Object catch (e, st) {
       _log.warning('Browser reset failed', e, st);
@@ -144,18 +131,11 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
   try {
     await windowManager.ensureInitialized();
     await windowManager.setPreventClose(true);
-    // The callback form of waitUntilReadyToShow is a plain VoidCallback: an
-    // async body is *not* awaited, so its channel calls would still be in
-    // flight while the first inbound URL is already repositioning the window.
-    // Sequencing it here keeps setup and the first mode transition ordered.
     await windowManager.waitUntilReadyToShow(
       const WindowOptions(
         titleBarStyle: TitleBarStyle.hidden,
         size: Size(640, 700),
         center: false,
-        // Force a fully opaque background so compositors that lack Mica /
-        // DWM acrylic (Windows 10 integrated GPUs, Remote Desktop) don't try
-        // to render a transparent frame and crash the Flutter engine.
         backgroundColor: Color(0xFF1E1E1E),
       ),
     );
@@ -173,8 +153,6 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
     _log.severe('Window manager init failed', e, st);
   }
 
-  // Created here so that the exitApp callback can call hotkeyService.dispose()
-  // without needing to update the override after the container is built.
   final hotkeyService = HotkeyService();
 
   final container = ProviderContainer(
@@ -206,23 +184,13 @@ Future<void> bootstrap(PlatformBindings bindings, List<String> args) async {
         } on Object catch (e, st) {
           _log.warning('Release failed during exit', e, st);
         }
-        _exitAfterFlush();
+        exitProcess();
       }),
     ],
   );
 
   final macWindow = Platform.isMacOS ? MacWindowChannel() : null;
 
-  // Riverpod does not await listeners, and each transition issues a dozen
-  // platform round-trips. Two overlapping transitions (hidden → settings →
-  // picker on a cold start) would interleave setSize/center/show and leave the
-  // window in an indeterminate geometry, so only one runs at a time.
-  //
-  // Deliberately not a chain of `then()` on a long-lived future: that would
-  // pin every later transition to the zone bootstrap started in, and one
-  // wedged transition would block the app's response to links forever. Instead
-  // a re-entrancy flag drains whatever state is current when the running
-  // transition finishes.
   AppState? applied;
   var applying = false;
 
@@ -403,12 +371,6 @@ Future<void> _applyAppMode(
   }
 }
 
-/// Sizes and positions the picker under the cursor, then shows it.
-///
-/// Any failure here returns the app to a consistent state — window hidden and
-/// mode set back to hidden — instead of leaving the state machine parked in
-/// `picker` with nothing on screen, which used to make every later link a
-/// no-op for the rest of the session.
 Future<void> _showPicker(
   ProviderContainer container,
   PlatformBindings bindings,
@@ -417,15 +379,10 @@ Future<void> _showPicker(
   try {
     await macWindow?.setPickerMode();
     final browsers = container.read(browsersProvider);
-    // Read the system text size here rather than baking in 1.0: the window is
-    // sized before its content is laid out, so an accessibility setting the
-    // layout knows nothing about would push the footer outside the frame.
     final winSize = PickerLayout.windowSize(
       browsers.length,
       textScale: PlatformDispatcher.instance.textScaleFactor,
     );
-    // Fetch cursor and display list concurrently, then hit-test locally so
-    // both reads observe the same cursor position.
     final (cursorResult, rects) = await (
       bindings.cursorLocator.cursorPosition(),
       bindings.cursorLocator.displayRects(),
@@ -454,9 +411,6 @@ Future<void> _showPicker(
     await windowManager.show();
     if (!Platform.isMacOS) await windowManager.focus();
     await macWindow?.activate();
-    // Re-apply the size once the window is actually on screen: a resize issued
-    // while hidden can leave the engine surface at the previous dimensions,
-    // which renders as a correctly framed but empty window.
     await windowManager.setSize(winSize);
   } on Object catch (e, st) {
     _log.warning('Picker transition failed, returning to hidden', e, st);
@@ -470,14 +424,9 @@ Future<void> _showPicker(
   }
 }
 
-/// `num.clamp` throws when the upper bound falls below the lower one, which
-/// happens on small or heavily scaled displays where the picker is taller than
-/// the work area. Pinning to the lower bound keeps the window on screen.
 double _clampToRange(double value, double lower, double upper) =>
     upper < lower ? lower : value.clamp(lower, upper).toDouble();
 
-/// Runs before runApp: scan detected browsers and create the icons directory
-/// so browsersProvider has data for the first frame.
 Future<void> _firstBootEarlyPhase({
   required BrowserService browserService,
   required Directory iconsDir,
@@ -490,10 +439,6 @@ Future<void> _firstBootEarlyPhase({
   }
 }
 
-/// Runs after runApp: extract icons concurrently.
-/// The picker renders with fallback icons until extraction completes.
-/// Registration is not done here — it is reconciled on every launch during
-/// bootstrap, before the first frame.
 Future<void> _firstBootLatePhase({
   required BrowserService browserService,
   required IconExtractor iconExtractor,
@@ -536,17 +481,11 @@ Future<void> _handleUrl(
   }
 
   final resolved = unwrapSafeLink(url);
-  // Inbound events arrive over IPC from any local process, so the scheme is
-  // untrusted here. A string like `--gpu-launcher=…` is not a URL but would be
-  // handed to the browser as argv and executed as a switch.
   if (!isLaunchableUrl(resolved)) {
     _log.warning('Rejected URL with non-launchable scheme');
     return;
   }
 
-  // macOS cannot tell us who opened the link, so the frontmost app stands in
-  // for it. Resolved here rather than in the event because it has to be read
-  // as close to the click as possible to still be accurate.
   final origin = sourceApp ?? (Platform.isMacOS ? await _macSourceApp() : null);
   if (origin != null) _log.fine('Link originated from $origin');
 

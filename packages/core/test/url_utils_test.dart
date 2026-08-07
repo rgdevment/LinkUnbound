@@ -88,6 +88,31 @@ void main() {
       expect(unwrapSafeLink(wrapped), inner);
     });
 
+    test('unwraps the current Teams SafeLinks CDN', () {
+      const inner = 'https://gitlab.example.tech/group/project/-/pipelines/12';
+      final wrapped =
+          'https://teams.public.onecdn.static.microsoft/evergreen-assets/'
+          'safelinks/2/atp-safelinks.html'
+          '?url=${Uri.encodeComponent(inner)}&locale=es-mx'
+          '&dest=${Uri.encodeComponent('https://teams.microsoft.com/api/mt')}';
+      expect(unwrapSafeLink(wrapped), inner);
+    });
+
+    test('unwraps a renamed CDN host via the interstitial path', () {
+      const inner = 'https://example.com/doc';
+      final wrapped =
+          'https://teams.future.cdn.microsoft/evergreen-assets/safelinks/2/'
+          'atp-safelinks.html?url=${Uri.encodeComponent(inner)}';
+      expect(unwrapSafeLink(wrapped), inner);
+    });
+
+    test('does not unwrap the interstitial path on a non-Microsoft host', () {
+      final wrapped =
+          'https://evil.example.com/evergreen-assets/safelinks/2/'
+          'atp-safelinks.html?url=${Uri.encodeComponent('https://x.com')}';
+      expect(unwrapSafeLink(wrapped), wrapped);
+    });
+
     test('returns original when inner url parameter is missing', () {
       const wrapped = 'https://nam12.safelinks.protection.outlook.com/?other=1';
       expect(unwrapSafeLink(wrapped), wrapped);

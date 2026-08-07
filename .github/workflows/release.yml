@@ -55,6 +55,11 @@ jobs:
         timeout-minutes: 10
         name: Create GitHub Release
 
+        permissions:
+            contents: write
+            id-token: write
+            attestations: write
+
         steps:
             - uses: actions/checkout@v6
               with:
@@ -83,6 +88,13 @@ jobs:
 
             - name: List artifacts
               run: find artifacts/ -type f
+
+            - uses: actions/attest-build-provenance@v4
+              with:
+                  subject-path: |
+                      artifacts/windows/**/*_Setup.exe
+                      artifacts/windows/**/*_store.msix*
+                      artifacts/macos/**/*.dmg
 
             - name: Create GitHub Release
               uses: softprops/action-gh-release@v2
@@ -117,7 +129,19 @@ jobs:
                   DMG_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${DMG_NAME}"
 
                   echo "Downloading DMG to compute SHA256..."
-                  curl -fSL -o "/tmp/${DMG_NAME}" "${DMG_URL}"
+                  DOWNLOADED=""
+                  for attempt in 1 2 3 4 5; do
+                    if curl -fSL -o "/tmp/${DMG_NAME}" "${DMG_URL}"; then
+                      DOWNLOADED=1
+                      break
+                    fi
+                    echo "Asset not downloadable yet (attempt ${attempt}/5); retrying..."
+                    sleep $((attempt * 10))
+                  done
+                  if [[ -z "$DOWNLOADED" || ! -s "/tmp/${DMG_NAME}" ]]; then
+                    echo "Could not download ${DMG_NAME}"
+                    exit 1
+                  fi
                   DMG_SHA256=$(sha256sum "/tmp/${DMG_NAME}" | awk '{print $1}')
                   rm -f "/tmp/${DMG_NAME}"
 
@@ -164,10 +188,24 @@ jobs:
                   CASK_EOF
 
                   git add "${CASK_FILE}"
+                  if git diff --cached --quiet; then
+                    echo "Cask already up to date; nothing to publish"
+                    exit 0
+                  fi
                   git commit -m "Update ${CASK_NAME} to ${VERSION}"
-                  git push origin main
 
-                  echo "Homebrew Tap updated: cask ${CASK_NAME} → ${VERSION}"
+                  for attempt in 1 2 3 4 5; do
+                    if git push origin HEAD:main; then
+                      echo "Homebrew Tap updated: cask ${CASK_NAME} → ${VERSION}"
+                      exit 0
+                    fi
+                    echo "Push rejected (attempt ${attempt}/5); rebasing onto concurrent release..."
+                    git fetch origin main && git rebase origin/main
+                    sleep $((RANDOM % 5 + 3))
+                  done
+
+                  echo "Could not push ${CASK_NAME} ${VERSION} after 5 attempts"
+                  exit 1
 
     publish-to-store:
         runs-on: windows-latest
@@ -220,3 +258,87 @@ jobs:
               run: |
                   msstore publish "${{ steps.find_msix.outputs.MSIX_PATH }}" \
                     --appId "${{ vars.STORE_APP_ID }}"
+
+    update-scoop-bucket:
+        runs-on: ubuntu-latest
+        needs: github-release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        timeout-minutes: 5
+        name: Update Scoop Bucket
+
+        steps:
+            - name: Update Scoop Bucket
+              env:
+                  GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+              run: |
+                  TAG="${GITHUB_REF_NAME}"
+                  VERSION="${TAG#v}"
+                  BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+                  SETUP="LinkUnbound_${VERSION}_x64_Setup.exe"
+
+                  if [[ "$VERSION" == *-* ]]; then
+                    NAME="linkunbound-beta"; SUFFIX=" (beta)"
+                  else
+                    NAME="linkunbound"; SUFFIX=""
+                  fi
+
+                  DOWNLOADED=""
+                  for attempt in 1 2 3 4 5; do
+                    if curl -fSL -o "/tmp/${SETUP}" "${BASE}/${SETUP}"; then
+                      DOWNLOADED=1
+                      break
+                    fi
+                    echo "Asset not downloadable yet (attempt ${attempt}/5); retrying..."
+                    sleep $((attempt * 10))
+                  done
+                  if [[ -z "$DOWNLOADED" || ! -s "/tmp/${SETUP}" ]]; then
+                    echo "Could not download ${SETUP} from ${BASE}"
+                    exit 1
+                  fi
+                  SHA=$(sha256sum "/tmp/${SETUP}" | awk '{print $1}')
+
+                  git clone "https://x-access-token:${GH_TOKEN}@github.com/rgdevment/scoop-bucket.git" /tmp/bucket
+                  cd /tmp/bucket
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  mkdir -p bucket
+
+                  jq -n \
+                    --arg version "$VERSION" \
+                    --arg desc "Smart browser router for HTTP(S) links${SUFFIX}" \
+                    --arg home "https://github.com/${{ github.repository }}" \
+                    --arg url "${BASE}/${SETUP}" \
+                    --arg hash "$SHA" \
+                    '{
+                      version: $version,
+                      description: $desc,
+                      homepage: $home,
+                      license: "GPL-3.0-only",
+                      architecture: {"64bit": {url: $url, hash: $hash}},
+                      innosetup: true,
+                      extract_dir: "{app}",
+                      shortcuts: [["linkunbound.exe", "LinkUnbound"]],
+                      post_install: [
+                        "Start-Process -FilePath \"$dir\\linkunbound.exe\" -ArgumentList \"--register\" -Wait"
+                      ]
+                    }' > "bucket/${NAME}.json"
+
+                  git add "bucket/${NAME}.json"
+                  if git diff --cached --quiet; then
+                    echo "Manifest already up to date; nothing to publish"
+                    exit 0
+                  fi
+                  git commit -m "${NAME} ${VERSION}"
+
+                  for attempt in 1 2 3 4 5; do
+                    if git push origin HEAD:main; then
+                      echo "Scoop bucket updated: ${NAME} → ${VERSION}"
+                      exit 0
+                    fi
+                    echo "Push rejected (attempt ${attempt}/5); rebasing onto concurrent release..."
+                    git fetch origin main && git rebase origin/main
+                    sleep $((RANDOM % 5 + 3))
+                  done
+
+                  echo "Could not push ${NAME} ${VERSION} after 5 attempts"
+                  exit 1
