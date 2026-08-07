@@ -1,0 +1,27 @@
+name: Set app version
+description: Writes the release version into the app pubspec so the produced binaries carry it
+
+inputs:
+    version:
+        description: Version to write into the pubspec
+        required: true
+    pubspec:
+        description: Path to the pubspec to rewrite
+        required: false
+        default: apps/linkunbound/pubspec.yaml
+
+runs:
+    using: composite
+    steps:
+        - name: Write version into pubspec
+          shell: bash
+          env:
+              APP_VERSION: ${{ inputs.version }}
+              PUBSPEC: ${{ inputs.pubspec }}
+          run: |
+              set -euo pipefail
+
+              sed "s|^version:.*|version: ${APP_VERSION}|" "$PUBSPEC" > "${PUBSPEC}.tmp"
+              mv "${PUBSPEC}.tmp" "$PUBSPEC"
+
+              grep '^version:' "$PUBSPEC"

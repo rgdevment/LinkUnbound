@@ -1,0 +1,70 @@
+name: Fetch release asset
+description: Downloads a published release asset, retrying while GitHub finishes making it available, and returns its checksum
+
+inputs:
+    repository:
+        description: Repository the release belongs to, as owner/name
+        required: true
+    tag:
+        description: Release tag the asset was published under
+        required: true
+    asset:
+        description: Asset file name
+        required: true
+    attempts:
+        description: How many times to retry the download
+        required: false
+        default: "5"
+
+outputs:
+    url:
+        description: Public download URL of the asset
+        value: ${{ steps.fetch.outputs.url }}
+    path:
+        description: Local path of the downloaded asset
+        value: ${{ steps.fetch.outputs.path }}
+    sha256:
+        description: SHA-256 checksum of the downloaded asset
+        value: ${{ steps.fetch.outputs.sha256 }}
+
+runs:
+    using: composite
+    steps:
+        - name: Download asset and compute checksum
+          id: fetch
+          shell: bash
+          env:
+              ASSET_REPOSITORY: ${{ inputs.repository }}
+              ASSET_TAG: ${{ inputs.tag }}
+              ASSET_NAME: ${{ inputs.asset }}
+              ASSET_ATTEMPTS: ${{ inputs.attempts }}
+          run: |
+              set -euo pipefail
+
+              url="https://github.com/${ASSET_REPOSITORY}/releases/download/${ASSET_TAG}/${ASSET_NAME}"
+              dest="${RUNNER_TEMP}/${ASSET_NAME}"
+
+              downloaded=""
+              for attempt in $(seq 1 "$ASSET_ATTEMPTS"); do
+                if curl -fSL -o "$dest" "$url"; then
+                  downloaded=1
+                  break
+                fi
+                echo "Asset not downloadable yet (attempt ${attempt}/${ASSET_ATTEMPTS}); retrying..."
+                sleep $((attempt * 10))
+              done
+
+              if [[ -z "$downloaded" || ! -s "$dest" ]]; then
+                echo "::error::Could not download ${url}"
+                exit 1
+              fi
+
+              sha256="$(sha256sum "$dest" | awk '{print $1}')"
+
+              {
+                echo "url=$url"
+                echo "path=$dest"
+                echo "sha256=$sha256"
+              } >> "$GITHUB_OUTPUT"
+
+              echo "Fetched ${ASSET_NAME} (sha256 ${sha256})"

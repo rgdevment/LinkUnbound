@@ -28,60 +28,32 @@ jobs:
             APPLE_ID: ${{ secrets.APPLE_ID }}
             APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
             APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+            RELEASE_APP_PATH: apps/linkunbound/build/macos/Build/Products/Release/LinkUnbound.app
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
               with:
                   ref: ${{ github.ref_name }}
 
             - name: Resolve version
-              id: get_version
-              run: |
-                  VERSION="${{ inputs.version }}"
-
-                  IS_PRERELEASE="false"
-                  if [[ "$VERSION" == *-* ]]; then
-                    IS_PRERELEASE="true"
-                  fi
-
-                  BUILD_NAME="${VERSION%-*}"
-                  BUILD_NUMBER=$(echo "$BUILD_NAME" | awk -F. '{printf "%d%03d%03d", $1, $2, $3}')
-
-                  echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-                  echo "BUILD_NAME=$BUILD_NAME" >> "$GITHUB_OUTPUT"
-                  echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
-                  echo "IS_PRERELEASE=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-                  echo "Version: $VERSION  Build: $BUILD_NAME ($BUILD_NUMBER)  PreRelease: $IS_PRERELEASE"
-
-            - uses: subosito/flutter-action@v2
+              id: version
+              uses: ./.github/actions/resolve-version
               with:
-                  channel: stable
-                  flutter-version: 3.44.1
-                  cache: true
+                  version: ${{ inputs.version }}
 
-            - name: Cache pub dependencies
-              uses: actions/cache@v5
+            - name: Set up Flutter workspace
+              uses: ./.github/actions/setup-flutter
+
+            - name: Set app version
+              uses: ./.github/actions/set-app-version
               with:
-                  path: ~/.pub-cache
-                  key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-                  restore-keys: ${{ runner.os }}-pub-
+                  version: ${{ steps.version.outputs.version }}
 
-            - name: Install Melos
-              run: dart pub global activate melos
-
-            - name: Get dependencies
-              run: melos bootstrap
-
-            - name: Update pubspec version
-              run: |
-                  VERSION="${{ steps.get_version.outputs.VERSION }}"
-                  sed -i '' "s/^version:.*/version: $VERSION/" apps/linkunbound/pubspec.yaml
-                  echo "Updated pubspec.yaml version to: $VERSION"
-
-            # ── Code Signing Setup ──
             - name: Import signing certificate
               if: env.MACOS_CERTIFICATE_P12 != ''
               run: |
+                  set -euo pipefail
+
                   KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
                   KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
 
@@ -105,24 +77,25 @@ jobs:
                   echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
                   echo "Certificate imported successfully"
 
-            # ── Build (universal: arm64 + x86_64) ──
             - name: Refresh CocoaPods lock
               run: |
+                  set -euo pipefail
                   rm -f apps/linkunbound/macos/Podfile.lock
                   cd apps/linkunbound/macos && pod install --repo-update
 
             - name: Build macOS release (universal)
+              working-directory: apps/linkunbound
               run: |
-                  cd apps/linkunbound
                   flutter build macos --release \
-                    --build-name="${{ steps.get_version.outputs.BUILD_NAME }}" \
-                    --build-number="${{ steps.get_version.outputs.BUILD_NUMBER }}" \
-                    --dart-define="APP_VERSION=${{ steps.get_version.outputs.VERSION }}"
+                    --build-name="${{ steps.version.outputs.build-name }}" \
+                    --build-number="${{ steps.version.outputs.build-number }}" \
+                    --dart-define="APP_VERSION=${{ steps.version.outputs.version }}"
 
             - name: Verify universal binary
               run: |
-                  APP="apps/linkunbound/build/macos/Build/Products/Release/LinkUnbound.app"
-                  ARCHS=$(lipo -archs "$APP/Contents/MacOS/LinkUnbound")
+                  set -euo pipefail
+
+                  ARCHS=$(lipo -archs "$RELEASE_APP_PATH/Contents/MacOS/LinkUnbound")
                   echo "Architectures: $ARCHS"
                   if [[ "$ARCHS" != *"x86_64"* ]] || [[ "$ARCHS" != *"arm64"* ]]; then
                     echo "::error::Expected universal binary (x86_64 + arm64), got: $ARCHS"
@@ -130,11 +103,10 @@ jobs:
                   fi
                   echo "Universal binary verified (x86_64 + arm64)"
 
-            # ── Code Sign the .app ──
             - name: Sign application
               if: env.MACOS_CERTIFICATE_P12 != ''
               run: |
-                  APP_PATH="apps/linkunbound/build/macos/Build/Products/Release/LinkUnbound.app"
+                  set -eu
 
                   SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk '{print $2}')
                   echo "Signing with identity: $SIGN_IDENTITY"
@@ -142,28 +114,27 @@ jobs:
                   codesign --deep --force --options runtime \
                     --entitlements "apps/linkunbound/macos/Runner/Release.entitlements" \
                     --sign "$SIGN_IDENTITY" \
-                    "$APP_PATH"
+                    "$RELEASE_APP_PATH"
 
                   echo "Verifying signature..."
-                  codesign --verify --deep --strict "$APP_PATH"
+                  codesign --verify --deep --strict "$RELEASE_APP_PATH"
                   echo "Signature verified"
 
             - name: Ad-hoc sign (unsigned build)
               if: env.MACOS_CERTIFICATE_P12 == ''
               run: |
-                  APP_PATH="apps/linkunbound/build/macos/Build/Products/Release/LinkUnbound.app"
-                  codesign --deep --force --sign - "$APP_PATH"
+                  set -euo pipefail
+                  codesign --deep --force --sign - "$RELEASE_APP_PATH"
                   echo "Ad-hoc signed (unsigned build)"
 
-            # ── Create DMG ──
             - name: Install create-dmg
               run: brew install create-dmg
 
             - name: Create DMG
+              env:
+                  DMG_PATH: apps/linkunbound/dist/LinkUnbound_${{ steps.version.outputs.version }}_universal.dmg
               run: |
-                  VERSION="${{ steps.get_version.outputs.VERSION }}"
-                  APP_PATH="apps/linkunbound/build/macos/Build/Products/Release/LinkUnbound.app"
-                  DMG_NAME="LinkUnbound_${VERSION}_universal.dmg"
+                  set -euo pipefail
 
                   mkdir -p apps/linkunbound/dist
 
@@ -176,22 +147,23 @@ jobs:
                     --app-drop-link 480 190 \
                     --hide-extension "LinkUnbound.app" \
                     --no-internet-enable \
-                    "apps/linkunbound/dist/$DMG_NAME" \
-                    "$APP_PATH" \
+                    "$DMG_PATH" \
+                    "$RELEASE_APP_PATH" \
                     || true
 
-                  if [[ ! -f "apps/linkunbound/dist/$DMG_NAME" ]]; then
+                  if [[ ! -f "$DMG_PATH" ]]; then
                     echo "::error::DMG was not created"
                     exit 1
                   fi
 
-                  echo "DMG created: $DMG_NAME ($(du -h "apps/linkunbound/dist/$DMG_NAME" | cut -f1))"
+                  echo "DMG created: $DMG_PATH ($(du -h "$DMG_PATH" | cut -f1))"
 
-            # ── Sign & Notarize DMG ──
             - name: Sign DMG
               if: env.MACOS_CERTIFICATE_P12 != ''
+              env:
+                  DMG_PATH: apps/linkunbound/dist/LinkUnbound_${{ steps.version.outputs.version }}_universal.dmg
               run: |
-                  DMG_PATH="apps/linkunbound/dist/LinkUnbound_${{ steps.get_version.outputs.VERSION }}_universal.dmg"
+                  set -eu
 
                   SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk '{print $2}')
                   echo "Signing DMG with identity: $SIGN_IDENTITY"
@@ -202,8 +174,10 @@ jobs:
 
             - name: Notarize DMG
               if: env.APPLE_ID != '' && env.MACOS_CERTIFICATE_P12 != ''
+              env:
+                  DMG_PATH: apps/linkunbound/dist/LinkUnbound_${{ steps.version.outputs.version }}_universal.dmg
               run: |
-                  DMG_PATH="apps/linkunbound/dist/LinkUnbound_${{ steps.get_version.outputs.VERSION }}_universal.dmg"
+                  set -euo pipefail
 
                   echo "Submitting for notarization..."
                   xcrun notarytool submit "$DMG_PATH" \
@@ -220,14 +194,12 @@ jobs:
                   spctl --assess --type open --context context:primary-signature "$DMG_PATH"
                   echo "Notarization complete"
 
-            # ── Cleanup ──
             - name: Cleanup keychain
               if: always() && env.KEYCHAIN_PATH != ''
               run: security delete-keychain "$KEYCHAIN_PATH" || true
 
-            # ── Upload ──
             - name: Upload artifact
-              uses: actions/upload-artifact@v6
+              uses: actions/upload-artifact@v7
               with:
                   name: release-macos
                   path: apps/linkunbound/dist/*.dmg
