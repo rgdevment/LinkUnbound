@@ -478,16 +478,6 @@ final class _ExitSignal implements Exception {
 
 Never _signalExit() => throw const _ExitSignal();
 
-final class _DelegatingBindings extends _FakeBindings {
-  _DelegatingBindings({required super.rootDir});
-
-  @override
-  Future<bool> tryDelegate(InboundEvent? event) async {
-    tryDelegateCalls++;
-    return true;
-  }
-}
-
 final class _UnclaimableBindings extends _FakeBindings {
   _UnclaimableBindings({required super.rootDir, this.delegateOnCall = 0});
 
@@ -1438,7 +1428,7 @@ void main() {
   testWidgets('a delegated launch exits without claiming the mutex', (
     tester,
   ) async {
-    final bindings = _DelegatingBindings(rootDir: tempDir);
+    final bindings = _UnclaimableBindings(rootDir: tempDir, delegateOnCall: 1);
     addTearDown(bindings.close);
 
     final exited = await bootUntilExit(tester, bindings, const []);
@@ -1470,6 +1460,10 @@ void main() {
     expect(exited, isA<_ExitSignal>());
     expect(bindings.claimCalls, 2);
     expect(bindings.tryDelegateCalls, 3);
+    expect(
+      bindings.logFile.readAsStringSync(),
+      isNot(contains('Discarding initial event')),
+    );
   });
 
   testWidgets('an unreachable resident drops the initial event and exits', (
@@ -1483,6 +1477,10 @@ void main() {
     expect(exited, isA<_ExitSignal>());
     expect(bindings.claimCalls, 2);
     expect(bindings.tryDelegateCalls, 3);
+    expect(
+      bindings.logFile.readAsStringSync(),
+      contains('Discarding initial event'),
+    );
   });
 
   testWidgets('tray exit releases the instance and exits', (tester) async {
@@ -1495,8 +1493,8 @@ void main() {
       (item) => item.label == 'Exit',
     );
 
-    // onClick is a VoidCallback holding an async body, so the signal surfaces
-    // as an unhandled asynchronous error rather than a synchronous throw.
+    // onClick is a VoidCallback wrapping an async body: the signal surfaces as
+    // an unhandled asynchronous error, not a synchronous throw.
     Object? captured;
     await tester.runAsync(() async {
       await runZonedGuarded(() async {

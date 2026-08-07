@@ -71,7 +71,7 @@ Future<void> bootstrap(
   }
 
   if (!claimed) {
-        if (await delegate('Post-claim delegation retry failed')) exitProcess();
+    if (await delegate('Post-claim delegation retry failed')) exitProcess();
     try {
       claimed = await bindings.claim();
     } on Object catch (e, st) {
@@ -105,7 +105,7 @@ Future<void> bootstrap(
     _log.severe('Browser config corrupted, resetting', e, st);
     try {
       await browserService.reset();
-      /isFirstBoot = true;
+      isFirstBoot = true;
     } on Object catch (e, st) {
       _log.warning('Browser reset failed', e, st);
     }
