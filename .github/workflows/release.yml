@@ -12,45 +12,127 @@ on:
                 default: "1.0.0-dev"
 
 permissions:
-    contents: write
+    contents: read
 
 jobs:
-    extract-version:
+    prepare:
         runs-on: ubuntu-latest
-        name: Extract Version
+        name: Prepare release
+        timeout-minutes: 5
         outputs:
-            version: ${{ steps.get_version.outputs.VERSION }}
+            version: ${{ steps.version.outputs.version }}
+            is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+            package-name: ${{ steps.naming.outputs.package-name }}
+            package-desc: ${{ steps.naming.outputs.package-desc }}
+            publish-store: ${{ steps.credentials.outputs.publish-store }}
+            publish-taps: ${{ steps.credentials.outputs.publish-taps }}
+
         steps:
-            - name: Resolve version
-              id: get_version
+            - uses: actions/checkout@v7
+
+            - name: Read version from event
+              id: event
+              env:
+                  DISPATCH_VERSION: ${{ github.event.inputs.version }}
               run: |
+                  set -euo pipefail
+
                   if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-                    VERSION="${{ github.event.inputs.version }}"
-                  elif [[ "$GITHUB_REF" =~ refs/tags/v(.+) ]]; then
-                    VERSION="${BASH_REMATCH[1]}"
+                    version="$DISPATCH_VERSION"
+                  elif [[ "$GITHUB_REF" =~ ^refs/tags/v(.+)$ ]]; then
+                    version="${BASH_REMATCH[1]}"
                   else
-                    VERSION="1.0.0"
+                    version="1.0.0"
                   fi
-                  echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-                  echo "Resolved version: $VERSION"
+
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
+
+            - name: Resolve version
+              id: version
+              uses: ./.github/actions/resolve-version
+              with:
+                  version: ${{ steps.event.outputs.version }}
+
+            - name: Select package identity
+              id: naming
+              env:
+                  IS_PRERELEASE: ${{ steps.version.outputs.is-prerelease }}
+              run: |
+                  set -euo pipefail
+
+                  if [[ "$IS_PRERELEASE" == "true" ]]; then
+                    name="linkunbound-beta"
+                    desc="Smart browser router for HTTP(S) links (beta)"
+                  else
+                    name="linkunbound"
+                    desc="Smart browser router for HTTP(S) links"
+                  fi
+
+                  {
+                    echo "package-name=$name"
+                    echo "package-desc=$desc"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Check distribution credentials
+              id: credentials
+              env:
+                  STORE_TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
+                  STORE_SELLER_ID: ${{ secrets.STORE_SELLER_ID }}
+                  STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
+                  STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
+                  STORE_APP_ID: ${{ vars.STORE_APP_ID }}
+                  GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+                  MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+                  PFX_BASE64: ${{ secrets.PFX_BASE64 }}
+              run: |
+                  set -euo pipefail
+
+                  missing=""
+                  for name in STORE_TENANT_ID STORE_SELLER_ID STORE_CLIENT_ID STORE_CLIENT_SECRET STORE_APP_ID; do
+                    if [[ -z "${!name}" ]]; then
+                      missing="$missing $name"
+                    fi
+                  done
+
+                  if [[ -n "$missing" ]]; then
+                    echo "::warning::Microsoft Store publishing will be skipped; missing:${missing}"
+                    echo "publish-store=false" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "publish-store=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+                  if [[ -z "$GIST_TOKEN" ]]; then
+                    echo "::warning::Homebrew and Scoop updates will be skipped; missing GIST_TOKEN"
+                    echo "publish-taps=false" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "publish-taps=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+                  if [[ -z "$MACOS_CERTIFICATE_P12" ]]; then
+                    echo "::warning::MACOS_CERTIFICATE_P12 is not set; the macOS build will be ad-hoc signed and not notarized"
+                  fi
+
+                  if [[ -z "$PFX_BASE64" ]]; then
+                    echo "::warning::PFX_BASE64 is not set; the Windows installer will not be signed"
+                  fi
 
     build-windows:
-        needs: extract-version
+        needs: prepare
         uses: ./.github/workflows/release-win.yml
         with:
-            version: ${{ needs.extract-version.outputs.version }}
+            version: ${{ needs.prepare.outputs.version }}
         secrets: inherit
 
     build-macos:
-        needs: extract-version
+        needs: prepare
         uses: ./.github/workflows/release-mac.yml
         with:
-            version: ${{ needs.extract-version.outputs.version }}
+            version: ${{ needs.prepare.outputs.version }}
         secrets: inherit
 
     github-release:
         runs-on: ubuntu-latest
-        needs: [extract-version, build-windows, build-macos]
+        needs: [prepare, build-windows, build-macos]
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         timeout-minutes: 10
         name: Create GitHub Release
@@ -61,27 +143,34 @@ jobs:
             attestations: write
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
               with:
                   ref: ${{ github.ref_name }}
                   fetch-depth: 0
 
             - name: Extract tag message
               id: tag_message
+              env:
+                  TAG: ${{ github.ref_name }}
               run: |
-                  MSG=$(git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "${{ github.ref_name }}" | sed '/-----BEGIN SSH SIGNATURE-----/,$d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
-                  echo "TAG_BODY<<EOF" >> $GITHUB_OUTPUT
-                  echo "$MSG" >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
+                  set -euo pipefail
+
+                  MSG=$(git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$TAG" | sed '/-----BEGIN SSH SIGNATURE-----/,$d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
+
+                  {
+                    echo "TAG_BODY<<TAG_BODY_EOF"
+                    echo "$MSG"
+                    echo "TAG_BODY_EOF"
+                  } >> "$GITHUB_OUTPUT"
 
             - name: Download Windows artifacts
-              uses: actions/download-artifact@v7
+              uses: actions/download-artifact@v8
               with:
                   name: release-windows
                   path: artifacts/windows
 
             - name: Download macOS artifacts
-              uses: actions/download-artifact@v7
+              uses: actions/download-artifact@v8
               with:
                   name: release-macos
                   path: artifacts/macos
@@ -97,11 +186,11 @@ jobs:
                       artifacts/macos/**/*.dmg
 
             - name: Create GitHub Release
-              uses: softprops/action-gh-release@v2
+              uses: softprops/action-gh-release@v3
               with:
                   body: ${{ steps.tag_message.outputs.TAG_BODY }}
                   generate_release_notes: true
-                  prerelease: ${{ contains(github.ref_name, '-') }}
+                  prerelease: ${{ needs.prepare.outputs.is-prerelease == 'true' }}
                   make_latest: true
                   files: |
                       artifacts/windows/**/*_Setup.exe
@@ -112,119 +201,113 @@ jobs:
 
     update-homebrew-cask:
         runs-on: ubuntu-latest
-        needs: github-release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        needs: [prepare, github-release]
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && needs.prepare.outputs.publish-taps == 'true'
         timeout-minutes: 5
         name: Update Homebrew Tap
 
         steps:
-            - name: Update Homebrew Tap
-              env:
-                  GH_TOKEN: ${{ secrets.GIST_TOKEN }}
-              run: |
-                  TAG="${GITHUB_REF_NAME}"
-                  VERSION="${TAG#v}"
+            - uses: actions/checkout@v7
 
-                  DMG_NAME="LinkUnbound_${VERSION}_universal.dmg"
-                  DMG_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${DMG_NAME}"
+            - name: Fetch published DMG
+              id: asset
+              uses: ./.github/actions/fetch-release-asset
+              with:
+                  repository: ${{ github.repository }}
+                  tag: ${{ github.ref_name }}
+                  asset: LinkUnbound_${{ needs.prepare.outputs.version }}_universal.dmg
 
-                  echo "Downloading DMG to compute SHA256..."
-                  DOWNLOADED=""
-                  for attempt in 1 2 3 4 5; do
-                    if curl -fSL -o "/tmp/${DMG_NAME}" "${DMG_URL}"; then
-                      DOWNLOADED=1
-                      break
-                    fi
-                    echo "Asset not downloadable yet (attempt ${attempt}/5); retrying..."
-                    sleep $((attempt * 10))
-                  done
-                  if [[ -z "$DOWNLOADED" || ! -s "/tmp/${DMG_NAME}" ]]; then
-                    echo "Could not download ${DMG_NAME}"
-                    exit 1
-                  fi
-                  DMG_SHA256=$(sha256sum "/tmp/${DMG_NAME}" | awk '{print $1}')
-                  rm -f "/tmp/${DMG_NAME}"
+            - name: Publish cask
+              uses: ./.github/actions/publish-manifest
+              with:
+                  repository: rgdevment/homebrew-tap
+                  token: ${{ secrets.GIST_TOKEN }}
+                  path: Casks/${{ needs.prepare.outputs.package-name }}.rb
+                  message: Update ${{ needs.prepare.outputs.package-name }} to ${{ needs.prepare.outputs.version }}
+                  content: |
+                      cask "${{ needs.prepare.outputs.package-name }}" do
+                        version "${{ needs.prepare.outputs.version }}"
+                        sha256 "${{ steps.asset.outputs.sha256 }}"
 
-                  echo "Version: ${VERSION}"
-                  echo "DMG SHA256: ${DMG_SHA256}"
+                        url "${{ steps.asset.outputs.url }}"
+                        name "LinkUnbound"
+                        desc "${{ needs.prepare.outputs.package-desc }}"
+                        homepage "https://github.com/${{ github.repository }}"
 
-                  if [[ "$VERSION" == *-* ]]; then
-                    CASK_FILE="Casks/linkunbound-beta.rb"
-                    CASK_NAME="linkunbound-beta"
-                    CASK_DESC="Smart browser router for HTTP(S) links (beta)"
-                  else
-                    CASK_FILE="Casks/linkunbound.rb"
-                    CASK_NAME="linkunbound"
-                    CASK_DESC="Smart browser router for HTTP(S) links"
-                  fi
+                        depends_on macos: :ventura
 
-                  git clone "https://x-access-token:${GH_TOKEN}@github.com/rgdevment/homebrew-tap.git" /tmp/homebrew-tap
-                  cd /tmp/homebrew-tap
+                        app "LinkUnbound.app"
 
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                        zap trash: [
+                          "~/Library/Application Support/com.rgdevment.linkunbound",
+                          "~/Library/Preferences/com.rgdevment.linkunbound.plist",
+                        ]
+                      end
 
-                  mkdir -p Casks
+    update-scoop-bucket:
+        runs-on: ubuntu-latest
+        needs: [prepare, github-release]
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && needs.prepare.outputs.publish-taps == 'true'
+        timeout-minutes: 5
+        name: Update Scoop Bucket
 
-                  cat > "${CASK_FILE}" <<- CASK_EOF
-                  	cask "${CASK_NAME}" do
-                  	  version "${VERSION}"
-                  	  sha256 "${DMG_SHA256}"
+        steps:
+            - uses: actions/checkout@v7
 
-                  	  url "${DMG_URL}"
-                  	  name "LinkUnbound"
-                  	  desc "${CASK_DESC}"
-                  	  homepage "https://github.com/${{ github.repository }}"
+            - name: Fetch published installer
+              id: asset
+              uses: ./.github/actions/fetch-release-asset
+              with:
+                  repository: ${{ github.repository }}
+                  tag: ${{ github.ref_name }}
+                  asset: LinkUnbound_${{ needs.prepare.outputs.version }}_x64_Setup.exe
 
-                  	  depends_on macos: :ventura
-
-                  	  app "LinkUnbound.app"
-
-                  	  zap trash: [
-                  	    "~/Library/Application Support/com.rgdevment.linkunbound",
-                  	    "~/Library/Preferences/com.rgdevment.linkunbound.plist",
-                  	  ]
-                  	end
-                  CASK_EOF
-
-                  git add "${CASK_FILE}"
-                  if git diff --cached --quiet; then
-                    echo "Cask already up to date; nothing to publish"
-                    exit 0
-                  fi
-                  git commit -m "Update ${CASK_NAME} to ${VERSION}"
-
-                  for attempt in 1 2 3 4 5; do
-                    if git push origin HEAD:main; then
-                      echo "Homebrew Tap updated: cask ${CASK_NAME} → ${VERSION}"
-                      exit 0
-                    fi
-                    echo "Push rejected (attempt ${attempt}/5); rebasing onto concurrent release..."
-                    git fetch origin main && git rebase origin/main
-                    sleep $((RANDOM % 5 + 3))
-                  done
-
-                  echo "Could not push ${CASK_NAME} ${VERSION} after 5 attempts"
-                  exit 1
+            - name: Publish manifest
+              uses: ./.github/actions/publish-manifest
+              with:
+                  repository: rgdevment/scoop-bucket
+                  token: ${{ secrets.GIST_TOKEN }}
+                  path: bucket/${{ needs.prepare.outputs.package-name }}.json
+                  message: ${{ needs.prepare.outputs.package-name }} ${{ needs.prepare.outputs.version }}
+                  validate-json: "true"
+                  content: |
+                      {
+                        "version": "${{ needs.prepare.outputs.version }}",
+                        "description": "${{ needs.prepare.outputs.package-desc }}",
+                        "homepage": "https://github.com/${{ github.repository }}",
+                        "license": "GPL-3.0-only",
+                        "architecture": {
+                          "64bit": {
+                            "url": "${{ steps.asset.outputs.url }}",
+                            "hash": "${{ steps.asset.outputs.sha256 }}"
+                          }
+                        },
+                        "innosetup": true,
+                        "extract_dir": "{app}",
+                        "shortcuts": [
+                          [
+                            "linkunbound.exe",
+                            "LinkUnbound"
+                          ]
+                        ],
+                        "post_install": [
+                          "Start-Process -FilePath \"$dir\\linkunbound.exe\" -ArgumentList \"--register\" -Wait"
+                        ]
+                      }
 
     publish-to-store:
         runs-on: windows-latest
-        needs: [extract-version, github-release]
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !contains(needs.extract-version.outputs.version, '-')
+        needs: [prepare, github-release]
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && needs.prepare.outputs.is-prerelease != 'true' && needs.prepare.outputs.publish-store == 'true'
         timeout-minutes: 15
         name: Publish to Microsoft Store
 
         steps:
-            - uses: actions/checkout@v6
-              with:
-                  ref: ${{ github.ref_name }}
-                  fetch-depth: 0
-
             - name: Install Microsoft Store Developer CLI
-              uses: microsoft/microsoft-store-apppublisher@v1.3
+              uses: microsoft/microsoft-store-apppublisher@v1.4
 
             - name: Download Windows artifacts
-              uses: actions/download-artifact@v7
+              uses: actions/download-artifact@v8
               with:
                   name: release-windows
                   path: artifacts/windows
@@ -233,112 +316,47 @@ jobs:
               id: find_msix
               shell: bash
               run: |
-                  MSIX=$(find artifacts/windows -name "*.msixupload" | head -1)
-                  [ -z "$MSIX" ] && MSIX=$(find artifacts/windows -name "*.msixbundle" | head -1)
-                  [ -z "$MSIX" ] && MSIX=$(find artifacts/windows -name "*.msix" | head -1)
+                  set -eu
+
+                  MSIX=""
+                  for pattern in "*.msixupload" "*.msixbundle" "*.msix"; do
+                    MSIX=$(find artifacts/windows -name "$pattern" | head -1)
+                    if [ -n "$MSIX" ]; then
+                      break
+                    fi
+                  done
+
                   if [ -z "$MSIX" ]; then
-                    echo "Error: No MSIX package found in release-windows artifact"
+                    echo "::error::No MSIX package found in release-windows artifact"
                     find artifacts/windows -type f
                     exit 1
                   fi
-                  echo "MSIX_PATH=$MSIX" >> $GITHUB_OUTPUT
+
+                  echo "MSIX_PATH=$MSIX" >> "$GITHUB_OUTPUT"
                   echo "Found: $MSIX"
 
             - name: Configure Microsoft Store CLI
               shell: bash
+              env:
+                  STORE_TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
+                  STORE_SELLER_ID: ${{ secrets.STORE_SELLER_ID }}
+                  STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
+                  STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
               run: |
+                  set -euo pipefail
+
                   msstore reconfigure \
-                    --tenantId "${{ secrets.STORE_TENANT_ID }}" \
-                    --sellerId "${{ secrets.STORE_SELLER_ID }}" \
-                    --clientId "${{ secrets.STORE_CLIENT_ID }}" \
-                    --clientSecret "${{ secrets.STORE_CLIENT_SECRET }}"
+                    --tenantId "$STORE_TENANT_ID" \
+                    --sellerId "$STORE_SELLER_ID" \
+                    --clientId "$STORE_CLIENT_ID" \
+                    --clientSecret "$STORE_CLIENT_SECRET"
 
             - name: Publish to Microsoft Store
               shell: bash
-              run: |
-                  msstore publish "${{ steps.find_msix.outputs.MSIX_PATH }}" \
-                    --appId "${{ vars.STORE_APP_ID }}"
-
-    update-scoop-bucket:
-        runs-on: ubuntu-latest
-        needs: github-release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        timeout-minutes: 5
-        name: Update Scoop Bucket
-
-        steps:
-            - name: Update Scoop Bucket
               env:
-                  GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+                  MSIX_PATH: ${{ steps.find_msix.outputs.MSIX_PATH }}
+                  STORE_APP_ID: ${{ vars.STORE_APP_ID }}
               run: |
-                  TAG="${GITHUB_REF_NAME}"
-                  VERSION="${TAG#v}"
-                  BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
-                  SETUP="LinkUnbound_${VERSION}_x64_Setup.exe"
+                  set -euo pipefail
 
-                  if [[ "$VERSION" == *-* ]]; then
-                    NAME="linkunbound-beta"; SUFFIX=" (beta)"
-                  else
-                    NAME="linkunbound"; SUFFIX=""
-                  fi
-
-                  DOWNLOADED=""
-                  for attempt in 1 2 3 4 5; do
-                    if curl -fSL -o "/tmp/${SETUP}" "${BASE}/${SETUP}"; then
-                      DOWNLOADED=1
-                      break
-                    fi
-                    echo "Asset not downloadable yet (attempt ${attempt}/5); retrying..."
-                    sleep $((attempt * 10))
-                  done
-                  if [[ -z "$DOWNLOADED" || ! -s "/tmp/${SETUP}" ]]; then
-                    echo "Could not download ${SETUP} from ${BASE}"
-                    exit 1
-                  fi
-                  SHA=$(sha256sum "/tmp/${SETUP}" | awk '{print $1}')
-
-                  git clone "https://x-access-token:${GH_TOKEN}@github.com/rgdevment/scoop-bucket.git" /tmp/bucket
-                  cd /tmp/bucket
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-                  mkdir -p bucket
-
-                  jq -n \
-                    --arg version "$VERSION" \
-                    --arg desc "Smart browser router for HTTP(S) links${SUFFIX}" \
-                    --arg home "https://github.com/${{ github.repository }}" \
-                    --arg url "${BASE}/${SETUP}" \
-                    --arg hash "$SHA" \
-                    '{
-                      version: $version,
-                      description: $desc,
-                      homepage: $home,
-                      license: "GPL-3.0-only",
-                      architecture: {"64bit": {url: $url, hash: $hash}},
-                      innosetup: true,
-                      extract_dir: "{app}",
-                      shortcuts: [["linkunbound.exe", "LinkUnbound"]],
-                      post_install: [
-                        "Start-Process -FilePath \"$dir\\linkunbound.exe\" -ArgumentList \"--register\" -Wait"
-                      ]
-                    }' > "bucket/${NAME}.json"
-
-                  git add "bucket/${NAME}.json"
-                  if git diff --cached --quiet; then
-                    echo "Manifest already up to date; nothing to publish"
-                    exit 0
-                  fi
-                  git commit -m "${NAME} ${VERSION}"
-
-                  for attempt in 1 2 3 4 5; do
-                    if git push origin HEAD:main; then
-                      echo "Scoop bucket updated: ${NAME} → ${VERSION}"
-                      exit 0
-                    fi
-                    echo "Push rejected (attempt ${attempt}/5); rebasing onto concurrent release..."
-                    git fetch origin main && git rebase origin/main
-                    sleep $((RANDOM % 5 + 3))
-                  done
-
-                  echo "Could not push ${NAME} ${VERSION} after 5 attempts"
-                  exit 1
+                  msstore publish "$MSIX_PATH" --appId "$STORE_APP_ID"

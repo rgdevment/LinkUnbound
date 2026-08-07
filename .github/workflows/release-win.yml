@@ -17,7 +17,7 @@ permissions:
     contents: read
 
 jobs:
-    release-windows:
+    build-windows:
         runs-on: windows-latest
         timeout-minutes: 30
         name: Build Windows
@@ -27,34 +27,18 @@ jobs:
             PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
               with:
                   ref: ${{ github.ref_name }}
 
             - name: Resolve version
-              id: get_version
-              shell: pwsh
-              run: |
-                  $version = "${{ inputs.version }}"
-
-                  $isPrerelease = if ($version -match '-') { 'true' } else { 'false' }
-                  $baseVersion = $version -replace '-.*', ''
-                  $parts = $baseVersion.Split('.')
-                  $version4 = switch ($parts.Count) {
-                    1 { "$baseVersion.0.0.0" }
-                    2 { "$baseVersion.0.0" }
-                    3 { "$baseVersion.0" }
-                    default { $baseVersion }
-                  }
-                  echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-                  echo "VERSION4=$version4" >> $env:GITHUB_OUTPUT
-                  echo "IS_PRERELEASE=$isPrerelease" >> $env:GITHUB_OUTPUT
-                  Write-Host "Version: $version  (MSIX: $version4)  (PreRelease: $isPrerelease)"
-
-            - uses: subosito/flutter-action@v2
+              id: version
+              uses: ./.github/actions/resolve-version
               with:
-                  channel: stable
-                  flutter-version: 3.44.1
+                  version: ${{ inputs.version }}
+
+            - name: Set up Flutter workspace
+              uses: ./.github/actions/setup-flutter
 
             - name: Install Fastforge
               run: dart pub global activate fastforge
@@ -62,19 +46,12 @@ jobs:
             - name: Install Inno Setup
               run: choco install innosetup --no-progress
 
-            - name: Get dependencies
-              working-directory: apps/linkunbound
-              run: flutter pub get
+            - name: Set app version
+              uses: ./.github/actions/set-app-version
+              with:
+                  version: ${{ steps.version.outputs.version }}
 
-            - name: Update pubspec version from tag
-              shell: pwsh
-              run: |
-                  $version = "${{ steps.get_version.outputs.VERSION }}"
-                  $pubspec = "apps/linkunbound/pubspec.yaml"
-                  (Get-Content $pubspec) -replace '^version:\s+.*', "version: $version" | Set-Content $pubspec
-                  Write-Host "Updated pubspec.yaml version to: $version"
-
-            - name: Build standalone (exe installer)
+            - name: Build standalone installer
               shell: pwsh
               run: |
                   Push-Location apps/linkunbound
@@ -82,7 +59,7 @@ jobs:
                     --platform windows `
                     --targets exe `
                     --build-dart-define "STORE_BUILD=false" `
-                    --build-dart-define "APP_VERSION=${{ steps.get_version.outputs.VERSION }}"
+                    --build-dart-define "APP_VERSION=${{ steps.version.outputs.version }}"
                   Pop-Location
 
             - name: Decode signing certificate
@@ -113,7 +90,7 @@ jobs:
             - name: Rename standalone installer
               shell: pwsh
               run: |
-                  $version = "${{ steps.get_version.outputs.VERSION }}"
+                  $version = "${{ steps.version.outputs.version }}"
                   $distDir = "apps/linkunbound/dist"
                   $setup = Get-ChildItem -Path $distDir -Recurse -Filter "*-setup.exe" | Select-Object -First 1
                   if ($setup) {
@@ -124,7 +101,7 @@ jobs:
                   }
 
             - name: Build store MSIX
-              if: steps.get_version.outputs.IS_PRERELEASE != 'true'
+              if: steps.version.outputs.is-prerelease != 'true'
               shell: pwsh
               run: |
                   Push-Location apps/linkunbound
@@ -132,14 +109,14 @@ jobs:
                     --platform windows `
                     --targets msix `
                     --build-dart-define "STORE_BUILD=true" `
-                    --build-dart-define "APP_VERSION=${{ steps.get_version.outputs.VERSION }}"
+                    --build-dart-define "APP_VERSION=${{ steps.version.outputs.version }}"
                   Pop-Location
 
             - name: Move and rename store MSIX
-              if: steps.get_version.outputs.IS_PRERELEASE != 'true'
+              if: steps.version.outputs.is-prerelease != 'true'
               shell: pwsh
               run: |
-                  $version = "${{ steps.get_version.outputs.VERSION }}"
+                  $version = "${{ steps.version.outputs.version }}"
                   $distDir = "apps/linkunbound/dist"
 
                   $extensions = @("*.msixupload", "*.msixbundle", "*.msix")
@@ -167,7 +144,7 @@ jobs:
                   }
 
             - name: Upload artifacts
-              uses: actions/upload-artifact@v6
+              uses: actions/upload-artifact@v7
               with:
                   name: release-windows
                   path: apps/linkunbound/dist/
