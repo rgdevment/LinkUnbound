@@ -1988,23 +1988,38 @@ dependencies = [
 ]
 
 [[package]]
-name = "linkunbound-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "linkunbound-spike"
+name = "linkunbound"
 version = "0.1.0"
 dependencies = [
  "linkunbound-core",
+ "linkunbound-win",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "linkunbound-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "url",
+]
+
+[[package]]
+name = "linkunbound-win"
+version = "0.1.0"
+dependencies = [
+ "linkunbound-core",
+ "serde_json",
+ "thiserror 2.0.20",
+ "windows",
+ "winreg",
 ]
 
 [[package]]

@@ -1,55 +1,80 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-type Choice = { id: string; name: string; profile?: string; tint: string };
+type Profile = { id: string; name: string };
+type Browser = {
+  id: string;
+  name: string;
+  exe: string;
+  profiles: Profile[];
+  private_flag: string | null;
+};
+type Destinations = { browsers: Browser[]; is_default: boolean };
+type Incoming = { url: string; source_app: string | null };
 
-const BROWSERS: Choice[] = [
-  { id: "firefox", name: "Firefox", tint: "bg-orange-500" },
-  { id: "chrome", name: "Chrome", profile: "Work", tint: "bg-sky-500" },
-  { id: "chrome", name: "Chrome", profile: "Personal", tint: "bg-emerald-500" },
-  { id: "edge", name: "Edge", tint: "bg-teal-500" },
-];
+/// One row per destination: a browser without profiles is one row, a browser
+/// with them is one row each, because that is the choice being made.
+type Destination = { browser: Browser; profile: Profile | null };
+
+function rowsOf(browsers: Browser[]): Destination[] {
+  return browsers.flatMap((browser): Destination[] =>
+    browser.profiles.length === 0
+      ? [{ browser, profile: null }]
+      : browser.profiles.map((profile) => ({ browser, profile })),
+  );
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
 
 export default function App() {
-  const [url, setUrl] = useState("https://gist.github.com/rgdevment/a1b2c3");
-  const [delivery, setDelivery] = useState(0);
+  const [incoming, setIncoming] = useState<Incoming | null>(null);
+  const [rows, setRows] = useState<Destination[]>([]);
   const [remember, setRemember] = useState(false);
   const [priv, setPriv] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
-    void invoke<{ url: string } | null>("picker_boot").then((pending) => {
-      if (!pending) return;
-      setUrl(pending.url);
-      setDelivery((n) => n + 1);
-    });
+    void invoke<Destinations>("picker_destinations").then((d) => setRows(rowsOf(d.browsers)));
   }, []);
 
   useEffect(() => {
-    const stop = listen<{ url: string }>("link:incoming", (e) => {
-      setUrl(e.payload.url);
-      setDelivery((n) => n + 1);
+    void invoke<Incoming | null>("picker_boot").then((pending) => {
+      if (pending) setIncoming(pending);
+    });
+    const stop = listen<Incoming>("link:incoming", (e) => {
+      setIncoming(e.payload);
+      setProblem(null);
     });
     return () => {
       void stop.then((f) => f());
     };
   }, []);
 
-  // One measurement per delivery, not per mount: the window outlives every
-  // link, so a mount-only effect never sees the second one.
-  useEffect(() => {
-    if (delivery === 0) return;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        void invoke("picker_painted");
-      });
-    });
-  }, [delivery]);
+  const open = useCallback(
+    (row: Destination) => {
+      void invoke("picker_open", {
+        browserId: row.browser.id,
+        profileId: row.profile?.id ?? null,
+        private: priv,
+        remember,
+      }).catch((e: unknown) => setProblem(String(e)));
+    },
+    [priv, remember],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") void invoke("picker_dismiss");
       setPriv(e.shiftKey);
+      if (e.key === "Escape") void invoke("picker_dismiss");
+      const index = Number.parseInt(e.key, 10) - 1;
+      if (e.type === "keydown" && index >= 0 && index < rows.length) open(rows[index]);
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
@@ -57,60 +82,70 @@ export default function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKey);
     };
-  }, []);
+  }, [rows, open]);
 
-  let host = url;
-  try {
-    host = new URL(url).host;
-  } catch {
-    /* the picker shows the raw string when the URL will not parse */
-  }
+  const url = incoming?.url ?? "";
 
   return (
-    <div className="flex h-full flex-col justify-between rounded-xl border border-neutral-200/60 bg-white/95 p-4 text-neutral-900 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-neutral-900/95 dark:text-neutral-100">
-      <div>
-        <p className="truncate text-sm font-semibold">{host}</p>
-        <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">{url}</p>
+    <div className="flex h-full flex-col rounded-xl border border-[#313244] bg-[#1E1E2E] p-[5px] text-[#CDD6F4] shadow-2xl">
+      <div className="flex items-start gap-2 px-3 pt-3 pb-2.5">
+        <div className="min-w-0 flex-grow">
+          <p className="truncate text-[13px] font-semibold">{hostOf(url)}</p>
+          <p className="truncate text-[11px] text-[#A6ADC8]">{url}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard.writeText(url)}
+          className="shrink-0 rounded-md bg-[#313244] px-2 py-1 text-[11px] text-[#A6ADC8] hover:text-[#CDD6F4]"
+        >
+          Copiar
+        </button>
+        <button
+          type="button"
+          onClick={() => setPriv((p) => !p)}
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${
+            priv ? "bg-[#45375C] text-[#CBA6F7]" : "bg-[#313244] text-[#A6ADC8]"
+          }`}
+        >
+          Privada
+        </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
-        {BROWSERS.map((b) => (
+      <div className="flex flex-col gap-0.5 px-[5px]">
+        {rows.map((row, i) => (
           <button
-            key={`${b.id}-${b.profile ?? "default"}`}
+            key={`${row.browser.id}-${row.profile?.id ?? "default"}`}
             type="button"
-            className="flex flex-col items-center gap-1.5 rounded-lg p-2 transition hover:bg-neutral-100 focus:ring-2 focus:ring-sky-500 focus:outline-none dark:hover:bg-white/5"
+            onClick={() => open(row)}
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-[#313244] focus:bg-[#313244] focus:outline-none"
           >
-            <span className={`h-9 w-9 rounded-full ${b.tint}`} />
-            <span className="text-xs leading-tight font-medium">{b.name}</span>
-            {b.profile && (
-              <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
-                {b.profile}
+            <span className="h-5 w-5 shrink-0 rounded-md bg-[#585B70]" />
+            <span className="flex-grow text-[13px]">{row.browser.name}</span>
+            {row.profile && (
+              <span className="rounded-full bg-[#313244] px-1.5 py-0.5 text-[11px] text-[#A6ADC8]">
+                {row.profile.name}
               </span>
             )}
+            <span className="text-[10.5px] text-[#6C7086]">{i + 1}</span>
           </button>
         ))}
       </div>
 
-      <div className="flex items-center justify-between text-xs">
-        <label className="flex items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-          />
-          <span>
-            Always for <span className="font-medium">{host}</span>
+      {problem && <p className="px-3 py-2 text-[11px] text-[#F38BA8]">{problem}</p>}
+
+      <div className="mt-1.5 flex items-center gap-2 border-t border-[#313244] px-3 py-2.5">
+        <input
+          id="remember"
+          type="checkbox"
+          checked={remember}
+          onChange={(e) => setRemember(e.target.checked)}
+        />
+        <label htmlFor="remember" className="text-[12px] text-[#BAC2DE]">
+          Abrir siempre aquí los enlaces de{" "}
+          <span className="font-semibold text-[#CDD6F4]">
+            {incoming?.source_app ?? hostOf(url)}
           </span>
         </label>
-        <span
-          className={
-            priv
-              ? "rounded bg-violet-500/15 px-1.5 py-0.5 font-medium text-violet-600 dark:text-violet-300"
-              : "text-neutral-400"
-          }
-        >
-          {priv ? "Private window" : "Shift = private"}
-        </span>
       </div>
     </div>
   );

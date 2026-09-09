@@ -47,11 +47,14 @@ We believe in:
 3. **Create a branch** from it (`git checkout -b feature/my-improvement`).
 4. **Make your changes** following the style guide below.
 5. **Run checks:**
+
    ```sh
-   melos run format
-   melos run analyze
-   melos run test
+   cargo fmt --all
+   cargo clippy --workspace --all-targets
+   cargo test --workspace
+   npm run lint --prefix app && npm test --prefix app
    ```
+
 6. **Open a Pull Request** to the branch you started from.
 
 ### Translate
@@ -66,32 +69,32 @@ Found something confusing? Missing information? PRs welcome.
 
 ## Project Structure
 
-LinkUnbound is a Dart/Flutter monorepo managed with [Melos](https://melos.invertase.dev/):
+LinkUnbound is a Cargo workspace with a Tauri front end:
 
-```
-linkunbound_workspace/
-  packages/
-    core/               # Pure Dart — models, services, platform interfaces
-      lib/src/
-        models/         # Browser, BrowserConfig, Rule
-        services/       # BrowserService, RuleService, LaunchService, etc.
-        platform/       # Abstract platform interfaces
-      test/             # Unit tests
-  apps/
-    linkunbound/        # Flutter app — UI, platform implementations, providers
-      lib/
-        platform/       # Windows and macOS-specific implementations
-        ui/             # Picker, Settings, shared widgets
-        providers.dart  # Riverpod providers
-        main.dart       # Entry point
+```text
+LinkUnbound/
+  crates/
+    linkunbound-core/     # Pure Rust — models, rules, URL handling
+      src/
+        browser.rs        # Browser and Profile
+        rule.rs           # HostPattern, Rule, RuleSet
+        lib.rs            # URL helpers
+  app/
+    src/                  # The picker and settings, in React
+    src-tauri/            # The desktop shell: windows, tray, single instance
+      src/
+      capabilities/       # What the front end is allowed to call
 ```
 
 **Key conventions:**
 
-- Business logic lives in `packages/core` (pure Dart, no Flutter dependency).
-- UI and platform implementations live in `apps/linkunbound`.
-- State management uses Riverpod with `NotifierProvider` pattern.
-- Tests go in `packages/core/test/`.
+- Business logic lives in `crates/linkunbound-core`. It depends on neither
+  Tauri nor any platform API, and CI enforces that.
+- The core never prints. The picker would inherit the output as garbage.
+- `unsafe` is forbidden workspace-wide. A platform crate that genuinely needs
+  it declares `allow(unsafe_code)` in one audited place, and CI fails when it
+  appears anywhere else.
+- Four consecutive comment lines are prose and fail the build.
 
 ---
 
@@ -99,65 +102,60 @@ linkunbound_workspace/
 
 ### Requirements
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (stable channel)
-- [Melos](https://melos.invertase.dev/) (`dart pub global activate melos`)
-- For Windows builds: Windows 10/11 with Visual Studio 2022 (Desktop development with C++)
-- For macOS builds: macOS 13 (Ventura) or newer with Xcode 15+ (open `apps/linkunbound/macos/Runner.xcworkspace` to edit Swift sources, native channels, signing or entitlements)
+- [Rust](https://rustup.rs) stable, with `rustfmt` and `clippy`
+- [Node.js](https://nodejs.org) 22 or newer
+- For Windows builds: Windows 10/11, Visual Studio 2022 (Desktop development
+  with C++) and the WebView2 runtime, which ships with Windows 11
+- For macOS builds: macOS 13 (Ventura) or newer with Xcode 15+
 
 ### Getting Started
 
 ```sh
 git clone https://github.com/rgdevment/LinkUnbound.git
 cd LinkUnbound
-melos bootstrap
+npm install --prefix app
 ```
 
 ### Running
 
 ```sh
-cd apps/linkunbound
-flutter run -d windows   # on Windows
-flutter run -d macos     # on macOS
+cd app
+npm run tauri dev
 ```
+
+Build with `cargo tauri build`, never with `cargo build` alone: the latter does
+not rebuild the front end and produces a binary whose window opens empty.
 
 ### Common Commands
 
-| Command              | What it does                     |
-| :------------------- | :------------------------------- |
-| `melos run format`   | Format all packages              |
-| `melos run analyze`  | Run `dart analyze` everywhere    |
-| `melos run test`     | Run tests in all packages        |
-| `melos bootstrap`    | Install dependencies + link      |
+| Command                        | What it does                        |
+| :----------------------------- | :---------------------------------- |
+| `cargo fmt --all`              | Format the Rust sources             |
+| `cargo clippy --workspace`     | Lint the Rust sources               |
+| `cargo test --workspace`       | Run the Rust tests                  |
+| `cargo deny check`             | Audit licences and advisories       |
+| `npm run lint --prefix app`    | Lint and format the front end       |
+| `npm test --prefix app`        | Run the front-end tests             |
 
 ---
 
 ## Style Guide
 
-- **Modern Dart** — Use latest language features.
-- **Descriptive names** — Code should read like prose.
-- **Minimal comments** — Only when clarifying non-obvious logic. Comments in English.
-- **No comment prefixes** — No `TODO`, `NOTE`, `FIX`, etc.
-- **KISS** — Keep it simple.
+- **Modern Rust** — edition 2024, and let the type system carry the invariants.
+- **Descriptive names** — code should read like prose.
+- **No comments** — write one only where a future reader would be surprised
+  without it: a hidden constraint, a workaround, a subtle invariant. One line.
+- **No comment prefixes** — no `TODO`, `NOTE`, `FIX`.
+- **English everywhere** in code, identifiers and comments.
+- **KISS** — keep it simple.
 
 ---
 
 ## Adding a Translation
 
-LinkUnbound uses Flutter's standard ARB-based localization.
-
-1. Copy `apps/linkunbound/lib/l10n/app_en.arb` as your base.
-2. Name your file with the language code: `app_de.arb`, `app_fr.arb`, etc.
-3. Translate the values (keep the keys in English).
-4. Run `flutter gen-l10n` to regenerate localization classes.
-5. Test by changing the language in Settings.
-6. Submit a Pull Request.
-
-**Guidelines:**
-
-- Keep translations concise — UI space is limited.
-- Use formal or neutral tone.
-- Preserve placeholders like `{name}` or `{count}`.
-- Don't translate brand names (LinkUnbound, Windows, etc.).
+The 2.0 series is being rebuilt and its localisation is not in place yet, so
+the interface currently ships in English only. Translations are welcome once
+that lands; until then, open an issue if you want to be told when it does.
 
 ---
 

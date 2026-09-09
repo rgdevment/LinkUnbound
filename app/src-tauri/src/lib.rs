@@ -1,101 +1,170 @@
-use std::io::Write;
-use std::sync::Mutex;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+mod launch;
 
+use std::sync::Mutex;
+
+use linkunbound_core::{Browser, HostPattern, Rule, Store, Target, host_of, normalise};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Default)]
-struct Delivery {
-    started: Option<Instant>,
+struct Pending {
     url: Option<String>,
+    source_app: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
 struct Incoming {
     url: String,
+    source_app: Option<String>,
 }
 
 #[derive(Serialize)]
-pub struct Timing {
-    to_show_us: u128,
-    to_paint_us: u128,
+struct Destinations {
+    browsers: Vec<Browser>,
+    is_default: bool,
 }
 
-fn url_from(args: &[String]) -> Option<String> {
-    args.iter()
-        .skip(1)
-        .find(|a| a.starts_with("http://") || a.starts_with("https://"))
-        .cloned()
+fn link_from(args: &[String]) -> Option<String> {
+    args.iter().skip(1).find_map(|arg| normalise(arg))
 }
 
-/// Release builds have no console on Windows, so measurements go to a file.
-fn record(stage: &str, micros: u128) {
-    let path = std::env::temp_dir().join("linkunbound-spike-latency.csv");
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-    {
-        let _ = writeln!(f, "{stage},{micros}");
+/// Where the 1.x line kept its files, so an upgrade finds them in place.
+fn store() -> Store {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .or_else(|| std::env::var_os("APPDATA"))
+        .map_or_else(std::env::temp_dir, std::path::PathBuf::from);
+    Store::at(base.join("LinkUnbound"))
+}
+
+#[cfg(windows)]
+fn clicked_in() -> Option<String> {
+    linkunbound_win::source_app()
+}
+
+#[cfg(not(windows))]
+fn clicked_in() -> Option<String> {
+    None
+}
+
+#[cfg(windows)]
+fn destinations() -> Destinations {
+    Destinations {
+        browsers: linkunbound_win::installed_browsers(),
+        is_default: linkunbound_win::is_default_browser(),
+    }
+}
+
+#[cfg(not(windows))]
+fn destinations() -> Destinations {
+    Destinations {
+        browsers: Vec::new(),
+        is_default: false,
     }
 }
 
 /// The window is created hidden at startup and never destroyed: the click path
 /// costs a show, not a webview.
 fn deliver(app: &AppHandle, url: String) {
-    let started = Instant::now();
+    let source_app = clicked_in();
+
+    // A rule that already answers this link means no window at all: the picker
+    // is for the questions nobody has answered yet.
+    if let Ok(rules) = store().rules()
+        && let Some(host) = host_of(&url)
+        && let Some(rule) = rules.resolve(&host, source_app.as_deref())
+        && launch::open(
+            &destinations().browsers,
+            &rule.target.browser_id,
+            rule.target.profile_id.as_deref(),
+            rule.private,
+            &url,
+        )
+        .is_ok()
     {
-        let state = app.state::<Mutex<Delivery>>();
+        return;
+    }
+
+    {
+        let state = app.state::<Mutex<Pending>>();
         let Ok(mut held) = state.lock() else { return };
-        held.started = Some(started);
         held.url = Some(url.clone());
+        held.source_app.clone_from(&source_app);
     }
 
     let Some(window) = app.get_webview_window("picker") else {
         return;
     };
-    record("emit", 0);
-    let _ = window.emit("link:incoming", Incoming { url });
+    let _ = window.emit("link:incoming", Incoming { url, source_app });
     let _ = window.show();
     let _ = window.set_focus();
-
-    record("to_show_us", started.elapsed().as_micros());
 }
 
 /// Pulled, not pushed: on a cold start `deliver` runs before the webview exists,
 /// so an emitted link would land on nobody.
 #[tauri::command]
-fn picker_boot(state: tauri::State<'_, Mutex<Delivery>>) -> Option<Incoming> {
-    record("frontend_booted", 0);
+fn picker_boot(state: tauri::State<'_, Mutex<Pending>>) -> Option<Incoming> {
     let held = state.lock().ok()?;
-    held.url.clone().map(|url| Incoming { url })
+    Some(Incoming {
+        url: held.url.clone()?,
+        source_app: held.source_app.clone(),
+    })
 }
 
 #[tauri::command]
-fn picker_painted(app: AppHandle, state: tauri::State<'_, Mutex<Delivery>>) -> Option<u128> {
-    let epoch_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis());
-    record("paint_epoch_ms", epoch_ms);
-    let elapsed = {
-        let Ok(held) = state.lock() else {
-            record("lock_failed", 0);
-            return None;
-        };
-        let Some(started) = held.started else {
-            record("painted_without_delivery", 0);
-            return None;
-        };
-        started.elapsed().as_micros()
+fn picker_destinations() -> Destinations {
+    destinations()
+}
+
+/// Takes no URL: the webview says which destination was chosen, never what to
+/// open. The link comes from state the core already validated.
+#[tauri::command]
+fn picker_open(
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Pending>>,
+    browser_id: String,
+    profile_id: Option<String>,
+    private: bool,
+    remember: bool,
+) -> Result<(), String> {
+    let (url, source_app) = {
+        let held = state.lock().map_err(|_| "state is poisoned".to_owned())?;
+        (
+            held.url
+                .clone()
+                .ok_or_else(|| "no link pending".to_owned())?,
+            held.source_app.clone(),
+        )
     };
-    record("to_paint_us", elapsed);
-    if std::env::var_os("SPIKE_BENCH").is_some()
-        && let Some(window) = app.get_webview_window("picker")
-    {
+
+    launch::open(
+        &destinations().browsers,
+        &browser_id,
+        profile_id.as_deref(),
+        private,
+        &url,
+    )
+    .map_err(|e| e.to_string())?;
+
+    if remember && let Some(host) = host_of(&url) {
+        let store = store();
+        let mut rules = store.rules().map_err(|e| e.to_string())?;
+        rules.upsert(Rule {
+            id: format!("{host}-{browser_id}"),
+            host: HostPattern::Suffix(host),
+            source_app,
+            target: Target {
+                browser_id,
+                profile_id,
+            },
+            private,
+        });
+        store.save_rules(&rules).map_err(|e| e.to_string())?;
+    }
+
+    if let Some(window) = app.get_webview_window("picker") {
         let _ = window.hide();
     }
-    Some(elapsed)
+    Ok(())
 }
 
 #[tauri::command]
@@ -108,19 +177,20 @@ fn picker_dismiss(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            if let Some(url) = url_from(&argv) {
+            if let Some(url) = link_from(&argv) {
                 deliver(app, url);
             }
         }))
-        .manage(Mutex::new(Delivery::default()))
+        .manage(Mutex::new(Pending::default()))
         .invoke_handler(tauri::generate_handler![
             picker_boot,
-            picker_painted,
+            picker_destinations,
+            picker_open,
             picker_dismiss
         ])
         .setup(|app| {
             let args: Vec<String> = std::env::args().collect();
-            if let Some(url) = url_from(&args) {
+            if let Some(url) = link_from(&args) {
                 deliver(app.handle(), url);
             }
             Ok(())
@@ -131,21 +201,37 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::url_from;
+    use super::link_from;
 
-    #[test]
-    fn picks_the_url_and_ignores_the_executable() {
-        let args = vec![
-            "linkunbound.exe".to_owned(),
-            "--background".to_owned(),
-            "https://github.com".to_owned(),
-        ];
-        assert_eq!(url_from(&args).as_deref(), Some("https://github.com"));
+    fn args(rest: &[&str]) -> Vec<String> {
+        std::iter::once("linkunbound.exe")
+            .chain(rest.iter().copied())
+            .map(str::to_owned)
+            .collect()
     }
 
     #[test]
-    fn no_url_means_no_delivery() {
-        let args = vec!["linkunbound.exe".to_owned(), "--register".to_owned()];
-        assert!(url_from(&args).is_none());
+    fn a_teams_link_arrives_already_unwrapped() {
+        let raw = "microsoft-edge:https://eu01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fgithub.com%2Fa";
+        assert_eq!(
+            link_from(&args(&["--background", raw])).as_deref(),
+            Some("https://github.com/a")
+        );
+    }
+
+    #[test]
+    fn switches_never_pass_for_a_link() {
+        assert!(link_from(&args(&["--register"])).is_none());
+        assert!(link_from(&args(&["--gpu-launcher=calc.exe"])).is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_destinations_offered_are_real_browsers() {
+        for browser in super::destinations().browsers {
+            assert!(!browser.exe.is_empty());
+            assert!(!browser.name.to_lowercase().contains("linkunbound"));
+            assert!(!browser.name.to_lowercase().contains("internet explorer"));
+        }
     }
 }
