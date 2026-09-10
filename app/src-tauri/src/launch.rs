@@ -48,6 +48,7 @@ mod tests {
             }],
             private_flag: Some("--incognito".to_owned()),
             extra_args: Vec::new(),
+            icon_path: None,
             custom: false,
             hidden: false,
         }]

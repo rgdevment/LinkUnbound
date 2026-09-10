@@ -15,6 +15,9 @@ const CHROME = {
   custom: false,
   hidden: false,
   icon: "data:image/png;base64,iVBORw0KGgo=",
+  args: [],
+  private_flag: "--incognito",
+  icon_path: null,
 };
 
 const EDGE = {
@@ -23,6 +26,16 @@ const EDGE = {
   name: "Microsoft Edge",
   profiles: 1,
   hidden: true,
+};
+
+const ODD = {
+  ...CHROME,
+  id: "odd-browser",
+  name: "Navegador raro",
+  profiles: 0,
+  private: false,
+  private_flag: null,
+  hidden: false,
 };
 
 const MINE = {
@@ -34,6 +47,9 @@ const MINE = {
   custom: true,
   hidden: false,
   icon: null,
+  args: ["--disable-extensions"],
+  private_flag: null,
+  icon_path: null,
 };
 
 function answers(list: unknown[], overrides: Record<string, () => Promise<unknown>> = {}) {
@@ -46,7 +62,7 @@ function answers(list: unknown[], overrides: Record<string, () => Promise<unknow
 describe("browsers", () => {
   beforeEach(() => {
     invoke.mockReset();
-    answers([CHROME, EDGE, MINE]);
+    answers([CHROME, EDGE, ODD, MINE]);
   });
 
   it("tells apart what Windows reports from what the user added", async () => {
@@ -99,23 +115,85 @@ describe("browsers", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Añadir un navegador" }));
     await userEvent.type(screen.getByLabelText("Nombre"), "Chrome limpio");
     await userEvent.type(screen.getByLabelText("Ruta del ejecutable"), "C:/x/chrome.exe");
-    await userEvent.type(screen.getByLabelText("Argumentos adicionales"), "--incognito --new");
-    await userEvent.click(screen.getByRole("button", { name: "Añadir" }));
+    await userEvent.type(screen.getByLabelText("Argumentos adicionales"), "--new --foo");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
     expect(invoke).toHaveBeenCalledWith("browsers_add", {
-      name: "Chrome limpio",
-      exe: "C:/x/chrome.exe",
-      args: ["--incognito", "--new"],
+      edit: {
+        name: "Chrome limpio",
+        exe: "C:/x/chrome.exe",
+        args: ["--new", "--foo"],
+        private_flag: null,
+        icon_path: null,
+      },
+    });
+  });
+
+  /// Without this argument the browser can never open a private window, which
+  /// is why the form asks for it instead of guessing.
+  it("carries the private argument so a custom browser can open incognito", async () => {
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Añadir un navegador" }));
+    await userEvent.type(screen.getByLabelText("Nombre"), "Brave");
+    await userEvent.type(screen.getByLabelText("Ruta del ejecutable"), "C:/b.exe");
+    await userEvent.type(screen.getByLabelText("Argumento de ventana privada"), "--incognito");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(invoke).toHaveBeenCalledWith("browsers_add", {
+      edit: expect.objectContaining({ private_flag: "--incognito" }),
+    });
+  });
+
+  it("says which browsers cannot open a private window at all", async () => {
+    render(<Browsers />);
+    expect(await screen.findByText("Sin perfiles · sin ventana privada")).toBeInTheDocument();
+  });
+
+  it("opens an editable form filled with what the browser already had", async () => {
+    render(<Browsers />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Editar Chrome sin extensiones" }),
+    );
+    expect(screen.getByLabelText("Nombre")).toHaveValue("Chrome sin extensiones");
+    expect(screen.getByLabelText("Argumentos adicionales")).toHaveValue("--disable-extensions");
+  });
+
+  it("saves an edit against the browser being edited", async () => {
+    render(<Browsers />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Editar Chrome sin extensiones" }),
+    );
+    await userEvent.clear(screen.getByLabelText("Nombre"));
+    await userEvent.type(screen.getByLabelText("Nombre"), "Otro nombre");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(invoke).toHaveBeenCalledWith("browsers_update", {
+      id: "custom-1",
+      edit: expect.objectContaining({ name: "Otro nombre" }),
+    });
+  });
+
+  /// Duplicating a detected browser is how one binary becomes two entries with
+  /// different arguments, so it cannot be limited to the custom ones.
+  it("can duplicate a detected browser, not only a custom one", async () => {
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Duplicar Google Chrome" }));
+    expect(invoke).toHaveBeenCalledWith("browsers_duplicate", { id: "google-chrome" });
+  });
+
+  it("sends the whole order when a browser moves, since that is the picker order", async () => {
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Bajar Google Chrome" }));
+    expect(invoke).toHaveBeenCalledWith("browsers_reorder", {
+      ids: ["microsoft-edge", "google-chrome", "odd-browser", "custom-1"],
     });
   });
 
   it("keeps the form open and says why when the path is wrong", async () => {
-    answers([CHROME], { browsers_add: () => Promise.reject("there is no program at that path") });
+    answers([CHROME], { browsers_add: () => Promise.reject("no hay ningún programa en esa ruta") });
     render(<Browsers />);
     await userEvent.click(await screen.findByRole("button", { name: "Añadir un navegador" }));
     await userEvent.type(screen.getByLabelText("Nombre"), "Roto");
     await userEvent.type(screen.getByLabelText("Ruta del ejecutable"), "C:/nope.exe");
-    await userEvent.click(screen.getByRole("button", { name: "Añadir" }));
-    expect(await screen.findByText(/no program at that path/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByText(/ningún programa en esa ruta/)).toBeInTheDocument();
     expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
   });
 });

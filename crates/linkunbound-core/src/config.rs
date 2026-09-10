@@ -132,6 +132,7 @@ pub fn read_browsers(raw: &str) -> Result<BrowserConfig, ConfigError> {
                     |a| a.into_iter().next(),
                 ),
                 exe: b.executable_path,
+                icon_path: None,
                 custom: b.is_custom,
                 hidden: false,
                 extra_args: b.extra_args,

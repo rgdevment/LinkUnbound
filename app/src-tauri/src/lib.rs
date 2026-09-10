@@ -307,19 +307,39 @@ struct BrowserView {
     custom: bool,
     hidden: bool,
     icon: Option<String>,
+    args: Vec<String>,
+    private_flag: Option<String>,
+    icon_path: Option<String>,
 }
 
 fn seen(browser: &Browser) -> BrowserView {
     BrowserView {
         profiles: browser.profiles.len(),
         private: browser.private_flag.is_some(),
-        icon: icon_data(&browser.exe, &browser.id),
+        icon: icon_data(browser.icon_source(), &browser.id),
         id: browser.id.clone(),
         name: browser.name.clone(),
         exe: browser.exe.clone(),
         custom: browser.custom,
         hidden: browser.hidden,
+        args: browser.extra_args.clone(),
+        private_flag: browser.private_flag.clone(),
+        icon_path: browser.icon_path.clone(),
     }
+}
+
+/// What the settings screen can change about a browser it owns.
+#[derive(serde::Deserialize)]
+struct Edit {
+    name: String,
+    exe: String,
+    args: Vec<String>,
+    private_flag: Option<String>,
+    icon_path: Option<String>,
+}
+
+fn readable(path: &str) -> bool {
+    std::path::Path::new(path).is_file()
 }
 
 #[tauri::command]
@@ -357,24 +377,80 @@ fn browsers_remove(id: String) -> Result<Vec<BrowserView>, String> {
     keep(all)
 }
 
+/// Never reuses a number a live entry already holds, or editing one would
+/// rename the other.
+fn free_id(all: &[Browser]) -> String {
+    (1..)
+        .map(|n| format!("custom-{n}"))
+        .find(|id| !all.iter().any(|b| &b.id == id))
+        .unwrap_or_else(|| "custom-1".to_owned())
+}
+
 #[tauri::command]
-fn browsers_add(name: String, exe: String, args: Vec<String>) -> Result<Vec<BrowserView>, String> {
-    if !std::path::Path::new(&exe).is_file() {
-        return Err("there is no program at that path".to_owned());
+fn browsers_add(edit: Edit) -> Result<Vec<BrowserView>, String> {
+    if !readable(&edit.exe) {
+        return Err("no hay ningún programa en esa ruta".to_owned());
     }
     let mut all = catalogue();
-    let id = format!("custom-{}", all.iter().filter(|b| b.custom).count() + 1);
     all.push(Browser {
-        id,
-        name,
-        exe,
+        id: free_id(&all),
+        name: edit.name,
+        exe: edit.exe,
         profiles: Vec::new(),
-        extra_args: args,
-        private_flag: None,
+        extra_args: edit.args,
+        private_flag: edit.private_flag.filter(|f| !f.is_empty()),
+        icon_path: edit.icon_path.filter(|p| !p.is_empty()),
         custom: true,
         hidden: false,
     });
     keep(all)
+}
+
+#[tauri::command]
+fn browsers_update(id: String, edit: Edit) -> Result<Vec<BrowserView>, String> {
+    if !readable(&edit.exe) {
+        return Err("no hay ningún programa en esa ruta".to_owned());
+    }
+    let mut all = catalogue();
+    let Some(found) = all.iter_mut().find(|b| b.id == id && b.custom) else {
+        return Err("solo puedes editar un navegador que añadiste tú".to_owned());
+    };
+    found.name = edit.name;
+    found.exe = edit.exe;
+    found.extra_args = edit.args;
+    found.private_flag = edit.private_flag.filter(|f| !f.is_empty());
+    found.icon_path = edit.icon_path.filter(|p| !p.is_empty());
+    keep(all)
+}
+
+#[tauri::command]
+fn browsers_duplicate(id: String) -> Result<Vec<BrowserView>, String> {
+    let mut all = catalogue();
+    let Some(source) = all.iter().find(|b| b.id == id) else {
+        return Err("ese navegador ya no está".to_owned());
+    };
+    let copy = source.duplicated(free_id(&all));
+    let at = all
+        .iter()
+        .position(|b| b.id == id)
+        .map_or(all.len(), |i| i + 1);
+    all.insert(at, copy);
+    keep(all)
+}
+
+/// The order here is the order of the picker, so moving one is how the user
+/// decides which destination sits under the first key.
+#[tauri::command]
+fn browsers_reorder(ids: Vec<String>) -> Result<Vec<BrowserView>, String> {
+    let mut all = catalogue();
+    let mut moved: Vec<Browser> = Vec::with_capacity(all.len());
+    for id in &ids {
+        if let Some(at) = all.iter().position(|b| &b.id == id) {
+            moved.push(all.remove(at));
+        }
+    }
+    moved.append(&mut all);
+    keep(moved)
 }
 
 /// Everything the app decided on its own goes; what the user chose stays.
@@ -543,6 +619,9 @@ pub fn run() {
             browsers_set_hidden,
             browsers_remove,
             browsers_add,
+            browsers_update,
+            browsers_duplicate,
+            browsers_reorder,
             maintenance_rescan,
             maintenance_reset,
             prefs_get,
@@ -587,6 +666,34 @@ mod tests {
     use linkunbound_core::Scope;
 
     const LINK: &str = "https://docs.google.com/document/d/1a9F/edit";
+
+    fn custom(id: &str) -> linkunbound_core::Browser {
+        linkunbound_core::Browser {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            exe: "x.exe".to_owned(),
+            profiles: Vec::new(),
+            extra_args: Vec::new(),
+            private_flag: None,
+            icon_path: None,
+            custom: true,
+            hidden: false,
+        }
+    }
+
+    /// Reusing a number a live entry holds would make an edit rename the other.
+    #[test]
+    fn a_new_entry_never_takes_an_id_another_one_already_holds() {
+        let mut all = vec![custom("custom-1"), custom("custom-3")];
+        assert_eq!(super::free_id(&all), "custom-2");
+        all.push(custom("custom-2"));
+        assert_eq!(super::free_id(&all), "custom-4");
+    }
+
+    #[test]
+    fn the_first_added_browser_starts_the_numbering() {
+        assert_eq!(super::free_id(&[]), "custom-1");
+    }
 
     #[test]
     fn opening_once_writes_no_rule_at_all() {

@@ -27,6 +27,9 @@ pub struct Browser {
     /// Declared at detection, never guessed: browsers treat an unknown switch as a URL.
     #[serde(default)]
     pub private_flag: Option<String>,
+    /// Where to read the icon from when it is not the executable itself.
+    #[serde(default)]
+    pub icon_path: Option<String>,
     /// Added by hand, so the registry cannot confirm or refresh it.
     #[serde(default)]
     pub custom: bool,
@@ -48,6 +51,7 @@ pub fn merge(detected: Vec<Browser>, saved: &[Browser]) -> Vec<Browser> {
             out.push(Browser {
                 hidden: kept.hidden,
                 extra_args: kept.extra_args.clone(),
+                icon_path: kept.icon_path.clone(),
                 ..found.clone()
             });
         }
@@ -61,6 +65,26 @@ pub fn merge(detected: Vec<Browser>, saved: &[Browser]) -> Vec<Browser> {
 }
 
 impl Browser {
+    /// Where the icon comes from: the override when set, the executable otherwise.
+    #[must_use]
+    pub fn icon_source(&self) -> &str {
+        self.icon_path.as_deref().unwrap_or(&self.exe)
+    }
+
+    /// A copy the user can change without touching the original, which is how
+    /// one browser becomes two profiles of the same binary.
+    #[must_use]
+    pub fn duplicated(&self, id: String) -> Self {
+        Self {
+            id,
+            name: format!("{} (copia)", self.name),
+            custom: true,
+            hidden: false,
+            profiles: Vec::new(),
+            ..self.clone()
+        }
+    }
+
     pub fn profile(&self, id: &str) -> Option<&Profile> {
         self.profiles.iter().find(|p| p.id == id)
     }
@@ -116,6 +140,7 @@ mod tests {
             }],
             private_flag: Some("--incognito".to_owned()),
             extra_args: Vec::new(),
+            icon_path: None,
             custom: false,
             hidden: false,
         }
@@ -129,6 +154,7 @@ mod tests {
             profiles: Vec::new(),
             private_flag: None,
             extra_args: Vec::new(),
+            icon_path: None,
             custom: false,
             hidden: false,
         }
@@ -186,6 +212,7 @@ mod merging {
             profiles: Vec::new(),
             extra_args: Vec::new(),
             private_flag: None,
+            icon_path: None,
             custom: false,
             hidden: false,
         }
@@ -232,6 +259,44 @@ mod merging {
         ];
         let ids: Vec<String> = merge(detected, &saved).into_iter().map(|b| b.id).collect();
         assert_eq!(ids, ["chrome", "firefox"]);
+    }
+
+    #[test]
+    fn a_custom_icon_survives_a_path_that_detection_moved() {
+        let detected = vec![browser("chrome", "C:/New/chrome.exe")];
+        let saved = vec![Browser {
+            icon_path: Some("C:/mine/icon.ico".to_owned()),
+            ..browser("chrome", "C:/Old/chrome.exe")
+        }];
+        let out = merge(detected, &saved);
+        assert_eq!(out[0].icon_source(), "C:/mine/icon.ico");
+    }
+
+    #[test]
+    fn without_an_override_the_icon_comes_from_the_executable() {
+        assert_eq!(browser("chrome", "C:/c.exe").icon_source(), "C:/c.exe");
+    }
+
+    /// The copy has to be editable, so it is the user's even when the original
+    /// came from the registry, and it starts with no profiles of its own.
+    #[test]
+    fn a_duplicate_belongs_to_the_user_and_keeps_the_binary() {
+        let original = Browser {
+            private_flag: Some("--incognito".to_owned()),
+            profiles: vec![super::Profile {
+                id: "Default".to_owned(),
+                name: "Personal".to_owned(),
+                args: Vec::new(),
+            }],
+            ..browser("chrome", "C:/c.exe")
+        };
+        let copy = original.duplicated("custom-1".to_owned());
+        assert_eq!(copy.id, "custom-1");
+        assert_eq!(copy.exe, "C:/c.exe");
+        assert_eq!(copy.private_flag.as_deref(), Some("--incognito"));
+        assert!(copy.custom);
+        assert!(copy.profiles.is_empty());
+        assert!(copy.name.contains("copia"));
     }
 
     #[test]

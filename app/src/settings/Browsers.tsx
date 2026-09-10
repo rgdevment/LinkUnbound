@@ -11,7 +11,20 @@ type BrowserView = {
   custom: boolean;
   hidden: boolean;
   icon: string | null;
+  args: string[];
+  private_flag: string | null;
+  icon_path: string | null;
 };
+
+type Edit = {
+  name: string;
+  exe: string;
+  args: string[];
+  private_flag: string | null;
+  icon_path: string | null;
+};
+
+const BLANK: Edit = { name: "", exe: "", args: [], private_flag: null, icon_path: null };
 
 function describe(browser: BrowserView): string {
   const parts = [
@@ -21,7 +34,7 @@ function describe(browser: BrowserView): string {
         ? "1 perfil"
         : `${browser.profiles} perfiles`,
   ];
-  if (browser.private) parts.push("admite ventana privada");
+  parts.push(browser.private ? "admite ventana privada" : "sin ventana privada");
   if (browser.hidden) parts.push("oculto del selector");
   return parts.join(" · ");
 }
@@ -43,20 +56,111 @@ function Icon({ browser }: { browser: BrowserView }) {
   );
 }
 
+const FIELD =
+  "rounded-md border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-[12px] dark:border-white/[0.12]";
+
+function Form({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial: Edit;
+  onSave: (edit: Edit) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(initial.name);
+  const [exe, setExe] = useState(initial.exe);
+  const [args, setArgs] = useState(initial.args.join(" "));
+  const [priv, setPriv] = useState(initial.private_flag ?? "");
+  const [icon, setIcon] = useState(initial.icon_path ?? "");
+
+  return (
+    <form
+      className="flex flex-col gap-2 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave({
+          name,
+          exe,
+          args: args.split(" ").filter(Boolean),
+          private_flag: priv || null,
+          icon_path: icon || null,
+        });
+      }}
+    >
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Nombre"
+        aria-label="Nombre"
+        required
+        className={FIELD}
+      />
+      <input
+        value={exe}
+        onChange={(e) => setExe(e.target.value)}
+        placeholder="Ruta del ejecutable"
+        aria-label="Ruta del ejecutable"
+        required
+        className={FIELD}
+      />
+      <input
+        value={args}
+        onChange={(e) => setArgs(e.target.value)}
+        placeholder="Argumentos adicionales (separados por espacios)"
+        aria-label="Argumentos adicionales"
+        className={FIELD}
+      />
+      <input
+        value={priv}
+        onChange={(e) => setPriv(e.target.value)}
+        placeholder="Argumento de ventana privada (--incognito, -private-window…)"
+        aria-label="Argumento de ventana privada"
+        className={FIELD}
+      />
+      <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
+        Sin este argumento, el navegador no podrá abrir en privado desde el selector.
+      </p>
+      <input
+        value={icon}
+        onChange={(e) => setIcon(e.target.value)}
+        placeholder="Ruta de icono personalizado (opcional)"
+        aria-label="Ruta de icono personalizado"
+        className={FIELD}
+      />
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          className="rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+        >
+          Guardar
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md px-3 py-1.5 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]"
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+const GHOST =
+  "grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-black/[0.06] disabled:opacity-25 dark:text-[#8B92A1] dark:hover:bg-white/[0.08]";
+
 export default function Browsers() {
   const [list, setList] = useState<BrowserView[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [exe, setExe] = useState("");
-  const [args, setArgs] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
 
   const run = (command: string, params: Record<string, unknown> = {}) => {
     void invoke<BrowserView[]>(command, params)
       .then((next) => {
         setList(next);
         setProblem(null);
-        setAdding(false);
+        setEditing(null);
       })
       .catch((e: unknown) => setProblem(String(e)));
   };
@@ -64,6 +168,15 @@ export default function Browsers() {
   useEffect(() => run("browsers_list"), []);
 
   if (list === null) return null;
+
+  const move = (id: string, step: number) => {
+    const order = list.map((b) => b.id);
+    const at = order.indexOf(id);
+    const to = at + step;
+    if (to < 0 || to >= order.length) return;
+    [order[at], order[to]] = [order[to], order[at]];
+    run("browsers_reorder", { ids: order });
+  };
 
   const detected = list.filter((b) => !b.custom);
   const mine = list.filter((b) => b.custom);
@@ -81,7 +194,7 @@ export default function Browsers() {
           {detected.map((b) => (
             <div
               key={b.id}
-              className="flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
+              className="group flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
             >
               <Icon browser={b} />
               <div className="min-w-0 flex-1">
@@ -90,6 +203,34 @@ export default function Browsers() {
                   {describe(b)}
                 </p>
               </div>
+              <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                <button
+                  type="button"
+                  aria-label={`Subir ${b.name}`}
+                  disabled={list[0]?.id === b.id}
+                  onClick={() => move(b.id, -1)}
+                  className={GHOST}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Bajar ${b.name}`}
+                  disabled={list.at(-1)?.id === b.id}
+                  onClick={() => move(b.id, 1)}
+                  className={GHOST}
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Duplicar ${b.name}`}
+                  onClick={() => run("browsers_duplicate", { id: b.id })}
+                  className={GHOST}
+                >
+                  ⧉
+                </button>
+              </span>
               <Switch
                 on={!b.hidden}
                 label={`Mostrar ${b.name} en el selector`}
@@ -107,84 +248,73 @@ export default function Browsers() {
 
       <Section title="Añadidos por ti">
         <Card>
-          {mine.map((b) => (
-            <div
-              key={b.id}
-              className="flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
-            >
-              <Icon browser={b} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[12.5px]">{b.name}</p>
-                <p className="mt-px truncate text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-                  {b.exe}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label={`Eliminar ${b.name}`}
-                onClick={() => run("browsers_remove", { id: b.id })}
-                className="grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-[#C0362F]/10 hover:text-[#C0362F] dark:text-[#8B92A1] dark:hover:bg-[#FF8A85]/10 dark:hover:text-[#FF8A85]"
+          {mine.map((b) =>
+            editing === b.id ? (
+              <Form
+                key={b.id}
+                initial={b}
+                onCancel={() => setEditing(null)}
+                onSave={(edit) => run("browsers_update", { id: b.id, edit })}
+              />
+            ) : (
+              <div
+                key={b.id}
+                className="group flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
               >
-                ✕
-              </button>
-            </div>
-          ))}
-
-          {adding ? (
-            <form
-              className="flex flex-col gap-2 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
-              onSubmit={(e) => {
-                e.preventDefault();
-                run("browsers_add", {
-                  name,
-                  exe,
-                  args: args.split(" ").filter(Boolean),
-                });
-              }}
-            >
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Nombre"
-                aria-label="Nombre"
-                required
-                className="rounded-md border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-[12px] dark:border-white/[0.12]"
-              />
-              <input
-                value={exe}
-                onChange={(e) => setExe(e.target.value)}
-                placeholder="Ruta del ejecutable"
-                aria-label="Ruta del ejecutable"
-                required
-                className="rounded-md border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-[12px] dark:border-white/[0.12]"
-              />
-              <input
-                value={args}
-                onChange={(e) => setArgs(e.target.value)}
-                placeholder="Argumentos adicionales (separados por espacios)"
-                aria-label="Argumentos adicionales"
-                className="rounded-md border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-[12px] dark:border-white/[0.12]"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
-                >
-                  Añadir
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAdding(false)}
-                  className="rounded-md px-3 py-1.5 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]"
-                >
-                  Cancelar
-                </button>
+                <Icon browser={b} />
+                <div className="min-w-0 flex-1">
+                  <p className={`truncate text-[12.5px] ${b.hidden ? "opacity-55" : ""}`}>
+                    {b.name}
+                  </p>
+                  <p className="mt-px truncate text-[11px] text-neutral-500 dark:text-[#8B92A1]">
+                    {b.exe}
+                  </p>
+                </div>
+                <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                  <button
+                    type="button"
+                    aria-label={`Editar ${b.name}`}
+                    onClick={() => setEditing(b.id)}
+                    className={GHOST}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Duplicar ${b.name}`}
+                    onClick={() => run("browsers_duplicate", { id: b.id })}
+                    className={GHOST}
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Eliminar ${b.name}`}
+                    onClick={() => run("browsers_remove", { id: b.id })}
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-[#C0362F]/10 hover:text-[#C0362F] dark:text-[#8B92A1] dark:hover:bg-[#FF8A85]/10 dark:hover:text-[#FF8A85]"
+                  >
+                    ✕
+                  </button>
+                </span>
+                <Switch
+                  on={!b.hidden}
+                  label={`Mostrar ${b.name} en el selector`}
+                  onChange={(next) => run("browsers_set_hidden", { id: b.id, hidden: !next })}
+                />
               </div>
-            </form>
+            ),
+          )}
+
+          {editing === "new" ? (
+            <Form
+              initial={BLANK}
+              onCancel={() => setEditing(null)}
+              onSave={(edit) => run("browsers_add", { edit })}
+            />
           ) : (
             <button
               type="button"
-              onClick={() => setAdding(true)}
+              onClick={() => setEditing("new")}
               className="w-full border-black/[0.08] px-3.5 py-3 text-left text-[12px] text-[#2F62D8] not-first:border-t dark:border-white/[0.08] dark:text-[#6E9BFF]"
             >
               Añadir un navegador
