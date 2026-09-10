@@ -4,6 +4,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 pub const SETTINGS: &str = "settings";
 pub const PICKER: &str = "picker";
+pub const NOTICE: &str = "notice";
 
 /// Built on demand: an idle webview costs tens of megabytes and this window is opened rarely.
 pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
@@ -30,6 +31,47 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
 pub fn show_tray<R: Runtime>(app: &AppHandle<R>, visible: bool) {
     if let Some(tray) = app.tray_by_id("main") {
         let _ = tray.set_visible(visible);
+    }
+}
+
+/// Built on demand and thrown away: it exists for a few seconds and must never
+/// take focus from whatever the user is doing.
+pub fn flash<R: Runtime>(app: &AppHandle<R>) {
+    dismiss_notice(app);
+    let built = tauri::WebviewWindowBuilder::new(app, NOTICE, tauri::WebviewUrl::default())
+        .title("LinkUnbound")
+        .inner_size(340.0, 92.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible(false)
+        .build();
+    let _ = built;
+}
+
+/// The corner farthest from where work happens, on the screen the pointer is on.
+pub fn show_notice<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window(NOTICE) else {
+        return;
+    };
+    if let Ok(Some(screen)) = window.current_monitor()
+        && let Ok(size) = window.outer_size()
+    {
+        let area = screen.size();
+        let at = screen.position();
+        let x = at.x + (area.width as i32) - (size.width as i32) - 24;
+        let y = at.y + (area.height as i32) - (size.height as i32) - 64;
+        let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+    }
+    let _ = window.show();
+}
+
+pub fn dismiss_notice<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window(NOTICE) {
+        let _ = window.close();
     }
 }
 

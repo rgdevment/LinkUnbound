@@ -21,6 +21,7 @@ const MIN_HEIGHT: f64 = 80.0;
 #[derive(Default)]
 struct Held {
     shortcut: Option<String>,
+    fired: Option<Fired>,
 }
 
 #[derive(Default)]
@@ -179,6 +180,22 @@ fn deliver(app: &AppHandle, url: String) {
         )
         .is_ok()
     {
+        // Resolving is invisible by design; without a way to notice and undo it,
+        // every surprise costs trust and gives nothing back.
+        if store().prefs().notify_on_rule {
+            let named = catalogue()
+                .iter()
+                .find(|b| b.id == rule.target.browser_id)
+                .map_or_else(|| rule.target.browser_id.clone(), |b| b.name.clone());
+            if let Ok(mut held) = app.state::<Mutex<Held>>().lock() {
+                held.fired = Some(Fired {
+                    url,
+                    rule_id: rule.id.clone(),
+                    browser: named,
+                });
+            }
+            shell::flash(app);
+        }
         return;
     }
 
@@ -196,6 +213,45 @@ fn deliver(app: &AppHandle, url: String) {
         return;
     };
     let _ = window.emit("link:incoming", Incoming::new(url, source_app, token));
+}
+
+/// What the ephemeral notice needs to name the rule and undo it.
+#[derive(Clone, Serialize)]
+struct Fired {
+    url: String,
+    rule_id: String,
+    browser: String,
+}
+
+/// Undoing means the rule goes: keeping it would ask the same question again on
+/// the next link, and the user already answered by pressing undo.
+/// Pulled like the picker's: the window is built after the event would have
+/// been emitted, so pushing it would land on nobody.
+#[tauri::command]
+fn notice_boot(state: tauri::State<'_, Mutex<Held>>) -> Option<Fired> {
+    state.lock().ok()?.fired.clone()
+}
+
+/// Placed and shown once the webview knows its own size, and never focused:
+/// it must not take the keyboard from whatever the user is doing.
+#[tauri::command]
+fn notice_ready(app: AppHandle) {
+    shell::show_notice(&app);
+}
+
+#[tauri::command]
+fn notice_undo(app: AppHandle, rule_id: String) -> Result<(), String> {
+    let store = store();
+    let mut rules = store.rules().map_err(|e| e.to_string())?;
+    rules.remove(&rule_id);
+    store.save_rules(&rules).map_err(|e| e.to_string())?;
+    shell::dismiss_notice(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn notice_dismiss(app: AppHandle) {
+    shell::dismiss_notice(&app);
 }
 
 /// Pulled, not pushed: on a cold start `deliver` runs before the webview exists,
@@ -626,6 +682,10 @@ pub fn run() {
             maintenance_reset,
             prefs_get,
             prefs_set,
+            notice_boot,
+            notice_ready,
+            notice_undo,
+            notice_dismiss,
             picker_open,
             picker_dismiss,
             settings_open,
