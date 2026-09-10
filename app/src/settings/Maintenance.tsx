@@ -26,6 +26,16 @@ export default function Maintenance() {
   const [asking, setAsking] = useState<Pending>(null);
   const [done, setDone] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+
+  const report = () => {
+    void invoke<string>("maintenance_report")
+      .then((path) => {
+        setSaved(path);
+        setProblem(null);
+      })
+      .catch((e: unknown) => setProblem(String(e)));
+  };
 
   const confirm = () => {
     if (!asking) return;
@@ -86,6 +96,28 @@ export default function Maintenance() {
           </div>
         </div>
       )}
+
+      <Section title="Informar de un problema">
+        <Card>
+          <Line
+            title="Guardar un informe de diagnóstico"
+            note="Un archivo con el estado de la app y tus reglas, sin las direcciones que visitas"
+          >
+            <button
+              type="button"
+              onClick={report}
+              className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+            >
+              Guardar
+            </button>
+          </Line>
+        </Card>
+        {saved && (
+          <p className="rounded-md bg-[#1E7A52]/10 px-3 py-2 text-[11.5px] break-all text-[#1E7A52] dark:bg-[#4CC38A]/10 dark:text-[#4CC38A]">
+            Guardado en {saved}
+          </p>
+        )}
+      </Section>
 
       <Section title="Navegadores">
         <Card>

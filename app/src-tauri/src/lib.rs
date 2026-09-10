@@ -223,8 +223,6 @@ struct Fired {
     browser: String,
 }
 
-/// Undoing means the rule goes: keeping it would ask the same question again on
-/// the next link, and the user already answered by pressing undo.
 /// Pulled like the picker's: the window is built after the event would have
 /// been emitted, so pushing it would land on nobody.
 #[tauri::command]
@@ -239,6 +237,8 @@ fn notice_ready(app: AppHandle) {
     shell::show_notice(&app);
 }
 
+/// Undoing means the rule goes: keeping it would ask the same question on the
+/// next link, and pressing undo already answered it.
 #[tauri::command]
 fn notice_undo(app: AppHandle, rule_id: String) -> Result<(), String> {
     let store = store();
@@ -628,6 +628,73 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
 }
 
 #[tauri::command]
+fn system_open_default_apps() -> Result<(), String> {
+    system::open_default_apps()
+}
+
+/// Re-registers against this executable, which is the only repair there is: the
+/// command pointed somewhere this binary no longer lives.
+#[tauri::command]
+fn system_repair() -> Result<system::SystemState, String> {
+    system::set_registered(true)
+}
+
+#[tauri::command]
+fn maintenance_report() -> Result<String, String> {
+    let state = system::state();
+    let facts = vec![
+        ("versión".to_owned(), env!("CARGO_PKG_VERSION").to_owned()),
+        ("sistema".to_owned(), std::env::consts::OS.to_owned()),
+        ("registrado".to_owned(), state.registered.to_string()),
+        ("predeterminado".to_owned(), state.is_default.to_string()),
+        ("diagnóstico".to_owned(), format!("{:?}", state.health)),
+        (
+            "asociaciones".to_owned(),
+            format!(
+                "{} de {}",
+                state.associations.iter().filter(|a| a.held).count(),
+                state.associations.len()
+            ),
+        ),
+        (
+            "arranca con el sistema".to_owned(),
+            state.starts_with_system.to_string(),
+        ),
+        (
+            "Edge instalado".to_owned(),
+            state.edge_installed.to_string(),
+        ),
+        (
+            "navegadores".to_owned(),
+            catalogue()
+                .iter()
+                .map(|b| b.name.clone())
+                .collect::<Vec<_>>()
+                .join(", "),
+        ),
+    ];
+    let store = store();
+    let body = linkunbound_core::diagnostics(
+        env!("CARGO_PKG_VERSION"),
+        &facts,
+        &store.rules().unwrap_or_default(),
+        &store.prefs(),
+    );
+
+    let target = std::env::var_os("USERPROFILE")
+        .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
+        .join("Desktop")
+        .join("linkunbound-diagnostico.md");
+    let target = if target.parent().is_some_and(std::path::Path::is_dir) {
+        target
+    } else {
+        std::env::temp_dir().join("linkunbound-diagnostico.md")
+    };
+    std::fs::write(&target, body).map_err(|e| e.to_string())?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 fn system_state() -> system::SystemState {
     system::state()
 }
@@ -680,6 +747,7 @@ pub fn run() {
             browsers_reorder,
             maintenance_rescan,
             maintenance_reset,
+            maintenance_report,
             prefs_get,
             prefs_set,
             notice_boot,
@@ -691,7 +759,9 @@ pub fn run() {
             settings_open,
             system_state,
             system_set_registered,
-            system_set_startup
+            system_set_startup,
+            system_open_default_apps,
+            system_repair
         ])
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {

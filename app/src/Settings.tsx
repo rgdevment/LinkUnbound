@@ -8,12 +8,26 @@ import { Card, Line, Section, Switch } from "./settings/parts";
 import Rules from "./settings/Rules";
 
 type Association = { scheme: string; held: boolean };
+type Health = "fine" | "stale" | "build_tree" | "not_registered";
 type SystemState = {
   registered: boolean;
   is_default: boolean;
   associations: Association[];
   starts_with_system: boolean;
   startup_is_ours: boolean;
+  health: Health;
+  edge_installed: boolean;
+};
+
+const AILMENT: Partial<Record<Health, { what: string; fix: string | null }>> = {
+  stale: {
+    what: "El registro apunta a una copia de LinkUnbound que ya no está ahí. Los enlaces no llegarán hasta repararlo.",
+    fix: "Reparar",
+  },
+  build_tree: {
+    what: "Estás ejecutando una copia recién compilada. Windows no puede confiar los enlaces a una ruta que desaparece al limpiar el proyecto.",
+    fix: null,
+  },
 };
 
 type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
@@ -75,16 +89,36 @@ const PAGES: { id: Page; label: string; icon: React.ReactNode }[] = [
 function Links({
   state,
   change,
+  run,
 }: {
   state: SystemState | null;
   change: (command: string, enabled: boolean) => void;
+  run: (command: string) => void;
 }) {
   const held = state?.associations.filter((a) => a.held).length ?? 0;
   const total = state?.associations.length ?? 0;
   const ok = state?.is_default ?? false;
+  const ailment = state ? AILMENT[state.health] : undefined;
 
   return (
     <>
+      {ailment && (
+        <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
+          <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">
+            LinkUnbound no está recibiendo los enlaces
+          </p>
+          <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">{ailment.what}</p>
+          {ailment.fix && (
+            <button
+              type="button"
+              onClick={() => run("system_repair")}
+              className="mt-2.5 rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
+            >
+              {ailment.fix}
+            </button>
+          )}
+        </div>
+      )}
       <Section title="Navegador predeterminado">
         <div className="flex items-center gap-2 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3 py-2.5 text-[11.5px] dark:border-white/[0.08] dark:bg-white/[0.02]">
           <span
@@ -112,12 +146,40 @@ function Links({
           </Line>
         </Card>
         {!ok && (
-          <p className="text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-            Solo tú puedes fijar el predeterminado, desde Configuración de Windows &gt; Aplicaciones
-            predeterminadas.
-          </p>
+          <Card>
+            <Line
+              title="Elegir LinkUnbound en Windows"
+              note="Solo tú puedes fijar el predeterminado, y se hace en el panel del sistema"
+            >
+              <button
+                type="button"
+                onClick={() => run("system_open_default_apps")}
+                className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+              >
+                Abrir Windows
+              </button>
+            </Line>
+          </Card>
         )}
       </Section>
+
+      {state?.edge_installed && (
+        <Section title="Por qué Teams y Outlook abren Edge">
+          <div className="rounded-lg border border-black/[0.08] bg-black/[0.015] p-3.5 text-[11.5px] leading-relaxed text-neutral-600 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-[#98A0B4]">
+            <p>
+              Algunas aplicaciones de Microsoft no abren los enlaces como lo haría cualquier otra:
+              se los pasan directamente a Edge por un canal propio, saltándose el navegador
+              predeterminado del sistema. Windows 11 ya no permite que otra aplicación se ponga en
+              medio de ese canal, así que no hay nada que LinkUnbound pueda hacer para
+              interceptarlo.
+            </p>
+            <p className="mt-2">
+              Lo que sí hace: cuando uno de esos enlaces llega envuelto en un enlace protegido,
+              LinkUnbound lo desenvuelve y te ofrece el destino real en lugar del intermediario.
+            </p>
+          </div>
+        </Section>
+      )}
     </>
   );
 }
@@ -135,6 +197,15 @@ export default function Settings() {
     setProblem(null);
     void invoke<SystemState>(command, { enabled })
       .then(setState)
+      .catch((e: unknown) => setProblem(String(e)));
+  }, []);
+
+  const run = useCallback((command: string) => {
+    setProblem(null);
+    void invoke<SystemState | null>(command)
+      .then((next) => {
+        if (next) setState(next);
+      })
       .catch((e: unknown) => setProblem(String(e)));
   }, []);
 
@@ -182,7 +253,7 @@ export default function Settings() {
             {problem}
           </p>
         )}
-        {page === "links" && <Links state={state} change={change} />}
+        {page === "links" && <Links state={state} change={change} run={run} />}
         {page === "rules" && <Rules />}
         {page === "browsers" && <Browsers />}
         {page === "app" && (

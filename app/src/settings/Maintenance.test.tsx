@@ -50,6 +50,22 @@ describe("maintenance", () => {
     expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: false });
   });
 
+  /// The report is meant to be pasted into a public issue, so the screen has to
+  /// promise what the core actually redacts.
+  it("saves a report and says where it landed", async () => {
+    invoke.mockResolvedValue("C:/Users/x/Desktop/linkunbound-diagnostico.md");
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(invoke).toHaveBeenCalledWith("maintenance_report");
+    expect(await screen.findByText(/linkunbound-diagnostico\.md/)).toBeInTheDocument();
+  });
+
+  it("saves the report without asking, since it destroys nothing", async () => {
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
   it("surfaces a refusal instead of claiming it worked", async () => {
     invoke.mockRejectedValue("the registry refused the write");
     render(<Maintenance />);

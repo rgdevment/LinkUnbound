@@ -15,6 +15,8 @@ const BASE = {
   ],
   starts_with_system: true,
   startup_is_ours: true,
+  health: "fine",
+  edge_installed: false,
 };
 
 const PREFS = {
@@ -56,10 +58,56 @@ describe("settings", () => {
     expect(await screen.findByText(/recibe los enlaces/)).toBeInTheDocument();
   });
 
-  it("points at Windows when another browser holds the links", async () => {
+  it("opens the Windows panel when another browser holds the links", async () => {
     answers({ ...BASE, is_default: false });
     render(<Settings />);
-    expect(await screen.findByText(/Aplicaciones predeterminadas/)).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Abrir Windows" }));
+    expect(invoke).toHaveBeenCalledWith("system_open_default_apps");
+  });
+
+  it("offers no Windows button once the links already arrive here", async () => {
+    render(<Settings />);
+    await screen.findByText(/recibe los enlaces/);
+    expect(screen.queryByRole("button", { name: "Abrir Windows" })).toBeNull();
+  });
+
+  /// Looking registered is not the same as working: the command can point at a
+  /// path this executable no longer occupies.
+  it("warns and offers to repair a registration pointing somewhere else", async () => {
+    answers({ ...BASE, health: "stale" });
+    render(<Settings />);
+    expect(await screen.findByText(/no está recibiendo los enlaces/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reparar" }));
+    expect(invoke).toHaveBeenCalledWith("system_repair");
+  });
+
+  /// A build tree cannot own the registration at all, so there is nothing to
+  /// repair and offering the button would lie.
+  it("explains a build tree without offering a repair that cannot work", async () => {
+    answers({ ...BASE, health: "build_tree" });
+    render(<Settings />);
+    expect(await screen.findByText(/recién compilada/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
+  });
+
+  it("says nothing about the handler when it is healthy", async () => {
+    render(<Settings />);
+    await screen.findByText(/recibe los enlaces/);
+    expect(screen.queryByText(/no está recibiendo los enlaces/)).toBeNull();
+  });
+
+  /// The complaint that started the project: explaining it was portable even
+  /// though intercepting the channel is not.
+  it("explains the Edge channel only on a machine that has Edge", async () => {
+    answers({ ...BASE, edge_installed: true });
+    render(<Settings />);
+    expect(await screen.findByText(/saltándose el navegador/)).toBeInTheDocument();
+  });
+
+  it("says nothing about Edge when Edge is not installed", async () => {
+    render(<Settings />);
+    await screen.findByText(/recibe los enlaces/);
+    expect(screen.queryByText(/saltándose el navegador/)).toBeNull();
   });
 
   it("lets the registration be turned off", async () => {
