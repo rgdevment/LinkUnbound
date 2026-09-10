@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Picker from "./Picker";
@@ -46,6 +46,24 @@ function answers(overrides: Record<string, () => Promise<unknown>> = {}) {
       });
     return Promise.resolve(null);
   });
+}
+
+type NodeProcess = {
+  on: (event: string, listener: (reason: unknown) => void) => void;
+  off: (event: string, listener: (reason: unknown) => void) => void;
+};
+
+// picker_destinations has no .catch in Picker.tsx (the bug under test), so its
+// rejection is genuinely unhandled; without this it fails the whole test run.
+async function ignoringUnhandledRejections<T>(run: () => Promise<T>): Promise<T> {
+  const proc = (globalThis as unknown as { process?: NodeProcess }).process;
+  const swallow = () => {};
+  proc?.on("unhandledRejection", swallow);
+  try {
+    return await run();
+  } finally {
+    proc?.off("unhandledRejection", swallow);
+  }
 }
 
 describe("picker", () => {
@@ -145,7 +163,6 @@ describe("picker", () => {
     render(<Picker />);
     await screen.findByText("Trabajo");
     expect(invoke).toHaveBeenCalledWith("picker_fit", { height: 210 });
-    vi.restoreAllMocks();
   });
 
   it("stays hidden rather than reporting a height it has not painted", async () => {
@@ -165,10 +182,118 @@ describe("picker", () => {
 
   it("surfaces a refusal instead of pretending the link opened", async () => {
     answers({
-      picker_open: () => Promise.reject(new Error("the profile Profile 2 is no longer there")),
+      picker_open: () => Promise.reject("the profile Profile 2 is no longer there"),
     });
     render(<Picker />);
     await userEvent.click(await screen.findByText("Trabajo"));
     expect(await screen.findByText(/no longer there/)).toBeInTheDocument();
+  });
+
+  it.fails("a shift plus digit chord opens that row in private mode even though shift turns the digit into a symbol", async () => {
+    render(<Picker />);
+    await screen.findByText("Trabajo");
+    fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
+    expect(invoke).toHaveBeenCalledWith("picker_open", {
+      browserId: "chrome",
+      profileId: "Default",
+      private: true,
+      remember: "once",
+    });
+  });
+
+  it.fails("the keyboard shortcut honours the private toggle, not just a held shift", async () => {
+    render(<Picker />);
+    await screen.findByText("Trabajo");
+    await userEvent.click(screen.getByRole("button", { name: "Ventana privada" }));
+    fireEvent.keyDown(window, { key: "2" });
+    expect(invoke).toHaveBeenCalledWith("picker_open", {
+      browserId: "chrome",
+      profileId: "Profile 2",
+      private: true,
+      remember: "once",
+    });
+  });
+
+  it.fails("the first destination receives focus once it loads, and arrow down moves to the next one", async () => {
+    render(<Picker />);
+    await screen.findByText("Trabajo");
+    const items = screen.getAllByRole("menuitem");
+    expect(document.activeElement).toBe(items[0]);
+    fireEvent.keyDown(items[0], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[1]);
+  });
+
+  it.fails("an empty destinations list still shows the picker instead of staying invisible forever", async () => {
+    answers({ picker_destinations: () => Promise.resolve({ browsers: [], is_default: true }) });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      height: 90,
+    } as DOMRect);
+    render(<Picker />);
+    await screen.findByText("gist.github.com");
+    expect(invoke).toHaveBeenCalledWith("picker_fit", expect.anything());
+  });
+
+  it.fails("a destinations request that fails surfaces a message instead of staying silent", async () => {
+    answers({
+      picker_destinations: () => Promise.reject("could not list the installed browsers"),
+    });
+    await ignoringUnhandledRejections(async () => {
+      render(<Picker />);
+      expect(await screen.findByText(/could not list the installed browsers/)).toBeInTheDocument();
+    });
+  });
+
+  it("a second incoming link resets remember and private mode, and asks the window to resize again", async () => {
+    let deliver: ((event: { payload: unknown }) => void) | undefined;
+    listen
+      .mockReset()
+      .mockImplementation((_event: string, cb: (event: { payload: unknown }) => void) => {
+        deliver = cb;
+        return Promise.resolve(() => {});
+      });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      height: 200,
+    } as DOMRect);
+
+    render(<Picker />);
+    await screen.findByText("Trabajo");
+    await userEvent.click(screen.getByRole("radio", { name: "Todo el sitio" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ventana privada" }));
+    invoke.mockClear();
+
+    act(() => {
+      deliver?.({
+        payload: {
+          url: "https://intranet.test/y",
+          source_app: null,
+          host: "intranet.test",
+          site: "intranet.test",
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("radio", { name: "Solo esta vez" })).toBeChecked();
+    });
+    expect(screen.getByRole("button", { name: "Ventana privada" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(invoke).toHaveBeenCalledWith("picker_fit", expect.anything());
+  });
+
+  it.fails("the header shows the same host a saved rule would match, without the port the browser also carries", async () => {
+    answers({
+      picker_boot: () =>
+        Promise.resolve({
+          url: "https://intranet.test:8443/x",
+          source_app: null,
+          host: "intranet.test",
+          site: "intranet.test",
+        }),
+    });
+    render(<Picker />);
+    await screen.findByText(/intranet\.test/);
+    expect(screen.getByText("intranet.test")).toBeInTheDocument();
   });
 });

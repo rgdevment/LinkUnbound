@@ -326,4 +326,59 @@ mod tests {
         assert!(set.resolve(URL, "github.com", None).is_none());
         assert!(set.resolve(URL, "github.com", Some("SLACK")).is_some());
     }
+
+    #[test]
+    #[ignore = "fails today: site_of pipes an IPv4 literal through psl::domain_str, which treats the last two octets as label+suffix"]
+    fn an_ip_v4_literal_keeps_itself_as_its_site() {
+        assert_eq!(site_of("192.168.1.50"), "192.168.1.50");
+        assert_eq!(site_of("10.0.1.50"), "10.0.1.50");
+        assert_eq!(site_of("127.0.0.1"), "127.0.0.1");
+        assert_eq!(site_of("8.8.8.8"), "8.8.8.8");
+    }
+
+    #[test]
+    fn an_ipv6_literal_keeps_itself_as_its_site() {
+        assert_eq!(site_of("[::1]"), "[::1]");
+    }
+
+    #[test]
+    fn a_host_carrying_a_port_is_not_split_by_it() {
+        assert_eq!(site_of("example.com:8443"), "example.com:8443");
+    }
+
+    #[test]
+    #[ignore = "fails today: site_of destroys IPv4 literals (see an_ip_v4_literal_keeps_itself_as_its_site), so a Site scope built from one machine's IP is short enough to also match a different machine"]
+    fn a_site_rule_built_from_one_machines_ip_never_matches_a_different_machine() {
+        let scope = Scope::Site(site_of("192.168.1.50"));
+        assert!(scope.matches("https://192.168.1.50/admin", "192.168.1.50"));
+        assert!(!scope.matches("https://10.0.1.50/admin", "10.0.1.50"));
+    }
+
+    #[test]
+    #[ignore = "fails today: RuleSet::upsert compares source_app with `==`, so replacing a rule migrated from 1.x as \"Slack\" with one saved as \"slack\" appends a duplicate instead of replacing it"]
+    fn upserting_a_rule_replaces_one_saved_for_the_same_origin_in_a_different_case() {
+        let mut set = RuleSet {
+            schema_version: 2,
+            rules: vec![rule(
+                "legacy",
+                Scope::Site("github.com".to_owned()),
+                Some("Slack"),
+                "firefox",
+            )],
+        };
+        set.upsert(rule(
+            "updated",
+            Scope::Site("github.com".to_owned()),
+            Some("slack"),
+            "chrome",
+        ));
+        assert_eq!(set.rules.len(), 1);
+        assert_eq!(
+            set.resolve(URL, "github.com", Some("slack"))
+                .unwrap()
+                .target
+                .browser_id,
+            "chrome"
+        );
+    }
 }

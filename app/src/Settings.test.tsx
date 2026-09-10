@@ -63,7 +63,7 @@ describe("ajustes", () => {
 
   it("muestra el motivo cuando el sistema rechaza el cambio", async () => {
     answers(BASE, {
-      system_set_registered: () => Promise.reject(new Error("the registry refused the write")),
+      system_set_registered: () => Promise.reject("the registry refused the write"),
     });
     render(<Settings />);
     await userEvent.click((await screen.findAllByRole("switch"))[0]);

@@ -53,7 +53,7 @@ jobs:
       - name: Unsafe stays where it was audited
         run: |
           found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs' || true)
-          expected=""
+          expected="crates/linkunbound-win/src/native.rs"
           if [ "$found" != "$expected" ]; then
             echo "$found"
             echo "::error::unsafe is allowed somewhere new; audit it and update this list"

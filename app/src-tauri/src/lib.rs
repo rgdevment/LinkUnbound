@@ -77,6 +77,7 @@ struct Listed {
     icon: Option<String>,
 }
 
+#[cfg(windows)]
 fn icons_dir() -> std::path::PathBuf {
     std::env::var_os("LOCALAPPDATA")
         .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
@@ -401,6 +402,28 @@ mod tests {
     fn switches_never_pass_for_a_link() {
         assert!(link_from(&args(&["--register"])).is_none());
         assert!(link_from(&args(&["--gpu-launcher=calc.exe"])).is_none());
+    }
+
+    /// `tauri-plugin-single-instance` reassembles argv on Windows by joining with
+    /// `"|"` and splitting it back the same way, so a URL that legitimately
+    /// contains a pipe in its path or query arrives as separate argv entries.
+    #[test]
+    #[ignore = "fails today: link_from returns the first argv fragment that normalises, so a URL containing a literal | arrives truncated at the pipe"]
+    fn a_url_containing_a_pipe_survives_the_single_instance_plugins_windows_split() {
+        let whole = "https://intranet.corp/x?f=activo|urgente";
+        let fragments: Vec<&str> = whole.split('|').collect();
+        assert_eq!(fragments, ["https://intranet.corp/x?f=activo", "urgente"]);
+        assert_eq!(link_from(&args(&fragments)).as_deref(), Some(whole));
+    }
+
+    #[test]
+    #[ignore = "fails today: depends on site_of destroying IPv4 literals (crates/linkunbound-core/src/rule.rs), so remembering \"the whole site\" for an IP ends up capturing a different machine"]
+    fn remembering_the_whole_site_for_an_ip_never_captures_a_different_machine() {
+        let scope = Remember::Site
+            .scope("https://192.168.1.50/admin", "192.168.1.50")
+            .unwrap();
+        assert!(scope.matches("https://192.168.1.50/admin", "192.168.1.50"));
+        assert!(!scope.matches("https://10.0.1.50/admin", "10.0.1.50"));
     }
 
     #[cfg(windows)]

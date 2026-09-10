@@ -226,4 +226,16 @@ mod tests {
         assert!(read_rules("{ not json").is_err());
         assert!(read_browsers("").is_err());
     }
+
+    #[test]
+    fn a_rules_file_written_by_a_newer_schema_is_refused_instead_of_dropping_fields() {
+        let err = read_rules(r#"{"schema_version": 99, "rules": []}"#).unwrap_err();
+        assert!(matches!(err, ConfigError::TooNew { found: 99 }));
+    }
+
+    #[test]
+    fn a_browsers_file_written_by_a_newer_schema_is_refused_instead_of_dropping_fields() {
+        let err = read_browsers(r#"{"schema_version": 99, "browsers": []}"#).unwrap_err();
+        assert!(matches!(err, ConfigError::TooNew { found: 99 }));
+    }
 }

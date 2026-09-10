@@ -53,18 +53,22 @@ pub fn set(enabled: bool) -> Option<Startup> {
 mod tests {
     use super::*;
 
+    /// A `cargo test` binary is never a packaged MSIX identity, so `task()` has no
+    /// startup task to find and this is deterministic rather than environment-dependent.
     #[test]
     fn asking_outside_a_package_answers_nothing_rather_than_failing() {
-        assert!(state().is_none() || state().is_some());
+        assert!(state().is_none());
     }
 
     #[test]
-    fn a_task_disabled_by_the_user_is_reported_as_not_ours_to_change() {
-        let blocked = Startup {
-            enabled: false,
-            ours_to_change: false,
-        };
-        assert!(!blocked.ours_to_change);
-        assert!(Startup::default().ours_to_change);
+    fn setting_it_outside_a_package_answers_nothing_rather_than_panicking() {
+        assert!(set(true).is_none());
+    }
+
+    #[test]
+    fn nothing_saved_yet_defaults_to_off_but_still_ours_to_change() {
+        let default = Startup::default();
+        assert!(!default.enabled);
+        assert!(default.ours_to_change);
     }
 }

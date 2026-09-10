@@ -1,6 +1,6 @@
 //! The one place in the workspace where `unsafe` is allowed. Every call here is
-//! a Win32 entry point with no safe wrapper; `rules.yml` fails the build if the
-//! allowance appears in any other file.
+//! a Win32 entry point with no safe wrapper; the `Unsafe stays where it was
+//! audited` step of `rules.yml` names this file and fails on any other.
 #![allow(unsafe_code)]
 
 use std::os::windows::ffi::OsStrExt;

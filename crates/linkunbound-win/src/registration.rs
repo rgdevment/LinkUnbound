@@ -359,6 +359,50 @@ mod tests {
     }
 
     #[test]
+    fn an_installed_path_that_merely_contains_the_word_target_is_not_a_build_tree() {
+        assert!(!is_build_tree(
+            r"C:\Program Files\LinkUnbound Target\linkunbound.exe"
+        ));
+    }
+
+    #[test]
+    #[ignore = "fails today: is_build_tree only recognises the literal \\target\\debug\\ and \\target\\release\\, so a `cargo build --target` output directory slips through"]
+    fn a_target_triple_build_is_still_recognised_as_a_build_tree() {
+        assert!(is_build_tree(
+            r"D:\repo\target\x86_64-pc-windows-msvc\release\linkunbound.exe"
+        ));
+        assert!(is_build_tree(
+            r"D:\repo\target\x86_64-pc-windows-msvc\debug\linkunbound.exe"
+        ));
+    }
+
+    #[test]
+    #[ignore = "fails today: is_build_tree only recognises the debug and release profile names, so a custom profile such as \\target\\dist\\ is not caught"]
+    fn a_custom_cargo_profile_is_still_recognised_as_a_build_tree() {
+        assert!(is_build_tree(r"D:\repo\target\dist\linkunbound.exe"));
+    }
+
+    #[test]
+    #[ignore = "fails today: is_registered() accepts any command containing \"linkunbound\", so a different executable whose name embeds ours reads as registered"]
+    fn a_different_executable_whose_name_merely_contains_ours_is_not_registered_as_us() {
+        let root = scratch("impostor");
+        let test_root = root.as_str();
+        scrub(test_root);
+        let reg = Registration::under(test_root);
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let (command, _) = hkcu
+            .create_subkey(format!(r"{test_root}\Classes\{PROG_ID}\shell\open\command"))
+            .unwrap();
+        command
+            .set_value("", &"\"C:\\Temp\\linkunbound-helper.exe\" \"%1\"")
+            .unwrap();
+
+        assert!(!reg.is_registered());
+        scrub(test_root);
+    }
+
+    #[test]
     fn a_third_party_prog_id_embedding_our_name_is_not_ours() {
         assert!(prog_id_is_ours("LinkUnboundURL"));
         assert!(prog_id_is_ours("linkunboundurl"));
