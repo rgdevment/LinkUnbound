@@ -17,6 +17,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { workspace = true }
 
 [dependencies]
+base64.workspace = true
 linkunbound-core.workspace = true
 tauri.workspace = true
 tauri-plugin-single-instance.workspace = true

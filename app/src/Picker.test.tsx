@@ -14,6 +14,7 @@ const CHROME = {
   name: "Chrome",
   exe: "chrome.exe",
   private_flag: "--incognito",
+  icon: "data:image/png;base64,iVBORw0KGgo=",
   profiles: [
     { id: "Default", name: "Personal" },
     { id: "Profile 2", name: "Trabajo" },
@@ -25,6 +26,7 @@ const FIREFOX = {
   name: "Firefox",
   exe: "firefox.exe",
   private_flag: "-private-window",
+  icon: null,
   profiles: [],
 };
 
@@ -36,7 +38,12 @@ function answers(overrides: Record<string, () => Promise<unknown>> = {}) {
     if (cmd === "picker_destinations")
       return Promise.resolve({ browsers: [CHROME, FIREFOX], is_default: true });
     if (cmd === "picker_boot")
-      return Promise.resolve({ url: "https://gist.github.com/a", source_app: "slack" });
+      return Promise.resolve({
+        url: "https://gist.github.com/a",
+        source_app: "slack",
+        host: "gist.github.com",
+        site: "github.com",
+      });
     return Promise.resolve(null);
   });
 }
@@ -69,7 +76,7 @@ describe("picker", () => {
       browserId: "chrome",
       profileId: "Profile 2",
       private: false,
-      remember: false,
+      remember: "once",
     });
   });
 
@@ -80,20 +87,80 @@ describe("picker", () => {
       browserId: "firefox",
       profileId: null,
       private: false,
-      remember: false,
+      remember: "once",
     });
   });
 
-  it("passes the remember choice along so the rule gets saved", async () => {
+  it("passes the chosen scope along so the rule gets saved", async () => {
     render(<Picker />);
-    await userEvent.click(await screen.findByRole("checkbox"));
+    await userEvent.click(await screen.findByRole("radio", { name: "Todo el sitio" }));
     await userEvent.click(screen.getByText("Firefox"));
     expect(invoke).toHaveBeenCalledWith("picker_open", {
       browserId: "firefox",
       profileId: null,
       private: false,
-      remember: true,
+      remember: "site",
     });
+  });
+
+  it("starts every link on the scope that writes nothing", async () => {
+    render(<Picker />);
+    const once = await screen.findByRole("radio", { name: "Solo esta vez" });
+    expect(once).toBeChecked();
+  });
+
+  it("offers no subdomain scope when the host is already its own site", async () => {
+    answers({
+      picker_boot: () =>
+        Promise.resolve({
+          url: "https://github.com/a",
+          source_app: null,
+          host: "github.com",
+          site: "github.com",
+        }),
+    });
+    render(<Picker />);
+    expect(await screen.findByRole("radio", { name: "Subdominio" })).toBeDisabled();
+  });
+
+  it("opens in a private window when shift is held", async () => {
+    const user = userEvent.setup();
+    render(<Picker />);
+    const row = await screen.findByText("Trabajo");
+    await user.keyboard("{Shift>}");
+    await user.click(row);
+    await user.keyboard("{/Shift}");
+    expect(invoke).toHaveBeenCalledWith("picker_open", {
+      browserId: "chrome",
+      profileId: "Profile 2",
+      private: true,
+      remember: "once",
+    });
+  });
+
+  it("measures itself so the window is sized before it is shown", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      height: 210,
+    } as DOMRect);
+    render(<Picker />);
+    await screen.findByText("Trabajo");
+    expect(invoke).toHaveBeenCalledWith("picker_fit", { height: 210 });
+    vi.restoreAllMocks();
+  });
+
+  it("stays hidden rather than reporting a height it has not painted", async () => {
+    render(<Picker />);
+    await screen.findByText("Trabajo");
+    expect(invoke).not.toHaveBeenCalledWith("picker_fit", expect.anything());
+  });
+
+  it("shows the real browser icon, and a placeholder when there is none", async () => {
+    const { container } = render(<Picker />);
+    await screen.findByText("Trabajo");
+    const icons = container.querySelectorAll("img");
+    expect(icons).toHaveLength(2);
+    expect(icons[0].getAttribute("src")).toMatch(/^data:image\/png/);
+    expect(icons[0].getAttribute("alt")).toBe("");
   });
 
   it("surfaces a refusal instead of pretending the link opened", async () => {

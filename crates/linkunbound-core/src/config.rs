@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::browser::Browser;
 use crate::private::private_flag_for;
-use crate::rule::{HostPattern, Rule, RuleSet, Target};
+use crate::rule::{Rule, RuleSet, Scope, Target};
 
 pub const SCHEMA_VERSION: u32 = 2;
 
@@ -53,18 +53,17 @@ struct LegacyBrowserConfig {
     browsers: Vec<LegacyBrowser>,
 }
 
-/// 1.x walked up the domain hierarchy, so a rule for `example.com` already
-/// covered `docs.example.com`. Migrating to `Exact` would narrow every existing
-/// rule and start showing the picker where the user had stopped seeing it.
+/// `Site` keeps the reach 1.x had: `Host` would narrow every migrated rule, and
+/// reducing the domain to its registrable form would widen one saved for a subdomain.
 fn migrate_rule(index: usize, legacy: LegacyRule) -> Rule {
-    let host = if legacy.domain == "*" {
-        HostPattern::Any
+    let scope = if legacy.domain == "*" {
+        Scope::Any
     } else {
-        HostPattern::Suffix(legacy.domain.to_ascii_lowercase())
+        Scope::Site(legacy.domain.to_ascii_lowercase())
     };
     Rule {
         id: format!("migrated-{index}"),
-        host,
+        scope,
         source_app: legacy.source_app.filter(|s| !s.is_empty()),
         target: Target {
             browser_id: legacy.browser_id,
@@ -170,27 +169,22 @@ mod tests {
         let set = read_rules(LEGACY_RULES).unwrap();
         assert_eq!(set.schema_version, SCHEMA_VERSION);
         assert_eq!(set.rules.len(), 3);
-        assert_eq!(
-            set.rules[0].host,
-            HostPattern::Suffix("github.com".to_owned())
-        );
-        assert_eq!(set.rules[1].host, HostPattern::Any);
+        assert_eq!(set.rules[0].scope, Scope::Site("github.com".to_owned()));
+        assert_eq!(set.rules[1].scope, Scope::Any);
         assert_eq!(set.rules[1].source_app.as_deref(), Some("slack"));
         assert!(set.rules[1].private);
-        assert_eq!(
-            set.rules[2].host,
-            HostPattern::Suffix("gitlab.test".to_owned())
-        );
+        assert_eq!(set.rules[2].scope, Scope::Site("gitlab.test".to_owned()));
         assert!(set.rules[2].source_app.is_none());
     }
 
     #[test]
     fn a_migrated_rule_still_covers_the_subdomains_1_x_covered() {
         let set = read_rules(LEGACY_RULES).unwrap();
-        assert!(set.resolve("github.com", None).is_some());
-        assert!(set.resolve("gist.github.com", None).is_some());
-        assert!(set.resolve("docs.gitlab.test", None).is_some());
-        assert!(set.resolve("notgithub.com", None).is_none());
+        let any = "https://example.test/";
+        assert!(set.resolve(any, "github.com", None).is_some());
+        assert!(set.resolve(any, "gist.github.com", None).is_some());
+        assert!(set.resolve(any, "docs.gitlab.test", None).is_some());
+        assert!(set.resolve(any, "notgithub.com", None).is_none());
     }
 
     #[test]
@@ -199,7 +193,7 @@ mod tests {
         let written = write_rules(&set).unwrap();
         let again = read_rules(&written).unwrap();
         assert_eq!(again.rules.len(), set.rules.len());
-        assert_eq!(again.rules[1].host, HostPattern::Any);
+        assert_eq!(again.rules[1].scope, Scope::Any);
         assert_eq!(again.schema_version, SCHEMA_VERSION);
     }
 

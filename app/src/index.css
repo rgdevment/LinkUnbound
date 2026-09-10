@@ -7,3 +7,8 @@ body,
   margin: 0;
   background: transparent;
 }
+
+body {
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+}

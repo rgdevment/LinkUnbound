@@ -11,7 +11,7 @@ pub use config::{
     write_rules,
 };
 pub use private::private_flag_for;
-pub use rule::{HostPattern, Rule, RuleSet, Target};
+pub use rule::{Rule, RuleSet, Scope, Target, site_of};
 pub use store::{Store, StoreError};
 pub use url::{
     host_of, is_launchable, looks_unresolved, normalise, unwrap_edge_protocol, unwrap_safe_link,

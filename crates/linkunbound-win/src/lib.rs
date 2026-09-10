@@ -1,6 +1,8 @@
 #[cfg(windows)]
 mod detect;
 #[cfg(windows)]
+mod icons;
+#[cfg(windows)]
 mod native;
 #[cfg(windows)]
 mod registration;
@@ -10,10 +12,12 @@ mod startup;
 #[cfg(windows)]
 pub use detect::{chromium_profiles, installed_browsers};
 #[cfg(windows)]
+pub use icons::cached_or_extract as icon_for;
+#[cfg(windows)]
 pub use native::{notify_associations_changed, source_app};
 #[cfg(windows)]
 pub use registration::{
-    PROG_ID, Registration, association_report, is_default_browser, prog_id_is_ours,
+    PROG_ID, Registration, association_report, is_build_tree, is_default_browser, prog_id_is_ours,
 };
 #[cfg(windows)]
 pub use startup::{Startup, set as set_startup, state as startup_state};
@@ -22,6 +26,8 @@ pub use startup::{Startup, set as set_startup, state as startup_state};
 pub enum RegistrationError {
     #[error("the registry refused the write: {0}")]
     Registry(#[from] std::io::Error),
+    #[error("a build tree must not own the shell registration")]
+    BuildTree,
 }
 
 #[cfg(test)]

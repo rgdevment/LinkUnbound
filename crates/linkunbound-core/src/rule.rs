@@ -2,28 +2,39 @@ use std::cmp::Reverse;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
-pub enum HostPattern {
-    Any,
-    Exact(String),
-    Suffix(String),
+/// Registrable domain; an unknown suffix keeps the host, which matches less rather than more.
+#[must_use]
+pub fn site_of(host: &str) -> String {
+    psl::domain_str(host).unwrap_or(host).to_ascii_lowercase()
 }
 
-impl HostPattern {
-    pub fn matches(&self, host: &str) -> bool {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum Scope {
+    Any,
+    Url(String),
+    Host(String),
+    Site(String),
+}
+
+impl Scope {
+    #[must_use]
+    pub fn matches(&self, url: &str, host: &str) -> bool {
         match self {
             Self::Any => true,
-            Self::Exact(d) => host == d,
-            Self::Suffix(d) => host == d || host.ends_with(&format!(".{d}")),
+            Self::Url(u) => url == u,
+            Self::Host(h) => host == h,
+            Self::Site(d) => host == d || host.ends_with(&format!(".{d}")),
         }
     }
 
-    fn specificity(&self) -> u32 {
+    /// The origin bonus in `Rule` sits above every value this returns.
+    fn specificity(&self) -> u64 {
         match self {
             Self::Any => 0,
-            Self::Suffix(d) => 1_000 + d.len() as u32,
-            Self::Exact(d) => 100_000 + d.len() as u32,
+            Self::Site(d) => 1_000 + d.len() as u64,
+            Self::Host(h) => 100_000 + h.len() as u64,
+            Self::Url(u) => 10_000_000 + u.len() as u64,
         }
     }
 }
@@ -38,7 +49,7 @@ pub struct Target {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rule {
     pub id: String,
-    pub host: HostPattern,
+    pub scope: Scope,
     #[serde(default)]
     pub source_app: Option<String>,
     pub target: Target,
@@ -47,17 +58,17 @@ pub struct Rule {
 }
 
 impl Rule {
-    fn specificity(&self) -> u32 {
+    fn specificity(&self) -> u64 {
         let origin = if self.source_app.is_some() {
-            1_000_000
+            1_000_000_000
         } else {
             0
         };
-        origin + self.host.specificity()
+        origin + self.scope.specificity()
     }
 
-    fn applies(&self, host: &str, source_app: Option<&str>) -> bool {
-        if !self.host.matches(host) {
+    fn applies(&self, url: &str, host: &str, source_app: Option<&str>) -> bool {
+        if !self.scope.matches(url, host) {
             return false;
         }
         match (&self.source_app, source_app) {
@@ -75,14 +86,14 @@ pub struct RuleSet {
 }
 
 impl RuleSet {
-    /// Replaces the rule covering the same host and origin instead of appending.
+    /// Replaces the rule covering the same scope and origin instead of appending.
     /// Without this, choosing "always here" a second time for the same site adds
     /// a rule that never wins and the app appears to ignore the request.
     pub fn upsert(&mut self, rule: Rule) {
         match self
             .rules
             .iter_mut()
-            .find(|r| r.host == rule.host && r.source_app == rule.source_app)
+            .find(|r| r.scope == rule.scope && r.source_app == rule.source_app)
         {
             Some(existing) => *existing = rule,
             None => self.rules.push(rule),
@@ -91,11 +102,12 @@ impl RuleSet {
 
     /// `Reverse` on the index keeps the first of equally specific rules: the list
     /// the user ordered is the list that decides, and `max_by_key` would take the last.
-    pub fn resolve(&self, host: &str, source_app: Option<&str>) -> Option<&Rule> {
+    #[must_use]
+    pub fn resolve(&self, url: &str, host: &str, source_app: Option<&str>) -> Option<&Rule> {
         self.rules
             .iter()
             .enumerate()
-            .filter(|(_, r)| r.applies(host, source_app))
+            .filter(|(_, r)| r.applies(url, host, source_app))
             .max_by_key(|(i, r)| (r.specificity(), Reverse(*i)))
             .map(|(_, r)| r)
     }
@@ -103,12 +115,14 @@ impl RuleSet {
 
 #[cfg(test)]
 mod tests {
-    use super::{HostPattern, Rule, RuleSet, Target};
+    use super::{Rule, RuleSet, Scope, Target, site_of};
 
-    fn rule(id: &str, host: HostPattern, source_app: Option<&str>, browser: &str) -> Rule {
+    const URL: &str = "https://github.com/rgdevment/LinkUnbound";
+
+    fn rule(id: &str, scope: Scope, source_app: Option<&str>, browser: &str) -> Rule {
         Rule {
             id: id.to_owned(),
-            host,
+            scope,
             source_app: source_app.map(str::to_owned),
             target: Target {
                 browser_id: browser.to_owned(),
@@ -119,56 +133,104 @@ mod tests {
     }
 
     #[test]
-    fn a_suffix_covers_the_domain_and_every_subdomain() {
-        let p = HostPattern::Suffix("github.com".to_owned());
-        assert!(p.matches("github.com"));
-        assert!(p.matches("gist.github.com"));
-        assert!(!p.matches("notgithub.com"));
-        assert!(!p.matches("github.com.evil.test"));
+    fn a_site_covers_the_domain_and_every_subdomain() {
+        let p = Scope::Site("github.com".to_owned());
+        assert!(p.matches(URL, "github.com"));
+        assert!(p.matches(URL, "gist.github.com"));
+        assert!(!p.matches(URL, "notgithub.com"));
+        assert!(!p.matches(URL, "github.com.evil.test"));
     }
 
     #[test]
-    fn an_exact_host_beats_the_suffix_that_also_covers_it() {
+    fn the_site_of_a_host_is_its_registrable_domain() {
+        assert_eq!(site_of("docs.google.com"), "google.com");
+        assert_eq!(site_of("google.com"), "google.com");
+        assert_eq!(site_of("www.bbc.co.uk"), "bbc.co.uk");
+        assert_eq!(site_of("bbc.co.uk"), "bbc.co.uk");
+        assert_eq!(site_of("a.b.c.github.io"), "c.github.io");
+    }
+
+    #[test]
+    fn an_unrecognised_host_keeps_itself_as_its_site() {
+        assert_eq!(site_of("localhost"), "localhost");
+        assert_eq!(site_of("box.invalid-tld-xyz"), "box.invalid-tld-xyz");
+    }
+
+    #[test]
+    fn an_exact_host_beats_the_site_that_also_covers_it() {
         let set = RuleSet {
-            schema_version: 1,
+            schema_version: 2,
             rules: vec![
                 rule(
                     "wide",
-                    HostPattern::Suffix("github.com".to_owned()),
+                    Scope::Site("github.com".to_owned()),
                     None,
                     "firefox",
                 ),
                 rule(
                     "narrow",
-                    HostPattern::Exact("gist.github.com".to_owned()),
+                    Scope::Host("gist.github.com".to_owned()),
                     None,
                     "chrome",
                 ),
             ],
         };
-        assert_eq!(set.resolve("gist.github.com", None).unwrap().id, "narrow");
-        assert_eq!(set.resolve("github.com", None).unwrap().id, "wide");
+        assert_eq!(
+            set.resolve(URL, "gist.github.com", None).unwrap().id,
+            "narrow"
+        );
+        assert_eq!(set.resolve(URL, "github.com", None).unwrap().id, "wide");
+    }
+
+    #[test]
+    fn one_link_beats_the_host_that_also_covers_it() {
+        let set = RuleSet {
+            schema_version: 2,
+            rules: vec![
+                rule(
+                    "host",
+                    Scope::Host("github.com".to_owned()),
+                    None,
+                    "firefox",
+                ),
+                rule("link", Scope::Url(URL.to_owned()), None, "chrome"),
+            ],
+        };
+        assert_eq!(set.resolve(URL, "github.com", None).unwrap().id, "link");
+        assert_eq!(
+            set.resolve("https://github.com/other", "github.com", None)
+                .unwrap()
+                .id,
+            "host"
+        );
+    }
+
+    #[test]
+    fn a_link_rule_ignores_a_query_it_was_not_saved_with() {
+        let set = RuleSet {
+            schema_version: 2,
+            rules: vec![rule("link", Scope::Url(URL.to_owned()), None, "chrome")],
+        };
+        assert!(
+            set.resolve(&format!("{URL}?tab=readme"), "github.com", None)
+                .is_none()
+        );
     }
 
     #[test]
     fn naming_the_origin_outranks_any_host_precision() {
         let set = RuleSet {
-            schema_version: 1,
+            schema_version: 2,
             rules: vec![
-                rule(
-                    "host",
-                    HostPattern::Exact("github.com".to_owned()),
-                    None,
-                    "firefox",
-                ),
-                rule("origin", HostPattern::Any, Some("slack"), "brave"),
+                rule("link", Scope::Url(URL.to_owned()), None, "firefox"),
+                rule("origin", Scope::Any, Some("slack"), "brave"),
             ],
         };
         assert_eq!(
-            set.resolve("github.com", Some("slack")).unwrap().id,
+            set.resolve(URL, "github.com", Some("slack")).unwrap().id,
             "origin"
         );
-        assert_eq!(set.resolve("github.com", None).unwrap().id, "host");
+        assert_eq!(set.resolve(URL, "github.com", None).unwrap().id, "link");
     }
 
     #[test]
@@ -177,22 +239,40 @@ mod tests {
             schema_version: 2,
             rules: vec![rule(
                 "first",
-                HostPattern::Suffix("github.com".to_owned()),
+                Scope::Site("github.com".to_owned()),
                 None,
                 "firefox",
             )],
         };
         set.upsert(rule(
             "second",
-            HostPattern::Suffix("github.com".to_owned()),
+            Scope::Site("github.com".to_owned()),
             None,
             "chrome",
         ));
         assert_eq!(set.rules.len(), 1);
         assert_eq!(
-            set.resolve("github.com", None).unwrap().target.browser_id,
+            set.resolve(URL, "github.com", None)
+                .unwrap()
+                .target
+                .browser_id,
             "chrome"
         );
+    }
+
+    #[test]
+    fn a_narrower_scope_over_the_same_host_is_a_different_rule() {
+        let mut set = RuleSet {
+            schema_version: 2,
+            rules: vec![rule(
+                "site",
+                Scope::Site("github.com".to_owned()),
+                None,
+                "firefox",
+            )],
+        };
+        set.upsert(rule("link", Scope::Url(URL.to_owned()), None, "chrome"));
+        assert_eq!(set.rules.len(), 2);
     }
 
     #[test]
@@ -201,14 +281,14 @@ mod tests {
             schema_version: 2,
             rules: vec![rule(
                 "anywhere",
-                HostPattern::Suffix("github.com".to_owned()),
+                Scope::Site("github.com".to_owned()),
                 None,
                 "firefox",
             )],
         };
         set.upsert(rule(
             "from-slack",
-            HostPattern::Suffix("github.com".to_owned()),
+            Scope::Site("github.com".to_owned()),
             Some("slack"),
             "brave",
         ));
@@ -218,32 +298,32 @@ mod tests {
     #[test]
     fn equally_specific_rules_are_decided_by_the_order_the_user_sees() {
         let set = RuleSet {
-            schema_version: 1,
+            schema_version: 2,
             rules: vec![
                 rule(
                     "first",
-                    HostPattern::Exact("github.com".to_owned()),
+                    Scope::Host("github.com".to_owned()),
                     None,
                     "firefox",
                 ),
                 rule(
                     "second",
-                    HostPattern::Exact("github.com".to_owned()),
+                    Scope::Host("github.com".to_owned()),
                     None,
                     "chrome",
                 ),
             ],
         };
-        assert_eq!(set.resolve("github.com", None).unwrap().id, "first");
+        assert_eq!(set.resolve(URL, "github.com", None).unwrap().id, "first");
     }
 
     #[test]
     fn a_rule_bound_to_an_origin_never_fires_without_one() {
         let set = RuleSet {
-            schema_version: 1,
-            rules: vec![rule("origin", HostPattern::Any, Some("slack"), "brave")],
+            schema_version: 2,
+            rules: vec![rule("origin", Scope::Any, Some("slack"), "brave")],
         };
-        assert!(set.resolve("github.com", None).is_none());
-        assert!(set.resolve("github.com", Some("SLACK")).is_some());
+        assert!(set.resolve(URL, "github.com", None).is_none());
+        assert!(set.resolve(URL, "github.com", Some("SLACK")).is_some());
     }
 }

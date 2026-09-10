@@ -109,7 +109,7 @@ impl Store {
 mod tests {
     use super::*;
     use crate::config::SCHEMA_VERSION;
-    use crate::rule::{HostPattern, Rule, Target};
+    use crate::rule::{Rule, Scope, Target};
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("linkunbound-store-{name}"));
@@ -120,7 +120,7 @@ mod tests {
     fn a_rule() -> Rule {
         Rule {
             id: "r1".to_owned(),
-            host: HostPattern::Suffix("github.com".to_owned()),
+            scope: Scope::Site("github.com".to_owned()),
             source_app: None,
             target: Target {
                 browser_id: "firefox".to_owned(),
@@ -150,7 +150,10 @@ mod tests {
         let read = store.rules().unwrap();
         assert_eq!(read.rules.len(), 1);
         assert_eq!(read.schema_version, SCHEMA_VERSION);
-        assert!(read.resolve("gist.github.com", None).is_some());
+        assert!(
+            read.resolve("https://gist.github.com/x", "gist.github.com", None)
+                .is_some()
+        );
     }
 
     #[test]

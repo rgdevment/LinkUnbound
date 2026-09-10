@@ -38,6 +38,16 @@ impl Default for Registration {
     }
 }
 
+/// A build tree must never own the registration. Its path disappears as soon as
+/// the tree is cleaned or rebuilt elsewhere, and since `HKCU\Software\Classes`
+/// shadows `HKLM`, the dead ProgId left behind hijacks links from the installed
+/// copy — Store or standalone alike.
+#[must_use]
+pub fn is_build_tree(exe: &str) -> bool {
+    let path = exe.replace('/', "\\").to_ascii_lowercase();
+    path.contains(r"\target\debug\") || path.contains(r"\target\release\")
+}
+
 fn quoted(exe: &str) -> String {
     format!("\"{}\"", exe.replace('/', "\\"))
 }
@@ -138,6 +148,9 @@ impl Registration {
     /// Writes everything Windows needs to offer the app as a browser. It never
     /// makes it the default: only the user can, through `UserChoice`.
     pub fn register(&self, exe: &str) -> Result<(), RegistrationError> {
+        if is_build_tree(exe) {
+            return Err(RegistrationError::BuildTree);
+        }
         self.write_prog_id(exe)?;
         self.write_start_menu(exe)?;
         self.write_capabilities(exe)?;
@@ -311,6 +324,38 @@ mod tests {
             }
         }
         scrub(test_root);
+    }
+
+    #[test]
+    fn a_build_tree_is_refused_and_writes_nothing() {
+        let root = scratch("buildtree");
+        let test_root = root.as_str();
+        scrub(test_root);
+        let reg = Registration::under(test_root);
+
+        let err = reg
+            .register(r"D:\Code\LinkUnbound\target\release\linkunbound.exe")
+            .unwrap_err();
+        assert!(matches!(err, RegistrationError::BuildTree));
+        assert!(!reg.is_registered());
+        assert!(
+            RegKey::predef(HKEY_CURRENT_USER)
+                .open_subkey(format!(r"{test_root}\Classes\{PROG_ID}"))
+                .is_err()
+        );
+        scrub(test_root);
+    }
+
+    #[test]
+    fn an_installed_path_is_not_mistaken_for_a_build_tree() {
+        assert!(!is_build_tree(
+            r"C:\Program Files\LinkUnbound\linkunbound.exe"
+        ));
+        assert!(!is_build_tree(
+            r"C:\Users\x\AppData\Local\LinkUnbound\linkunbound.exe"
+        ));
+        assert!(is_build_tree(r"D:\repo\target\debug\linkunbound.exe"));
+        assert!(is_build_tree("D:/repo/target/release/linkunbound.exe"));
     }
 
     #[test]

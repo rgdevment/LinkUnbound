@@ -6,9 +6,13 @@ mod system;
 
 use std::sync::Mutex;
 
-use linkunbound_core::{Browser, HostPattern, Rule, Store, Target, host_of, normalise};
+use linkunbound_core::{Browser, Rule, Scope, Store, Target, host_of, normalise, site_of};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
+
+const PICKER_WIDTH: f64 = 368.0;
+/// Below this the webview measured before it painted.
+const MIN_HEIGHT: f64 = 80.0;
 
 #[derive(Default)]
 struct Pending {
@@ -20,12 +24,80 @@ struct Pending {
 struct Incoming {
     url: String,
     source_app: Option<String>,
+    host: String,
+    site: String,
+}
+
+impl Incoming {
+    fn new(url: String, source_app: Option<String>) -> Self {
+        let host = host_of(&url).unwrap_or_default();
+        let site = site_of(&host);
+        Self {
+            url,
+            source_app,
+            host,
+            site,
+        }
+    }
+}
+
+/// `Once` writes nothing, which is why it is the state every link starts in.
+#[derive(Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Remember {
+    Once,
+    Url,
+    Host,
+    Site,
+}
+
+impl Remember {
+    fn scope(self, url: &str, host: &str) -> Option<Scope> {
+        match self {
+            Self::Once => None,
+            Self::Url => Some(Scope::Url(url.to_owned())),
+            Self::Host => Some(Scope::Host(host.to_owned())),
+            Self::Site => Some(Scope::Site(site_of(host))),
+        }
+    }
 }
 
 #[derive(Serialize)]
 struct Destinations {
-    browsers: Vec<Browser>,
+    browsers: Vec<Listed>,
     is_default: bool,
+}
+
+/// The icon rides along as a data URI: a handful of 2 kB PNGs costs less than
+/// opening the asset protocol and scoping it.
+#[derive(Serialize)]
+struct Listed {
+    #[serde(flatten)]
+    browser: Browser,
+    icon: Option<String>,
+}
+
+fn icons_dir() -> std::path::PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
+        .join("LinkUnbound")
+        .join("icons")
+}
+
+#[cfg(windows)]
+fn icon_data(exe: &str, id: &str) -> Option<String> {
+    use base64::Engine;
+    let path = linkunbound_win::icon_for(exe, id, &icons_dir())?;
+    let bytes = std::fs::read(path).ok()?;
+    Some(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
+#[cfg(not(windows))]
+fn icon_data(_exe: &str, _id: &str) -> Option<String> {
+    None
 }
 
 fn link_from(args: &[String]) -> Option<String> {
@@ -52,7 +124,13 @@ fn clicked_in() -> Option<String> {
 
 fn destinations() -> Destinations {
     Destinations {
-        browsers: system::browsers(),
+        browsers: system::browsers()
+            .into_iter()
+            .map(|browser| Listed {
+                icon: icon_data(&browser.exe, &browser.id),
+                browser,
+            })
+            .collect(),
         is_default: system::state().is_default,
     }
 }
@@ -67,9 +145,9 @@ fn deliver(app: &AppHandle, url: String) {
     // honoured falls through to the picker rather than opening somewhere else.
     if let Ok(rules) = store().rules()
         && let Some(host) = host_of(&url)
-        && let Some(rule) = rules.resolve(&host, source_app.as_deref())
+        && let Some(rule) = rules.resolve(&url, &host, source_app.as_deref())
         && launch::open(
-            &destinations().browsers,
+            &system::browsers(),
             &rule.target.browser_id,
             rule.target.profile_id.as_deref(),
             rule.private,
@@ -90,10 +168,7 @@ fn deliver(app: &AppHandle, url: String) {
     let Some(window) = app.get_webview_window("picker") else {
         return;
     };
-    let _ = window.emit("link:incoming", Incoming { url, source_app });
-    place::at_cursor(&window);
-    let _ = window.show();
-    let _ = window.set_focus();
+    let _ = window.emit("link:incoming", Incoming::new(url, source_app));
 }
 
 /// Pulled, not pushed: on a cold start `deliver` runs before the webview exists,
@@ -101,10 +176,23 @@ fn deliver(app: &AppHandle, url: String) {
 #[tauri::command]
 fn picker_boot(state: tauri::State<'_, Mutex<Pending>>) -> Option<Incoming> {
     let held = state.lock().ok()?;
-    Some(Incoming {
-        url: held.url.clone()?,
-        source_app: held.source_app.clone(),
-    })
+    Some(Incoming::new(held.url.clone()?, held.source_app.clone()))
+}
+
+/// Sizing before showing is what keeps the picker from appearing at the wrong size.
+#[tauri::command]
+fn picker_fit(app: AppHandle, height: f64) {
+    let Some(window) = app.get_webview_window("picker") else {
+        return;
+    };
+    let width = window.inner_size().map_or(PICKER_WIDTH, |s| {
+        let scale = window.scale_factor().unwrap_or(1.0);
+        f64::from(s.width) / scale
+    });
+    let _ = window.set_size(tauri::LogicalSize::new(width, height.max(MIN_HEIGHT)));
+    place::at_cursor(&window);
+    let _ = window.show();
+    let _ = window.set_focus();
 }
 
 #[tauri::command]
@@ -121,7 +209,7 @@ fn picker_open(
     browser_id: String,
     profile_id: Option<String>,
     private: bool,
-    remember: bool,
+    remember: Remember,
 ) -> Result<(), String> {
     let (url, source_app) = {
         let held = state.lock().map_err(|_| "state is poisoned".to_owned())?;
@@ -134,7 +222,7 @@ fn picker_open(
     };
 
     launch::open(
-        &destinations().browsers,
+        &system::browsers(),
         &browser_id,
         profile_id.as_deref(),
         private,
@@ -142,12 +230,14 @@ fn picker_open(
     )
     .map_err(|e| e.to_string())?;
 
-    if remember && let Some(host) = host_of(&url) {
+    if let Some(host) = host_of(&url)
+        && let Some(scope) = remember.scope(&url, &host)
+    {
         let store = store();
         let mut rules = store.rules().map_err(|e| e.to_string())?;
         rules.upsert(Rule {
-            id: format!("{host}-{browser_id}"),
-            host: HostPattern::Suffix(host),
+            id: format!("{host}-{browser_id}-{}", rules.rules.len()),
+            scope,
             source_app,
             target: Target {
                 browser_id,
@@ -197,6 +287,7 @@ pub fn run() {
         .manage(Mutex::new(Pending::default()))
         .invoke_handler(tauri::generate_handler![
             picker_boot,
+            picker_fit,
             picker_destinations,
             picker_open,
             picker_dismiss,
@@ -232,7 +323,41 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::link_from;
+    use super::{Remember, link_from};
+    use linkunbound_core::Scope;
+
+    const LINK: &str = "https://docs.google.com/document/d/1a9F/edit";
+
+    #[test]
+    fn opening_once_writes_no_rule_at_all() {
+        assert!(Remember::Once.scope(LINK, "docs.google.com").is_none());
+    }
+
+    #[test]
+    fn each_scope_saves_the_reach_its_label_promises() {
+        assert_eq!(
+            Remember::Url.scope(LINK, "docs.google.com"),
+            Some(Scope::Url(LINK.to_owned()))
+        );
+        assert_eq!(
+            Remember::Host.scope(LINK, "docs.google.com"),
+            Some(Scope::Host("docs.google.com".to_owned()))
+        );
+        assert_eq!(
+            Remember::Site.scope(LINK, "docs.google.com"),
+            Some(Scope::Site("google.com".to_owned()))
+        );
+    }
+
+    /// The whole site of a compound suffix is the registrable domain, never the
+    /// suffix: `co.uk` as a rule would answer for every British domain.
+    #[test]
+    fn the_whole_site_never_reaches_past_the_registrable_domain() {
+        assert_eq!(
+            Remember::Site.scope("https://www.bbc.co.uk/news", "www.bbc.co.uk"),
+            Some(Scope::Site("bbc.co.uk".to_owned()))
+        );
+    }
 
     fn args(rest: &[&str]) -> Vec<String> {
         std::iter::once("linkunbound.exe")
@@ -250,6 +375,28 @@ mod tests {
         );
     }
 
+    /// 1.x moved links through a named pipe with a 4096-byte buffer and a real
+    /// Teams link overran it, arriving as truncated JSON that was thrown away.
+    #[test]
+    fn a_link_far_longer_than_four_kilobytes_survives() {
+        let padding = "a".repeat(6000);
+        let long = format!(
+            "https://teams.microsoft.com/l/message/19:meeting@thread.v2?context={padding}&ce=prod"
+        );
+        assert!(long.len() > 6000);
+        assert_eq!(link_from(&args(&[&long])).as_deref(), Some(long.as_str()));
+    }
+
+    #[test]
+    fn a_long_link_still_unwraps_out_of_its_wrapper() {
+        let padding = "b".repeat(5000);
+        let inner = format!("https%3A%2F%2Fgithub.com%2F{padding}");
+        let wrapped = format!("https://eu01.safelinks.protection.outlook.com/?url={inner}&data=05");
+        let out = link_from(&args(&[&wrapped])).expect("should unwrap");
+        assert!(out.starts_with("https://github.com/"));
+        assert!(out.len() > 5000);
+    }
+
     #[test]
     fn switches_never_pass_for_a_link() {
         assert!(link_from(&args(&["--register"])).is_none());
@@ -259,7 +406,8 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn the_destinations_offered_are_real_browsers() {
-        for browser in super::destinations().browsers {
+        for listed in super::destinations().browsers {
+            let browser = listed.browser;
             assert!(!browser.exe.is_empty());
             assert!(!browser.name.to_lowercase().contains("linkunbound"));
             assert!(!browser.name.to_lowercase().contains("internet explorer"));
