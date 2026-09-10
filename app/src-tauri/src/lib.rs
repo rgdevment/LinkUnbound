@@ -1,4 +1,8 @@
 mod launch;
+mod place;
+mod shell;
+mod shortcut;
+mod system;
 
 use std::sync::Mutex;
 
@@ -46,19 +50,10 @@ fn clicked_in() -> Option<String> {
     None
 }
 
-#[cfg(windows)]
 fn destinations() -> Destinations {
     Destinations {
-        browsers: linkunbound_win::installed_browsers(),
-        is_default: linkunbound_win::is_default_browser(),
-    }
-}
-
-#[cfg(not(windows))]
-fn destinations() -> Destinations {
-    Destinations {
-        browsers: Vec::new(),
-        is_default: false,
+        browsers: system::browsers(),
+        is_default: system::state().is_default,
     }
 }
 
@@ -68,7 +63,8 @@ fn deliver(app: &AppHandle, url: String) {
     let source_app = clicked_in();
 
     // A rule that already answers this link means no window at all: the picker
-    // is for the questions nobody has answered yet.
+    // is for the questions nobody has answered yet. A rule that cannot be
+    // honoured falls through to the picker rather than opening somewhere else.
     if let Ok(rules) = store().rules()
         && let Some(host) = host_of(&url)
         && let Some(rule) = rules.resolve(&host, source_app.as_deref())
@@ -95,6 +91,7 @@ fn deliver(app: &AppHandle, url: String) {
         return;
     };
     let _ = window.emit("link:incoming", Incoming { url, source_app });
+    place::at_cursor(&window);
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -161,17 +158,33 @@ fn picker_open(
         store.save_rules(&rules).map_err(|e| e.to_string())?;
     }
 
-    if let Some(window) = app.get_webview_window("picker") {
-        let _ = window.hide();
-    }
+    shell::hide_picker(&app);
     Ok(())
 }
 
 #[tauri::command]
+fn system_state() -> system::SystemState {
+    system::state()
+}
+
+#[tauri::command]
+fn system_set_registered(enabled: bool) -> Result<system::SystemState, String> {
+    system::set_registered(enabled)
+}
+
+#[tauri::command]
+fn system_set_startup(enabled: bool) -> Result<system::SystemState, String> {
+    system::set_starts_with_system(enabled)
+}
+
+#[tauri::command]
 fn picker_dismiss(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("picker") {
-        let _ = window.hide();
-    }
+    shell::hide_picker(&app);
+}
+
+#[tauri::command]
+fn settings_open(app: AppHandle) {
+    shell::open_settings(&app);
 }
 
 pub fn run() {
@@ -186,12 +199,30 @@ pub fn run() {
             picker_boot,
             picker_destinations,
             picker_open,
-            picker_dismiss
+            picker_dismiss,
+            settings_open,
+            system_state,
+            system_set_registered,
+            system_set_startup
         ])
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let args: Vec<String> = std::env::args().collect();
+            system::reconcile();
+
+            if args.iter().any(|a| a == "--register") {
+                app.handle().exit(0);
+                return Ok(());
+            }
+            shell::install_tray(app.handle())?;
+            shortcut::install(app.handle());
+
+            // Launched by the shell for a link: no settings window, just the
+            // picker. Launched on its own: the tray, and nothing on screen.
             if let Some(url) = link_from(&args) {
                 deliver(app.handle(), url);
+            } else if !args.iter().any(|a| a == "--background") {
+                shell::open_settings(app.handle());
             }
             Ok(())
         })

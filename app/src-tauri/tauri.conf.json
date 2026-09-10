@@ -11,6 +11,16 @@
   "app": {
     "windows": [
       {
+        "label": "settings",
+        "title": "LinkUnbound",
+        "width": 780,
+        "height": 560,
+        "minWidth": 640,
+        "minHeight": 480,
+        "resizable": true,
+        "visible": false
+      },
+      {
         "label": "picker",
         "title": "LinkUnbound",
         "width": 520,
@@ -19,7 +29,6 @@
         "decorations": false,
         "transparent": true,
         "shadow": true,
-        "center": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false

@@ -20,6 +20,7 @@ tauri-build = { workspace = true }
 linkunbound-core.workspace = true
 tauri.workspace = true
 tauri-plugin-single-instance.workspace = true
+tauri-plugin-global-shortcut.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

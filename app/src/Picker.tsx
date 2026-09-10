@@ -33,7 +33,7 @@ function hostOf(url: string): string {
   }
 }
 
-export default function App() {
+export default function Picker() {
   const [incoming, setIncoming] = useState<Incoming | null>(null);
   const [rows, setRows] = useState<Destination[]>([]);
   const [remember, setRemember] = useState(false);
@@ -131,7 +131,9 @@ export default function App() {
         ))}
       </div>
 
-      {problem && <p className="px-3 py-2 text-[11px] text-[#F38BA8]">{problem}</p>}
+      {problem && (
+        <p className="px-3 py-2 text-[11px] text-[#F38BA8]">{problem} — elige otro destino.</p>
+      )}
 
       <div className="mt-1.5 flex items-center gap-2 border-t border-[#313244] px-3 py-2.5">
         <input

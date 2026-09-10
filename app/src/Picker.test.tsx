@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import App from "./App";
+import Picker from "./Picker";
 
 const invoke = vi.fn();
 const listen = vi.fn();
@@ -49,7 +49,7 @@ describe("picker", () => {
   });
 
   it("offers one row per profile, not one per browser", async () => {
-    render(<App />);
+    render(<Picker />);
     expect(await screen.findByText("Trabajo")).toBeInTheDocument();
     expect(screen.getByText("Personal")).toBeInTheDocument();
     expect(screen.getAllByText("Chrome")).toHaveLength(2);
@@ -57,13 +57,13 @@ describe("picker", () => {
   });
 
   it("shows the link the backend hands back and where it came from", async () => {
-    render(<App />);
+    render(<Picker />);
     expect(await screen.findByText("gist.github.com")).toBeInTheDocument();
     expect(screen.getByText("slack")).toBeInTheDocument();
   });
 
   it("asks the backend to open the chosen profile, and never sends the url", async () => {
-    render(<App />);
+    render(<Picker />);
     await userEvent.click(await screen.findByText("Trabajo"));
     expect(invoke).toHaveBeenCalledWith("picker_open", {
       browserId: "chrome",
@@ -74,7 +74,7 @@ describe("picker", () => {
   });
 
   it("a browser without profiles opens with no profile", async () => {
-    render(<App />);
+    render(<Picker />);
     await userEvent.click(await screen.findByText("Firefox"));
     expect(invoke).toHaveBeenCalledWith("picker_open", {
       browserId: "firefox",
@@ -85,7 +85,7 @@ describe("picker", () => {
   });
 
   it("passes the remember choice along so the rule gets saved", async () => {
-    render(<App />);
+    render(<Picker />);
     await userEvent.click(await screen.findByRole("checkbox"));
     await userEvent.click(screen.getByText("Firefox"));
     expect(invoke).toHaveBeenCalledWith("picker_open", {
@@ -100,7 +100,7 @@ describe("picker", () => {
     answers({
       picker_open: () => Promise.reject(new Error("the profile Profile 2 is no longer there")),
     });
-    render(<App />);
+    render(<Picker />);
     await userEvent.click(await screen.findByText("Trabajo"));
     expect(await screen.findByText(/no longer there/)).toBeInTheDocument();
   });
