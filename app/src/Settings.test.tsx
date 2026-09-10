@@ -17,6 +17,18 @@ const BASE = {
   startup_is_ours: true,
 };
 
+const PREFS = {
+  prefs: {
+    schema_version: 1,
+    theme: "system",
+    locale: "system",
+    shortcut: "Alt+Shift+L",
+    hide_tray: false,
+    notify_on_rule: true,
+  },
+  shortcut_held: "Alt+Shift+L",
+};
+
 function answers(
   state: Record<string, unknown>,
   overrides: Record<string, () => Promise<unknown>> = {},
@@ -24,6 +36,7 @@ function answers(
   invoke.mockImplementation((cmd: string) => {
     if (cmd in overrides) return overrides[cmd]();
     if (cmd === "rules_list") return Promise.resolve([]);
+    if (cmd === "prefs_get" || cmd === "prefs_set") return Promise.resolve(PREFS);
     return Promise.resolve(state);
   });
 }

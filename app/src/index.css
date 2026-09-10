@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* The theme is a choice, not just what the system reports. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 html,
 body,
 #root {

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import About from "./settings/About";
+import Application from "./settings/Application";
 import Browsers from "./settings/Browsers";
 import Maintenance from "./settings/Maintenance";
 import { Card, Line, Section, Switch } from "./settings/parts";
@@ -121,36 +122,6 @@ function Links({
   );
 }
 
-function AppPage({
-  state,
-  change,
-}: {
-  state: SystemState | null;
-  change: (command: string, enabled: boolean) => void;
-}) {
-  return (
-    <Section title="Inicio">
-      <Card>
-        <Line
-          title="Iniciar con el sistema"
-          note={
-            state?.startup_is_ours === false
-              ? "Gestionado desde Configuración de Windows > Aplicaciones de inicio"
-              : "El primer enlace de cada sesión se abre al instante"
-          }
-        >
-          <Switch
-            on={state?.starts_with_system ?? false}
-            disabled={state?.startup_is_ours === false}
-            label="Iniciar con el sistema"
-            onChange={(next) => change("system_set_startup", next)}
-          />
-        </Line>
-      </Card>
-    </Section>
-  );
-}
-
 export default function Settings() {
   const [page, setPage] = useState<Page>("links");
   const [state, setState] = useState<SystemState | null>(null);
@@ -214,7 +185,13 @@ export default function Settings() {
         {page === "links" && <Links state={state} change={change} />}
         {page === "rules" && <Rules />}
         {page === "browsers" && <Browsers />}
-        {page === "app" && <AppPage state={state} change={change} />}
+        {page === "app" && (
+          <Application
+            startsWithSystem={state?.starts_with_system ?? false}
+            startupIsOurs={state?.startup_is_ours ?? true}
+            onSystem={change}
+          />
+        )}
         {page === "care" && <Maintenance />}
         {page === "about" && <About />}
       </main>

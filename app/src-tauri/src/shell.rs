@@ -25,6 +25,14 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Hiding it is only reachable with a shortcut left; the core refuses the
+/// combination that would strand the user.
+pub fn show_tray<R: Runtime>(app: &AppHandle<R>, visible: bool) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_visible(visible);
+    }
+}
+
 pub fn hide_picker<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(PICKER) {
         let _ = window.hide();

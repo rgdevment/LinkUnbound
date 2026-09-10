@@ -75,6 +75,10 @@ impl Store {
         self.dir.join("rules.json")
     }
 
+    fn prefs_path(&self) -> PathBuf {
+        self.dir.join("preferences.json")
+    }
+
     fn browsers_path(&self) -> PathBuf {
         self.dir.join("browsers.json")
     }
@@ -94,6 +98,26 @@ impl Store {
             source,
         })?;
         save_atomically(&self.rules_path(), &body)
+    }
+
+    /// Falls back to what 1.x left in its own `theme` file, so an upgrade keeps
+    /// the appearance the user had chosen.
+    pub fn prefs(&self) -> crate::Preferences {
+        if let Ok(raw) = fs::read_to_string(self.prefs_path())
+            && let Ok(found) = serde_json::from_str::<crate::Preferences>(&raw)
+        {
+            return found;
+        }
+        let legacy = fs::read_to_string(self.dir.join("theme")).unwrap_or_default();
+        crate::Preferences::default().with_legacy_theme(&legacy)
+    }
+
+    pub fn save_prefs(&self, prefs: &crate::Preferences) -> Result<(), StoreError> {
+        let body = serde_json::to_string_pretty(prefs).map_err(|source| StoreError::Content {
+            path: self.prefs_path(),
+            source: crate::ConfigError::Malformed(source),
+        })?;
+        save_atomically(&self.prefs_path(), &body)
     }
 
     pub fn save_browsers(&self, config: &BrowserConfig) -> Result<(), StoreError> {

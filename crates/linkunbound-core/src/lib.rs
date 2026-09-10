@@ -1,5 +1,6 @@
 mod browser;
 mod config;
+mod prefs;
 mod private;
 mod rule;
 mod store;
@@ -10,6 +11,7 @@ pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,
 };
+pub use prefs::{Locale, Preferences, Theme};
 pub use private::private_flag_for;
 pub use rule::{Rule, RuleSet, Scope, Target, site_of};
 pub use store::{Store, StoreError};

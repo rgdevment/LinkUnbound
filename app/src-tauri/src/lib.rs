@@ -6,13 +6,22 @@ mod system;
 
 use std::sync::Mutex;
 
-use linkunbound_core::{Browser, Rule, Scope, Store, Target, host_of, merge, normalise, site_of};
+use linkunbound_core::{
+    Browser, Preferences, Rule, Scope, Store, Target, host_of, merge, normalise, site_of,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 const PICKER_WIDTH: f64 = 368.0;
 /// Below this the webview measured before it painted.
 const MIN_HEIGHT: f64 = 80.0;
+
+/// The combination actually claimed, which the settings screen needs and only
+/// the registration knows.
+#[derive(Default)]
+struct Held {
+    shortcut: Option<String>,
+}
 
 #[derive(Default)]
 struct Pending {
@@ -446,6 +455,46 @@ fn picker_open(
     Ok(())
 }
 
+/// The shortcut the app really holds, which is not always the one asked for.
+#[derive(Serialize)]
+struct Settings {
+    prefs: Preferences,
+    shortcut_held: Option<String>,
+}
+
+fn claim(app: &AppHandle, prefs: &Preferences) -> Settings {
+    let shortcut_held = shortcut::install(app, prefs.shortcut.as_deref());
+    if let Ok(mut held) = app.state::<Mutex<Held>>().lock() {
+        held.shortcut.clone_from(&shortcut_held);
+    }
+    Settings {
+        prefs: prefs.clone(),
+        shortcut_held,
+    }
+}
+
+/// Reads without touching the registration: the picker asks for this too, and
+/// re-claiming the combination on every link would be gratuitous.
+#[tauri::command]
+fn prefs_get(state: tauri::State<'_, Mutex<Held>>) -> Settings {
+    let prefs = store().prefs();
+    let shortcut_held = state.lock().ok().and_then(|h| h.shortcut.clone());
+    Settings {
+        prefs,
+        shortcut_held,
+    }
+}
+
+#[tauri::command]
+fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
+    if !prefs.reachable() {
+        return Err("con la bandeja oculta y sin atajo no habría forma de volver aquí".to_owned());
+    }
+    store().save_prefs(&prefs).map_err(|e| e.to_string())?;
+    shell::show_tray(&app, !prefs.hide_tray);
+    Ok(claim(&app, &prefs))
+}
+
 #[tauri::command]
 fn system_state() -> system::SystemState {
     system::state()
@@ -482,6 +531,7 @@ pub fn run() {
             }
         }))
         .manage(Mutex::new(Pending::default()))
+        .manage(Mutex::new(Held::default()))
         .invoke_handler(tauri::generate_handler![
             picker_boot,
             picker_fit,
@@ -495,6 +545,8 @@ pub fn run() {
             browsers_add,
             maintenance_rescan,
             maintenance_reset,
+            prefs_get,
+            prefs_set,
             picker_open,
             picker_dismiss,
             settings_open,
@@ -512,7 +564,9 @@ pub fn run() {
                 return Ok(());
             }
             shell::install_tray(app.handle())?;
-            shortcut::install(app.handle());
+            let prefs = store().prefs();
+            claim(app.handle(), &prefs);
+            shell::show_tray(app.handle(), !prefs.hide_tray);
 
             // Launched by the shell for a link: no settings window, just the
             // picker. Launched on its own: the tray, and nothing on screen.
