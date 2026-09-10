@@ -41,11 +41,15 @@ impl Default for Registration {
 /// A build tree must never own the registration. Its path disappears as soon as
 /// the tree is cleaned or rebuilt elsewhere, and since `HKCU\Software\Classes`
 /// shadows `HKLM`, the dead ProgId left behind hijacks links from the installed
-/// copy — Store or standalone alike.
+/// copy — Store or standalone alike. By path component, because `--target`
+/// nests the profile deeper and a custom profile spells neither name.
 #[must_use]
 pub fn is_build_tree(exe: &str) -> bool {
     let path = exe.replace('/', "\\").to_ascii_lowercase();
-    path.contains(r"\target\debug\") || path.contains(r"\target\release\")
+    path.split('\\')
+        .rev()
+        .skip(1)
+        .any(|component| component == "target")
 }
 
 fn quoted(exe: &str) -> String {
@@ -187,10 +191,22 @@ impl Registration {
 
     #[must_use]
     pub fn is_registered(&self) -> bool {
+        let Ok(exe) = std::env::current_exe() else {
+            return false;
+        };
+        self.is_registered_as(&exe.to_string_lossy())
+    }
+
+    #[must_use]
+    pub fn is_registered_as(&self, exe: &str) -> bool {
         Self::hkcu()
             .open_subkey(format!(r"{}\{PROG_ID}\shell\open\command", self.classes()))
             .and_then(|k| k.get_value::<String, _>(""))
-            .is_ok_and(|command| command.to_ascii_lowercase().contains("linkunbound"))
+            .is_ok_and(|command| {
+                command
+                    .to_ascii_lowercase()
+                    .starts_with(&quoted(exe).to_ascii_lowercase())
+            })
     }
 }
 
@@ -277,7 +293,7 @@ mod tests {
             .unwrap();
         assert_eq!(https, PROG_ID);
 
-        assert!(reg.is_registered());
+        assert!(reg.is_registered_as(r"C:\Apps\linkunbound.exe"));
         scrub(test_root);
     }
 
@@ -366,7 +382,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "fails today: is_build_tree only recognises the literal \\target\\debug\\ and \\target\\release\\, so a `cargo build --target` output directory slips through"]
     fn a_target_triple_build_is_still_recognised_as_a_build_tree() {
         assert!(is_build_tree(
             r"D:\repo\target\x86_64-pc-windows-msvc\release\linkunbound.exe"
@@ -377,13 +392,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "fails today: is_build_tree only recognises the debug and release profile names, so a custom profile such as \\target\\dist\\ is not caught"]
     fn a_custom_cargo_profile_is_still_recognised_as_a_build_tree() {
         assert!(is_build_tree(r"D:\repo\target\dist\linkunbound.exe"));
     }
 
     #[test]
-    #[ignore = "fails today: is_registered() accepts any command containing \"linkunbound\", so a different executable whose name embeds ours reads as registered"]
     fn a_different_executable_whose_name_merely_contains_ours_is_not_registered_as_us() {
         let root = scratch("impostor");
         let test_root = root.as_str();

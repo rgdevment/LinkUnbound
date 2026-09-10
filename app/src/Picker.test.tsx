@@ -43,27 +43,10 @@ function answers(overrides: Record<string, () => Promise<unknown>> = {}) {
         source_app: "slack",
         host: "gist.github.com",
         site: "github.com",
+        token: 1,
       });
     return Promise.resolve(null);
   });
-}
-
-type NodeProcess = {
-  on: (event: string, listener: (reason: unknown) => void) => void;
-  off: (event: string, listener: (reason: unknown) => void) => void;
-};
-
-// picker_destinations has no .catch in Picker.tsx (the bug under test), so its
-// rejection is genuinely unhandled; without this it fails the whole test run.
-async function ignoringUnhandledRejections<T>(run: () => Promise<T>): Promise<T> {
-  const proc = (globalThis as unknown as { process?: NodeProcess }).process;
-  const swallow = () => {};
-  proc?.on("unhandledRejection", swallow);
-  try {
-    return await run();
-  } finally {
-    proc?.off("unhandledRejection", swallow);
-  }
 }
 
 describe("picker", () => {
@@ -95,6 +78,7 @@ describe("picker", () => {
       profileId: "Profile 2",
       private: false,
       remember: "once",
+      token: 1,
     });
   });
 
@@ -106,6 +90,7 @@ describe("picker", () => {
       profileId: null,
       private: false,
       remember: "once",
+      token: 1,
     });
   });
 
@@ -118,6 +103,7 @@ describe("picker", () => {
       profileId: null,
       private: false,
       remember: "site",
+      token: 1,
     });
   });
 
@@ -135,6 +121,7 @@ describe("picker", () => {
           source_app: null,
           host: "github.com",
           site: "github.com",
+          token: 1,
         }),
     });
     render(<Picker />);
@@ -153,6 +140,7 @@ describe("picker", () => {
       profileId: "Profile 2",
       private: true,
       remember: "once",
+      token: 1,
     });
   });
 
@@ -189,7 +177,7 @@ describe("picker", () => {
     expect(await screen.findByText(/no longer there/)).toBeInTheDocument();
   });
 
-  it.fails("a shift plus digit chord opens that row in private mode even though shift turns the digit into a symbol", async () => {
+  it("a shift plus digit chord opens that row in private mode even though shift turns the digit into a symbol", async () => {
     render(<Picker />);
     await screen.findByText("Trabajo");
     fireEvent.keyDown(window, { key: "!", code: "Digit1", shiftKey: true });
@@ -198,23 +186,25 @@ describe("picker", () => {
       profileId: "Default",
       private: true,
       remember: "once",
+      token: 1,
     });
   });
 
-  it.fails("the keyboard shortcut honours the private toggle, not just a held shift", async () => {
+  it("the keyboard shortcut honours the private toggle, not just a held shift", async () => {
     render(<Picker />);
     await screen.findByText("Trabajo");
     await userEvent.click(screen.getByRole("button", { name: "Ventana privada" }));
-    fireEvent.keyDown(window, { key: "2" });
+    fireEvent.keyDown(window, { key: "2", code: "Digit2" });
     expect(invoke).toHaveBeenCalledWith("picker_open", {
       browserId: "chrome",
       profileId: "Profile 2",
       private: true,
       remember: "once",
+      token: 1,
     });
   });
 
-  it.fails("the first destination receives focus once it loads, and arrow down moves to the next one", async () => {
+  it("the first destination receives focus once it loads, and arrow down moves to the next one", async () => {
     render(<Picker />);
     await screen.findByText("Trabajo");
     const items = screen.getAllByRole("menuitem");
@@ -223,7 +213,7 @@ describe("picker", () => {
     expect(document.activeElement).toBe(items[1]);
   });
 
-  it.fails("an empty destinations list still shows the picker instead of staying invisible forever", async () => {
+  it("an empty destinations list still shows the picker instead of staying invisible forever", async () => {
     answers({ picker_destinations: () => Promise.resolve({ browsers: [], is_default: true }) });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       height: 90,
@@ -233,14 +223,12 @@ describe("picker", () => {
     expect(invoke).toHaveBeenCalledWith("picker_fit", expect.anything());
   });
 
-  it.fails("a destinations request that fails surfaces a message instead of staying silent", async () => {
+  it("a destinations request that fails surfaces a message instead of staying silent", async () => {
     answers({
       picker_destinations: () => Promise.reject("could not list the installed browsers"),
     });
-    await ignoringUnhandledRejections(async () => {
-      render(<Picker />);
-      expect(await screen.findByText(/could not list the installed browsers/)).toBeInTheDocument();
-    });
+    render(<Picker />);
+    expect(await screen.findByText(/could not list the installed browsers/)).toBeInTheDocument();
   });
 
   it("a second incoming link resets remember and private mode, and asks the window to resize again", async () => {
@@ -268,6 +256,7 @@ describe("picker", () => {
           source_app: null,
           host: "intranet.test",
           site: "intranet.test",
+          token: 1,
         },
       });
     });
@@ -282,7 +271,7 @@ describe("picker", () => {
     expect(invoke).toHaveBeenCalledWith("picker_fit", expect.anything());
   });
 
-  it.fails("the header shows the same host a saved rule would match, without the port the browser also carries", async () => {
+  it("the header shows the same host a saved rule would match, without the port the browser also carries", async () => {
     answers({
       picker_boot: () =>
         Promise.resolve({
@@ -290,6 +279,7 @@ describe("picker", () => {
           source_app: null,
           host: "intranet.test",
           site: "intranet.test",
+          token: 1,
         }),
     });
     render(<Picker />);

@@ -12,7 +12,13 @@ type Browser = {
   icon: string | null;
 };
 type Destinations = { browsers: Browser[]; is_default: boolean };
-type Incoming = { url: string; source_app: string | null; host: string; site: string };
+type Incoming = {
+  url: string;
+  source_app: string | null;
+  host: string;
+  site: string;
+  token: number;
+};
 
 /// One row per destination: a browser without profiles is one row, a browser
 /// with them is one row each, because that is the choice being made.
@@ -28,12 +34,12 @@ function rowsOf(browsers: Browser[]): Destination[] {
   );
 }
 
-function split(url: string): { head: string; tail: string } {
+function trail(url: string): string {
   try {
     const u = new URL(url);
-    return { head: u.host, tail: u.pathname === "/" ? u.search : u.pathname + u.search };
+    return u.pathname === "/" ? u.search : u.pathname + u.search;
   } catch {
-    return { head: url, tail: "" };
+    return "";
   }
 }
 
@@ -86,12 +92,16 @@ export default function Picker() {
   const [problem, setProblem] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [cursor, setCursor] = useState(0);
+  const [ready, setReady] = useState(false);
 
   const frame = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
-    void invoke<Destinations>("picker_destinations").then((d) => setRows(rowsOf(d.browsers)));
+    void invoke<Destinations>("picker_destinations")
+      .then((d) => setRows(rowsOf(d.browsers)))
+      .catch((e: unknown) => setProblem(String(e)))
+      .finally(() => setReady(true));
   }, []);
 
   const arrive = useCallback((next: Incoming) => {
@@ -114,7 +124,7 @@ export default function Picker() {
   }, [arrive]);
 
   useLayoutEffect(() => {
-    if (!frame.current || rows.length === 0) return;
+    if (!frame.current || !ready) return;
     const report = () => {
       const height = frame.current?.getBoundingClientRect().height;
       if (height) void invoke("picker_fit", { height });
@@ -125,29 +135,31 @@ export default function Picker() {
     return () => watch.disconnect();
     // `incoming` is a dependency: a second link with the same row count leaves the
     // height untouched, so the observer alone would never show the window again.
-  }, [rows.length, incoming]);
+  }, [ready, rows.length, incoming]);
 
   useEffect(() => {
     rowRefs.current[cursor]?.focus();
-  }, [cursor]);
+  }, [cursor, rows.length]);
 
   const open = useCallback(
     (row: Destination, isPrivate: boolean) => {
+      if (!incoming) return;
       void invoke("picker_open", {
         browserId: row.browser.id,
         profileId: row.profile?.id ?? null,
         private: isPrivate,
         remember,
+        token: incoming.token,
       }).catch((e: unknown) => setProblem(String(e)));
     },
-    [remember],
+    [remember, incoming],
   );
 
   const host = incoming?.host ?? "";
   const site = incoming?.site ?? "";
   const url = incoming?.url ?? "";
   const from = incoming?.source_app;
-  const { head, tail } = split(url);
+  const tail = trail(url);
 
   // A host that is already its own site would save the very same rule twice.
   const scopes: { id: Remember; label: string; keeps: boolean; dead: boolean }[] = [
@@ -163,18 +175,22 @@ export default function Picker() {
         void invoke("picker_dismiss");
         return;
       }
-      const index = Number.parseInt(e.key, 10) - 1;
-      if (index >= 0 && index < rows.length && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        open(rows[index], e.shiftKey);
+      // `code`, not `key`: with shift held the digit arrives as its symbol.
+      const digit = /^Digit([1-9])$/.exec(e.code);
+      if (digit && !e.repeat && !e.ctrlKey && !e.altKey) {
+        const index = Number(digit[1]) - 1;
+        if (index < rows.length) {
+          e.preventDefault();
+          open(rows[index], priv || e.shiftKey);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [rows, open]);
+  }, [rows, open, priv]);
 
   const onListKey = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && rows.length > 0) {
       e.preventDefault();
       const step = e.key === "ArrowDown" ? 1 : -1;
       setCursor((c) => (c + step + rows.length) % rows.length);
@@ -189,7 +205,7 @@ export default function Picker() {
       <div className="flex items-center gap-2 border-b border-black/[0.08] py-[13px] pr-[11px] pl-[15px] dark:border-white/[0.08]">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="truncate text-[13.5px] leading-[18px]">
-            <b className="font-semibold">{head}</b>
+            <b className="font-semibold">{host || url}</b>
             <span className="text-neutral-400 dark:text-[#646B7C]">{tail}</span>
           </p>
           {from && (

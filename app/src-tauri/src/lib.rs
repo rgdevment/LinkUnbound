@@ -18,6 +18,8 @@ const MIN_HEIGHT: f64 = 80.0;
 struct Pending {
     url: Option<String>,
     source_app: Option<String>,
+    /// Echoed back on pick, so a newer link cannot open in place of the one seen.
+    token: u64,
 }
 
 #[derive(Clone, Serialize)]
@@ -26,10 +28,11 @@ struct Incoming {
     source_app: Option<String>,
     host: String,
     site: String,
+    token: u64,
 }
 
 impl Incoming {
-    fn new(url: String, source_app: Option<String>) -> Self {
+    fn new(url: String, source_app: Option<String>, token: u64) -> Self {
         let host = host_of(&url).unwrap_or_default();
         let site = site_of(&host);
         Self {
@@ -37,6 +40,7 @@ impl Incoming {
             source_app,
             host,
             site,
+            token,
         }
     }
 }
@@ -101,8 +105,11 @@ fn icon_data(_exe: &str, _id: &str) -> Option<String> {
     None
 }
 
+/// The whole tail first: `tauri-plugin-single-instance` joins argv with `|` and
+/// splits on it again, tearing apart any link that carries one.
 fn link_from(args: &[String]) -> Option<String> {
-    args.iter().skip(1).find_map(|arg| normalise(arg))
+    let tail = args[1..].join("|");
+    normalise(&tail).or_else(|| args.iter().skip(1).find_map(|arg| normalise(arg)))
 }
 
 /// Where the 1.x line kept its files, so an upgrade finds them in place.
@@ -159,17 +166,20 @@ fn deliver(app: &AppHandle, url: String) {
         return;
     }
 
+    let token;
     {
         let state = app.state::<Mutex<Pending>>();
         let Ok(mut held) = state.lock() else { return };
         held.url = Some(url.clone());
         held.source_app.clone_from(&source_app);
+        held.token = held.token.wrapping_add(1);
+        token = held.token;
     }
 
     let Some(window) = app.get_webview_window("picker") else {
         return;
     };
-    let _ = window.emit("link:incoming", Incoming::new(url, source_app));
+    let _ = window.emit("link:incoming", Incoming::new(url, source_app, token));
 }
 
 /// Pulled, not pushed: on a cold start `deliver` runs before the webview exists,
@@ -177,7 +187,11 @@ fn deliver(app: &AppHandle, url: String) {
 #[tauri::command]
 fn picker_boot(state: tauri::State<'_, Mutex<Pending>>) -> Option<Incoming> {
     let held = state.lock().ok()?;
-    Some(Incoming::new(held.url.clone()?, held.source_app.clone()))
+    Some(Incoming::new(
+        held.url.clone()?,
+        held.source_app.clone(),
+        held.token,
+    ))
 }
 
 /// Sizing before showing is what keeps the picker from appearing at the wrong size.
@@ -211,15 +225,16 @@ fn picker_open(
     profile_id: Option<String>,
     private: bool,
     remember: Remember,
+    token: u64,
 ) -> Result<(), String> {
-    let (url, source_app) = {
-        let held = state.lock().map_err(|_| "state is poisoned".to_owned())?;
-        (
-            held.url
-                .clone()
-                .ok_or_else(|| "no link pending".to_owned())?,
-            held.source_app.clone(),
-        )
+    let url = {
+        let mut held = state.lock().map_err(|_| "state is poisoned".to_owned())?;
+        if held.token != token {
+            return Err("that link was replaced by a newer one".to_owned());
+        }
+        held.url
+            .take()
+            .ok_or_else(|| "no link pending".to_owned())?
     };
 
     launch::open(
@@ -231,6 +246,9 @@ fn picker_open(
     )
     .map_err(|e| e.to_string())?;
 
+    // Hidden before saving: a failed rule must not read as "pick somewhere else".
+    shell::hide_picker(&app);
+
     if let Some(host) = host_of(&url)
         && let Some(scope) = remember.scope(&url, &host)
     {
@@ -239,7 +257,7 @@ fn picker_open(
         rules.upsert(Rule {
             id: format!("{host}-{browser_id}-{}", rules.rules.len()),
             scope,
-            source_app,
+            source_app: None,
             target: Target {
                 browser_id,
                 profile_id,
@@ -248,8 +266,6 @@ fn picker_open(
         });
         store.save_rules(&rules).map_err(|e| e.to_string())?;
     }
-
-    shell::hide_picker(&app);
     Ok(())
 }
 
@@ -269,7 +285,10 @@ fn system_set_startup(enabled: bool) -> Result<system::SystemState, String> {
 }
 
 #[tauri::command]
-fn picker_dismiss(app: AppHandle) {
+fn picker_dismiss(app: AppHandle, state: tauri::State<'_, Mutex<Pending>>) {
+    if let Ok(mut held) = state.lock() {
+        held.url = None;
+    }
     shell::hide_picker(&app);
 }
 
@@ -408,7 +427,6 @@ mod tests {
     /// `"|"` and splitting it back the same way, so a URL that legitimately
     /// contains a pipe in its path or query arrives as separate argv entries.
     #[test]
-    #[ignore = "fails today: link_from returns the first argv fragment that normalises, so a URL containing a literal | arrives truncated at the pipe"]
     fn a_url_containing_a_pipe_survives_the_single_instance_plugins_windows_split() {
         let whole = "https://intranet.corp/x?f=activo|urgente";
         let fragments: Vec<&str> = whole.split('|').collect();
@@ -417,7 +435,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "fails today: depends on site_of destroying IPv4 literals (crates/linkunbound-core/src/rule.rs), so remembering \"the whole site\" for an IP ends up capturing a different machine"]
     fn remembering_the_whole_site_for_an_ip_never_captures_a_different_machine() {
         let scope = Remember::Site
             .scope("https://192.168.1.50/admin", "192.168.1.50")

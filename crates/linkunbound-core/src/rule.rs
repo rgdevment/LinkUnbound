@@ -2,9 +2,19 @@ use std::cmp::Reverse;
 
 use serde::{Deserialize, Serialize};
 
+/// `psl` would read the last two octets as label plus suffix: `192.168.1.50`
+/// becomes `1.50`, which then matches other machines.
+#[must_use]
+pub fn is_address(host: &str) -> bool {
+    host.starts_with('[') || host.parse::<std::net::IpAddr>().is_ok()
+}
+
 /// Registrable domain; an unknown suffix keeps the host, which matches less rather than more.
 #[must_use]
 pub fn site_of(host: &str) -> String {
+    if is_address(host) {
+        return host.to_ascii_lowercase();
+    }
     psl::domain_str(host).unwrap_or(host).to_ascii_lowercase()
 }
 
@@ -24,7 +34,7 @@ impl Scope {
             Self::Any => true,
             Self::Url(u) => url == u,
             Self::Host(h) => host == h,
-            Self::Site(d) => host == d || host.ends_with(&format!(".{d}")),
+            Self::Site(d) => host == d || host.strip_suffix(d).is_some_and(|p| p.ends_with('.')),
         }
     }
 
@@ -36,6 +46,14 @@ impl Scope {
             Self::Host(h) => 100_000 + h.len() as u64,
             Self::Url(u) => 10_000_000 + u.len() as u64,
         }
+    }
+}
+
+fn same_origin(a: Option<&str>, b: Option<&str>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+        _ => false,
     }
 }
 
@@ -90,11 +108,10 @@ impl RuleSet {
     /// Without this, choosing "always here" a second time for the same site adds
     /// a rule that never wins and the app appears to ignore the request.
     pub fn upsert(&mut self, rule: Rule) {
-        match self
-            .rules
-            .iter_mut()
-            .find(|r| r.scope == rule.scope && r.source_app == rule.source_app)
-        {
+        match self.rules.iter_mut().find(|r| {
+            r.scope == rule.scope
+                && same_origin(r.source_app.as_deref(), rule.source_app.as_deref())
+        }) {
             Some(existing) => *existing = rule,
             None => self.rules.push(rule),
         }
@@ -328,7 +345,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "fails today: site_of pipes an IPv4 literal through psl::domain_str, which treats the last two octets as label+suffix"]
     fn an_ip_v4_literal_keeps_itself_as_its_site() {
         assert_eq!(site_of("192.168.1.50"), "192.168.1.50");
         assert_eq!(site_of("10.0.1.50"), "10.0.1.50");
@@ -347,7 +363,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "fails today: site_of destroys IPv4 literals (see an_ip_v4_literal_keeps_itself_as_its_site), so a Site scope built from one machine's IP is short enough to also match a different machine"]
     fn a_site_rule_built_from_one_machines_ip_never_matches_a_different_machine() {
         let scope = Scope::Site(site_of("192.168.1.50"));
         assert!(scope.matches("https://192.168.1.50/admin", "192.168.1.50"));
@@ -355,7 +370,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "fails today: RuleSet::upsert compares source_app with `==`, so replacing a rule migrated from 1.x as \"Slack\" with one saved as \"slack\" appends a duplicate instead of replacing it"]
     fn upserting_a_rule_replaces_one_saved_for_the_same_origin_in_a_different_case() {
         let mut set = RuleSet {
             schema_version: 2,
