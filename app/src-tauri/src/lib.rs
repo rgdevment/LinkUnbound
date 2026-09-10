@@ -102,7 +102,7 @@ fn icons_dir() -> std::path::PathBuf {
 #[cfg(windows)]
 fn icon_data(exe: &str, id: &str) -> Option<String> {
     use base64::Engine;
-    let path = linkunbound_win::icon_for(exe, id, &icons_dir())?;
+    let path = linkunbound_win::icon_for(exe, id, &icons_dir(), linkunbound_shell::ICON_SIDE)?;
     let bytes = std::fs::read(path).ok()?;
     Some(format!(
         "data:image/png;base64,{}",

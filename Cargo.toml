@@ -12,6 +12,16 @@ publish = false
 [workspace.dependencies]
 linkunbound-core = { path = "crates/linkunbound-core" }
 linkunbound-win = { path = "crates/linkunbound-win" }
+linkunbound-shell = { path = "crates/linkunbound-shell" }
+slint = { version = "1.17", default-features = false, features = [
+  "compat-1-2",
+  "backend-winit",
+  "renderer-software",
+  "std",
+] }
+slint-build = "1.17"
+tray-icon = "0.21"
+muda = "0.18"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-build = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"

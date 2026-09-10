@@ -1,0 +1,20 @@
+[package]
+name = "linkunbound-shell"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+linkunbound-core.workspace = true
+slint.workspace = true
+
+[target."cfg(windows)".dependencies]
+linkunbound-win.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true

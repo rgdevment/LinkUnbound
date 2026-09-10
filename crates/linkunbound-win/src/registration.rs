@@ -210,6 +210,16 @@ impl Registration {
     }
 }
 
+/// The taskbar paints itself light or dark independently of the app theme, and
+/// it never recolours a tray icon: the right one has to be handed over.
+#[must_use]
+pub fn taskbar_is_light() -> bool {
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        .and_then(|k| k.get_value::<u32, _>("SystemUsesLightTheme"))
+        .is_ok_and(|v| v == 1)
+}
+
 /// Matches exactly, never by substring: a third-party ProgId embedding our name
 /// would otherwise read as ours.
 #[must_use]

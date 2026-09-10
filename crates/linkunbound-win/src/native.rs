@@ -9,7 +9,7 @@ use std::path::Path;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, MAX_PATH};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits,
-    GetObjectW, ReleaseDC,
+    GetObjectW, HBITMAP, ReleaseDC,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
@@ -74,31 +74,24 @@ pub fn source_app() -> Option<String> {
     (!stem.is_empty()).then_some(stem)
 }
 
-/// The pixels behind a file's icon, as RGBA. Windows hands them back bottom-up
-/// and in BGRA, so both are undone here rather than by every caller.
-fn icon_pixels(icon: HICON) -> Option<(u32, u32, Vec<u8>)> {
-    let mut info = ICONINFO::default();
-    unsafe { GetIconInfo(icon, &mut info) }.ok()?;
-
-    let colour = info.hbmColor;
+/// The pixels behind a bitmap, as RGBA. Windows hands them back bottom-up and
+/// in BGRA, so both are undone here rather than by every caller.
+fn bitmap_pixels(handle: HBITMAP) -> Option<(u32, u32, Vec<u8>)> {
     let mut bitmap = BITMAP::default();
     let wrote = unsafe {
         GetObjectW(
-            colour.into(),
+            handle.into(),
             i32::try_from(size_of::<BITMAP>()).ok()?,
             Some(std::ptr::from_mut(&mut bitmap).cast()),
         )
     };
     if wrote == 0 || bitmap.bmWidth <= 0 || bitmap.bmHeight <= 0 {
-        unsafe {
-            let _ = DeleteObject(colour.into());
-            let _ = DeleteObject(info.hbmMask.into());
-        }
         return None;
     }
 
     let width = u32::try_from(bitmap.bmWidth).ok()?;
     let height = u32::try_from(bitmap.bmHeight).ok()?;
+    let count = width.checked_mul(height)?.checked_mul(4)?;
     let mut header = BITMAPINFO {
         bmiHeader: BITMAPINFOHEADER {
             biSize: u32::try_from(size_of::<BITMAPINFOHEADER>()).ok()?,
@@ -113,12 +106,15 @@ fn icon_pixels(icon: HICON) -> Option<(u32, u32, Vec<u8>)> {
         ..Default::default()
     };
 
-    let mut pixels = vec![0u8; (width * height * 4) as usize];
+    let mut pixels = vec![0u8; count as usize];
     let screen = unsafe { GetDC(None) };
+    if screen.is_invalid() {
+        return None;
+    }
     let rows = unsafe {
         GetDIBits(
             screen,
-            colour,
+            handle,
             0,
             height,
             Some(pixels.as_mut_ptr().cast()),
@@ -128,8 +124,6 @@ fn icon_pixels(icon: HICON) -> Option<(u32, u32, Vec<u8>)> {
     };
     unsafe {
         ReleaseDC(None, screen);
-        let _ = DeleteObject(colour.into());
-        let _ = DeleteObject(info.hbmMask.into());
     }
     if rows == 0 {
         return None;
@@ -142,10 +136,60 @@ fn icon_pixels(icon: HICON) -> Option<(u32, u32, Vec<u8>)> {
     Some((width, height, pixels))
 }
 
-/// The icon Explorer shows for this file, as RGBA pixels. `None` when the path
-/// is unreachable or carries no icon — a network drive, a stripped binary.
+fn icon_pixels(icon: HICON) -> Option<(u32, u32, Vec<u8>)> {
+    let mut info = ICONINFO::default();
+    unsafe { GetIconInfo(icon, &mut info) }.ok()?;
+    let pixels = bitmap_pixels(info.hbmColor);
+    unsafe {
+        let _ = DeleteObject(info.hbmColor.into());
+        let _ = DeleteObject(info.hbmMask.into());
+    }
+    pixels
+}
+
+/// Asks the shell for the icon at a chosen size, which reaches the high
+/// resolution variants inside the executable. `SHGetFileInfoW` only ever returns
+/// the 32 px one, and shrinking that into a list row loses the detail.
+fn shell_image(path: &Path, side: i32) -> Option<(u32, u32, Vec<u8>)> {
+    use windows::Win32::Foundation::SIZE;
+    use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
+    use windows::Win32::UI::Shell::{
+        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
+    };
+
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    wide.push(0);
+
+    unsafe {
+        let started = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
+        let factory: Option<IShellItemImageFactory> =
+            SHCreateItemFromParsingName(windows::core::PCWSTR(wide.as_ptr()), None).ok();
+        let out = factory
+            .and_then(|f| {
+                f.GetImage(SIZE { cx: side, cy: side }, SIIGBF_BIGGERSIZEOK)
+                    .ok()
+            })
+            .and_then(|handle| {
+                let pixels = bitmap_pixels(handle);
+                let _ = DeleteObject(handle.into());
+                pixels
+            });
+        if started {
+            CoUninitialize();
+        }
+        out
+    }
+}
+
+/// The icon Explorer shows for this file, at the side asked for, as RGBA pixels.
+/// `None` when the path is unreachable or carries no icon — a network drive, a
+/// stripped binary.
 #[must_use]
-pub fn file_icon(path: &Path) -> Option<(u32, u32, Vec<u8>)> {
+pub fn file_icon(path: &Path, side: i32) -> Option<(u32, u32, Vec<u8>)> {
+    if let Some(found) = shell_image(path, side) {
+        return Some(found);
+    }
+
     let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
     wide.push(0);
 

@@ -2,13 +2,12 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Picker window: receive the incoming link and dismiss itself.",
-  "windows": ["picker"],
+  "windows": [
+    "picker"
+  ],
   "permissions": [
     "core:default",
     "core:event:allow-listen",
-    "core:event:allow-unlisten",
-    "core:window:allow-hide",
-    "core:window:allow-show",
-    "core:window:allow-set-focus"
+    "core:event:allow-unlisten"
   ]
 }

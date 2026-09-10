@@ -3,15 +3,21 @@ use std::path::{Path, PathBuf};
 
 use crate::native::file_icon;
 
-/// Extraction touches the shell and the GDI, so a click must not pay for it twice.
+/// Extraction touches the shell and the GDI, so a click must not pay for it
+/// twice. The side rides in the name: asking for a different one has to miss the
+/// cache, or the picker would scale yesterday's size and lose its edges. And a
+/// browser that updated gets read again, or its icon stays wrong for good.
 #[must_use]
-pub fn cached_or_extract(exe: &str, id: &str, dir: &Path) -> Option<PathBuf> {
-    let target = dir.join(format!("{id}.png"));
-    if target.exists() {
-        return Some(target);
+pub fn cached_or_extract(exe: &str, id: &str, dir: &Path, side: u32) -> Option<PathBuf> {
+    let target = dir.join(format!("{id}-{side}.png"));
+    let source = fs::metadata(exe).and_then(|m| m.modified()).ok();
+    match (fs::metadata(&target).and_then(|m| m.modified()), source) {
+        (Ok(cached), Some(built)) if cached >= built => return Some(target),
+        (Ok(_), None) => return Some(target),
+        _ => {}
     }
 
-    let (width, height, pixels) = file_icon(Path::new(exe))?;
+    let (width, height, pixels) = file_icon(Path::new(exe), i32::try_from(side).ok()?)?;
     fs::create_dir_all(dir).ok()?;
 
     let staging = target.with_extension("tmp");
@@ -40,7 +46,7 @@ mod tests {
     #[test]
     fn an_executable_that_is_not_there_yields_nothing() {
         let dir = scratch("missing");
-        assert!(cached_or_extract(r"C:\nope\ghost.exe", "ghost", &dir).is_none());
+        assert!(cached_or_extract(r"C:\nope\ghost.exe", "ghost", &dir, 24).is_none());
     }
 
     #[test]
@@ -51,7 +57,7 @@ mod tests {
             return;
         }
 
-        let first = cached_or_extract(explorer, "explorer", &dir).expect("should extract");
+        let first = cached_or_extract(explorer, "explorer", &dir, 24).expect("should extract");
         assert!(first.exists());
         assert_eq!(first.extension().unwrap(), "png");
 
@@ -59,7 +65,8 @@ mod tests {
         assert_eq!(&bytes[1..4], b"PNG");
         assert!(bytes.len() > 200);
 
-        let again = cached_or_extract(explorer, "explorer", &dir).expect("should hit the cache");
+        let again =
+            cached_or_extract(explorer, "explorer", &dir, 24).expect("should hit the cache");
         assert_eq!(first, again);
 
         let leftovers: Vec<_> = fs::read_dir(&dir)
@@ -85,7 +92,7 @@ mod probe {
         let dir = std::env::temp_dir().join("linkunbound-icons-probe");
         let _ = std::fs::remove_dir_all(&dir);
         for browser in installed_browsers() {
-            match cached_or_extract(&browser.exe, &browser.id, &dir) {
+            match cached_or_extract(&browser.exe, &browser.id, &dir, 24) {
                 Some(path) => {
                     let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
                     println!("{:<34} {} bytes", browser.name, bytes);

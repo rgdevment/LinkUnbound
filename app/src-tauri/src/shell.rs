@@ -81,6 +81,23 @@ pub fn hide_picker<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// The taskbar never recolours what it is given, so both variants ship and the
+/// right one is chosen. A tray icon is a silhouette, not the app icon shrunk.
+#[cfg(windows)]
+fn tray_icon() -> Option<tauri::image::Image<'static>> {
+    let bytes: &[u8] = if linkunbound_win::taskbar_is_light() {
+        include_bytes!("../icons/tray-light-32.png")
+    } else {
+        include_bytes!("../icons/tray-dark-32.png")
+    };
+    tauri::image::Image::from_bytes(bytes).ok()
+}
+
+#[cfg(not(windows))]
+fn tray_icon() -> Option<tauri::image::Image<'static>> {
+    None
+}
+
 /// The tray is the only proof the app is running: it lives in the background
 /// with no window of its own, so without it there is no way to reach settings
 /// or to tell it is alive at all.
@@ -91,9 +108,13 @@ pub fn install_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&settings, &separator, &quit])?;
 
     TrayIconBuilder::with_id("main")
-        .icon(app.default_window_icon().cloned().ok_or_else(|| {
-            tauri::Error::AssetNotFound("the bundled window icon is missing".to_owned())
-        })?)
+        .icon(
+            tray_icon()
+                .or_else(|| app.default_window_icon().cloned())
+                .ok_or_else(|| {
+                    tauri::Error::AssetNotFound("the bundled tray icon is missing".to_owned())
+                })?,
+        )
         .tooltip("LinkUnbound")
         .menu(&menu)
         .show_menu_on_left_click(false)

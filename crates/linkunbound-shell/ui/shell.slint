@@ -1,0 +1,391 @@
+struct Destination {
+    key: string,
+    name: string,
+    profile: string,
+    icon: image,
+    can-private: bool,
+}
+
+struct Reach {
+    label: string,
+    keeps: bool,
+    dead: bool,
+}
+
+global Palette {
+    in property <bool> light: false;
+
+    out property <brush> ground: light ? #FFFFFF : #191A1F;
+    out property <brush> ink: light ? #16181D : #F0F1F4;
+    out property <brush> dim: light ? #676D7C : #8B92A1;
+    out property <brush> dimmer: light ? #9298A6 : #646B7C;
+    out property <brush> line: light ? #00000014 : #ffffff14;
+    out property <brush> hover: light ? #0000000b : #ffffff12;
+    out property <brush> chip: light ? #0000000e : #ffffff10;
+    out property <brush> key-bg: light ? #00000010 : #ffffff14;
+    out property <brush> key-ink: light ? #6C7280 : #A2A9B8;
+    out property <brush> accent: light ? #2F62D8 : #6E9BFF;
+    out property <brush> accent-soft: light ? #2F62D821 : #6E9BFF2b;
+    out property <brush> neutral: light ? #00000017 : #ffffff1c;
+    out property <brush> neutral-ink: light ? #3A3F4B : #D6DAE3;
+    out property <brush> edge: light ? #0000001f : #ffffff1a;
+}
+
+component Row inherits Rectangle {
+    in property <Destination> entry;
+    in property <bool> private-wanted;
+    in property <float> icon-side;
+    callback chosen(bool);
+
+    height: 42px;
+    border-radius: 7px;
+    background: touch.has-hover ? Palette.hover : transparent;
+    // A browser with no private switch cannot honour the intent, and saying so
+    // beforehand beats refusing after the click.
+    opacity: root.private-wanted && !root.entry.can-private ? 0.45 : 1.0;
+
+    touch := TouchArea {
+        enabled: !(root.private-wanted && !root.entry.can-private);
+        clicked => { root.chosen(root.private-wanted); }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 11px;
+
+        Rectangle {
+            width: 22px;
+            height: 22px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 4px;
+            background: Palette.key-bg;
+            Text {
+                text: root.entry.key;
+                font-size: 12px;
+                color: Palette.key-ink;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: 100%;
+                height: 100%;
+            }
+        }
+
+        Image {
+            source: root.entry.icon;
+            width: root.icon-side * 1px;
+            height: root.icon-side * 1px;
+            y: (parent.height - self.height) / 2;
+            image-fit: contain;
+            image-rendering: smooth;
+        }
+
+        Text {
+            text: root.entry.name;
+            font-size: 14.5px;
+            color: Palette.ink;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        if root.entry.profile != "": Rectangle {
+            horizontal-stretch: 0;
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 4px;
+            background: Palette.chip;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                Text {
+                    text: root.entry.profile;
+                    font-size: 12px;
+                    color: Palette.dim;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+component Segment inherits Rectangle {
+    in property <Reach> reach;
+    in property <bool> active;
+    callback picked();
+
+    height: 28px;
+    border-radius: 6px;
+    opacity: root.reach.dead ? 0.4 : 1.0;
+    background: root.active
+        ? (root.reach.keeps ? Palette.accent-soft : Palette.neutral)
+        : (touch.has-hover ? Palette.hover : Palette.chip);
+
+    touch := TouchArea {
+        enabled: !root.reach.dead;
+        clicked => { root.picked(); }
+    }
+
+    Text {
+        text: root.reach.label;
+        font-size: 12px;
+        color: root.active ? (root.reach.keeps ? Palette.accent : Palette.neutral-ink) : Palette.dim;
+        font-weight: root.active ? 700 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+        overflow: elide;
+    }
+}
+
+component IconButton inherits Rectangle {
+    in property <bool> lit;
+    callback pressed();
+
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    background: root.lit
+        ? Palette.accent-soft
+        : (touch.has-hover ? Palette.hover : transparent);
+
+    touch := TouchArea {
+        clicked => { root.pressed(); }
+    }
+}
+
+export component Picker inherits Window {
+    in property <float> icon-side: 24;
+    in property <string> host;
+    in property <string> trail;
+    in property <string> source;
+    in property <[Destination]> rows;
+    in property <[Reach]> reaches;
+    in property <string> problem;
+    in-out property <int> reach-index: 0;
+    in-out property <bool> private-on: false;
+    in-out property <bool> pinned-private: false;
+    in-out property <bool> copied: false;
+
+    callback open(int, bool);
+    callback dismissed();
+    callback copy();
+
+    title: "LinkUnbound";
+    no-frame: true;
+    background: transparent;
+    width: 368px;
+    height: root.wanted-height;
+    default-font-family: "Segoe UI";
+    forward-focus: keys;
+
+    out property <length> wanted-height:
+        66px + 1px
+        + (root.rows.length * 42px) + 16px
+        + 1px + 38px + 28px + 12px
+        + (root.problem == "" ? 0px : 36px);
+
+    keys := FocusScope {
+        // Shift is a held intent, not a toggle: it has to light the icon while
+        // it is down so the effect is visible before committing to a row.
+        key-pressed(event) => {
+            root.private-on = event.modifiers.shift || root.pinned-private;
+            if (event.text == Key.Escape) {
+                root.dismissed();
+                return accept;
+            }
+            if (event.text >= "1" && event.text <= "9") {
+                root.open(event.text.to-float() - 1, root.private-on);
+                return accept;
+            }
+            return reject;
+        }
+        key-released(event) => {
+            root.private-on = event.modifiers.shift || root.pinned-private;
+            return reject;
+        }
+
+        Rectangle {
+            border-radius: 10px;
+            background: Palette.ground;
+            border-width: 1px;
+            border-color: Palette.edge;
+
+            VerticalLayout {
+                Rectangle {
+                    height: 66px;
+                    HorizontalLayout {
+                        padding-left: 15px;
+                        padding-right: 11px;
+                        spacing: 8px;
+                        alignment: stretch;
+
+                        VerticalLayout {
+                            spacing: 4px;
+                            alignment: center;
+                            HorizontalLayout {
+                                alignment: start;
+                                Text {
+                                    text: root.host;
+                                    font-size: 14.5px;
+                                    font-weight: 700;
+                                    color: Palette.ink;
+                                }
+                                Text {
+                                    text: root.trail;
+                                    font-size: 14.5px;
+                                    color: Palette.dimmer;
+                                    overflow: elide;
+                                }
+                            }
+                            if root.source != "": Text {
+                                text: "Desde " + root.source;
+                                font-size: 12px;
+                                color: Palette.dim;
+                            }
+                        }
+
+                        copy-button := IconButton {
+                            y: (parent.height - self.height) / 2;
+                            lit: root.copied;
+                            pressed => { root.copy(); }
+                            // Drawn rather than typed: the glyphs for these live
+                            // in an icon font that is not guaranteed to be there.
+                            Path {
+                                x: 8px;
+                                y: 8px;
+                                width: 14px;
+                                height: 14px;
+                                viewbox-width: 24;
+                                viewbox-height: 24;
+                                stroke: root.copied ? Palette.accent : Palette.dim;
+                                stroke-width: 1.9px;
+                                commands: root.copied
+                                    ? "M 5 13 L 10 18 L 19 6"
+                                    : "M 9 9 L 19 9 L 19 21 L 9 21 Z M 5 15 L 5 5 L 15 5";
+                            }
+                        }
+
+                        mask-button := IconButton {
+                            y: (parent.height - self.height) / 2;
+                            lit: root.private-on;
+                            pressed => { root.pinned-private = !root.pinned-private; root.private-on = root.pinned-private; }
+                            // Composed rather than a path: Slint does not resolve
+                            // elliptical arcs in a commands string.
+                            Rectangle {
+                                x: 7px;
+                                y: 13px;
+                                width: 16px;
+                                height: 2px;
+                                border-radius: 1px;
+                                background: root.private-on ? Palette.accent : Palette.dim;
+                            }
+                            Rectangle {
+                                x: 8px;
+                                y: 15px;
+                                width: 7px;
+                                height: 6px;
+                                border-radius: 3px;
+                                background: root.private-on ? Palette.accent : Palette.dim;
+                            }
+                            Rectangle {
+                                x: 15px;
+                                y: 15px;
+                                width: 7px;
+                                height: 6px;
+                                border-radius: 3px;
+                                background: root.private-on ? Palette.accent : Palette.dim;
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Palette.line; }
+
+                VerticalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    padding-top: 7px;
+                    padding-bottom: 7px;
+                    for item[i] in root.rows: Row {
+                        entry: item;
+                        icon-side: root.icon-side;
+                        private-wanted: root.private-on;
+                        chosen(private) => { root.open(i, private); }
+                    }
+                }
+
+                if root.problem != "": Rectangle {
+                    height: 36px;
+                    HorizontalLayout {
+                        padding-left: 15px;
+                        padding-right: 15px;
+                        Text {
+                            text: root.problem;
+                            font-size: 11.5px;
+                            color: #FF8A85;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Palette.line; }
+
+                Rectangle {
+                    height: 38px;
+                    HorizontalLayout {
+                        padding-left: 15px;
+                        padding-right: 15px;
+                        alignment: space-between;
+                        Text {
+                            text: "Recordar esta elección";
+                            font-size: 12.5px;
+                            color: Palette.dimmer;
+                            vertical-alignment: center;
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            alignment: end;
+                            Rectangle {
+                                width: 24px;
+                                height: 20px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: 4px;
+                                background: root.private-on ? Palette.accent-soft : Palette.key-bg;
+                                Text {
+                                    text: "⇧";
+                                    font-size: 13px;
+                                    color: root.private-on ? Palette.accent : Palette.key-ink;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: 100%;
+                                    height: 100%;
+                                }
+                            }
+                            Text {
+                                text: "privada";
+                                font-size: 12.5px;
+                                color: root.private-on ? Palette.accent : Palette.dimmer;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-left: 15px;
+                    padding-right: 15px;
+                    padding-bottom: 12px;
+                    spacing: 4px;
+                    for item[i] in root.reaches: Segment {
+                        reach: item;
+                        active: i == root.reach-index;
+                        picked => { root.reach-index = i; }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -10,14 +10,14 @@ mod registration;
 mod startup;
 
 #[cfg(windows)]
-pub use detect::{chromium_profiles, installed_browsers};
+pub use detect::installed_browsers;
 #[cfg(windows)]
 pub use icons::cached_or_extract as icon_for;
 #[cfg(windows)]
 pub use native::{notify_associations_changed, source_app};
 #[cfg(windows)]
 pub use registration::{
-    PROG_ID, Registration, association_report, is_build_tree, is_default_browser, prog_id_is_ours,
+    Registration, association_report, is_build_tree, is_default_browser, taskbar_is_light,
 };
 #[cfg(windows)]
 pub use startup::{Startup, set as set_startup, state as startup_state};
