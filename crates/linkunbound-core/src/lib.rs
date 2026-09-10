@@ -5,7 +5,7 @@ mod rule;
 mod store;
 mod url;
 
-pub use browser::{Browser, LaunchRefused, Profile};
+pub use browser::{Browser, LaunchRefused, Profile, merge};
 pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,

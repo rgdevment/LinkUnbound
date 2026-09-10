@@ -27,6 +27,37 @@ pub struct Browser {
     /// Declared at detection, never guessed: browsers treat an unknown switch as a URL.
     #[serde(default)]
     pub private_flag: Option<String>,
+    /// Added by hand, so the registry cannot confirm or refresh it.
+    #[serde(default)]
+    pub custom: bool,
+    /// Kept out of the picker without being forgotten.
+    #[serde(default)]
+    pub hidden: bool,
+}
+
+/// What the registry finds is the truth about paths and profiles; what the user
+/// saved is the truth about order, hiding and their own entries. A saved entry
+/// that detection no longer sees was uninstalled and goes.
+#[must_use]
+pub fn merge(detected: Vec<Browser>, saved: &[Browser]) -> Vec<Browser> {
+    let mut out: Vec<Browser> = Vec::with_capacity(detected.len() + saved.len());
+    for kept in saved {
+        if kept.custom {
+            out.push(kept.clone());
+        } else if let Some(found) = detected.iter().find(|d| d.id == kept.id) {
+            out.push(Browser {
+                hidden: kept.hidden,
+                extra_args: kept.extra_args.clone(),
+                ..found.clone()
+            });
+        }
+    }
+    for found in detected {
+        if !out.iter().any(|b| b.id == found.id) {
+            out.push(found);
+        }
+    }
+    out
 }
 
 impl Browser {
@@ -85,6 +116,8 @@ mod tests {
             }],
             private_flag: Some("--incognito".to_owned()),
             extra_args: Vec::new(),
+            custom: false,
+            hidden: false,
         }
     }
 
@@ -96,6 +129,8 @@ mod tests {
             profiles: Vec::new(),
             private_flag: None,
             extra_args: Vec::new(),
+            custom: false,
+            hidden: false,
         }
     }
 
@@ -136,5 +171,74 @@ mod tests {
             .launch(None, false, "https://example.test")
             .unwrap();
         assert_eq!(args, ["https://example.test"]);
+    }
+}
+
+#[cfg(test)]
+mod merging {
+    use super::{Browser, merge};
+
+    fn browser(id: &str, exe: &str) -> Browser {
+        Browser {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            exe: exe.to_owned(),
+            profiles: Vec::new(),
+            extra_args: Vec::new(),
+            private_flag: None,
+            custom: false,
+            hidden: false,
+        }
+    }
+
+    /// An update moves the executable, so a saved path must never win.
+    #[test]
+    fn detection_decides_the_path_and_the_saved_entry_decides_the_rest() {
+        let detected = vec![browser("chrome", "C:/New/chrome.exe")];
+        let saved = vec![Browser {
+            hidden: true,
+            extra_args: vec!["--foo".to_owned()],
+            ..browser("chrome", "C:/Old/chrome.exe")
+        }];
+        let out = merge(detected, &saved);
+        assert_eq!(out[0].exe, "C:/New/chrome.exe");
+        assert!(out[0].hidden);
+        assert_eq!(out[0].extra_args, ["--foo"]);
+    }
+
+    #[test]
+    fn a_browser_added_by_hand_survives_without_the_registry() {
+        let mine = Browser {
+            custom: true,
+            ..browser("mine", "C:/Apps/odd.exe")
+        };
+        let out = merge(Vec::new(), &[mine]);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].custom);
+    }
+
+    #[test]
+    fn a_detected_browser_that_vanished_is_dropped() {
+        let out = merge(Vec::new(), &[browser("gone", "C:/Gone/x.exe")]);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn something_newly_installed_shows_up_at_the_end() {
+        let saved = vec![browser("chrome", "C:/C/chrome.exe")];
+        let detected = vec![
+            browser("firefox", "C:/F/firefox.exe"),
+            browser("chrome", "C:/C/chrome.exe"),
+        ];
+        let ids: Vec<String> = merge(detected, &saved).into_iter().map(|b| b.id).collect();
+        assert_eq!(ids, ["chrome", "firefox"]);
+    }
+
+    #[test]
+    fn the_saved_order_is_the_order_that_comes_back() {
+        let saved = vec![browser("b", "C:/b.exe"), browser("a", "C:/a.exe")];
+        let detected = vec![browser("a", "C:/a.exe"), browser("b", "C:/b.exe")];
+        let ids: Vec<String> = merge(detected, &saved).into_iter().map(|b| b.id).collect();
+        assert_eq!(ids, ["b", "a"]);
     }
 }

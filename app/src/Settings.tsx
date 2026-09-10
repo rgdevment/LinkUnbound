@@ -1,5 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import About from "./settings/About";
+import Browsers from "./settings/Browsers";
+import Maintenance from "./settings/Maintenance";
 import { Card, Line, Section, Switch } from "./settings/parts";
 import Rules from "./settings/Rules";
 
@@ -12,7 +15,7 @@ type SystemState = {
   startup_is_ours: boolean;
 };
 
-type Page = "links" | "rules" | "browsers" | "app" | "about";
+type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
 
 const PAGES: { id: Page; label: string; icon: React.ReactNode }[] = [
   {
@@ -43,6 +46,16 @@ const PAGES: { id: Page; label: string; icon: React.ReactNode }[] = [
       <>
         <circle cx="12" cy="12" r="3" />
         <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2" />
+      </>
+    ),
+  },
+  {
+    id: "care",
+    label: "Mantenimiento",
+    icon: (
+      <>
+        <path d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 0 1-4-4z" />
+        <path d="M17.5 3.5 21 7" />
       </>
     ),
   },
@@ -200,12 +213,10 @@ export default function Settings() {
         )}
         {page === "links" && <Links state={state} change={change} />}
         {page === "rules" && <Rules />}
+        {page === "browsers" && <Browsers />}
         {page === "app" && <AppPage state={state} change={change} />}
-        {(page === "browsers" || page === "about") && (
-          <p className="text-[12.5px] text-neutral-500 dark:text-[#8B92A1]">
-            Todavía no está construida.
-          </p>
-        )}
+        {page === "care" && <Maintenance />}
+        {page === "about" && <About />}
       </main>
     </div>
   );

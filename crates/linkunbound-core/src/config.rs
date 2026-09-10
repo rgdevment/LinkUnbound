@@ -45,6 +45,8 @@ struct LegacyBrowser {
     extra_args: Vec<String>,
     #[serde(default, rename = "privateArgs")]
     private_args: Option<Vec<String>>,
+    #[serde(default, rename = "isCustom")]
+    is_custom: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -130,6 +132,8 @@ pub fn read_browsers(raw: &str) -> Result<BrowserConfig, ConfigError> {
                     |a| a.into_iter().next(),
                 ),
                 exe: b.executable_path,
+                custom: b.is_custom,
+                hidden: false,
                 extra_args: b.extra_args,
             })
             .collect(),

@@ -48,6 +48,8 @@ mod tests {
             }],
             private_flag: Some("--incognito".to_owned()),
             extra_args: Vec::new(),
+            custom: false,
+            hidden: false,
         }]
     }
 

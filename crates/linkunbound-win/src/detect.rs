@@ -70,6 +70,8 @@ fn read_entry(root: &RegKey, key_name: &str) -> Option<Browser> {
         profiles: chromium_profiles(&exe),
         exe,
         extra_args: Vec::new(),
+        custom: false,
+        hidden: false,
     })
 }
 

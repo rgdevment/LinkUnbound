@@ -6,7 +6,7 @@ mod system;
 
 use std::sync::Mutex;
 
-use linkunbound_core::{Browser, Rule, Scope, Store, Target, host_of, normalise, site_of};
+use linkunbound_core::{Browser, Rule, Scope, Store, Target, host_of, merge, normalise, site_of};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -130,10 +130,17 @@ fn clicked_in() -> Option<String> {
     None
 }
 
+/// Detection plus what the user saved, which is the only place the two meet.
+fn catalogue() -> Vec<Browser> {
+    let saved = store().browsers().map(|c| c.browsers).unwrap_or_default();
+    merge(system::browsers(), &saved)
+}
+
 fn destinations() -> Destinations {
     Destinations {
-        browsers: system::browsers()
+        browsers: catalogue()
             .into_iter()
+            .filter(|b| !b.hidden)
             .map(|browser| Listed {
                 icon: icon_data(&browser.exe, &browser.id),
                 browser,
@@ -155,7 +162,7 @@ fn deliver(app: &AppHandle, url: String) {
         && let Some(host) = host_of(&url)
         && let Some(rule) = rules.resolve(&url, &host, source_app.as_deref())
         && launch::open(
-            &system::browsers(),
+            &catalogue(),
             &rule.target.browser_id,
             rule.target.profile_id.as_deref(),
             rule.private,
@@ -253,7 +260,7 @@ fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
 
 #[tauri::command]
 fn rules_list() -> Result<Vec<RuleView>, String> {
-    let browsers = system::browsers();
+    let browsers = catalogue();
     Ok(store()
         .rules()
         .map_err(|e| e.to_string())?
@@ -279,6 +286,105 @@ fn rules_reorder(ids: Vec<String>) -> Result<Vec<RuleView>, String> {
     rules.reorder(&ids);
     store.save_rules(&rules).map_err(|e| e.to_string())?;
     rules_list()
+}
+
+#[derive(Serialize)]
+struct BrowserView {
+    id: String,
+    name: String,
+    exe: String,
+    profiles: usize,
+    private: bool,
+    custom: bool,
+    hidden: bool,
+    icon: Option<String>,
+}
+
+fn seen(browser: &Browser) -> BrowserView {
+    BrowserView {
+        profiles: browser.profiles.len(),
+        private: browser.private_flag.is_some(),
+        icon: icon_data(&browser.exe, &browser.id),
+        id: browser.id.clone(),
+        name: browser.name.clone(),
+        exe: browser.exe.clone(),
+        custom: browser.custom,
+        hidden: browser.hidden,
+    }
+}
+
+#[tauri::command]
+fn browsers_list() -> Vec<BrowserView> {
+    catalogue().iter().map(seen).collect()
+}
+
+/// Saves the merged catalogue, which is what turns a detected browser into a
+/// saved one the moment the user first touches it.
+fn keep(browsers: Vec<Browser>) -> Result<Vec<BrowserView>, String> {
+    let store = store();
+    let mut config = store.browsers().unwrap_or_default();
+    config.browsers = browsers;
+    store.save_browsers(&config).map_err(|e| e.to_string())?;
+    Ok(browsers_list())
+}
+
+#[tauri::command]
+fn browsers_set_hidden(id: String, hidden: bool) -> Result<Vec<BrowserView>, String> {
+    let mut all = catalogue();
+    let Some(found) = all.iter_mut().find(|b| b.id == id) else {
+        return Err("that browser is no longer installed".to_owned());
+    };
+    found.hidden = hidden;
+    keep(all)
+}
+
+#[tauri::command]
+fn browsers_remove(id: String) -> Result<Vec<BrowserView>, String> {
+    let mut all = catalogue();
+    if !all.iter().any(|b| b.id == id && b.custom) {
+        return Err("only a browser you added can be removed".to_owned());
+    }
+    all.retain(|b| b.id != id);
+    keep(all)
+}
+
+#[tauri::command]
+fn browsers_add(name: String, exe: String, args: Vec<String>) -> Result<Vec<BrowserView>, String> {
+    if !std::path::Path::new(&exe).is_file() {
+        return Err("there is no program at that path".to_owned());
+    }
+    let mut all = catalogue();
+    let id = format!("custom-{}", all.iter().filter(|b| b.custom).count() + 1);
+    all.push(Browser {
+        id,
+        name,
+        exe,
+        profiles: Vec::new(),
+        extra_args: args,
+        private_flag: None,
+        custom: true,
+        hidden: false,
+    });
+    keep(all)
+}
+
+/// Everything the app decided on its own goes; what the user chose stays.
+#[tauri::command]
+fn maintenance_rescan() -> Result<Vec<BrowserView>, String> {
+    let mut all = catalogue();
+    all.retain(|b| b.custom);
+    keep(all)
+}
+
+#[tauri::command]
+fn maintenance_reset() -> Result<(), String> {
+    let store = store();
+    store
+        .save_rules(&linkunbound_core::RuleSet::default())
+        .map_err(|e| e.to_string())?;
+    store
+        .save_browsers(&Default::default())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -309,7 +415,7 @@ fn picker_open(
     };
 
     launch::open(
-        &system::browsers(),
+        &catalogue(),
         &browser_id,
         profile_id.as_deref(),
         private,
@@ -383,6 +489,12 @@ pub fn run() {
             rules_list,
             rules_remove,
             rules_reorder,
+            browsers_list,
+            browsers_set_hidden,
+            browsers_remove,
+            browsers_add,
+            maintenance_rescan,
+            maintenance_reset,
             picker_open,
             picker_dismiss,
             settings_open,

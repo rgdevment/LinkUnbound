@@ -1,0 +1,61 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import Maintenance from "./Maintenance";
+
+const invoke = vi.fn();
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
+
+describe("maintenance", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockResolvedValue(null);
+  });
+
+  /// Everything on this screen destroys something, so no button may act on the
+  /// first click.
+  it("asks before wiping the configuration, and says what is lost", async () => {
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Restablecer" }));
+    expect(invoke).not.toHaveBeenCalled();
+    expect(await screen.findByText(/No se puede deshacer/)).toBeInTheDocument();
+  });
+
+  it("does nothing when the question is dismissed", async () => {
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Restablecer" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("wipes the configuration once confirmed", async () => {
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Restablecer" }));
+    const ask = await screen.findByRole("alertdialog", { name: "Restablecer la configuración" });
+    await userEvent.click(within(ask).getByRole("button", { name: "Restablecer" }));
+    expect(invoke).toHaveBeenCalledWith("maintenance_reset", {});
+  });
+
+  it("explains that a rescan keeps what the user added by hand", async () => {
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(await screen.findByText(/añadiste a mano se conservan/)).toBeInTheDocument();
+  });
+
+  it("unregisters through the same command the links screen uses", async () => {
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    const ask = await screen.findByRole("alertdialog");
+    await userEvent.click(within(ask).getByRole("button", { name: "Quitar" }));
+    expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: false });
+  });
+
+  it("surfaces a refusal instead of claiming it worked", async () => {
+    invoke.mockRejectedValue("the registry refused the write");
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Restablecer" }));
+    const ask = await screen.findByRole("alertdialog");
+    await userEvent.click(within(ask).getByRole("button", { name: "Restablecer" }));
+    expect(await screen.findByText(/registry refused/)).toBeInTheDocument();
+  });
+});
