@@ -23,50 +23,60 @@ function answers(
 ) {
   invoke.mockImplementation((cmd: string) => {
     if (cmd in overrides) return overrides[cmd]();
+    if (cmd === "rules_list") return Promise.resolve([]);
     return Promise.resolve(state);
   });
 }
 
-describe("ajustes", () => {
+async function go(section: string) {
+  await userEvent.click(await screen.findByRole("button", { name: section }));
+}
+
+describe("settings", () => {
   beforeEach(() => {
     invoke.mockReset();
     answers(BASE);
   });
 
-  it("dice que Windows abre los enlaces cuando de verdad los abre", async () => {
+  it("says the links arrive here when they really do", async () => {
     render(<Settings />);
-    expect(await screen.findByText(/Windows abre los enlaces/)).toBeInTheDocument();
+    expect(await screen.findByText(/recibe los enlaces/)).toBeInTheDocument();
   });
 
-  it("explica que el cambio se hace en Windows cuando otro tiene los enlaces", async () => {
+  it("points at Windows when another browser holds the links", async () => {
     answers({ ...BASE, is_default: false });
     render(<Settings />);
     expect(await screen.findByText(/Aplicaciones predeterminadas/)).toBeInTheDocument();
   });
 
-  it("deja desactivar el registro", async () => {
+  it("lets the registration be turned off", async () => {
     render(<Settings />);
-    const toggles = await screen.findAllByRole("switch");
-    await userEvent.click(toggles[0]);
+    await userEvent.click(await screen.findByRole("switch", { name: "Ofrecerse como navegador" }));
     expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: false });
   });
 
-  /// Reactivarlo desde aquí no funcionaría: el interruptor tiene que decirlo en
-  /// vez de fingir que la orden se aceptó.
-  it("bloquea el arranque cuando lo desactivaron desde fuera, y lo explica", async () => {
+  /// Turning it back on from here would not work, so the switch has to say so
+  /// rather than pretend the order was accepted.
+  it("blocks startup when something outside disabled it, and explains why", async () => {
     answers({ ...BASE, starts_with_system: false, startup_is_ours: false });
     render(<Settings />);
-    expect(await screen.findByText(/Administrador de tareas/)).toBeInTheDocument();
-    const toggles = screen.getAllByRole("switch");
-    expect(toggles[1]).toBeDisabled();
+    await go("Aplicación");
+    expect(await screen.findByText(/Aplicaciones de inicio/)).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Iniciar con el sistema" })).toBeDisabled();
   });
 
-  it("muestra el motivo cuando el sistema rechaza el cambio", async () => {
+  it("shows the reason when the system refuses the change", async () => {
     answers(BASE, {
       system_set_registered: () => Promise.reject("the registry refused the write"),
     });
     render(<Settings />);
-    await userEvent.click((await screen.findAllByRole("switch"))[0]);
+    await userEvent.click(await screen.findByRole("switch", { name: "Ofrecerse como navegador" }));
     expect(await screen.findByText(/registry refused/)).toBeInTheDocument();
+  });
+
+  it("opens on the links section, not on a blank pane", async () => {
+    render(<Settings />);
+    expect(await screen.findByRole("heading", { name: "Enlaces" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enlaces" })).toHaveAttribute("aria-current", "page");
   });
 });

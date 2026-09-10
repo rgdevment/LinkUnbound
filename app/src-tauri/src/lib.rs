@@ -210,6 +210,77 @@ fn picker_fit(app: AppHandle, height: f64) {
     let _ = window.set_focus();
 }
 
+/// The rule as the settings window shows it: what it covers, where it opens and
+/// whether the browser it names is still installed.
+#[derive(Serialize)]
+struct RuleView {
+    id: String,
+    kind: &'static str,
+    covers: String,
+    browser: String,
+    profile: Option<String>,
+    icon: Option<String>,
+    private: bool,
+    source_app: Option<String>,
+    resolved: bool,
+}
+
+fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
+    let found = browsers.iter().find(|b| b.id == rule.target.browser_id);
+    let profile = rule.target.profile_id.as_ref().and_then(|id| {
+        found
+            .and_then(|b| b.profiles.iter().find(|p| &p.id == id))
+            .map(|p| p.name.clone())
+    });
+    let (kind, covers) = match &rule.scope {
+        Scope::Any => ("any", String::new()),
+        Scope::Url(u) => ("url", u.clone()),
+        Scope::Host(h) => ("host", h.clone()),
+        Scope::Site(d) => ("site", d.clone()),
+    };
+    RuleView {
+        id: rule.id.clone(),
+        kind,
+        covers,
+        browser: found.map_or_else(|| rule.target.browser_id.clone(), |b| b.name.clone()),
+        profile,
+        icon: found.and_then(|b| icon_data(&b.exe, &b.id)),
+        private: rule.private,
+        source_app: rule.source_app.clone(),
+        resolved: found.is_some(),
+    }
+}
+
+#[tauri::command]
+fn rules_list() -> Result<Vec<RuleView>, String> {
+    let browsers = system::browsers();
+    Ok(store()
+        .rules()
+        .map_err(|e| e.to_string())?
+        .rules
+        .iter()
+        .map(|r| describe(r, &browsers))
+        .collect())
+}
+
+#[tauri::command]
+fn rules_remove(id: String) -> Result<Vec<RuleView>, String> {
+    let store = store();
+    let mut rules = store.rules().map_err(|e| e.to_string())?;
+    rules.remove(&id);
+    store.save_rules(&rules).map_err(|e| e.to_string())?;
+    rules_list()
+}
+
+#[tauri::command]
+fn rules_reorder(ids: Vec<String>) -> Result<Vec<RuleView>, String> {
+    let store = store();
+    let mut rules = store.rules().map_err(|e| e.to_string())?;
+    rules.reorder(&ids);
+    store.save_rules(&rules).map_err(|e| e.to_string())?;
+    rules_list()
+}
+
 #[tauri::command]
 fn picker_destinations() -> Destinations {
     destinations()
@@ -309,6 +380,9 @@ pub fn run() {
             picker_boot,
             picker_fit,
             picker_destinations,
+            rules_list,
+            rules_remove,
+            rules_reorder,
             picker_open,
             picker_dismiss,
             settings_open,

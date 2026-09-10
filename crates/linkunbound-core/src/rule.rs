@@ -76,6 +76,21 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// What `upsert` already treats as the same rule, so the id cannot name two.
+    #[must_use]
+    pub fn identity(&self) -> String {
+        let scope = match &self.scope {
+            Scope::Any => "any".to_owned(),
+            Scope::Url(u) => format!("url:{u}"),
+            Scope::Host(h) => format!("host:{h}"),
+            Scope::Site(d) => format!("site:{d}"),
+        };
+        match &self.source_app {
+            Some(app) => format!("{scope}@{}", app.to_ascii_lowercase()),
+            None => scope,
+        }
+    }
+
     fn specificity(&self) -> u64 {
         let origin = if self.source_app.is_some() {
             1_000_000_000
@@ -107,7 +122,8 @@ impl RuleSet {
     /// Replaces the rule covering the same scope and origin instead of appending.
     /// Without this, choosing "always here" a second time for the same site adds
     /// a rule that never wins and the app appears to ignore the request.
-    pub fn upsert(&mut self, rule: Rule) {
+    pub fn upsert(&mut self, mut rule: Rule) {
+        rule.id = rule.identity();
         match self.rules.iter_mut().find(|r| {
             r.scope == rule.scope
                 && same_origin(r.source_app.as_deref(), rule.source_app.as_deref())
@@ -115,6 +131,25 @@ impl RuleSet {
             Some(existing) => *existing = rule,
             None => self.rules.push(rule),
         }
+    }
+
+    /// The order the user sees is the order that decides, so moving a rule is
+    /// how a tie gets broken.
+    pub fn remove(&mut self, id: &str) -> bool {
+        let before = self.rules.len();
+        self.rules.retain(|r| r.id != id);
+        before != self.rules.len()
+    }
+
+    pub fn reorder(&mut self, ids: &[String]) {
+        let mut moved: Vec<Rule> = Vec::with_capacity(self.rules.len());
+        for id in ids {
+            if let Some(at) = self.rules.iter().position(|r| &r.id == id) {
+                moved.push(self.rules.remove(at));
+            }
+        }
+        moved.append(&mut self.rules);
+        self.rules = moved;
     }
 
     /// `Reverse` on the index keeps the first of equally specific rules: the list
@@ -332,6 +367,90 @@ mod tests {
             ],
         };
         assert_eq!(set.resolve(URL, "github.com", None).unwrap().id, "first");
+    }
+
+    #[test]
+    fn two_rules_that_upsert_would_merge_cannot_hold_different_ids() {
+        let a = rule(
+            "x",
+            Scope::Site("github.com".to_owned()),
+            Some("Slack"),
+            "chrome",
+        );
+        let b = rule(
+            "y",
+            Scope::Site("github.com".to_owned()),
+            Some("slack"),
+            "firefox",
+        );
+        assert_eq!(a.identity(), b.identity());
+
+        let c = rule("z", Scope::Host("github.com".to_owned()), None, "chrome");
+        assert_ne!(a.identity(), c.identity());
+    }
+
+    #[test]
+    fn saving_a_rule_names_it_after_what_it_covers() {
+        let mut set = RuleSet::default();
+        set.upsert(rule(
+            "ignored",
+            Scope::Site("github.com".to_owned()),
+            None,
+            "chrome",
+        ));
+        assert_eq!(set.rules[0].id, "site:github.com");
+    }
+
+    #[test]
+    fn removing_a_rule_takes_only_that_one() {
+        let mut set = RuleSet::default();
+        set.upsert(rule(
+            "a",
+            Scope::Site("github.com".to_owned()),
+            None,
+            "chrome",
+        ));
+        set.upsert(rule("b", Scope::Url(URL.to_owned()), None, "firefox"));
+        assert!(set.remove("site:github.com"));
+        assert!(!set.remove("site:github.com"));
+        assert_eq!(set.rules.len(), 1);
+    }
+
+    /// Between equally specific rules the first wins, so reordering is the only
+    /// way the user can change which one answers.
+    #[test]
+    fn reordering_decides_which_of_two_equal_rules_answers() {
+        let mut set = RuleSet::default();
+        set.upsert(rule(
+            "a",
+            Scope::Host("github.com".to_owned()),
+            None,
+            "firefox",
+        ));
+        set.upsert(rule(
+            "b",
+            Scope::Host("github.com".to_owned()),
+            Some("slack"),
+            "chrome",
+        ));
+        let ids: Vec<String> = set.rules.iter().rev().map(|r| r.id.clone()).collect();
+        set.reorder(&ids);
+        assert_eq!(set.rules[0].target.browser_id, "chrome");
+    }
+
+    /// An id the caller no longer has must not drop the rule it names.
+    #[test]
+    fn reordering_with_a_stale_id_keeps_every_rule() {
+        let mut set = RuleSet::default();
+        set.upsert(rule(
+            "a",
+            Scope::Site("github.com".to_owned()),
+            None,
+            "chrome",
+        ));
+        set.upsert(rule("b", Scope::Url(URL.to_owned()), None, "firefox"));
+        set.reorder(&["site:github.com".to_owned(), "gone".to_owned()]);
+        assert_eq!(set.rules.len(), 2);
     }
 
     #[test]
