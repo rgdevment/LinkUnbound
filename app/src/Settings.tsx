@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { type Key, type Language, Speaking, spoken, useWords } from "./i18n";
 import About from "./settings/About";
 import Application from "./settings/Application";
 import Browsers from "./settings/Browsers";
@@ -19,23 +20,19 @@ type SystemState = {
   edge_installed: boolean;
 };
 
-const AILMENT: Partial<Record<Health, { what: string; fix: string | null }>> = {
-  stale: {
-    what: "El registro apunta a una copia de LinkUnbound que ya no está ahí. Los enlaces no llegarán hasta repararlo.",
-    fix: "Reparar",
-  },
-  build_tree: {
-    what: "Estás ejecutando una copia recién compilada. Windows no puede confiar los enlaces a una ruta que desaparece al limpiar el proyecto.",
-    fix: null,
-  },
+type Spoken = { language: string };
+
+const AILMENT: Partial<Record<Health, { what: Key; fix: Key | null }>> = {
+  stale: { what: "healthStale", fix: "healthRepair" },
+  build_tree: { what: "healthBuildTree", fix: null },
 };
 
 type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
 
-const PAGES: { id: Page; label: string; icon: React.ReactNode }[] = [
+const PAGES: { id: Page; label: Key; icon: React.ReactNode }[] = [
   {
     id: "links",
-    label: "Enlaces",
+    label: "navLinks",
     icon: (
       <>
         <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
@@ -43,10 +40,10 @@ const PAGES: { id: Page; label: string; icon: React.ReactNode }[] = [
       </>
     ),
   },
-  { id: "rules", label: "Reglas", icon: <path d="M4 6h16M4 12h11M4 18h7" /> },
+  { id: "rules", label: "navRules", icon: <path d="M4 6h16M4 12h11M4 18h7" /> },
   {
     id: "browsers",
-    label: "Navegadores",
+    label: "navBrowsers",
     icon: (
       <>
         <circle cx="12" cy="12" r="9" />
@@ -56,7 +53,7 @@ const PAGES: { id: Page; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: "app",
-    label: "Aplicación",
+    label: "navApp",
     icon: (
       <>
         <circle cx="12" cy="12" r="3" />
@@ -66,7 +63,7 @@ const PAGES: { id: Page; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: "care",
-    label: "Mantenimiento",
+    label: "navCare",
     icon: (
       <>
         <path d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 0 1-4-4z" />
@@ -76,7 +73,7 @@ const PAGES: { id: Page; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: "about",
-    label: "Acerca de",
+    label: "navAbout",
     icon: (
       <>
         <circle cx="12" cy="12" r="9" />
@@ -95,6 +92,7 @@ function Links({
   change: (command: string, enabled: boolean) => void;
   run: (command: string) => void;
 }) {
+  const t = useWords();
   const held = state?.associations.filter((a) => a.held).length ?? 0;
   const total = state?.associations.length ?? 0;
   const ok = state?.is_default ?? false;
@@ -105,58 +103,50 @@ function Links({
       {ailment && (
         <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
           <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">
-            LinkUnbound no está recibiendo los enlaces
+            {t("healthTitle")}
           </p>
-          <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">{ailment.what}</p>
+          <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
+            {t(ailment.what)}
+          </p>
           {ailment.fix && (
             <button
               type="button"
               onClick={() => run("system_repair")}
               className="mt-2.5 rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
             >
-              {ailment.fix}
+              {t(ailment.fix)}
             </button>
           )}
         </div>
       )}
-      <Section title="Navegador predeterminado">
+      <Section title={t("sectionDefault")}>
         <div className="flex items-center gap-2 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3 py-2.5 text-[11.5px] dark:border-white/[0.08] dark:bg-white/[0.02]">
           <span
             className={`h-[7px] w-[7px] shrink-0 rounded-full ${ok ? "bg-[#1E7A52] dark:bg-[#4CC38A]" : "bg-[#A85B14] dark:bg-[#E9A05C]"}`}
           />
-          <span className="flex-1">
-            {ok
-              ? "LinkUnbound recibe los enlaces de este equipo"
-              : "Windows todavía no envía los enlaces aquí"}
-          </span>
+          <span className="flex-1">{ok ? t("defaultYes") : t("defaultNo")}</span>
           <span className="text-neutral-500 dark:text-[#8B92A1]">
-            {held} de {total} asociaciones
+            {t("associations", String(held), String(total))}
           </span>
         </div>
         <Card>
-          <Line
-            title="Ofrecerse como navegador"
-            note="Aparece en la lista de Windows para que puedas elegirlo"
-          >
+          <Line title={t("offerTitle")} note={t("offerNote")}>
             <Switch
               on={state?.registered ?? false}
-              label="Ofrecerse como navegador"
+              label={t("offerTitle")}
               onChange={(next) => change("system_set_registered", next)}
             />
           </Line>
         </Card>
         {!ok && (
           <Card>
-            <Line
-              title="Elegir LinkUnbound en Windows"
-              note="Solo tú puedes fijar el predeterminado, y se hace en el panel del sistema"
-            >
+            <Line title={t("chooseTitle")} note={t("chooseNote")}>
               <button
                 type="button"
                 onClick={() => run("system_open_default_apps")}
                 className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
               >
-                Abrir Windows
+                {t("chooseGo")}
               </button>
             </Line>
           </Card>
@@ -164,19 +154,10 @@ function Links({
       </Section>
 
       {state?.edge_installed && (
-        <Section title="Por qué Teams y Outlook abren Edge">
+        <Section title={t("edgeTitle")}>
           <div className="rounded-lg border border-black/[0.08] bg-black/[0.015] p-3.5 text-[11.5px] leading-relaxed text-neutral-600 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-[#98A0B4]">
-            <p>
-              Algunas aplicaciones de Microsoft no abren los enlaces como lo haría cualquier otra:
-              se los pasan directamente a Edge por un canal propio, saltándose el navegador
-              predeterminado del sistema. Windows 11 ya no permite que otra aplicación se ponga en
-              medio de ese canal, así que no hay nada que LinkUnbound pueda hacer para
-              interceptarlo.
-            </p>
-            <p className="mt-2">
-              Lo que sí hace: cuando uno de esos enlaces llega envuelto en un enlace protegido,
-              LinkUnbound lo desenvuelve y te ofrece el destino real en lugar del intermediario.
-            </p>
+            <p>{t("edgeBody")}</p>
+            <p className="mt-2">{t("edgeRelief")}</p>
           </div>
         </Section>
       )}
@@ -185,6 +166,23 @@ function Links({
 }
 
 export default function Settings() {
+  const [language, setLanguage] = useState<Language>("es");
+
+  useEffect(() => {
+    void invoke<Spoken>("prefs_get")
+      .then(({ language }) => setLanguage(spoken(language)))
+      .catch(noop);
+  }, []);
+
+  return (
+    <Speaking value={language}>
+      <Shell onLanguage={setLanguage} />
+    </Speaking>
+  );
+}
+
+function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
+  const t = useWords();
   const [page, setPage] = useState<Page>("links");
   const [state, setState] = useState<SystemState | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -212,7 +210,7 @@ export default function Settings() {
   return (
     <div className="flex h-full bg-white text-[#16181D] dark:bg-[#191A1F] dark:text-[#F0F1F4]">
       <nav
-        aria-label="Secciones"
+        aria-label={t("navLabel")}
         className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-black/[0.08] bg-black/[0.02] p-2 dark:border-white/[0.08] dark:bg-white/[0.02]"
       >
         {PAGES.map((p) => (
@@ -238,16 +236,18 @@ export default function Settings() {
             >
               {p.icon}
             </svg>
-            {p.label}
+            {t(p.label)}
           </button>
         ))}
         <span className="mt-auto px-2.5 py-2 text-[10.5px] text-neutral-400 dark:text-[#646B7C]">
-          Versión 2.0.0
+          {t("version", "2.0.0")}
         </span>
       </nav>
 
       <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
-        <h1 className="text-[15px] font-semibold">{PAGES.find((p) => p.id === page)?.label}</h1>
+        <h1 className="text-[15px] font-semibold">
+          {t(PAGES.find((p) => p.id === page)?.label ?? "navLinks")}
+        </h1>
         {problem && (
           <p className="rounded-md bg-[#C0362F]/10 px-3 py-2 text-[11.5px] text-[#C0362F] dark:bg-[#FF8A85]/10 dark:text-[#FF8A85]">
             {problem}
@@ -261,6 +261,7 @@ export default function Settings() {
             startsWithSystem={state?.starts_with_system ?? false}
             startupIsOurs={state?.startup_is_ours ?? true}
             onSystem={change}
+            onLanguage={onLanguage}
           />
         )}
         {page === "care" && <Maintenance />}

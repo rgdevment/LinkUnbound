@@ -2,6 +2,7 @@
 
 //! `cargo run -p linkunbound-shell --example preview`
 
+use linkunbound_core::Language;
 use linkunbound_shell::{Listed, Picker, dress};
 use slint::ComponentHandle;
 
@@ -46,6 +47,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let window = Picker::new()?;
     dress(
         &window,
+        &Language::Spanish.strings(),
         "https://docs.google.com/document/d/1a9F/edit",
         Some("tisty-gui"),
         &rows,

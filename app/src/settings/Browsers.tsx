@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { type Key, useWords } from "../i18n";
 import { Card, Section, Switch } from "./parts";
 
 type BrowserView = {
@@ -26,16 +27,16 @@ type Edit = {
 
 const BLANK: Edit = { name: "", exe: "", args: [], private_flag: null, icon_path: null };
 
-function describe(browser: BrowserView): string {
+function describe(browser: BrowserView, t: (key: Key, ...values: string[]) => string): string {
   const parts = [
     browser.profiles === 0
-      ? "Sin perfiles"
+      ? t("profilesNone")
       : browser.profiles === 1
-        ? "1 perfil"
-        : `${browser.profiles} perfiles`,
+        ? t("profilesOne")
+        : t("profilesMany", String(browser.profiles)),
   ];
-  parts.push(browser.private ? "admite ventana privada" : "sin ventana privada");
-  if (browser.hidden) parts.push("oculto del selector");
+  parts.push(browser.private ? t("privateYes") : t("privateNo"));
+  if (browser.hidden) parts.push(t("hiddenFromPicker"));
   return parts.join(" · ");
 }
 
@@ -68,6 +69,7 @@ function Form({
   onSave: (edit: Edit) => void;
   onCancel: () => void;
 }) {
+  const t = useWords();
   const [name, setName] = useState(initial.name);
   const [exe, setExe] = useState(initial.exe);
   const [args, setArgs] = useState(initial.args.join(" "));
@@ -91,41 +93,41 @@ function Form({
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Nombre"
-        aria-label="Nombre"
+        placeholder={t("fieldName")}
+        aria-label={t("fieldName")}
         required
         className={FIELD}
       />
       <input
         value={exe}
         onChange={(e) => setExe(e.target.value)}
-        placeholder="Ruta del ejecutable"
-        aria-label="Ruta del ejecutable"
+        placeholder={t("fieldExe")}
+        aria-label={t("fieldExe")}
         required
         className={FIELD}
       />
       <input
         value={args}
         onChange={(e) => setArgs(e.target.value)}
-        placeholder="Argumentos adicionales (separados por espacios)"
-        aria-label="Argumentos adicionales"
+        placeholder={t("fieldArgs")}
+        aria-label={t("fieldArgsLabel")}
         className={FIELD}
       />
       <input
         value={priv}
         onChange={(e) => setPriv(e.target.value)}
-        placeholder="Argumento de ventana privada (--incognito, -private-window…)"
-        aria-label="Argumento de ventana privada"
+        placeholder={t("fieldPrivate")}
+        aria-label={t("fieldPrivateLabel")}
         className={FIELD}
       />
       <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
-        Sin este argumento, el navegador no podrá abrir en privado desde el selector.
+        {t("fieldPrivateHint")}
       </p>
       <input
         value={icon}
         onChange={(e) => setIcon(e.target.value)}
-        placeholder="Ruta de icono personalizado (opcional)"
-        aria-label="Ruta de icono personalizado"
+        placeholder={t("fieldIcon")}
+        aria-label={t("fieldIconLabel")}
         className={FIELD}
       />
       <div className="flex gap-2">
@@ -133,14 +135,14 @@ function Form({
           type="submit"
           className="rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
         >
-          Guardar
+          {t("save")}
         </button>
         <button
           type="button"
           onClick={onCancel}
           className="rounded-md px-3 py-1.5 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]"
         >
-          Cancelar
+          {t("cancel")}
         </button>
       </div>
     </form>
@@ -151,11 +153,12 @@ const GHOST =
   "grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-black/[0.06] disabled:opacity-25 dark:text-[#8B92A1] dark:hover:bg-white/[0.08]";
 
 export default function Browsers() {
+  const t = useWords();
   const [list, setList] = useState<BrowserView[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
 
-  const run = (command: string, params: Record<string, unknown> = {}) => {
+  const run = useCallback((command: string, params: Record<string, unknown> = {}) => {
     void invoke<BrowserView[]>(command, params)
       .then((next) => {
         setList(next);
@@ -163,9 +166,9 @@ export default function Browsers() {
         setEditing(null);
       })
       .catch((e: unknown) => setProblem(String(e)));
-  };
+  }, []);
 
-  useEffect(() => run("browsers_list"), []);
+  useEffect(() => run("browsers_list"), [run]);
 
   if (list === null) return null;
 
@@ -189,7 +192,7 @@ export default function Browsers() {
         </p>
       )}
 
-      <Section title="Detectados en el equipo">
+      <Section title={t("browsersDetected")}>
         <Card>
           {detected.map((b) => (
             <div
@@ -200,13 +203,13 @@ export default function Browsers() {
               <div className="min-w-0 flex-1">
                 <p className={`text-[12.5px] ${b.hidden ? "opacity-55" : ""}`}>{b.name}</p>
                 <p className="mt-px text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-                  {describe(b)}
+                  {describe(b, t)}
                 </p>
               </div>
               <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                 <button
                   type="button"
-                  aria-label={`Subir ${b.name}`}
+                  aria-label={t("browserUp", b.name)}
                   disabled={list[0]?.id === b.id}
                   onClick={() => move(b.id, -1)}
                   className={GHOST}
@@ -215,7 +218,7 @@ export default function Browsers() {
                 </button>
                 <button
                   type="button"
-                  aria-label={`Bajar ${b.name}`}
+                  aria-label={t("browserDown", b.name)}
                   disabled={list.at(-1)?.id === b.id}
                   onClick={() => move(b.id, 1)}
                   className={GHOST}
@@ -224,7 +227,7 @@ export default function Browsers() {
                 </button>
                 <button
                   type="button"
-                  aria-label={`Duplicar ${b.name}`}
+                  aria-label={t("browserDuplicate", b.name)}
                   onClick={() => run("browsers_duplicate", { id: b.id })}
                   className={GHOST}
                 >
@@ -233,20 +236,20 @@ export default function Browsers() {
               </span>
               <Switch
                 on={!b.hidden}
-                label={`Mostrar ${b.name} en el selector`}
+                label={t("browserShow", b.name)}
                 onChange={(next) => run("browsers_set_hidden", { id: b.id, hidden: !next })}
               />
             </div>
           ))}
           {detected.length === 0 && (
             <p className="px-3.5 py-4 text-center text-[12px] text-neutral-500 dark:text-[#8B92A1]">
-              Windows no reporta ningún navegador instalado.
+              {t("browsersNone")}
             </p>
           )}
         </Card>
       </Section>
 
-      <Section title="Añadidos por ti">
+      <Section title={t("browsersMine")}>
         <Card>
           {mine.map((b) =>
             editing === b.id ? (
@@ -273,7 +276,7 @@ export default function Browsers() {
                 <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                   <button
                     type="button"
-                    aria-label={`Editar ${b.name}`}
+                    aria-label={t("browserEdit", b.name)}
                     onClick={() => setEditing(b.id)}
                     className={GHOST}
                   >
@@ -281,7 +284,7 @@ export default function Browsers() {
                   </button>
                   <button
                     type="button"
-                    aria-label={`Duplicar ${b.name}`}
+                    aria-label={t("browserDuplicate", b.name)}
                     onClick={() => run("browsers_duplicate", { id: b.id })}
                     className={GHOST}
                   >
@@ -289,7 +292,7 @@ export default function Browsers() {
                   </button>
                   <button
                     type="button"
-                    aria-label={`Eliminar ${b.name}`}
+                    aria-label={t("browserRemove", b.name)}
                     onClick={() => run("browsers_remove", { id: b.id })}
                     className="grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-[#C0362F]/10 hover:text-[#C0362F] dark:text-[#8B92A1] dark:hover:bg-[#FF8A85]/10 dark:hover:text-[#FF8A85]"
                   >
@@ -298,7 +301,7 @@ export default function Browsers() {
                 </span>
                 <Switch
                   on={!b.hidden}
-                  label={`Mostrar ${b.name} en el selector`}
+                  label={t("browserShow", b.name)}
                   onChange={(next) => run("browsers_set_hidden", { id: b.id, hidden: !next })}
                 />
               </div>
@@ -317,7 +320,7 @@ export default function Browsers() {
               onClick={() => setEditing("new")}
               className="w-full border-black/[0.08] px-3.5 py-3 text-left text-[12px] text-[#2F62D8] not-first:border-t dark:border-white/[0.08] dark:text-[#6E9BFF]"
             >
-              Añadir un navegador
+              {t("browsersAdd")}
             </button>
           )}
         </Card>

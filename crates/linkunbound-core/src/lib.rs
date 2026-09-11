@@ -1,5 +1,7 @@
 mod browser;
 mod config;
+mod i18n;
+mod launch;
 mod prefs;
 mod private;
 mod report;
@@ -12,6 +14,8 @@ pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,
 };
+pub use i18n::{Language, Strings};
+pub use launch::{LaunchError, open as launch};
 pub use prefs::{Locale, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};

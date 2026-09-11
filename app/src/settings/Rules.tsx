@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { type Key, useWords } from "../i18n";
 
 type RuleView = {
   id: string;
@@ -13,11 +14,11 @@ type RuleView = {
   resolved: boolean;
 };
 
-const KIND: Record<RuleView["kind"], string> = {
-  any: "Cualquiera",
-  url: "Esta URL",
-  host: "Subdominio",
-  site: "Sitio",
+const KIND: Record<RuleView["kind"], Key> = {
+  any: "kindAny",
+  url: "kindUrl",
+  host: "kindHost",
+  site: "kindSite",
 };
 
 function covers(rule: RuleView): string {
@@ -26,19 +27,20 @@ function covers(rule: RuleView): string {
 }
 
 export default function Rules() {
+  const t = useWords();
   const [rules, setRules] = useState<RuleView[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  const load = (command: string, args: Record<string, unknown> = {}) => {
+  const load = useCallback((command: string, args: Record<string, unknown> = {}) => {
     void invoke<RuleView[]>(command, args)
       .then((next) => {
         setRules(next);
         setProblem(null);
       })
       .catch((e: unknown) => setProblem(String(e)));
-  };
+  }, []);
 
-  useEffect(() => load("rules_list"), []);
+  useEffect(() => load("rules_list"), [load]);
 
   const move = (index: number, step: number) => {
     if (!rules) return;
@@ -62,10 +64,9 @@ export default function Rules() {
   if (rules.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-black/[0.12] px-4 py-7 text-center dark:border-white/[0.12]">
-        <p className="text-[12.5px] font-semibold">Todavía no hay ninguna regla</p>
+        <p className="text-[12.5px] font-semibold">{t("rulesEmptyTitle")}</p>
         <p className="mt-1 text-[12px] text-neutral-500 dark:text-[#8B92A1]">
-          Se crean desde el selector, eligiendo un alcance distinto de «Solo esta vez» antes de
-          pulsar un navegador.
+          {t("rulesEmptyBody")}
         </p>
       </div>
     );
@@ -74,7 +75,7 @@ export default function Rules() {
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-[11px] font-semibold tracking-[0.09em] text-neutral-400 uppercase dark:text-[#646B7C]">
-        {rules.length === 1 ? "1 regla" : `${rules.length} reglas`}
+        {rules.length === 1 ? t("rulesOne") : t("rulesMany", String(rules.length))}
       </h2>
 
       <ul className="overflow-hidden rounded-lg border border-black/[0.08] dark:border-white/[0.08]">
@@ -92,7 +93,7 @@ export default function Rules() {
                     : "bg-black/[0.055] text-neutral-500 dark:bg-white/[0.07] dark:text-[#8B92A1]"
               }`}
             >
-              {rule.source_app ? "Desde" : KIND[rule.kind]}
+              {rule.source_app ? t("kindFrom") : t(KIND[rule.kind])}
             </span>
 
             <span className="min-w-0 flex-1 truncate text-[12.5px]">{covers(rule)}</span>
@@ -114,14 +115,14 @@ export default function Rules() {
 
             {rule.private && (
               <span className="shrink-0 text-[10.5px] text-[#2F62D8] dark:text-[#6E9BFF]">
-                privada
+                {t("rulePrivate")}
               </span>
             )}
 
             <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
               <button
                 type="button"
-                aria-label={`Subir la regla de ${covers(rule)}`}
+                aria-label={t("ruleUp", covers(rule))}
                 disabled={i === 0}
                 onClick={() => move(i, -1)}
                 className="grid h-6 w-6 place-items-center rounded text-neutral-500 hover:bg-black/[0.06] disabled:opacity-25 dark:text-[#8B92A1] dark:hover:bg-white/[0.08]"
@@ -130,7 +131,7 @@ export default function Rules() {
               </button>
               <button
                 type="button"
-                aria-label={`Bajar la regla de ${covers(rule)}`}
+                aria-label={t("ruleDown", covers(rule))}
                 disabled={i === rules.length - 1}
                 onClick={() => move(i, 1)}
                 className="grid h-6 w-6 place-items-center rounded text-neutral-500 hover:bg-black/[0.06] disabled:opacity-25 dark:text-[#8B92A1] dark:hover:bg-white/[0.08]"
@@ -139,7 +140,7 @@ export default function Rules() {
               </button>
               <button
                 type="button"
-                aria-label={`Eliminar la regla de ${covers(rule)}`}
+                aria-label={t("ruleRemove", covers(rule))}
                 onClick={() => load("rules_remove", { id: rule.id })}
                 className="grid h-6 w-6 place-items-center rounded text-neutral-500 hover:bg-[#C0362F]/10 hover:text-[#C0362F] dark:text-[#8B92A1] dark:hover:bg-[#FF8A85]/10 dark:hover:text-[#FF8A85]"
               >
@@ -150,10 +151,7 @@ export default function Rules() {
         ))}
       </ul>
 
-      <p className="text-[11px] text-neutral-400 dark:text-[#646B7C]">
-        Entre reglas que alcanzan lo mismo gana la primera. Las marcadas «Desde» vienen de la
-        versión 1.4 y el selector ya no las crea.
-      </p>
+      <p className="text-[11px] text-neutral-400 dark:text-[#646B7C]">{t("rulesFooter")}</p>
     </section>
   );
 }

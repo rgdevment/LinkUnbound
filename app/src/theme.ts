@@ -7,8 +7,8 @@ function paint(theme: Theme, systemIsDark: boolean) {
   document.documentElement.classList.toggle("dark", dark);
 }
 
-/// Both windows call this: the theme is one choice and it has to look the same
-/// in the picker as in settings.
+let reread: (() => void) | null = null;
+
 export function follow() {
   const media = window.matchMedia("(prefers-color-scheme: dark)");
   let chosen: Theme = "system";
@@ -16,7 +16,7 @@ export function follow() {
   paint(chosen, media.matches);
   media.addEventListener("change", () => paint(chosen, media.matches));
 
-  const read = () =>
+  reread = () =>
     void invoke<{ prefs: { theme: Theme } }>("prefs_get")
       .then(({ prefs }) => {
         chosen = prefs.theme;
@@ -24,6 +24,9 @@ export function follow() {
       })
       .catch(() => {});
 
-  read();
-  return read;
+  reread();
+}
+
+export function refresh() {
+  reread?.();
 }

@@ -1,3 +1,4 @@
+import { useWords } from "../i18n";
 import { Card, Line, Section } from "./parts";
 
 const VERSION = "2.0.0";
@@ -17,27 +18,29 @@ function External({ href, children }: { href: string; children: string }) {
 }
 
 export default function About() {
+  const t = useWords();
+
   return (
     <>
       <div className="flex items-center gap-3.5 rounded-lg border border-black/[0.08] bg-black/[0.015] px-4 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.02]">
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] font-semibold">LinkUnbound {VERSION}</p>
           <p className="mt-0.5 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]">
-            Elige tú en qué navegador se abre cada enlace.
+            {t("aboutTagline")}
           </p>
         </div>
       </div>
 
-      <Section title="Proyecto">
+      <Section title={t("aboutProject")}>
         <Card>
-          <Line title="Código fuente" note="GPL-3.0 · las aportaciones son bienvenidas">
-            <External href={REPO}>Abrir</External>
+          <Line title={t("aboutSource")} note={t("aboutSourceNote")}>
+            <External href={REPO}>{t("open")}</External>
           </Line>
-          <Line title="Informar de un problema" note="Errores, ideas y navegadores que no detecta">
-            <External href={`${REPO}/issues`}>Abrir</External>
+          <Line title={t("aboutIssue")} note={t("aboutIssueNote")}>
+            <External href={`${REPO}/issues`}>{t("open")}</External>
           </Line>
-          <Line title="Apoyar el desarrollo" note="LinkUnbound es gratis y no lleva publicidad">
-            <External href={`${REPO}#sponsors`}>Abrir</External>
+          <Line title={t("aboutSponsor")} note={t("aboutSponsorNote")}>
+            <External href={`${REPO}#sponsors`}>{t("open")}</External>
           </Line>
         </Card>
       </Section>

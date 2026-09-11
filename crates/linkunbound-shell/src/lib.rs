@@ -2,12 +2,14 @@
 
 slint::include_modules!();
 
+pub mod single;
+pub mod tray;
+
 use std::rc::Rc;
 
-use linkunbound_core::{Browser, Scope, looks_unresolved, site_of};
+use linkunbound_core::{Browser, Scope, Strings, looks_unresolved, site_of};
 
-/// Drawn at this side and extracted at this side: any other ratio is a scale,
-/// and a scaled 24 px icon loses the edges that make it recognisable.
+/// Extracted and drawn at this same side: any other ratio scales, and blurs.
 pub const ICON_SIDE: u32 = 24;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,8 +42,6 @@ impl Reaches {
     }
 }
 
-/// One row per destination: a browser without profiles is one row, a browser
-/// with them is one row each, because that is the choice being made.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listed {
     pub browser_id: String,
@@ -82,21 +82,20 @@ pub fn destinations(browsers: &[Browser]) -> Vec<Listed> {
         .collect()
 }
 
-/// A host that is already its own site would save the very same rule twice. And
-/// a wrapper we failed to unwrap must not be remembered at all: the rule would
-/// key off Microsoft's redirector and answer for every link it ever carries.
+/// A wrapper left unwrapped must not be remembered: the rule would key off
+/// Microsoft's redirector and answer for every link it ever carries.
 #[must_use]
-pub fn reaches(url: &str, host: &str, site: &str) -> Vec<(String, bool, bool)> {
+pub fn reaches(words: &Strings, url: &str, host: &str, site: &str) -> Vec<(String, bool, bool)> {
     let wrapped = looks_unresolved(url);
     vec![
-        ("Solo esta vez".to_owned(), false, false),
-        ("Esta URL".to_owned(), true, wrapped),
+        (words.reach_once.to_owned(), false, false),
+        (words.reach_url.to_owned(), true, wrapped),
         (
-            "Subdominio".to_owned(),
+            words.reach_subdomain.to_owned(),
             true,
             wrapped || host == site || host.is_empty(),
         ),
-        ("Todo el sitio".to_owned(), true, wrapped),
+        (words.reach_site.to_owned(), true, wrapped),
     ]
 }
 
@@ -116,16 +115,21 @@ fn image_for(path: Option<&str>) -> slint::Image {
         .unwrap_or_default()
 }
 
-/// Fills the window with a link. Kept apart from the event wiring so the shape
-/// of what the user sees can be checked without opening a window.
-pub fn dress(window: &Picker, url: &str, source: Option<&str>, rows: &[Listed]) {
+pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, rows: &[Listed]) {
     window.set_icon_side(f32::from(u16::try_from(ICON_SIDE).unwrap_or(24)));
     let (host, trail) = split(url);
     let site = site_of(&host);
 
     window.set_host(host.clone().into());
     window.set_trail(trail.into());
-    window.set_source(source.unwrap_or_default().into());
+    window.set_source_line(
+        source
+            .map(|from| Strings::fill(words.picker_from, from))
+            .unwrap_or_default()
+            .into(),
+    );
+    window.set_remember_label(words.picker_remember.into());
+    window.set_private_label(words.picker_private.into());
     window.set_private_on(false);
     window.set_copied(false);
     window.set_reach_index(0);
@@ -144,7 +148,7 @@ pub fn dress(window: &Picker, url: &str, source: Option<&str>, rows: &[Listed]) 
         .collect();
     window.set_rows(Rc::new(slint::VecModel::from(listed)).into());
 
-    let scopes: Vec<Reach> = reaches(url, &host, &site)
+    let scopes: Vec<Reach> = reaches(words, url, &host, &site)
         .into_iter()
         .map(|(label, keeps, dead)| Reach {
             label: label.into(),
@@ -158,7 +162,9 @@ pub fn dress(window: &Picker, url: &str, source: Option<&str>, rows: &[Listed]) 
 #[cfg(test)]
 mod tests {
     use super::{Listed, Reaches, destinations, reaches, split};
-    use linkunbound_core::{Browser, Profile, Scope};
+    use linkunbound_core::{Browser, Language, Profile, Scope, Strings};
+
+    const SPOKEN: Strings = Language::Spanish.strings();
 
     fn browser(id: &str, profiles: &[&str], private: bool) -> Browser {
         Browser {
@@ -196,7 +202,6 @@ mod tests {
         assert!(rows[0].profile_id.is_none());
     }
 
-    /// Hidden means hidden from the picker, not forgotten by settings.
     #[test]
     fn a_hidden_browser_never_reaches_the_picker() {
         let hidden = Browser {
@@ -216,18 +221,31 @@ mod tests {
 
     #[test]
     fn the_subdomain_reach_is_dead_when_the_host_is_already_its_site() {
-        let same = reaches(PLAIN, "github.com", "github.com");
+        let same = reaches(&SPOKEN, PLAIN, "github.com", "github.com");
         assert!(same[2].2);
-        let sub = reaches(PLAIN, "docs.google.com", "google.com");
+        let sub = reaches(&SPOKEN, PLAIN, "docs.google.com", "google.com");
         assert!(!sub[2].2);
     }
 
-    /// Remembering a wrapper we could not unwrap would key the rule off
-    /// Microsoft's redirector and answer for every link it ever carries.
+    #[test]
+    fn the_reaches_are_worded_in_the_language_they_are_asked_for() {
+        let spanish = reaches(&SPOKEN, PLAIN, "github.com", "github.com");
+        let english = reaches(
+            &Language::English.strings(),
+            PLAIN,
+            "github.com",
+            "github.com",
+        );
+        assert_eq!(spanish[0].0, "Solo esta vez");
+        assert_eq!(english[0].0, "Just this time");
+        assert_eq!(english[3].0, "The whole site");
+    }
+
     #[test]
     fn a_wrapper_that_stayed_wrapped_cannot_be_remembered() {
         let wrapped = "https://eu01.safelinks.protection.outlook.com/?whatever=1";
         let offered = reaches(
+            &SPOKEN,
             wrapped,
             "eu01.safelinks.protection.outlook.com",
             "outlook.com",
@@ -284,8 +302,6 @@ mod tests {
         );
     }
 
-    /// An index the interface never produces must not be read as a reach that
-    /// writes something to disk.
     #[test]
     fn an_index_out_of_range_falls_back_to_writing_nothing() {
         assert!(Reaches::at(99).scope("https://x.test/", "x.test").is_none());

@@ -39,6 +39,12 @@ fn save_atomically(path: &Path, body: &str) -> Result<(), StoreError> {
     fs::rename(&staging, path).map_err(fail)
 }
 
+/// `serde_json` refuses the mark Windows editors prepend, which would discard a
+/// whole file over three invisible bytes.
+fn unmarked(raw: &str) -> &str {
+    raw.strip_prefix('\u{feff}').unwrap_or(raw)
+}
+
 fn load<T>(path: &Path, parse: impl Fn(&str) -> Result<T, ConfigError>) -> Result<T, StoreError>
 where
     T: Default,
@@ -53,7 +59,7 @@ where
             });
         }
     };
-    parse(&raw).map_err(|source| StoreError::Content {
+    parse(unmarked(&raw)).map_err(|source| StoreError::Content {
         path: path.to_path_buf(),
         source,
     })
@@ -104,7 +110,7 @@ impl Store {
     /// the appearance the user had chosen.
     pub fn prefs(&self) -> crate::Preferences {
         if let Ok(raw) = fs::read_to_string(self.prefs_path())
-            && let Ok(found) = serde_json::from_str::<crate::Preferences>(&raw)
+            && let Ok(found) = serde_json::from_str::<crate::Preferences>(unmarked(&raw))
         {
             return found;
         }
@@ -139,6 +145,42 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("linkunbound-store-{name}"));
         let _ = fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn a_file_saved_with_a_byte_order_mark_is_still_read() {
+        let dir = scratch("bom");
+        fs::create_dir_all(&dir).expect("should create");
+        let store = Store::at(&dir);
+
+        let marked = format!(
+            "\u{feff}{}",
+            serde_json::to_string(&crate::Preferences {
+                locale: crate::Locale::English,
+                ..crate::Preferences::default()
+            })
+            .expect("should serialise")
+        );
+        fs::write(dir.join("preferences.json"), marked).expect("should write");
+
+        assert_eq!(store.prefs().locale, crate::Locale::English);
+    }
+
+    #[test]
+    fn rules_survive_the_same_mark() {
+        let dir = scratch("bom-rules");
+        fs::create_dir_all(&dir).expect("should create");
+        let store = Store::at(&dir);
+
+        let mut rules = RuleSet::default();
+        rules.upsert(a_rule());
+        let body = format!(
+            "\u{feff}{}",
+            crate::write_rules(&rules).expect("should serialise")
+        );
+        fs::write(dir.join("rules.json"), body).expect("should write");
+
+        assert_eq!(store.rules().expect("should read").rules.len(), 1);
     }
 
     fn a_rule() -> Rule {

@@ -20,8 +20,9 @@ slint = { version = "1.17", default-features = false, features = [
   "std",
 ] }
 slint-build = "1.17"
-tray-icon = "0.21"
-muda = "0.18"
+tray-icon = "0.24"
+muda = "0.19"
+interprocess = "2.4"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-build = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"

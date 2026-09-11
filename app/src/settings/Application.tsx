@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { type Key, type Language, spoken, useWords } from "../i18n";
+import { refresh } from "../theme";
 import { Card, Line, Section, Switch } from "./parts";
 
 type Theme = "system" | "light" | "dark";
@@ -14,18 +16,18 @@ type Preferences = {
   notify_on_rule: boolean;
 };
 
-type Settings = { prefs: Preferences; shortcut_held: string | null };
+type Settings = { prefs: Preferences; shortcut_held: string | null; language: string };
 
-const THEMES: { id: Theme; label: string }[] = [
-  { id: "system", label: "Automático" },
-  { id: "light", label: "Claro" },
-  { id: "dark", label: "Oscuro" },
+const THEMES: { id: Theme; label: Key }[] = [
+  { id: "system", label: "themeAuto" },
+  { id: "light", label: "themeLight" },
+  { id: "dark", label: "themeDark" },
 ];
 
-const LOCALES: { id: Locale; label: string }[] = [
-  { id: "system", label: "Automático" },
-  { id: "spanish", label: "Español" },
-  { id: "english", label: "Inglés" },
+const LOCALES: { id: Locale; label: Key }[] = [
+  { id: "system", label: "localeAuto" },
+  { id: "spanish", label: "localeSpanish" },
+  { id: "english", label: "localeEnglish" },
 ];
 
 const MODIFIERS = new Set(["Control", "Alt", "Shift", "Meta"]);
@@ -54,11 +56,12 @@ function Choice<T extends string>({
   label,
   onPick,
 }: {
-  options: { id: T; label: string }[];
+  options: { id: T; label: Key }[];
   value: T;
   label: string;
   onPick: (next: T) => void;
 }) {
+  const t = useWords();
   return (
     <fieldset className="flex shrink-0 gap-1">
       <legend className="sr-only">{label}</legend>
@@ -78,7 +81,7 @@ function Choice<T extends string>({
                 : "bg-black/[0.045] text-neutral-500 dark:bg-white/[0.06] dark:text-[#8B92A1]"
             }`}
           >
-            {o.label}
+            {t(o.label)}
           </span>
         </label>
       ))}
@@ -90,23 +93,31 @@ export default function Application({
   startsWithSystem,
   startupIsOurs,
   onSystem,
+  onLanguage,
 }: {
   startsWithSystem: boolean;
   startupIsOurs: boolean;
   onSystem: (command: string, enabled: boolean) => void;
+  onLanguage: (next: Language) => void;
 }) {
+  const t = useWords();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
+
+  const failure = (reason: string) =>
+    reason.endsWith("unreachable") ? t("errUnreachable") : reason;
 
   const apply = (patch: Partial<Preferences>) => {
     if (!settings) return;
     void invoke<Settings>("prefs_set", { prefs: { ...settings.prefs, ...patch } })
       .then((next) => {
         setSettings(next);
+        onLanguage(spoken(next.language));
+        refresh();
         setProblem(null);
       })
-      .catch((e: unknown) => setProblem(String(e)))
+      .catch((e: unknown) => setProblem(failure(String(e))))
       .finally(() => setCapturing(false));
   };
 
@@ -126,58 +137,48 @@ export default function Application({
         </p>
       )}
 
-      <Section title="Apariencia">
+      <Section title={t("appAppearance")}>
         <Card>
-          <Line title="Tema">
+          <Line title={t("appTheme")}>
             <Choice
               options={THEMES}
               value={prefs.theme}
-              label="Tema"
+              label={t("appTheme")}
               onPick={(theme) => apply({ theme })}
             />
           </Line>
-          <Line title="Idioma" note="Requiere reiniciar la aplicación">
+          <Line title={t("appLanguage")}>
             <Choice
               options={LOCALES}
               value={prefs.locale}
-              label="Idioma"
+              label={t("appLanguage")}
               onPick={(locale) => apply({ locale })}
             />
           </Line>
         </Card>
       </Section>
 
-      <Section title="Inicio">
+      <Section title={t("appStartup")}>
         <Card>
           <Line
-            title="Iniciar con el sistema"
-            note={
-              startupIsOurs
-                ? "El primer enlace de cada sesión se abre al instante"
-                : "Gestionado desde Configuración de Windows > Aplicaciones de inicio"
-            }
+            title={t("startupTitle")}
+            note={startupIsOurs ? t("startupOurs") : t("startupWindows")}
           >
             <Switch
               on={startsWithSystem}
               disabled={!startupIsOurs}
-              label="Iniciar con el sistema"
+              label={t("startupTitle")}
               onChange={(next) => onSystem("system_set_startup", next)}
             />
           </Line>
         </Card>
       </Section>
 
-      <Section title="Acceso rápido">
+      <Section title={t("appQuick")}>
         <Card>
           <Line
-            title="Atajo para abrir los ajustes"
-            note={
-              taken
-                ? "Otra aplicación ya usa esa combinación"
-                : prefs.shortcut
-                  ? "Pulsa el botón y luego la combinación que quieras"
-                  : "Desactivado"
-            }
+            title={t("shortcutTitle")}
+            note={taken ? t("shortcutTaken") : prefs.shortcut ? t("shortcutHow") : t("shortcutOff")}
           >
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -202,7 +203,7 @@ export default function Application({
                       : "border-black/[0.12] dark:border-white/[0.12]"
                 }`}
               >
-                {capturing ? "Pulsa una combinación…" : (prefs.shortcut ?? "Sin atajo")}
+                {capturing ? t("shortcutPress") : (prefs.shortcut ?? t("shortcutNone"))}
               </button>
               {prefs.shortcut && (
                 <button
@@ -210,38 +211,31 @@ export default function Application({
                   onClick={() => apply({ shortcut: null })}
                   className="text-[11.5px] text-neutral-500 dark:text-[#8B92A1]"
                 >
-                  Quitar
+                  {t("remove")}
                 </button>
               )}
             </div>
           </Line>
           <Line
-            title="Ocultar el icono de la bandeja"
-            note={
-              prefs.shortcut
-                ? "Seguirás pudiendo abrir los ajustes con el atajo"
-                : "Necesitas un atajo antes de poder ocultarlo"
-            }
+            title={t("hideTrayTitle")}
+            note={prefs.shortcut ? t("hideTrayWith") : t("hideTrayNeeds")}
           >
             <Switch
               on={prefs.hide_tray}
               disabled={!prefs.shortcut}
-              label="Ocultar el icono de la bandeja"
+              label={t("hideTrayTitle")}
               onChange={(hide_tray) => apply({ hide_tray })}
             />
           </Line>
         </Card>
       </Section>
 
-      <Section title="Cuando una regla decide">
+      <Section title={t("appRule")}>
         <Card>
-          <Line
-            title="Avisar cuando una regla abre sin preguntar"
-            note="Un aviso breve, con la opción de deshacer"
-          >
+          <Line title={t("notifyTitle")} note={t("notifyNote")}>
             <Switch
               on={prefs.notify_on_rule}
-              label="Avisar cuando una regla abre sin preguntar"
+              label={t("notifyTitle")}
               onChange={(notify_on_rule) => apply({ notify_on_rule })}
             />
           </Line>

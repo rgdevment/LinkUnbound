@@ -40,8 +40,6 @@ component Row inherits Rectangle {
     height: 42px;
     border-radius: 7px;
     background: touch.has-hover ? Palette.hover : transparent;
-    // A browser with no private switch cannot honour the intent, and saying so
-    // beforehand beats refusing after the click.
     opacity: root.private-wanted && !root.entry.can-private ? 0.45 : 1.0;
 
     touch := TouchArea {
@@ -159,7 +157,9 @@ export component Picker inherits Window {
     in property <float> icon-side: 24;
     in property <string> host;
     in property <string> trail;
-    in property <string> source;
+    in property <string> source-line;
+    in property <string> remember-label;
+    in property <string> private-label;
     in property <[Destination]> rows;
     in property <[Reach]> reaches;
     in property <string> problem;
@@ -187,8 +187,7 @@ export component Picker inherits Window {
         + (root.problem == "" ? 0px : 36px);
 
     keys := FocusScope {
-        // Shift is a held intent, not a toggle: it has to light the icon while
-        // it is down so the effect is visible before committing to a row.
+        // Shift is held, not toggled: the icon lights while it is down.
         key-pressed(event) => {
             root.private-on = event.modifiers.shift || root.pinned-private;
             if (event.text == Key.Escape) {
@@ -239,8 +238,8 @@ export component Picker inherits Window {
                                     overflow: elide;
                                 }
                             }
-                            if root.source != "": Text {
-                                text: "Desde " + root.source;
+                            if root.source-line != "": Text {
+                                text: root.source-line;
                                 font-size: 12px;
                                 color: Palette.dim;
                             }
@@ -250,8 +249,7 @@ export component Picker inherits Window {
                             y: (parent.height - self.height) / 2;
                             lit: root.copied;
                             pressed => { root.copy(); }
-                            // Drawn rather than typed: the glyphs for these live
-                            // in an icon font that is not guaranteed to be there.
+                            // Drawn: these glyphs are not in every system font.
                             Path {
                                 x: 8px;
                                 y: 8px;
@@ -271,8 +269,7 @@ export component Picker inherits Window {
                             y: (parent.height - self.height) / 2;
                             lit: root.private-on;
                             pressed => { root.pinned-private = !root.pinned-private; root.private-on = root.pinned-private; }
-                            // Composed rather than a path: Slint does not resolve
-                            // elliptical arcs in a commands string.
+                            // Composed: Slint does not resolve elliptical arcs.
                             Rectangle {
                                 x: 7px;
                                 y: 13px;
@@ -340,7 +337,7 @@ export component Picker inherits Window {
                         padding-right: 15px;
                         alignment: space-between;
                         Text {
-                            text: "Recordar esta elección";
+                            text: root.remember-label;
                             font-size: 12.5px;
                             color: Palette.dimmer;
                             vertical-alignment: center;
@@ -365,7 +362,7 @@ export component Picker inherits Window {
                                 }
                             }
                             Text {
-                                text: "privada";
+                                text: root.private-label;
                                 font-size: 12.5px;
                                 color: root.private-on ? Palette.accent : Palette.dimmer;
                                 vertical-alignment: center;
@@ -384,6 +381,94 @@ export component Picker inherits Window {
                         active: i == root.reach-index;
                         picked => { root.reach-index = i; }
                     }
+                }
+            }
+        }
+    }
+}
+
+export component Notice inherits Window {
+    in property <string> headline;
+    in property <string> reason;
+    in property <string> undo-label;
+    in-out property <int> left: 6;
+
+    callback undo();
+    callback dismissed();
+
+    title: "LinkUnbound";
+    no-frame: true;
+    background: transparent;
+    width: 356px;
+    height: 76px;
+    default-font-family: "Segoe UI";
+
+    Rectangle {
+        border-radius: 10px;
+        background: Palette.ground;
+        border-width: 1px;
+        border-color: Palette.edge;
+
+        HorizontalLayout {
+            padding-left: 15px;
+            padding-right: 12px;
+            spacing: 10px;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Text {
+                    text: root.headline;
+                    font-size: 13px;
+                    color: Palette.ink;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.reason;
+                    font-size: 11.5px;
+                    color: Palette.dim;
+                    overflow: elide;
+                }
+            }
+
+            Rectangle {
+                width: 76px;
+                height: 28px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 6px;
+                background: undo-touch.has-hover ? Palette.hover : Palette.chip;
+                undo-touch := TouchArea {
+                    clicked => { root.undo(); }
+                }
+                Text {
+                    text: root.undo-label;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: Palette.ink;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+            }
+
+            Rectangle {
+                width: 26px;
+                height: 26px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 6px;
+                background: close-touch.has-hover ? Palette.hover : transparent;
+                close-touch := TouchArea {
+                    clicked => { root.dismissed(); }
+                }
+                Text {
+                    text: root.left;
+                    font-size: 12px;
+                    color: Palette.dimmer;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
                 }
             }
         }

@@ -1,6 +1,6 @@
 [package]
 
-name = "linkunbound"
+name = "linkunbound-settings"
 
 version.workspace = true
 

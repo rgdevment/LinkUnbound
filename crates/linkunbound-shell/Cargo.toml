@@ -12,6 +12,10 @@ workspace = true
 [dependencies]
 linkunbound-core.workspace = true
 slint.workspace = true
+interprocess.workspace = true
+tray-icon.workspace = true
+muda.workspace = true
+png.workspace = true
 
 [target."cfg(windows)".dependencies]
 linkunbound-win.workspace = true

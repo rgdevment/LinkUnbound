@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use linkunbound_core::{Browser, LaunchRefused};
+use crate::{Browser, LaunchRefused};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LaunchError {
@@ -34,7 +34,7 @@ pub fn open(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linkunbound_core::Profile;
+    use crate::Profile;
 
     fn catalogue() -> Vec<Browser> {
         vec![Browser {

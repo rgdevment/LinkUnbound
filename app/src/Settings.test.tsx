@@ -53,6 +53,29 @@ describe("settings", () => {
     answers(BASE);
   });
 
+  it("speaks whatever language the backend resolved", async () => {
+    answers(BASE, { prefs_get: () => Promise.resolve({ ...PREFS, language: "en" }) });
+    render(<Settings />);
+    expect(await screen.findByRole("button", { name: "Links" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Maintenance" })).toBeInTheDocument();
+  });
+
+  it("changes language without a restart when the choice is made", async () => {
+    answers(BASE, {
+      prefs_get: () => Promise.resolve({ ...PREFS, language: "es" }),
+      prefs_set: () =>
+        Promise.resolve({
+          ...PREFS,
+          prefs: { ...PREFS.prefs, locale: "english" },
+          language: "en",
+        }),
+    });
+    render(<Settings />);
+    await go("Aplicación");
+    await userEvent.click(await screen.findByRole("radio", { name: "Inglés" }));
+    expect(await screen.findByRole("button", { name: "Application" })).toBeInTheDocument();
+  });
+
   it("says the links arrive here when they really do", async () => {
     render(<Settings />);
     expect(await screen.findByText(/recibe los enlaces/)).toBeInTheDocument();

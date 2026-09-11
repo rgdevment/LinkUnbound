@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { follow } from "../theme";
 import Application from "./Application";
 
 const invoke = vi.fn();
@@ -23,7 +24,7 @@ function answers(prefs = PREFS, held: string | null = "Alt+Shift+L", fail?: stri
 }
 
 function mount() {
-  render(<Application startsWithSystem startupIsOurs onSystem={() => {}} />);
+  render(<Application startsWithSystem startupIsOurs onSystem={() => {}} onLanguage={() => {}} />);
 }
 
 describe("application settings", () => {
@@ -38,6 +39,19 @@ describe("application settings", () => {
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
       prefs: { ...PREFS, theme: "dark" },
     });
+  });
+
+  it("repaints the window as soon as the theme is chosen", async () => {
+    invoke.mockImplementation((cmd: string) => {
+      const prefs = { ...PREFS, theme: document.documentElement.dataset.picked ?? "system" };
+      if (cmd === "prefs_set") document.documentElement.dataset.picked = "dark";
+      return Promise.resolve({ prefs, shortcut_held: null });
+    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {} }));
+    follow();
+    mount();
+    await userEvent.click(await screen.findByRole("radio", { name: "Oscuro" }));
+    await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
   });
 
   it("captures a combination from the physical keys, not the printed ones", async () => {

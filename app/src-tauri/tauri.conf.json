@@ -9,21 +9,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "label": "picker",
-        "title": "LinkUnbound",
-        "width": 368,
-        "height": 270,
-        "resizable": false,
-        "decorations": false,
-        "transparent": true,
-        "shadow": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "visible": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
     }
@@ -31,5 +17,6 @@
   "bundle": {
     "active": false,
     "targets": []
-  }
+  },
+  "mainBinaryName": "linkunbound-settings"
 }
