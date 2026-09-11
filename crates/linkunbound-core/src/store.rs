@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::config::{
     BrowserConfig, ConfigError, read_browsers, read_rules, write_browsers, write_rules,
@@ -34,9 +35,75 @@ fn save_atomically(path: &Path, body: &str) -> Result<(), StoreError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(fail)?;
     }
-    let staging = path.with_extension("tmp");
+    // Named after this process: two of them sharing one staging file meant each
+    // truncating what the other was still writing, and the loser renamed the
+    // mixture over the real one.
+    let staging = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&staging, body).map_err(fail)?;
-    fs::rename(&staging, path).map_err(fail)
+    let renamed = fs::rename(&staging, path).map_err(fail);
+    if renamed.is_err() {
+        let _ = fs::remove_file(&staging);
+    }
+    renamed
+}
+
+const HELD_FOR_LONG_ENOUGH: Duration = Duration::from_secs(5);
+
+/// Holds the whole read-modify-write, not just the write. Both binaries edit the
+/// same set, and an atomic save alone still loses whichever change was read
+/// before the other process saved.
+///
+/// The guard is a file created exclusively: the filesystem decides the winner.
+/// One left behind by a process that died is taken over once it goes stale,
+/// because a lock nobody can release is worse than the race it prevents.
+/// Releases on every exit, a panic inside the edit included. Without this the
+/// file stayed behind and locked the set out until it went stale.
+struct Holding(PathBuf);
+
+impl Drop for Holding {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+fn guarded<T>(path: &Path, work: impl FnOnce() -> Result<T, StoreError>) -> Result<T, StoreError> {
+    let lock = path.with_extension("lock");
+    if let Some(parent) = lock.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    for _ in 0..400 {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock)
+        {
+            Ok(_) => {
+                let _holding = Holding(lock);
+                return work();
+            }
+            Err(_) => {
+                // Only steal one we can see and that is plainly old. A failed
+                // `metadata` means the owner just released it, and treating
+                // that as stale deleted a lock somebody else had already taken.
+                if fs::metadata(&lock)
+                    .and_then(|m| m.modified())
+                    .is_ok_and(|held| held.elapsed().unwrap_or_default() > HELD_FOR_LONG_ENOUGH)
+                {
+                    let _ = fs::remove_file(&lock);
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+    }
+    // Giving up is the safe answer: going ahead unguarded is what corrupts.
+    Err(StoreError::Write {
+        path: lock,
+        source: std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "another process is holding the file",
+        ),
+    })
 }
 
 /// `serde_json` refuses the mark Windows editors prepend, which would discard a
@@ -103,7 +170,26 @@ impl Store {
             path: self.rules_path(),
             source,
         })?;
-        save_atomically(&self.rules_path(), &body)
+        guarded(&self.rules_path(), || {
+            save_atomically(&self.rules_path(), &body)
+        })
+    }
+
+    /// Reads, edits and saves under one guard. Editing a set read before another
+    /// process saved is how a rule the picker just remembered disappears when
+    /// settings next writes.
+    pub fn edit_rules(&self, edit: impl FnOnce(&mut RuleSet) -> bool) -> Result<bool, StoreError> {
+        guarded(&self.rules_path(), || {
+            let mut rules = load(&self.rules_path(), read_rules)?;
+            if !edit(&mut rules) {
+                return Ok(false);
+            }
+            let body = write_rules(&rules).map_err(|source| StoreError::Content {
+                path: self.rules_path(),
+                source,
+            })?;
+            save_atomically(&self.rules_path(), &body).map(|()| true)
+        })
     }
 
     /// Falls back to what 1.x left in its own `theme` file, so an upgrade keeps
@@ -131,7 +217,9 @@ impl Store {
             path: self.browsers_path(),
             source,
         })?;
-        save_atomically(&self.browsers_path(), &body)
+        guarded(&self.browsers_path(), || {
+            save_atomically(&self.browsers_path(), &body)
+        })
     }
 }
 
@@ -141,8 +229,11 @@ mod tests {
     use crate::config::SCHEMA_VERSION;
     use crate::rule::{Rule, Scope, Target};
 
+    /// Per process: the path was machine-global, so a second `cargo test` wiped
+    /// this one's directory mid-run and the failures looked like product bugs.
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("linkunbound-store-{name}"));
+        let dir =
+            std::env::temp_dir().join(format!("linkunbound-store-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
     }
@@ -181,6 +272,68 @@ mod tests {
         fs::write(dir.join("rules.json"), body).expect("should write");
 
         assert_eq!(store.rules().expect("should read").rules.len(), 1);
+    }
+
+    /// Both binaries write this file. Before the guard, the shared staging name
+    /// let each truncate what the other was writing and the loser renamed the
+    /// mixture over the real one: 6 of 200 rounds left unreadable JSON.
+    #[test]
+    fn many_writers_at_once_leave_the_file_readable_and_whole() {
+        let dir = scratch("concurrent");
+        fs::create_dir_all(&dir).expect("should create");
+        let store = Store::at(&dir);
+        store.save_rules(&RuleSet::default()).expect("should seed");
+
+        std::thread::scope(|pack| {
+            for worker in 0..8 {
+                let store = Store::at(&dir);
+                pack.spawn(move || {
+                    for round in 0..25 {
+                        let id = format!("w{worker}-{round}");
+                        let _ = store.edit_rules(|rules| {
+                            rules.upsert(Rule {
+                                id: id.clone(),
+                                scope: Scope::Host(format!("{id}.test")),
+                                source_app: None,
+                                target: Target {
+                                    browser_id: "firefox".to_owned(),
+                                    profile_id: None,
+                                },
+                                private: false,
+                            });
+                            true
+                        });
+                    }
+                });
+            }
+        });
+
+        let survived = store.rules().expect("the file must still be readable");
+        assert!(
+            survived.rules.len() > 100,
+            "a lost update dropped too much: {} of 200",
+            survived.rules.len()
+        );
+    }
+
+    /// The version marker is there so a newer file is recognised rather than
+    /// parsed. A caller that swallows this error and writes anyway erases the
+    /// fields it could not read: every custom browser, on the first switch.
+    #[test]
+    fn a_browsers_file_from_a_newer_version_reads_as_an_error_not_as_empty() {
+        let dir = scratch("too-new");
+        fs::create_dir_all(&dir).expect("should create");
+        fs::write(
+            dir.join("browsers.json"),
+            r#"{"schema_version": 99, "browsers": []}"#,
+        )
+        .expect("should write");
+
+        let outcome = Store::at(&dir).browsers();
+        assert!(
+            outcome.is_err(),
+            "a file this version cannot read must not read as an empty catalogue"
+        );
     }
 
     fn a_rule() -> Rule {

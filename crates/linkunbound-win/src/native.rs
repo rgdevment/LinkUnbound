@@ -6,24 +6,164 @@
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE, MAX_PATH};
+use windows::Win32::Foundation::{CloseHandle, GlobalFree, HANDLE, HWND, MAX_PATH, POINT};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits,
-    GetObjectW, HBITMAP, ReleaseDC,
+    GetMonitorInfoW, GetObjectW, HBITMAP, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+    MonitorFromPoint, ReleaseDC,
 };
+use windows::Win32::System::DataExchange::{
+    CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+};
+use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
+use windows::Win32::System::Ole::CF_UNICODETEXT;
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    AttachThreadInput, GetCurrentThreadId, OpenProcess, PROCESS_NAME_WIN32,
+    PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{SetFocus, VkKeyScanW};
 use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW};
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId,
+    HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
+    WS_EX_TOOLWINDOW,
+};
 
 /// Tells the shell the association keys changed. Without it Explorer keeps
 /// serving the previous default until something else invalidates its cache.
 pub fn notify_associations_changed() {
     unsafe {
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+    }
+}
+
+#[must_use]
+pub fn cursor() -> Option<(i32, i32)> {
+    let mut point = POINT::default();
+    unsafe { GetCursorPos(&mut point) }.ok()?;
+    Some((point.x, point.y))
+}
+
+/// The work area, not the screen: otherwise the picker lands under the taskbar.
+#[must_use]
+pub fn work_area_at(x: i32, y: i32) -> Option<(i32, i32, i32, i32)> {
+    let monitor: HMONITOR = unsafe { MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST) };
+    let mut info = MONITORINFO {
+        cbSize: u32::try_from(std::mem::size_of::<MONITORINFO>()).ok()?,
+        ..Default::default()
+    };
+    if !unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool() {
+        return None;
+    }
+    let area = info.rcWork;
+    Some((
+        area.left,
+        area.top,
+        area.right - area.left,
+        area.bottom - area.top,
+    ))
+}
+
+/// A tool window is kept out of the taskbar and the alt-tab list. The picker is
+/// summoned by a click and dismissed by one: an entry standing there outlives
+/// the window it names, with no icon of its own to show.
+pub fn keep_off_the_taskbar(window: isize) {
+    let hwnd = HWND(window as *mut std::ffi::c_void);
+    let style = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+    unsafe {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_TOOLWINDOW.0 as isize);
+    }
+    let _ = unsafe {
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE,
+        )
+    };
+}
+
+/// The digit a key would type unshifted. Slint hands over the character the
+/// layout produced, so `Shift+1` arrives as `!` on a Spanish keyboard, `@` on a
+/// US one, and so on: without asking Windows which key that was, holding Shift
+/// silently broke the very shortcut it is meant to modify.
+#[must_use]
+pub fn digit_behind(typed: char) -> Option<u32> {
+    let scan = unsafe { VkKeyScanW(typed as u16) };
+    if scan == -1 {
+        return None;
+    }
+    let virtual_key = u32::from(u16::try_from(scan).ok()? & 0x00ff);
+    // VK_1 through VK_9 share their codes with the ASCII digits.
+    (0x31..=0x39)
+        .contains(&virtual_key)
+        .then(|| virtual_key - 0x30)
+}
+
+#[must_use]
+pub fn is_in_front(window: isize) -> bool {
+    unsafe { GetForegroundWindow() }.0 as isize == window
+}
+
+/// Windows refuses `SetForegroundWindow` to a process that is not already in
+/// front. Attaching to the input queue of the window that is lifts the refusal;
+/// this is the handshake every launcher performs.
+pub fn take_the_keyboard(window: isize) {
+    let hwnd = HWND(window as *mut std::ffi::c_void);
+    let front = unsafe { GetForegroundWindow() };
+    let ours = unsafe { GetCurrentThreadId() };
+    let theirs = unsafe { GetWindowThreadProcessId(front, None) };
+
+    if theirs != 0 && theirs != ours {
+        let _ = unsafe { AttachThreadInput(ours, theirs, true) };
+        let _ = unsafe { SetForegroundWindow(hwnd) };
+        let _ = unsafe { SetFocus(Some(hwnd)) };
+        let _ = unsafe { AttachThreadInput(ours, theirs, false) };
+    } else {
+        let _ = unsafe { SetForegroundWindow(hwnd) };
+        let _ = unsafe { SetFocus(Some(hwnd)) };
+    }
+}
+
+/// The clipboard is a global the whole desktop shares: it has to be opened,
+/// emptied and closed, and the buffer handed over stops being ours the moment
+/// `SetClipboardData` accepts it.
+pub fn copy_text(text: &str) -> bool {
+    let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    let bytes = std::mem::size_of_val(wide.as_slice());
+
+    unsafe {
+        if OpenClipboard(None).is_err() {
+            return false;
+        }
+        let _ = EmptyClipboard();
+
+        let Ok(handle) = GlobalAlloc(GMEM_MOVEABLE, bytes) else {
+            let _ = CloseClipboard();
+            return false;
+        };
+        let target = GlobalLock(handle);
+        if target.is_null() {
+            let _ = GlobalFree(Some(handle));
+            let _ = CloseClipboard();
+            return false;
+        }
+        std::ptr::copy_nonoverlapping(wide.as_ptr(), target.cast::<u16>(), wide.len());
+        let _ = GlobalUnlock(handle);
+
+        let given = SetClipboardData(CF_UNICODETEXT.0.into(), Some(HANDLE(handle.0)));
+        if given.is_err() {
+            let _ = GlobalFree(Some(handle));
+            let _ = CloseClipboard();
+            return false;
+        }
+        let _ = CloseClipboard();
+        true
     }
 }
 
@@ -211,6 +351,43 @@ pub fn file_icon(path: &Path, side: i32) -> Option<(u32, u32, Vec<u8>)> {
         let _ = DestroyIcon(info.hIcon);
     }
     pixels
+}
+
+#[cfg(test)]
+mod keys {
+    use super::digit_behind;
+
+    /// Slint reports the character the layout produced, so with Shift held a
+    /// digit never arrives as a digit. Asking Windows which key it was is what
+    /// makes Shift-to-open-privately work on any keyboard.
+    #[test]
+    fn a_plain_digit_is_itself() {
+        for (typed, expected) in [('1', 1), ('5', 5), ('9', 9)] {
+            assert_eq!(digit_behind(typed), Some(expected), "{typed}");
+        }
+    }
+
+    #[test]
+    fn a_letter_is_not_a_destination() {
+        for typed in ['a', 'z', ' ', '0'] {
+            assert_eq!(digit_behind(typed), None, "{typed}");
+        }
+    }
+
+    /// Whatever this machine's layout puts on Shift+1 must resolve back to 1.
+    #[test]
+    fn the_shifted_face_of_a_digit_resolves_to_that_digit() {
+        let shifted = ['!', '"', '@', '#', '$', '%', '&', '/', '(', ')', '='];
+        let resolved: Vec<_> = shifted.iter().filter_map(|c| digit_behind(*c)).collect();
+        assert!(
+            !resolved.is_empty(),
+            "no shifted digit resolved on this layout: the guard would be dead"
+        );
+        assert!(
+            resolved.iter().all(|d| (1..=9).contains(d)),
+            "resolved outside 1..9: {resolved:?}"
+        );
+    }
 }
 
 #[cfg(test)]

@@ -37,6 +37,14 @@ mod tests {
 
     /// The picker left for the resident; a window still declared here would be
     /// a second one nobody drives.
+    /// Two tray clicks would otherwise start two processes, each reconciling the
+    /// registry and each claiming the global shortcut.
+    #[test]
+    fn only_one_settings_process_may_exist() {
+        let wiring = include_str!("lib.rs");
+        assert!(wiring.contains("tauri_plugin_single_instance::init"));
+    }
+
     #[test]
     fn no_window_is_declared_at_all_any_more() {
         let config = include_str!("../tauri.conf.json");

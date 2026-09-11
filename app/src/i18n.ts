@@ -14,9 +14,12 @@ const ES = {
 
   healthTitle: "LinkUnbound no está recibiendo los enlaces",
   healthStale:
-    "El registro apunta a una copia de LinkUnbound que ya no está ahí. Los enlaces no llegarán hasta repararlo.",
+    "El registro apunta a otra copia de LinkUnbound. Los enlaces irán allí, no aquí, hasta que lo repares.",
   healthBuildTree:
-    "Estás ejecutando una copia recién compilada. Windows no puede confiar los enlaces a una ruta que desaparece al limpiar el proyecto.",
+    "Estás ejecutando una copia recién compilada. Windows no puede confiar los enlaces a una ruta que desaparece al limpiar el proyecto, así que esta copia no se registra.",
+  healthWrongBinary:
+    "El registro apunta a la ventana de ajustes, que no sabe abrir un enlace. Repáralo para que apunte al proceso que sí.",
+  healthPointsAt: "Windows ejecutaría: {}",
   healthRepair: "Reparar",
   sectionDefault: "Navegador predeterminado",
   defaultYes: "LinkUnbound recibe los enlaces de este equipo",
@@ -156,9 +159,12 @@ const EN: Record<Key, string> = {
 
   healthTitle: "LinkUnbound is not receiving links",
   healthStale:
-    "The registration points at a copy of LinkUnbound that is no longer there. Links will not arrive until it is repaired.",
+    "The registration points at another copy of LinkUnbound. Links will go there, not here, until you repair it.",
   healthBuildTree:
     "You are running a freshly built copy. Windows cannot trust links to a path that disappears when the project is cleaned.",
+  healthWrongBinary:
+    "The registration points at the settings window, which cannot open a link. Repair it so it points at the process that can.",
+  healthPointsAt: "Windows would run: {}",
   healthRepair: "Repair",
   sectionDefault: "Default browser",
   defaultYes: "LinkUnbound receives the links of this computer",

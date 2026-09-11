@@ -105,6 +105,9 @@ fn version_of(value: &serde_json::Value) -> u32 {
         .unwrap_or(0)
 }
 
+/// The file is disarmed on the way in, at the one place it is read: this app is
+/// what the shell runs for a link, so whatever the file says is what gets
+/// launched. Anything past this point can be trusted to launch.
 pub fn read_browsers(raw: &str) -> Result<BrowserConfig, ConfigError> {
     let value: serde_json::Value = serde_json::from_str(raw)?;
     let found = version_of(&value);
@@ -112,7 +115,11 @@ pub fn read_browsers(raw: &str) -> Result<BrowserConfig, ConfigError> {
         return Err(ConfigError::TooNew { found });
     }
     if found == SCHEMA_VERSION {
-        return Ok(serde_json::from_value(value)?);
+        let mut config: BrowserConfig = serde_json::from_value(value)?;
+        for browser in &mut config.browsers {
+            crate::hostile::disarm(browser);
+        }
+        return Ok(config);
     }
 
     let legacy: LegacyBrowserConfig = serde_json::from_value(value)?;

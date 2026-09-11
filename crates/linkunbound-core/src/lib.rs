@@ -1,5 +1,7 @@
+mod binaries;
 mod browser;
 mod config;
+mod hostile;
 mod i18n;
 mod launch;
 mod prefs;
@@ -9,11 +11,13 @@ mod rule;
 mod store;
 mod url;
 
+pub use binaries::{Registered, link_handler, settings_binary, what_is_registered};
 pub use browser::{Browser, LaunchRefused, Profile, merge};
 pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,
 };
+pub use hostile::{as_file_name, disarm, is_remote};
 pub use i18n::{Language, Strings};
 pub use launch::{LaunchError, open as launch};
 pub use prefs::{Locale, Preferences, Theme};

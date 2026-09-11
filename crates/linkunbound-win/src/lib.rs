@@ -14,10 +14,14 @@ pub use detect::installed_browsers;
 #[cfg(windows)]
 pub use icons::cached_or_extract as icon_for;
 #[cfg(windows)]
-pub use native::{notify_associations_changed, source_app};
+pub use native::{
+    copy_text, cursor, digit_behind, is_in_front, keep_off_the_taskbar,
+    notify_associations_changed, source_app, take_the_keyboard, work_area_at,
+};
 #[cfg(windows)]
 pub use registration::{
     Registration, association_report, is_build_tree, is_default_browser, taskbar_is_light,
+    windows_are_light,
 };
 #[cfg(windows)]
 pub use startup::{Startup, set as set_startup, state as startup_state};

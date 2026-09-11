@@ -2,12 +2,20 @@
 
 slint::include_modules!();
 
+pub mod place;
 pub mod single;
 pub mod tray;
 
 use std::rc::Rc;
 
 use linkunbound_core::{Browser, Scope, Strings, looks_unresolved, site_of};
+
+/// Both windows read the same palette, so the choice is applied once per window
+/// rather than threaded through every component that draws.
+pub fn paint(picker: &Picker, notice: &Notice, light: bool) {
+    picker.global::<Palette>().set_light(light);
+    notice.global::<Palette>().set_light(light);
+}
 
 /// Extracted and drawn at this same side: any other ratio scales, and blurs.
 pub const ICON_SIDE: u32 = 24;
@@ -133,7 +141,13 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
     window.set_private_on(false);
     window.set_copied(false);
     window.set_reach_index(0);
-    window.set_problem(String::new().into());
+    let wrapped = looks_unresolved(url);
+    window.set_alarming(!wrapped);
+    window.set_problem(if wrapped {
+        words.wrapper_unresolved.into()
+    } else {
+        slint::SharedString::new()
+    });
 
     let listed: Vec<Destination> = rows
         .iter()
@@ -162,7 +176,7 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
 #[cfg(test)]
 mod tests {
     use super::{Listed, Reaches, destinations, reaches, split};
-    use linkunbound_core::{Browser, Language, Profile, Scope, Strings};
+    use linkunbound_core::{Browser, Language, Profile, Scope, Strings, looks_unresolved};
 
     const SPOKEN: Strings = Language::Spanish.strings();
 
@@ -239,6 +253,21 @@ mod tests {
         assert_eq!(spanish[0].0, "Solo esta vez");
         assert_eq!(english[0].0, "Just this time");
         assert_eq!(english[3].0, "The whole site");
+    }
+
+    /// Greying the reaches without a word leaves the user with no reason why.
+    #[test]
+    fn a_wrapped_link_is_named_as_such_and_not_as_a_failure() {
+        let wrapped = "https://eu01.safelinks.protection.outlook.com/?whatever=1";
+        assert!(looks_unresolved(wrapped));
+        assert!(!looks_unresolved(PLAIN));
+
+        let spanish = Language::Spanish.strings();
+        assert!(spanish.wrapper_unresolved.contains("envuelto"));
+        assert!(
+            !spanish.wrapper_unresolved.is_empty(),
+            "the picker shows this in place of nothing"
+        );
     }
 
     #[test]

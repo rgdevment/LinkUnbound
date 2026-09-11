@@ -53,6 +53,13 @@ fn catalogue() -> Vec<Browser> {
     merge(system::browsers(), &saved)
 }
 
+/// Refuses to go on when the saved file cannot be read. `SCHEMA_VERSION` exists
+/// so a newer file is recognised rather than parsed; swallowing that error and
+/// writing anyway erased every custom browser the moment a switch was touched.
+fn saved_browsers() -> Result<linkunbound_core::BrowserConfig, String> {
+    store().browsers().map_err(|e| e.to_string())
+}
+
 /// The rule as the settings window shows it: what it covers, where it opens and
 /// whether the browser it names is still installed.
 #[derive(Serialize)]
@@ -108,19 +115,20 @@ fn rules_list() -> Result<Vec<RuleView>, String> {
 
 #[tauri::command]
 fn rules_remove(id: String) -> Result<Vec<RuleView>, String> {
-    let store = store();
-    let mut rules = store.rules().map_err(|e| e.to_string())?;
-    rules.remove(&id);
-    store.save_rules(&rules).map_err(|e| e.to_string())?;
+    store()
+        .edit_rules(|rules| rules.remove(&id))
+        .map_err(|e| e.to_string())?;
     rules_list()
 }
 
 #[tauri::command]
 fn rules_reorder(ids: Vec<String>) -> Result<Vec<RuleView>, String> {
-    let store = store();
-    let mut rules = store.rules().map_err(|e| e.to_string())?;
-    rules.reorder(&ids);
-    store.save_rules(&rules).map_err(|e| e.to_string())?;
+    store()
+        .edit_rules(|rules| {
+            rules.reorder(&ids);
+            true
+        })
+        .map_err(|e| e.to_string())?;
     rules_list()
 }
 
@@ -177,10 +185,9 @@ fn browsers_list() -> Vec<BrowserView> {
 /// Saves the merged catalogue, which is what turns a detected browser into a
 /// saved one the moment the user first touches it.
 fn keep(browsers: Vec<Browser>) -> Result<Vec<BrowserView>, String> {
-    let store = store();
-    let mut config = store.browsers().unwrap_or_default();
+    let mut config = saved_browsers()?;
     config.browsers = browsers;
-    store.save_browsers(&config).map_err(|e| e.to_string())?;
+    store().save_browsers(&config).map_err(|e| e.to_string())?;
     Ok(browsers_list())
 }
 
@@ -431,11 +438,6 @@ fn system_set_startup(enabled: bool) -> Result<system::SystemState, String> {
     system::set_starts_with_system(enabled)
 }
 
-#[tauri::command]
-fn settings_open(app: AppHandle) {
-    shell::open_settings(&app);
-}
-
 pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(Held::default()))
@@ -455,7 +457,6 @@ pub fn run() {
             maintenance_report,
             prefs_get,
             prefs_set,
-            settings_open,
             system_state,
             system_set_registered,
             system_set_startup,
@@ -463,6 +464,11 @@ pub fn run() {
             system_repair
         ])
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // Two tray clicks used to mean two processes, each writing the registry
+        // and each claiming the shortcut. The second now raises the first.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            shell::open_settings(app);
+        }))
         .setup(|app| {
             let args: Vec<String> = std::env::args_os()
                 .map(|a| a.to_string_lossy().into_owned())

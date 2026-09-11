@@ -189,15 +189,23 @@ impl Registration {
         Ok(())
     }
 
+    /// Whether the app is offered at all. Whether the command points at the
+    /// right binary is a separate question, and a separate answer.
     #[must_use]
     pub fn is_registered(&self) -> bool {
-        let Ok(exe) = std::env::current_exe() else {
-            return false;
-        };
-        self.is_registered_as(&exe.to_string_lossy())
+        self.registered_command().is_some()
     }
 
+    /// The command as the shell will read it, so a caller can say what it points
+    /// at rather than only whether it is ours.
     #[must_use]
+    pub fn registered_command(&self) -> Option<String> {
+        Self::hkcu()
+            .open_subkey(format!(r"{}\{PROG_ID}\shell\open\command", self.classes()))
+            .and_then(|k| k.get_value::<String, _>(""))
+            .ok()
+    }
+
     pub fn is_registered_as(&self, exe: &str) -> bool {
         Self::hkcu()
             .open_subkey(format!(r"{}\{PROG_ID}\shell\open\command", self.classes()))
@@ -217,6 +225,16 @@ pub fn taskbar_is_light() -> bool {
     RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
         .and_then(|k| k.get_value::<u32, _>("SystemUsesLightTheme"))
+        .is_ok_and(|v| v == 1)
+}
+
+/// A separate setting from the taskbar one in Windows 11: an app may be dark on
+/// a light taskbar, and the picker has to follow this one.
+#[must_use]
+pub fn windows_are_light() -> bool {
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        .and_then(|k| k.get_value::<u32, _>("AppsUseLightTheme"))
         .is_ok_and(|v| v == 1)
 }
 
@@ -421,7 +439,14 @@ mod tests {
             .set_value("", &"\"C:\\Temp\\linkunbound-helper.exe\" \"%1\"")
             .unwrap();
 
-        assert!(!reg.is_registered());
+        assert!(
+            reg.is_registered(),
+            "something is registered, whoever it belongs to"
+        );
+        assert!(
+            !reg.is_registered_as(r"C:\Temp\linkunbound.exe"),
+            "a name that merely contains ours is not ours"
+        );
         scrub(test_root);
     }
 

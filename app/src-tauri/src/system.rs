@@ -13,6 +13,10 @@ pub struct SystemState {
     /// undone from here: the toggle has to explain rather than pretend.
     pub startup_is_ours: bool,
     pub health: Health,
+    /// What the shell would actually run. Shown as-is so a registration left by
+    /// a build tree or another install names itself instead of hiding behind a
+    /// verdict.
+    pub registered_path: Option<String>,
     /// Present when the machine has Edge, which is what makes Teams and Outlook
     /// bypass the default browser.
     pub edge_installed: bool,
@@ -27,6 +31,8 @@ pub enum Health {
     Stale,
     /// Running from a build tree, which cannot own the registration at all.
     BuildTree,
+    /// Registered to our own settings window, which cannot open a link.
+    WrongBinary,
     NotRegistered,
 }
 
@@ -40,39 +46,42 @@ pub struct Association {
 mod platform {
     use super::Health;
     use super::{Association, SystemState};
+    use linkunbound_core::{Registered, link_handler, what_is_registered};
     use linkunbound_win::{
         Registration, association_report, installed_browsers, is_build_tree, is_default_browser,
         notify_associations_changed, set_startup, startup_state,
     };
+    use std::path::PathBuf;
 
     /// Looking registered is not the same as working: the command can point at a
     /// path this executable no longer occupies, and nothing else would say so.
     fn health(registration: &Registration) -> Health {
-        let Some(exe) = own_path() else {
+        let Some(handler) = handler() else {
             return Health::NotRegistered;
         };
-        if is_build_tree(&exe) {
+        if is_build_tree(&handler.to_string_lossy()) {
             return Health::BuildTree;
         }
-        if registration.is_registered_as(&exe) {
-            return Health::Fine;
+        match what_is_registered(registration.registered_command().as_deref(), &handler) {
+            Registered::Correct => Health::Fine,
+            Registered::WrongBinary(_) => Health::WrongBinary,
+            Registered::Elsewhere(_) => Health::Stale,
+            Registered::Absent => Health::NotRegistered,
         }
-        if registration.is_registered() {
-            return Health::Stale;
-        }
-        Health::NotRegistered
     }
 
-    fn own_path() -> Option<String> {
-        Some(std::env::current_exe().ok()?.to_string_lossy().into_owned())
+    /// The resident, never this process: settings cannot open a link, and
+    /// registering it is the one mistake this whole check exists to catch.
+    fn handler() -> Option<PathBuf> {
+        Some(link_handler(&std::env::current_exe().ok()?))
     }
 
     /// Reconciles on every launch, the way 1.x did: an update moves the
     /// executable and the keys keep pointing at a path that no longer exists.
     pub fn reconcile() {
-        let Some(exe) = own_path() else { return };
+        let Some(handler) = handler() else { return };
         let registration = Registration::default();
-        if registration.register(&exe).is_ok() {
+        if registration.register(&handler.to_string_lossy()).is_ok() {
             notify_associations_changed();
         }
     }
@@ -82,6 +91,7 @@ mod platform {
         let registration = Registration::default();
         SystemState {
             health: health(&registration),
+            registered_path: registration.registered_command(),
             edge_installed: installed_browsers().iter().any(|b| b.id.contains("edge")),
             registered: registration.is_registered(),
             is_default: is_default_browser(),
@@ -107,8 +117,8 @@ mod platform {
     pub fn set_registered(enabled: bool) -> Result<SystemState, String> {
         let registration = Registration::default();
         let outcome = if enabled {
-            let exe = own_path().ok_or_else(|| "cannot find our own path".to_owned())?;
-            registration.register(&exe)
+            let handler = handler().ok_or_else(|| "cannot find our own path".to_owned())?;
+            registration.register(&handler.to_string_lossy())
         } else {
             registration.unregister()
         };

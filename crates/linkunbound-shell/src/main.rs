@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use linkunbound_core::{Language, Rule, Store, Strings, Target, host_of, normalise};
 use linkunbound_shell::tray::{Asked, Tray};
-use linkunbound_shell::{ICON_SIDE, Listed, Notice, Picker, Reaches, dress, single};
-use slint::ComponentHandle;
+use linkunbound_shell::{ICON_SIDE, Listed, Notice, Picker, Reaches, dress, paint, place, single};
+use slint::{ComponentHandle, Model};
 
 fn store() -> Store {
     let base = std::env::var_os("LOCALAPPDATA")
@@ -49,6 +49,38 @@ mod host {
     pub fn light_taskbar() -> bool {
         linkunbound_win::taskbar_is_light()
     }
+
+    pub fn light_windows() -> bool {
+        linkunbound_win::windows_are_light()
+    }
+
+    pub fn cursor() -> Option<(i32, i32)> {
+        linkunbound_win::cursor()
+    }
+
+    pub fn work_area_at(x: i32, y: i32) -> Option<(i32, i32, i32, i32)> {
+        linkunbound_win::work_area_at(x, y)
+    }
+
+    pub fn keep_off_the_taskbar(window: isize) {
+        linkunbound_win::keep_off_the_taskbar(window);
+    }
+
+    pub fn take_the_keyboard(window: isize) {
+        linkunbound_win::take_the_keyboard(window);
+    }
+
+    pub fn is_in_front(window: isize) -> bool {
+        linkunbound_win::is_in_front(window)
+    }
+
+    pub fn copy_text(text: &str) -> bool {
+        linkunbound_win::copy_text(text)
+    }
+
+    pub fn digit_behind(typed: char) -> Option<u32> {
+        linkunbound_win::digit_behind(typed)
+    }
 }
 
 #[cfg(not(windows))]
@@ -69,6 +101,34 @@ mod host {
 
     pub fn light_taskbar() -> bool {
         false
+    }
+
+    pub fn light_windows() -> bool {
+        false
+    }
+
+    pub fn cursor() -> Option<(i32, i32)> {
+        None
+    }
+
+    pub fn work_area_at(_x: i32, _y: i32) -> Option<(i32, i32, i32, i32)> {
+        None
+    }
+
+    pub fn keep_off_the_taskbar(_window: isize) {}
+
+    pub fn take_the_keyboard(_window: isize) {}
+
+    pub fn is_in_front(_window: isize) -> bool {
+        true
+    }
+
+    pub fn copy_text(_text: &str) -> bool {
+        false
+    }
+
+    pub fn digit_behind(typed: char) -> Option<u32> {
+        typed.to_digit(10).filter(|d| (1..=9).contains(d))
     }
 }
 
@@ -98,8 +158,8 @@ struct Fired {
 fn answered_by_rule(url: &str, source: Option<&str>) -> Option<Fired> {
     let rules = store().rules().ok()?;
     let host = host_of(url)?;
-    let browsers = catalogue();
     let rule = rules.resolve(url, &host, source)?;
+    let browsers = catalogue();
     linkunbound_core::launch(
         &browsers,
         &rule.target.browser_id,
@@ -127,6 +187,9 @@ fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
     notice.set_undo_label(words.notice_undo.into());
     notice.set_left(NOTICE_SECONDS);
     let _ = notice.show();
+    if let Some(handle) = native_handle(notice.window()) {
+        host::keep_off_the_taskbar(handle);
+    }
 }
 
 /// Settings runs in another process: the file is the only channel between them.
@@ -140,30 +203,34 @@ fn prefs_touched_at() -> Option<std::time::SystemTime> {
 }
 
 fn forget(rule_id: &str) {
-    let store = store();
-    let Ok(mut rules) = store.rules() else { return };
-    rules.remove(rule_id);
-    let _ = store.save_rules(&rules);
+    let _ = store().edit_rules(|rules| rules.remove(rule_id));
 }
 
-fn remember(url: &str, chosen: &Listed, private: bool, reach: Reaches) {
-    let Some(host) = host_of(url) else { return };
-    let Some(scope) = reach.scope(url, &host) else {
-        return;
+/// Reports rather than swallows: the window says the choice was remembered, and
+/// a failed write would leave that claim false with nothing on screen to correct
+/// it.
+fn remember(url: &str, chosen: &Listed, private: bool, reach: Reaches) -> bool {
+    let Some(host) = host_of(url) else {
+        return true;
     };
-    let store = store();
-    let Ok(mut rules) = store.rules() else { return };
-    rules.upsert(Rule {
-        id: String::new(),
-        scope,
-        source_app: None,
-        target: Target {
-            browser_id: chosen.browser_id.clone(),
-            profile_id: chosen.profile_id.clone(),
-        },
-        private,
-    });
-    let _ = store.save_rules(&rules);
+    let Some(scope) = reach.scope(url, &host) else {
+        return true;
+    };
+    store()
+        .edit_rules(|rules| {
+            rules.upsert(Rule {
+                id: String::new(),
+                scope,
+                source_app: None,
+                target: Target {
+                    browser_id: chosen.browser_id.clone(),
+                    profile_id: chosen.profile_id.clone(),
+                },
+                private,
+            });
+            true
+        })
+        .is_ok()
 }
 
 fn open_settings() {
@@ -182,9 +249,30 @@ fn open_settings() {
 struct Shown {
     url: Option<String>,
     rows: Vec<Listed>,
+    /// Links that arrived while one was already on screen. Redressing the window
+    /// under the user would open the wrong one, and dropping them would lose a
+    /// click they already made.
+    waiting: std::collections::VecDeque<String>,
+}
+
+/// A link that arrives while one is already on screen waits its turn. Redressing
+/// the window under the user opens the wrong one — they aimed at what they could
+/// see — and discarding it loses a click they already made.
+///
+/// Kept apart from the window so the decision can be checked without one.
+fn claims_the_window(shown: &mut Shown, url: String, occupied: bool) -> Option<String> {
+    if occupied {
+        shown.waiting.push_back(url);
+        return None;
+    }
+    Some(url)
 }
 
 fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: String) {
+    let occupied = picker.window().is_visible();
+    let Some(url) = claims_the_window(&mut shown.borrow_mut(), url, occupied) else {
+        return;
+    };
     let listed = rows();
     if listed.is_empty() {
         open_settings();
@@ -196,7 +284,189 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
         held.url = Some(url);
         held.rows = listed;
     }
+    beside_the_pointer(picker);
     let _ = picker.show();
+    if let Some(handle) = native_handle(picker.window()) {
+        host::keep_off_the_taskbar(handle);
+        host::take_the_keyboard(handle);
+    }
+}
+
+/// The picker is summoned by a click and answered with the keyboard, so it has
+/// to be in front and hold the focus; winit hands over neither on its own.
+fn native_handle(window: &slint::Window) -> Option<isize> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    match window.window_handle().window_handle().ok()?.as_raw() {
+        RawWindowHandle::Win32(win32) => Some(win32.hwnd.get()),
+        _ => None,
+    }
+}
+
+/// Shows whatever queued up behind the link just dealt with, so nothing a user
+/// clicked is silently dropped.
+fn next_in_line(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>) {
+    let queued = shown.borrow_mut().waiting.pop_front();
+    if let Some(url) = queued {
+        present(picker, words, shown, url);
+    }
+}
+
+/// The picker belongs to the click that summoned it, not to the middle of a screen.
+fn beside_the_pointer(picker: &Picker) {
+    let Some((cx, cy)) = host::cursor() else {
+        return;
+    };
+    let Some((x, y, width, height)) = host::work_area_at(cx, cy) else {
+        return;
+    };
+    let scale = f64::from(picker.window().scale_factor());
+    let size = |logical: f32| (f64::from(logical) * scale).round() as i32;
+
+    let (at_x, at_y) = place::beside(
+        (cx, cy),
+        (
+            size(picker.get_wanted_width()),
+            size(picker.get_wanted_height()),
+        ),
+        place::Bounds {
+            x,
+            y,
+            width,
+            height,
+        },
+    );
+    picker
+        .window()
+        .set_position(slint::PhysicalPosition::new(at_x, at_y));
+}
+
+/// Everything the event loop owns. Reached from the listener thread by way of
+/// `invoke_from_event_loop`, which is why it lives here and not in a closure:
+/// the state is `Rc` and cannot cross a thread, but a wake-up can.
+struct Ui {
+    picker: Picker,
+    notice: Notice,
+    shown: Rc<RefCell<Shown>>,
+    words: Cell<Strings>,
+    firing: RefCell<Option<String>>,
+    tray: Option<Tray>,
+    watch: slint::Timer,
+    countdown: slint::Timer,
+    prefs_seen: Cell<Option<std::time::SystemTime>>,
+    held_focus: Cell<bool>,
+}
+
+thread_local! {
+    static UI: RefCell<Option<Rc<Ui>>> = const { RefCell::new(None) };
+}
+
+fn ui() -> Option<Rc<Ui>> {
+    UI.with_borrow(Clone::clone)
+}
+
+impl Ui {
+    /// Settings runs in another process: the file is the only channel between
+    /// them. Read when something is about to be shown rather than on a clock.
+    fn catch_up(&self) {
+        let now = prefs_touched_at();
+        if now == self.prefs_seen.get() {
+            return;
+        }
+        self.prefs_seen.set(now);
+        self.obey(&store().prefs());
+    }
+
+    fn obey(&self, prefs: &linkunbound_core::Preferences) {
+        self.words.set(Language::chosen(prefs.locale).strings());
+        paint(&self.picker, &self.notice, wants_light(prefs.theme));
+        if let Some(tray) = self.tray.as_ref() {
+            tray.show(!prefs.hide_tray);
+            tray.relabel(&self.words.get());
+        }
+    }
+
+    /// Slint offers no focus-lost event, so this polls — but only while the
+    /// picker is on screen, and it stops itself the moment it is not.
+    fn watch_focus(self: &Rc<Self>) {
+        self.held_focus.set(false);
+        let weak = Rc::downgrade(self);
+        self.watch.start(
+            slint::TimerMode::Repeated,
+            Duration::from_millis(60),
+            move || {
+                let Some(ui) = weak.upgrade() else { return };
+                if !ui.picker.window().is_visible() {
+                    ui.watch.stop();
+                    return;
+                }
+                // Without a handle nothing is known yet, and taking that for
+                // "in front" armed the dismissal before the window ever had the
+                // focus: the picker vanished on the tick after it appeared.
+                let Some(ours) = native_handle(ui.picker.window()) else {
+                    return;
+                };
+                if host::is_in_front(ours) {
+                    ui.held_focus.set(true);
+                } else if ui.held_focus.get() {
+                    let _ = ui.picker.hide();
+                    ui.watch.stop();
+                }
+            },
+        );
+    }
+
+    fn count_down(self: &Rc<Self>) {
+        let weak = Rc::downgrade(self);
+        self.countdown.start(
+            slint::TimerMode::Repeated,
+            Duration::from_secs(1),
+            move || {
+                let Some(ui) = weak.upgrade() else { return };
+                let left = ui.notice.get_left() - 1;
+                ui.notice.set_left(left);
+                if left <= 0 {
+                    let _ = ui.notice.hide();
+                    ui.countdown.stop();
+                }
+            },
+        );
+    }
+}
+
+/// One link, start to finish, on the UI thread. Called the instant the socket
+/// reads it: waiting for a poll turned four milliseconds of work into sixty.
+fn arrived(raw: String) {
+    let Some(ui) = ui() else { return };
+    // The socket takes a line from any process of this user; the command line is
+    // normalised and this has to be too, or the scheme guard is walked around.
+    let Some(url) = normalise(&raw) else { return };
+    ui.catch_up();
+
+    if let Some(fired) = answered_by_rule(&url, host::clicked_in().as_deref()) {
+        if store().prefs().notify_on_rule {
+            ui.firing.replace(Some(fired.rule_id.clone()));
+            flash(&ui.notice, &ui.words.get(), &fired);
+            ui.count_down();
+        }
+        return;
+    }
+    present(&ui.picker, &ui.words.get(), &ui.shown, url);
+    ui.watch_focus();
+}
+
+fn wants_light(theme: linkunbound_core::Theme) -> bool {
+    match theme {
+        linkunbound_core::Theme::Light => true,
+        linkunbound_core::Theme::Dark => false,
+        linkunbound_core::Theme::System => host::light_windows(),
+    }
+}
+
+fn asked_for(what: Asked) {
+    match what {
+        Asked::Settings => open_settings(),
+        Asked::Quit => slint::quit_event_loop().unwrap_or(()),
+    }
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -205,8 +475,9 @@ fn main() -> Result<(), slint::PlatformError> {
         .collect();
     let incoming = link_from(&args);
 
-    let (links, inbox) = channel::<String>();
-    let Some(_server) = single::claim(links) else {
+    let Some(_server) = single::claim(|url| {
+        let _ = slint::invoke_from_event_loop(move || arrived(url));
+    }) else {
         if let Some(url) = incoming {
             single::hand_over(&url);
         } else {
@@ -217,22 +488,42 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let picker = Picker::new()?;
     let shown = Rc::new(RefCell::new(Shown::default()));
-    let words = Rc::new(Cell::new(
-        Language::chosen(store().prefs().locale).strings(),
-    ));
 
     {
         let handle = picker.as_weak();
+        let shown = Rc::clone(&shown);
         picker.on_dismissed(move || {
-            if let Some(window) = handle.upgrade() {
-                let _ = window.hide();
+            let Some(window) = handle.upgrade() else {
+                return;
+            };
+            let _ = window.hide();
+            if let Some(ui) = ui() {
+                next_in_line(&window, &ui.words.get(), &shown);
             }
         });
     }
     {
         let handle = picker.as_weak();
+        picker.on_typed(move |typed, private| {
+            let Some(window) = handle.upgrade() else {
+                return false;
+            };
+            let Some(digit) = typed.chars().next().and_then(host::digit_behind) else {
+                return false;
+            };
+            let Some(index) = i32::try_from(digit).ok().map(|d| d - 1) else {
+                return false;
+            };
+            if index >= window.get_rows().row_count().try_into().unwrap_or(i32::MAX) {
+                return false;
+            }
+            window.invoke_open(index, private);
+            true
+        });
+    }
+    {
+        let handle = picker.as_weak();
         let shown = Rc::clone(&shown);
-        let spoken = Rc::clone(&words);
         picker.on_open(move |index, private| {
             let Some(window) = handle.upgrade() else {
                 return;
@@ -251,10 +542,24 @@ fn main() -> Result<(), slint::PlatformError> {
                 &url,
             ) {
                 Ok(()) => {
-                    let _ = window.hide();
-                    remember(&url, chosen, private, reach);
+                    let words = ui().map(|ui| ui.words.get());
+                    if remember(&url, chosen, private, reach) {
+                        let _ = window.hide();
+                        drop(held);
+                        if let Some(words) = words {
+                            next_in_line(&window, &words, &shown);
+                        }
+                    } else if let Some(words) = words {
+                        window.set_alarming(true);
+                        window.set_problem(words.fail_not_remembered.into());
+                    }
                 }
-                Err(why) => window.set_problem(spoken.get().on_failure(&why).into()),
+                Err(why) => {
+                    if let Some(ui) = ui() {
+                        window.set_alarming(true);
+                        window.set_problem(ui.words.get().on_failure(&why).into());
+                    }
+                }
             }
         });
     }
@@ -262,25 +567,22 @@ fn main() -> Result<(), slint::PlatformError> {
         let handle = picker.as_weak();
         let shown = Rc::clone(&shown);
         picker.on_copy(move || {
-            if let Some(window) = handle.upgrade()
-                && shown.borrow().url.is_some()
-            {
-                window.set_copied(true);
+            let Some(window) = handle.upgrade() else {
+                return;
+            };
+            let url = shown.borrow().url.clone();
+            // The tick only ever animated: nothing had reached the clipboard.
+            if let Some(url) = url {
+                window.set_copied(host::copy_text(&url));
             }
         });
     }
 
-    if let Some(url) = incoming {
-        present(&picker, &words.get(), &shown, url);
-    }
-
     let notice = Notice::new()?;
-    let firing: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
     {
         let handle = notice.as_weak();
-        let firing = Rc::clone(&firing);
         notice.on_undo(move || {
-            if let Some(id) = firing.borrow_mut().take() {
+            if let Some(id) = ui().and_then(|ui| ui.firing.borrow_mut().take()) {
                 forget(&id);
             }
             if let Some(window) = handle.upgrade() {
@@ -297,64 +599,51 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    let tray = Tray::install(host::light_taskbar(), &words.get());
+    let spoken = Language::chosen(store().prefs().locale).strings();
+    let tray = Tray::install(host::light_taskbar(), &spoken);
     let (asks, tray_inbox) = channel::<Asked>();
 
-    // Slint owns the UI thread, so the channels drain from its timer.
-    let ticker = slint::Timer::default();
-    let handle = picker.as_weak();
-    let notice_handle = notice.as_weak();
-    let mut ticks = 0u32;
-    let mut prefs_seen = prefs_touched_at();
-    ticker.start(
+    let state = Rc::new(Ui {
+        picker,
+        notice,
+        shown,
+        words: Cell::new(spoken),
+        firing: RefCell::new(None),
+        tray,
+        watch: slint::Timer::default(),
+        countdown: slint::Timer::default(),
+        prefs_seen: Cell::new(prefs_touched_at()),
+        held_focus: Cell::new(false),
+    });
+    // Applied here rather than only on a later change: the tray was built
+    // visible and the theme never left settings at all.
+    state.obey(&store().prefs());
+    UI.with_borrow_mut(|slot| *slot = Some(Rc::clone(&state)));
+
+    // Down the same path as any other link — reaching `present` directly meant a
+    // rule never answered the first link of a session — but deferred into the
+    // loop: before it runs there is no window handle, so the picker would open
+    // with a taskbar button and without the keyboard.
+    if let Some(url) = incoming {
+        let _ = slint::invoke_from_event_loop(move || arrived(url));
+    }
+
+    // The tray hands its events to a global queue rather than a callback, so
+    // this is the one thing still on a clock — and only while the app is idle,
+    // which is exactly when nothing else needs the CPU.
+    let pump = slint::Timer::default();
+    pump.start(
         slint::TimerMode::Repeated,
-        Duration::from_millis(80),
+        Duration::from_millis(120),
         move || {
-            ticks += 1;
-            if ticks.is_multiple_of(25) {
-                let now = prefs_touched_at();
-                if now != prefs_seen {
-                    prefs_seen = now;
-                    let prefs = store().prefs();
-                    words.set(Language::chosen(prefs.locale).strings());
-                    if let Some(tray) = tray.as_ref() {
-                        tray.show(!prefs.hide_tray);
-                        tray.relabel(&words.get());
-                    }
-                }
-            }
-            if ticks.is_multiple_of(12)
-                && let Some(window) = notice_handle.upgrade()
-                && window.window().is_visible()
-            {
-                let left = window.get_left() - 1;
-                window.set_left(left);
-                if left <= 0 {
-                    let _ = window.hide();
-                }
-            }
-            if let Some(tray) = tray.as_ref() {
+            if let Some(tray) = state.tray.as_ref() {
                 tray.drain(&asks);
             }
-            while let Ok(asked) = tray_inbox.try_recv() {
-                match asked {
-                    Asked::Settings => open_settings(),
-                    Asked::Quit => slint::quit_event_loop().unwrap_or(()),
+            while let Ok(what) = tray_inbox.try_recv() {
+                if what == Asked::Settings {
+                    state.catch_up();
                 }
-            }
-            while let Ok(url) = inbox.try_recv() {
-                if let Some(fired) = answered_by_rule(&url, host::clicked_in().as_deref()) {
-                    if store().prefs().notify_on_rule
-                        && let Some(window) = notice_handle.upgrade()
-                    {
-                        firing.replace(Some(fired.rule_id.clone()));
-                        flash(&window, &words.get(), &fired);
-                    }
-                    continue;
-                }
-                if let Some(window) = handle.upgrade() {
-                    present(&window, &words.get(), &shown, url);
-                }
+                asked_for(what);
             }
         },
     );
@@ -364,7 +653,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
 #[cfg(test)]
 mod tests {
-    use super::link_from;
+    use super::{Shown, claims_the_window, link_from};
+    use linkunbound_core::normalise;
     use linkunbound_shell::Reaches;
 
     fn args(rest: &[&str]) -> Vec<String> {
@@ -372,6 +662,57 @@ mod tests {
             .chain(rest.iter().copied())
             .map(str::to_owned)
             .collect()
+    }
+
+    /// The socket accepts a line from any process of this user, so what it
+    /// carries is as untrusted as a command line and has to cross the same
+    /// guard. A `file://` reaching a rule would fetch a UNC path and hand over
+    /// the NTLM hash without a click.
+    #[test]
+    fn what_arrives_over_the_socket_meets_the_same_guard_as_the_command_line() {
+        for hostile in [
+            "file://evil.test/share/payload",
+            "--gpu-launcher=calc.exe",
+            "javascript:alert(1)",
+            "",
+        ] {
+            assert!(
+                normalise(hostile).is_none(),
+                "{hostile} must not survive the guard"
+            );
+        }
+        assert_eq!(
+            normalise("https://github.com/a").as_deref(),
+            Some("https://github.com/a")
+        );
+    }
+
+    /// A link arriving while one is on screen must not redress the window: the
+    /// user aimed at what they could see. And it must not be dropped either —
+    /// that click already happened.
+    #[test]
+    fn a_link_arriving_over_a_shown_one_waits_instead_of_replacing_it() {
+        let mut shown = Shown::default();
+
+        let first = claims_the_window(&mut shown, "https://first.test/a".to_owned(), false);
+        assert_eq!(
+            first.as_deref(),
+            Some("https://first.test/a"),
+            "with no window up, the link is dressed straight away"
+        );
+        assert!(shown.waiting.is_empty());
+
+        let second = claims_the_window(&mut shown, "https://second.test/b".to_owned(), true);
+        assert!(second.is_none(), "it must not take a window already in use");
+        let third = claims_the_window(&mut shown, "https://third.test/c".to_owned(), true);
+        assert!(third.is_none());
+
+        assert_eq!(
+            shown.waiting.pop_front().as_deref(),
+            Some("https://second.test/b"),
+            "queued links are answered in the order they were clicked"
+        );
+        assert_eq!(shown.waiting.len(), 1, "and none of them is dropped");
     }
 
     #[test]

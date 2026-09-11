@@ -16,6 +16,7 @@ linkunbound-shell = { path = "crates/linkunbound-shell" }
 slint = { version = "1.17", default-features = false, features = [
   "compat-1-2",
   "backend-winit",
+  "raw-window-handle-06",
   "renderer-software",
   "std",
 ] }
@@ -23,7 +24,8 @@ slint-build = "1.17"
 tray-icon = "0.24"
 muda = "0.19"
 interprocess = "2.4"
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+# No tray feature: the resident owns the tray, through the `tray-icon` crate.
+tauri = { version = "2" }
 tauri-build = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-global-shortcut = "2"
@@ -33,6 +35,14 @@ url = "2"
 png = "0.18"
 base64 = "0.22"
 thiserror = "2"
+
+[profile.release]
+# The resident is mapped for the whole session, so its size is working set the
+# user pays for all day. Panics still unwind: aborting would turn a recoverable
+# failure into a crash with no notice.
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

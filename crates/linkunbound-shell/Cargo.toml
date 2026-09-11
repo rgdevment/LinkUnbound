@@ -16,9 +16,13 @@ interprocess.workspace = true
 tray-icon.workspace = true
 muda.workspace = true
 png.workspace = true
+raw-window-handle = "0.6"
 
 [target."cfg(windows)".dependencies]
 linkunbound-win.workspace = true
 
 [build-dependencies]
 slint-build.workspace = true
+
+[target."cfg(windows)".build-dependencies]
+embed-manifest = "1.4"

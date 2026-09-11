@@ -76,6 +76,40 @@ describe("settings", () => {
     expect(await screen.findByRole("button", { name: "Application" })).toBeInTheDocument();
   });
 
+  /// A screen reader picks its voice from this attribute, so it has to follow
+  /// the language actually being shown.
+  it("tells the document which language it is speaking", async () => {
+    answers(BASE, { prefs_get: () => Promise.resolve({ ...PREFS, language: "en" }) });
+    render(<Settings />);
+    await screen.findByRole("button", { name: "Links" });
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("names the binary the registration really points at", async () => {
+    answers({
+      ...BASE,
+      health: "wrong_binary",
+      registered_path: String.raw`"C:\Program Files\LinkUnbound\linkunbound-settings.exe" "%1"`,
+    });
+    render(<Settings />);
+    expect(await screen.findByText(/no sabe abrir un enlace/)).toBeInTheDocument();
+    expect(
+      screen.getByText((text) => text.includes("linkunbound-settings.exe")),
+    ).toBeInTheDocument();
+  });
+
+  it("does not hide a registration left behind by a build tree", async () => {
+    answers({
+      ...BASE,
+      health: "build_tree",
+      registered_path: String.raw`"D:\Code\LinkUnbound\target\debug\linkunbound-shell.exe" "%1"`,
+    });
+    render(<Settings />);
+    expect(
+      await screen.findByText((text) => text.includes(String.raw`target\debug`)),
+    ).toBeInTheDocument();
+  });
+
   it("says the links arrive here when they really do", async () => {
     render(<Settings />);
     expect(await screen.findByText(/recibe los enlaces/)).toBeInTheDocument();

@@ -49,7 +49,6 @@ tauri-plugin-global-shortcut.workspace = true
 
 serde.workspace = true
 
-thiserror.workspace = true
 
 
 

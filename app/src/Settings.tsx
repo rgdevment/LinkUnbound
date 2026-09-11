@@ -9,7 +9,7 @@ import { Card, Line, Section, Switch } from "./settings/parts";
 import Rules from "./settings/Rules";
 
 type Association = { scheme: string; held: boolean };
-type Health = "fine" | "stale" | "build_tree" | "not_registered";
+type Health = "fine" | "stale" | "build_tree" | "wrong_binary" | "not_registered";
 type SystemState = {
   registered: boolean;
   is_default: boolean;
@@ -17,6 +17,7 @@ type SystemState = {
   starts_with_system: boolean;
   startup_is_ours: boolean;
   health: Health;
+  registered_path: string | null;
   edge_installed: boolean;
 };
 
@@ -25,6 +26,7 @@ type Spoken = { language: string };
 const AILMENT: Partial<Record<Health, { what: Key; fix: Key | null }>> = {
   stale: { what: "healthStale", fix: "healthRepair" },
   build_tree: { what: "healthBuildTree", fix: null },
+  wrong_binary: { what: "healthWrongBinary", fix: "healthRepair" },
 };
 
 type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
@@ -108,6 +110,11 @@ function Links({
           <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
             {t(ailment.what)}
           </p>
+          {state?.registered_path && (
+            <p className="mt-1 font-mono text-[10.5px] break-all text-neutral-500 dark:text-[#8B92A1]">
+              {t("healthPointsAt", state.registered_path)}
+            </p>
+          )}
           {ailment.fix && (
             <button
               type="button"
@@ -173,6 +180,12 @@ export default function Settings() {
       .then(({ language }) => setLanguage(spoken(language)))
       .catch(noop);
   }, []);
+
+  // A screen reader picks its voice from this, so leaving it at the document's
+  // default reads Spanish with an English engine.
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   return (
     <Speaking value={language}>

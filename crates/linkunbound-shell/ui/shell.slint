@@ -12,19 +12,23 @@ struct Reach {
     dead: bool,
 }
 
-global Palette {
+export global Palette {
     in property <bool> light: false;
 
     out property <brush> ground: light ? #FFFFFF : #191A1F;
     out property <brush> ink: light ? #16181D : #F0F1F4;
     out property <brush> dim: light ? #676D7C : #8B92A1;
-    out property <brush> dimmer: light ? #9298A6 : #646B7C;
+    out property <brush> dimmer: light ? #6B7280 : #8B92A1;
     out property <brush> line: light ? #00000014 : #ffffff14;
     out property <brush> hover: light ? #0000000b : #ffffff12;
     out property <brush> chip: light ? #0000000e : #ffffff10;
     out property <brush> key-bg: light ? #00000010 : #ffffff14;
     out property <brush> key-ink: light ? #6C7280 : #A2A9B8;
     out property <brush> accent: light ? #2F62D8 : #6E9BFF;
+    // Literals here were picked for a dark ground and sat at 2.2:1 on a light
+    // one, which is where the launch failures are printed.
+    out property <brush> wrong: light ? #B3261E : #FF8A85;
+    out property <brush> caution: light ? #8A5200 : #E9A05C;
     out property <brush> accent-soft: light ? #2F62D821 : #6E9BFF2b;
     out property <brush> neutral: light ? #00000017 : #ffffff1c;
     out property <brush> neutral-ink: light ? #3A3F4B : #D6DAE3;
@@ -163,22 +167,27 @@ export component Picker inherits Window {
     in property <[Destination]> rows;
     in property <[Reach]> reaches;
     in property <string> problem;
+    in property <bool> alarming: true;
     in-out property <int> reach-index: 0;
     in-out property <bool> private-on: false;
     in-out property <bool> pinned-private: false;
     in-out property <bool> copied: false;
 
     callback open(int, bool);
+    /// Returns whether the key was a destination. See `key-pressed`.
+    callback typed(string, bool) -> bool;
     callback dismissed();
     callback copy();
 
     title: "LinkUnbound";
     no-frame: true;
     background: transparent;
-    width: 368px;
+    width: root.wanted-width;
     height: root.wanted-height;
     default-font-family: "Segoe UI";
     forward-focus: keys;
+
+    out property <length> wanted-width: 368px;
 
     out property <length> wanted-height:
         66px + 1px
@@ -194,8 +203,30 @@ export component Picker inherits Window {
                 root.dismissed();
                 return accept;
             }
-            if (event.text >= "1" && event.text <= "9") {
-                root.open(event.text.to-float() - 1, root.private-on);
+            // Reach, copy and private are the rest of what this window does, and
+            // a TouchArea answers to nothing but a pointer: without these, a
+            // keyboard could open a link but never remember one.
+            if (event.text == Key.LeftArrow) {
+                root.reach-index = max(0, root.reach-index - 1);
+                return accept;
+            }
+            if (event.text == Key.RightArrow || event.text == Key.Tab) {
+                root.reach-index = min(root.reaches.length - 1, root.reach-index + 1);
+                return accept;
+            }
+            if (event.text == "c" && event.modifiers.control) {
+                root.copy();
+                return accept;
+            }
+            if (event.text == "p" && event.modifiers.control) {
+                root.pinned-private = !root.pinned-private;
+                root.private-on = root.pinned-private;
+                return accept;
+            }
+            // The digit is worked out in Rust: with Shift held the layout hands
+            // over "!" or "@" instead of "1", so comparing characters here made
+            // Shift-to-open-privately break the very key it modifies.
+            if (root.typed(event.text, root.private-on)) {
                 return accept;
             }
             return reject;
@@ -321,7 +352,7 @@ export component Picker inherits Window {
                         Text {
                             text: root.problem;
                             font-size: 11.5px;
-                            color: #FF8A85;
+                            color: root.alarming ? Palette.wrong : Palette.caution;
                             vertical-alignment: center;
                             overflow: elide;
                         }
