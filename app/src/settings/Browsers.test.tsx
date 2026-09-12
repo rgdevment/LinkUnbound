@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Browsers from "./Browsers";
@@ -60,6 +60,54 @@ function answers(list: unknown[], overrides: Record<string, () => Promise<unknow
 }
 
 describe("browsers", () => {
+  it("asks before removing a browser, and says what is lost", async () => {
+    render(<Browsers />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Eliminar Chrome sin extensiones" }),
+    );
+    expect(invoke).not.toHaveBeenCalledWith("browsers_remove", expect.anything());
+    expect(await screen.findByText(/sin destino/)).toBeInTheDocument();
+
+    const ask = screen.getByRole("alertdialog", { name: "Eliminar Chrome sin extensiones" });
+    await userEvent.click(within(ask).getByRole("button", { name: "Eliminar" }));
+    expect(invoke).toHaveBeenCalledWith("browsers_remove", { id: MINE.id });
+  });
+
+  /// The saved order is one list and the screen shows two: stepping through the
+  /// whole list moved something in the other section, invisibly.
+  it("moves a browser past the one above it on screen, not in the file", async () => {
+    answers([MINE, CHROME, EDGE, ODD]);
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Bajar Google Chrome" }));
+    expect(invoke).toHaveBeenCalledWith("browsers_reorder", {
+      ids: [MINE.id, EDGE.id, CHROME.id, ODD.id],
+    });
+  });
+
+  it("does not offer to move the first of a section above a browser in the other", async () => {
+    answers([MINE, CHROME, EDGE, ODD]);
+    render(<Browsers />);
+    expect(await screen.findByRole("button", { name: "Subir Google Chrome" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Subir Chrome sin extensiones" })).toBeDisabled();
+  });
+
+  /// Only the path is off limits: a rescan would undo anything typed over it.
+  it("edits a detected browser, with its path locked", async () => {
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Editar Google Chrome" }));
+    expect(await screen.findByLabelText("Ruta del ejecutable")).toHaveAttribute("readonly");
+
+    const name = screen.getByLabelText("Nombre");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Chrome del trabajo");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(invoke).toHaveBeenCalledWith(
+      "browsers_update",
+      expect.objectContaining({ id: "google-chrome" }),
+    );
+  });
+
   beforeEach(() => {
     invoke.mockReset();
     answers([CHROME, EDGE, ODD, MINE]);

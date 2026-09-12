@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { type Key, useWords } from "../i18n";
+import Confirm from "./Confirm";
 import { Card, Section, Switch } from "./parts";
 
 type BrowserView = {
@@ -62,10 +63,14 @@ const FIELD =
 
 function Form({
   initial,
+  detected,
   onSave,
   onCancel,
 }: {
   initial: Edit;
+  /// Detection owns the path: typing over it would be undone by the next
+  /// rescan, so the field is shown and locked rather than hidden.
+  detected?: boolean;
   onSave: (edit: Edit) => void;
   onCancel: () => void;
 }) {
@@ -104,8 +109,14 @@ function Form({
         placeholder={t("fieldExe")}
         aria-label={t("fieldExe")}
         required
-        className={FIELD}
+        readOnly={detected}
+        className={`${FIELD} ${detected ? "opacity-60" : ""}`}
       />
+      {detected && (
+        <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
+          {t("fieldExeDetected")}
+        </p>
+      )}
       <input
         value={args}
         onChange={(e) => setArgs(e.target.value)}
@@ -157,6 +168,7 @@ export default function Browsers() {
   const [list, setList] = useState<BrowserView[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [asking, setAsking] = useState<BrowserView | null>(null);
 
   const run = useCallback((command: string, params: Record<string, unknown> = {}) => {
     void invoke<BrowserView[]>(command, params)
@@ -172,11 +184,18 @@ export default function Browsers() {
 
   if (list === null) return null;
 
-  const move = (id: string, step: number) => {
+  /// Moves within the section the user is looking at. The saved order is one
+  /// list and the screen shows two, so stepping through the whole list swapped
+  /// a browser with one from the other section and nothing appeared to happen.
+  const move = (id: string, step: number, within: BrowserView[]) => {
+    const seen = within.findIndex((b) => b.id === id);
+    const neighbour = within[seen + step];
+    if (!neighbour) return;
+
     const order = list.map((b) => b.id);
     const at = order.indexOf(id);
-    const to = at + step;
-    if (to < 0 || to >= order.length) return;
+    const to = order.indexOf(neighbour.id);
+    if (at < 0 || to < 0) return;
     [order[at], order[to]] = [order[to], order[at]];
     run("browsers_reorder", { ids: order });
   };
@@ -192,55 +211,86 @@ export default function Browsers() {
         </p>
       )}
 
+      {asking && (
+        <Confirm
+          title={t("browserDeleteTitle", asking.name)}
+          body={t("browserDeleteBody")}
+          go={t("deleteGo")}
+          onConfirm={() => {
+            run("browsers_remove", { id: asking.id });
+            setAsking(null);
+          }}
+          onCancel={() => setAsking(null)}
+        />
+      )}
+
       <Section title={t("browsersDetected")}>
         <Card>
-          {detected.map((b) => (
-            <div
-              key={b.id}
-              className="group flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
-            >
-              <Icon browser={b} />
-              <div className="min-w-0 flex-1">
-                <p className={`text-[12.5px] ${b.hidden ? "opacity-55" : ""}`}>{b.name}</p>
-                <p className="mt-px text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-                  {describe(b, t)}
-                </p>
-              </div>
-              <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-                <button
-                  type="button"
-                  aria-label={t("browserUp", b.name)}
-                  disabled={list[0]?.id === b.id}
-                  onClick={() => move(b.id, -1)}
-                  className={GHOST}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  aria-label={t("browserDown", b.name)}
-                  disabled={list.at(-1)?.id === b.id}
-                  onClick={() => move(b.id, 1)}
-                  className={GHOST}
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  aria-label={t("browserDuplicate", b.name)}
-                  onClick={() => run("browsers_duplicate", { id: b.id })}
-                  className={GHOST}
-                >
-                  ⧉
-                </button>
-              </span>
-              <Switch
-                on={!b.hidden}
-                label={t("browserShow", b.name)}
-                onChange={(next) => run("browsers_set_hidden", { id: b.id, hidden: !next })}
+          {detected.map((b) =>
+            editing === b.id ? (
+              <Form
+                key={b.id}
+                initial={b}
+                detected
+                onCancel={() => setEditing(null)}
+                onSave={(edit) => run("browsers_update", { id: b.id, edit })}
               />
-            </div>
-          ))}
+            ) : (
+              <div
+                key={b.id}
+                className="group flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
+              >
+                <Icon browser={b} />
+                <div className="min-w-0 flex-1">
+                  <p className={`text-[12.5px] ${b.hidden ? "opacity-55" : ""}`}>{b.name}</p>
+                  <p className="mt-px text-[11px] text-neutral-500 dark:text-[#8B92A1]">
+                    {describe(b, t)}
+                  </p>
+                </div>
+                <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                  <button
+                    type="button"
+                    aria-label={t("browserUp", b.name)}
+                    disabled={detected[0]?.id === b.id}
+                    onClick={() => move(b.id, -1, detected)}
+                    className={GHOST}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("browserDown", b.name)}
+                    disabled={detected.at(-1)?.id === b.id}
+                    onClick={() => move(b.id, 1, detected)}
+                    className={GHOST}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("browserEdit", b.name)}
+                    onClick={() => setEditing(b.id)}
+                    className={GHOST}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("browserDuplicate", b.name)}
+                    onClick={() => run("browsers_duplicate", { id: b.id })}
+                    className={GHOST}
+                  >
+                    ⧉
+                  </button>
+                </span>
+                <Switch
+                  on={!b.hidden}
+                  label={t("browserShow", b.name)}
+                  onChange={(next) => run("browsers_set_hidden", { id: b.id, hidden: !next })}
+                />
+              </div>
+            ),
+          )}
           {detected.length === 0 && (
             <p className="px-3.5 py-4 text-center text-[12px] text-neutral-500 dark:text-[#8B92A1]">
               {t("browsersNone")}
@@ -276,6 +326,24 @@ export default function Browsers() {
                 <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                   <button
                     type="button"
+                    aria-label={t("browserUp", b.name)}
+                    disabled={mine[0]?.id === b.id}
+                    onClick={() => move(b.id, -1, mine)}
+                    className={GHOST}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("browserDown", b.name)}
+                    disabled={mine.at(-1)?.id === b.id}
+                    onClick={() => move(b.id, 1, mine)}
+                    className={GHOST}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
                     aria-label={t("browserEdit", b.name)}
                     onClick={() => setEditing(b.id)}
                     className={GHOST}
@@ -293,7 +361,7 @@ export default function Browsers() {
                   <button
                     type="button"
                     aria-label={t("browserRemove", b.name)}
-                    onClick={() => run("browsers_remove", { id: b.id })}
+                    onClick={() => setAsking(b)}
                     className="grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-[#C0362F]/10 hover:text-[#C0362F] dark:text-[#8B92A1] dark:hover:bg-[#FF8A85]/10 dark:hover:text-[#FF8A85]"
                   >
                     ✕

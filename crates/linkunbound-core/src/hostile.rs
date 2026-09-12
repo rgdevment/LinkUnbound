@@ -1,9 +1,7 @@
 use crate::browser::Browser;
 
-/// Switches that make a browser run another binary. A `browsers.json` is an
-/// ordinary file in the user's profile: anything that can write there would
-/// otherwise own every click, because this app is what the shell launches for
-/// a link and it launches whatever the file says.
+/// Switches that make a browser run another binary. The file lives in the
+/// user's profile, and this app is what the shell runs for a link.
 const RUNS_SOMETHING_ELSE: [&str; 8] = [
     "--gpu-launcher",
     "--utility-cmd-prefix",
@@ -15,9 +13,7 @@ const RUNS_SOMETHING_ELSE: [&str; 8] = [
     "--headless",
 ];
 
-/// A path served over the network authenticates the user against whoever holds
-/// it. Reaching one by accident hands over an NTLM hash; reaching one because a
-/// config file said so hands it over on purpose.
+/// Reaching a network path authenticates the user against whoever holds it.
 #[must_use]
 pub fn is_remote(path: &str) -> bool {
     let tidy = path.replace('/', "\\");
@@ -35,9 +31,7 @@ pub fn arms_a_launcher(arg: &str) -> bool {
     RUNS_SOMETHING_ELSE.contains(&named.as_str())
 }
 
-/// Strips what a browser entry must not carry, rather than dropping the entry:
-/// a user who really did type an odd switch keeps their browser, and loses only
-/// the part that could run something else.
+/// Strips rather than rejects: an odd switch costs the switch, not the browser.
 pub fn disarm(browser: &mut Browser) -> bool {
     let mut touched = false;
 
@@ -67,8 +61,8 @@ pub fn disarm(browser: &mut Browser) -> bool {
     touched
 }
 
-/// Everything a browser id ends up naming is a file we create. Left alone, an
-/// id of `..\..\x` or `\\host\share\x` decides where that file goes.
+/// An id with `..` or a UNC prefix would otherwise decide where our own
+/// files land.
 #[must_use]
 pub fn as_file_name(id: &str) -> String {
     let tidy: String = id
@@ -117,8 +111,6 @@ mod tests {
         }
     }
 
-    /// The picker is what the shell runs for every link, so a switch that runs
-    /// another binary turns one edited file into execution on the next click.
     #[test]
     fn a_switch_that_runs_another_binary_is_taken_away() {
         let mut browser = hostile();
@@ -158,9 +150,6 @@ mod tests {
         }
     }
 
-    /// The icon path is read by the shell, so a remote one fetches over SMB and
-    /// authenticates on the way. It is also the cheapest field to abuse: no
-    /// traversal and no execution, just a string.
     #[test]
     fn a_remote_icon_is_dropped_rather_than_fetched() {
         let mut browser = hostile();
@@ -181,8 +170,6 @@ mod tests {
         assert_eq!(as_file_name(""), "unnamed");
     }
 
-    /// The whole attack, end to end: an edited file reaching the argv that a
-    /// click would run. This is the boundary, so it is tested from the JSON.
     #[test]
     fn an_edited_file_cannot_put_another_binary_in_the_argv() {
         let raw = r#"{

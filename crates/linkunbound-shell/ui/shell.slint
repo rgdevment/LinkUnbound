@@ -187,7 +187,9 @@ export component Picker inherits Window {
     default-font-family: "Segoe UI";
     forward-focus: keys;
 
-    out property <length> wanted-width: 368px;
+    // A fifth reach appears when the click came from a known app, and five
+    // labels do not fit the width four were drawn for.
+    out property <length> wanted-width: root.reaches.length > 4 ? 428px : 368px;
 
     out property <length> wanted-height:
         66px + 1px

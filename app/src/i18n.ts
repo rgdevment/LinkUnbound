@@ -47,11 +47,18 @@ const ES = {
   rulesOne: "1 regla",
   rulesMany: "{} reglas",
   rulesFooter:
-    "Entre reglas que alcanzan lo mismo gana la primera. Las marcadas «Desde» vienen de la versión 1.4 y el selector ya no las crea.",
+    "Gana siempre la regla más precisa: una URL concreta antes que un subdominio, y este antes que el sitio entero. Las marcadas «Desde» ganan sobre todas y responden a los enlaces de una aplicación, sea cual sea la dirección.",
   rulePrivate: "privada",
   ruleUp: "Subir la regla de {}",
   ruleDown: "Bajar la regla de {}",
   ruleRemove: "Eliminar la regla de {}",
+  ruleBrowser: "Navegador para la regla de {}",
+  ruleDeleteTitle: "Eliminar la regla de {}",
+  ruleDeleteBody: "Los enlaces que cubría volverán a preguntarte en qué navegador abrirlos.",
+  browserDeleteTitle: "Eliminar {}",
+  browserDeleteBody:
+    "Se quita del selector y se pierden sus argumentos y su icono. Las reglas que apuntaban a él quedarán sin destino.",
+  deleteGo: "Eliminar",
 
   browsersDetected: "Detectados en el equipo",
   browsersMine: "Añadidos por ti",
@@ -72,6 +79,7 @@ const ES = {
   fieldPrivateHint: "Sin este argumento, el navegador no podrá abrir en privado desde el selector.",
   fieldIcon: "Ruta de icono personalizado (opcional)",
   fieldIconLabel: "Ruta de icono personalizado",
+  fieldExeDetected: "La detección decide esta ruta; un nuevo escaneo la restauraría.",
   browserUp: "Subir {}",
   browserDown: "Bajar {}",
   browserDuplicate: "Duplicar {}",
@@ -135,8 +143,15 @@ const ES = {
   aboutSourceNote: "GPL-3.0 · las aportaciones son bienvenidas",
   aboutIssue: "Informar de un problema",
   aboutIssueNote: "Errores, ideas y navegadores que no detecta",
-  aboutSponsor: "Apoyar el desarrollo",
-  aboutSponsorNote: "LinkUnbound es gratis y no lleva publicidad",
+  aboutSponsor: "Invítame un café",
+  aboutSponsorNote:
+    "LinkUnbound es gratis y siempre lo será. Si te ahorra tiempo, considera apoyar el desarrollo.",
+  aboutLicense: "Licencia GPL-3.0",
+  aboutLicenseNote: "Software libre: puedes leerlo, cambiarlo y compartirlo",
+  aboutOtherTools: "Otras herramientas",
+  aboutCopyPaste: "CopyPaste",
+  aboutCopyPasteNote:
+    "Gestor de portapapeles gratuito y de código abierto para Windows, macOS y Linux. Misma filosofía: sin anuncios, sin telemetría, todo local.",
   open: "Abrir",
 
   save: "Guardar",
@@ -192,11 +207,18 @@ const EN: Record<Key, string> = {
   rulesOne: "1 rule",
   rulesMany: "{} rules",
   rulesFooter:
-    "Between rules that reach the same thing, the first one wins. The ones marked «From» come from version 1.4 and the picker no longer makes them.",
+    "The most precise rule always wins: one URL before a subdomain, and that before the whole site. The ones marked «From» win over all of them, and answer the links of one application whatever the address.",
   rulePrivate: "private",
   ruleUp: "Move the rule for {} up",
   ruleDown: "Move the rule for {} down",
   ruleRemove: "Delete the rule for {}",
+  ruleBrowser: "Browser for the rule for {}",
+  ruleDeleteTitle: "Delete the rule for {}",
+  ruleDeleteBody: "The links it covered will ask you again which browser to open them in.",
+  browserDeleteTitle: "Remove {}",
+  browserDeleteBody:
+    "It leaves the picker and its arguments and icon are lost. Rules pointing at it will be left without a destination.",
+  deleteGo: "Delete",
 
   browsersDetected: "Detected on this computer",
   browsersMine: "Added by you",
@@ -218,6 +240,7 @@ const EN: Record<Key, string> = {
     "Without this argument, the browser will not be able to open privately from the picker.",
   fieldIcon: "Custom icon path (optional)",
   fieldIconLabel: "Custom icon path",
+  fieldExeDetected: "Detection owns this path; a rescan would put it back.",
   browserUp: "Move {} up",
   browserDown: "Move {} down",
   browserDuplicate: "Duplicate {}",
@@ -281,8 +304,15 @@ const EN: Record<Key, string> = {
   aboutSourceNote: "GPL-3.0 · contributions are welcome",
   aboutIssue: "Report a problem",
   aboutIssueNote: "Bugs, ideas and browsers it fails to detect",
-  aboutSponsor: "Support the development",
-  aboutSponsorNote: "LinkUnbound is free and carries no advertising",
+  aboutSponsor: "Buy me a coffee",
+  aboutSponsorNote:
+    "LinkUnbound is free and always will be. If it saves you time, consider supporting the work.",
+  aboutLicense: "GPL-3.0 licence",
+  aboutLicenseNote: "Free software: you can read it, change it and share it",
+  aboutOtherTools: "Other tools",
+  aboutCopyPaste: "CopyPaste",
+  aboutCopyPasteNote:
+    "A free, open source clipboard manager for Windows, macOS and Linux. Same idea: no ads, no telemetry, all local.",
   open: "Open",
 
   save: "Save",

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { follow } from "../theme";
@@ -9,8 +9,8 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...
 
 const PREFS = {
   schema_version: 1,
-  theme: "system" as const,
-  locale: "system" as const,
+  theme: "system" as "system" | "light" | "dark",
+  locale: "system" as "system" | "spanish" | "english",
   shortcut: "Alt+Shift+L" as string | null,
   hide_tray: false,
   notify_on_rule: true,
@@ -31,6 +31,20 @@ describe("application settings", () => {
   beforeEach(() => {
     invoke.mockReset();
     answers();
+  });
+
+  /// The other tests assert the payload, not what the control ends up showing.
+  it("marks the option that is actually in force", async () => {
+    answers({ ...PREFS, theme: "dark", locale: "english" });
+    mount();
+
+    const theme = within(await screen.findByRole("group", { name: "Tema" }));
+    expect(theme.getByRole("radio", { name: "Oscuro" })).toBeChecked();
+    expect(theme.getByRole("radio", { name: "Automático" })).not.toBeChecked();
+
+    const language = within(screen.getByRole("group", { name: "Idioma" }));
+    expect(language.getByRole("radio", { name: "Inglés" })).toBeChecked();
+    expect(language.getByRole("radio", { name: "Español" })).not.toBeChecked();
   });
 
   it("saves the theme as a choice of its own, not as whatever the system says", async () => {

@@ -3,6 +3,8 @@ import { Card, Line, Section } from "./parts";
 
 const VERSION = "2.0.0";
 const REPO = "https://github.com/rgdevment/LinkUnbound";
+const COFFEE = "https://buymeacoffee.com/rgdevment";
+const COPYPASTE = "https://github.com/rgdevment/CopyPaste";
 
 function External({ href, children }: { href: string; children: string }) {
   return (
@@ -36,11 +38,27 @@ export default function About() {
           <Line title={t("aboutSource")} note={t("aboutSourceNote")}>
             <External href={REPO}>{t("open")}</External>
           </Line>
+          <Line title={t("aboutLicense")} note={t("aboutLicenseNote")}>
+            <External href={`${REPO}/blob/main/LICENSE`}>{t("open")}</External>
+          </Line>
           <Line title={t("aboutIssue")} note={t("aboutIssueNote")}>
             <External href={`${REPO}/issues`}>{t("open")}</External>
           </Line>
+        </Card>
+      </Section>
+
+      <Section title={t("aboutSponsor")}>
+        <Card>
           <Line title={t("aboutSponsor")} note={t("aboutSponsorNote")}>
-            <External href={`${REPO}#sponsors`}>{t("open")}</External>
+            <External href={COFFEE}>{t("open")}</External>
+          </Line>
+        </Card>
+      </Section>
+
+      <Section title={t("aboutOtherTools")}>
+        <Card>
+          <Line title={t("aboutCopyPaste")} note={t("aboutCopyPasteNote")}>
+            <External href={COPYPASTE}>{t("open")}</External>
           </Line>
         </Card>
       </Section>

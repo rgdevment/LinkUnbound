@@ -59,10 +59,14 @@ mod platform {
         let Some(handler) = handler() else {
             return Health::NotRegistered;
         };
+        verdict(registration.registered_command().as_deref(), &handler)
+    }
+
+    fn verdict(command: Option<&str>, handler: &std::path::Path) -> Health {
         if is_build_tree(&handler.to_string_lossy()) {
             return Health::BuildTree;
         }
-        match what_is_registered(registration.registered_command().as_deref(), &handler) {
+        match what_is_registered(command, handler) {
             Registered::Correct => Health::Fine,
             Registered::WrongBinary(_) => Health::WrongBinary,
             Registered::Elsewhere(_) => Health::Stale,
@@ -134,6 +138,56 @@ mod platform {
 
     pub fn browsers() -> Vec<linkunbound_core::Browser> {
         installed_browsers()
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::super::Health;
+        use super::verdict;
+        use std::path::Path;
+
+        /// The screen's reaction to each verdict is tested with literals; this
+        /// is the side that decides which verdict it gets.
+        #[test]
+        fn each_registration_gets_the_verdict_the_screen_draws() {
+            let installed = Path::new(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe");
+
+            assert_eq!(
+                verdict(
+                    Some(r#""C:\Program Files\LinkUnbound\linkunbound-shell.exe" "%1""#),
+                    installed
+                ),
+                Health::Fine
+            );
+            assert_eq!(
+                verdict(
+                    Some(r#""C:\Program Files\LinkUnbound\linkunbound-settings.exe" "%1""#),
+                    installed
+                ),
+                Health::WrongBinary,
+                "settings cannot open a link, and registering it is the mistake this catches"
+            );
+            assert_eq!(
+                verdict(
+                    Some(r#""C:\Otra\LinkUnbound\linkunbound-shell.exe" "%1""#),
+                    installed
+                ),
+                Health::Stale
+            );
+            assert_eq!(verdict(None, installed), Health::NotRegistered);
+        }
+
+        /// A build tree cannot own the registration: its path disappears when
+        /// the project is cleaned, and the dead key hijacks the installed copy.
+        #[test]
+        fn a_build_tree_is_named_before_anything_else_is_judged() {
+            let built = r"D:\Code\LinkUnbound\target\release\linkunbound-shell.exe";
+            let command = format!("\"{built}\" \"%1\"");
+            assert_eq!(
+                verdict(Some(&command), Path::new(built)),
+                Health::BuildTree,
+                "even when the command points at itself"
+            );
+        }
     }
 }
 

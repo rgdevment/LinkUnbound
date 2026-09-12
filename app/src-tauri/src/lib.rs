@@ -4,7 +4,7 @@ mod system;
 
 use std::sync::Mutex;
 
-use linkunbound_core::{Browser, Language, Preferences, Rule, Scope, Store, merge};
+use linkunbound_core::{Browser, Language, Preferences, Rule, Scope, Store, Target, merge};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
@@ -53,18 +53,14 @@ fn catalogue() -> Vec<Browser> {
     merge(system::browsers(), &saved)
 }
 
-/// Refuses to go on when the saved file cannot be read. `SCHEMA_VERSION` exists
-/// so a newer file is recognised rather than parsed; swallowing that error and
-/// writing anyway erased every custom browser the moment a switch was touched.
-fn saved_browsers() -> Result<linkunbound_core::BrowserConfig, String> {
-    store().browsers().map_err(|e| e.to_string())
-}
-
 /// The rule as the settings window shows it: what it covers, where it opens and
 /// whether the browser it names is still installed.
 #[derive(Serialize)]
 struct RuleView {
     id: String,
+    /// As stored, so the screen can offer to change it without matching names.
+    browser_id: String,
+    profile_id: Option<String>,
     kind: &'static str,
     covers: String,
     browser: String,
@@ -90,6 +86,8 @@ fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
     };
     RuleView {
         id: rule.id.clone(),
+        browser_id: rule.target.browser_id.clone(),
+        profile_id: rule.target.profile_id.clone(),
         kind,
         covers,
         browser: found.map_or_else(|| rule.target.browser_id.clone(), |b| b.name.clone()),
@@ -121,14 +119,23 @@ fn rules_remove(id: String) -> Result<Vec<RuleView>, String> {
     rules_list()
 }
 
+/// In place: remaking the rule would send it to the end of the order.
 #[tauri::command]
-fn rules_reorder(ids: Vec<String>) -> Result<Vec<RuleView>, String> {
-    store()
-        .edit_rules(|rules| {
-            rules.reorder(&ids);
-            true
-        })
+fn rules_retarget(
+    id: String,
+    browser_id: String,
+    profile_id: Option<String>,
+) -> Result<Vec<RuleView>, String> {
+    let target = Target {
+        browser_id,
+        profile_id,
+    };
+    let changed = store()
+        .edit_rules(|rules| rules.retarget(&id, target.clone()))
         .map_err(|e| e.to_string())?;
+    if !changed {
+        return Err("that rule is no longer there".to_owned());
+    }
     rules_list()
 }
 
@@ -138,6 +145,9 @@ struct BrowserView {
     name: String,
     exe: String,
     profiles: usize,
+    /// Named, not just counted: a rule can point at one profile of a browser,
+    /// so the screen has to be able to offer them apart.
+    profile_names: Vec<(String, String)>,
     private: bool,
     custom: bool,
     hidden: bool,
@@ -150,6 +160,11 @@ struct BrowserView {
 fn seen(browser: &Browser) -> BrowserView {
     BrowserView {
         profiles: browser.profiles.len(),
+        profile_names: browser
+            .profiles
+            .iter()
+            .map(|p| (p.id.clone(), p.name.clone()))
+            .collect(),
         private: browser.private_flag.is_some(),
         icon: icon_data(browser.icon_source(), &browser.id),
         id: browser.id.clone(),
@@ -185,30 +200,44 @@ fn browsers_list() -> Vec<BrowserView> {
 /// Saves the merged catalogue, which is what turns a detected browser into a
 /// saved one the moment the user first touches it.
 fn keep(browsers: Vec<Browser>) -> Result<Vec<BrowserView>, String> {
-    let mut config = saved_browsers()?;
-    config.browsers = browsers;
-    store().save_browsers(&config).map_err(|e| e.to_string())?;
+    keep_in(&store(), browsers)?;
     Ok(browsers_list())
+}
+
+/// Refuses to write when the file cannot be read: going ahead erased every
+/// custom browser the moment a switch was touched.
+fn keep_in(store: &Store, browsers: Vec<Browser>) -> Result<(), String> {
+    let mut config = store.browsers().map_err(|e| e.to_string())?;
+    config.browsers = browsers;
+    store.save_browsers(&config).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn browsers_set_hidden(id: String, hidden: bool) -> Result<Vec<BrowserView>, String> {
-    let mut all = catalogue();
+    keep(hidden_in(catalogue(), &id, hidden)?)
+}
+
+fn hidden_in(mut all: Vec<Browser>, id: &str, hidden: bool) -> Result<Vec<Browser>, String> {
     let Some(found) = all.iter_mut().find(|b| b.id == id) else {
         return Err("that browser is no longer installed".to_owned());
     };
     found.hidden = hidden;
-    keep(all)
+    Ok(all)
 }
 
 #[tauri::command]
 fn browsers_remove(id: String) -> Result<Vec<BrowserView>, String> {
-    let mut all = catalogue();
+    keep(without(catalogue(), &id)?)
+}
+
+/// A detected browser is hidden, never removed: the next scan would bring it
+/// back and the deletion would look like it failed.
+fn without(mut all: Vec<Browser>, id: &str) -> Result<Vec<Browser>, String> {
     if !all.iter().any(|b| b.id == id && b.custom) {
         return Err("only a browser you added can be removed".to_owned());
     }
     all.retain(|b| b.id != id);
-    keep(all)
+    Ok(all)
 }
 
 /// Never reuses a number a live entry already holds, or editing one would
@@ -240,21 +269,34 @@ fn browsers_add(edit: Edit) -> Result<Vec<BrowserView>, String> {
     keep(all)
 }
 
+/// A detected browser can be renamed and given arguments or an icon, the way
+/// 1.x allowed, but not moved: the path is what detection found, and a rescan
+/// would overwrite anything typed over it.
 #[tauri::command]
 fn browsers_update(id: String, edit: Edit) -> Result<Vec<BrowserView>, String> {
-    if !readable(&edit.exe) {
-        return Err("no hay ningún programa en esa ruta".to_owned());
-    }
-    let mut all = catalogue();
-    let Some(found) = all.iter_mut().find(|b| b.id == id && b.custom) else {
-        return Err("solo puedes editar un navegador que añadiste tú".to_owned());
+    keep(edited(catalogue(), &id, edit, readable)?)
+}
+
+fn edited(
+    mut all: Vec<Browser>,
+    id: &str,
+    edit: Edit,
+    exists: impl Fn(&str) -> bool,
+) -> Result<Vec<Browser>, String> {
+    let Some(found) = all.iter_mut().find(|b| b.id == id) else {
+        return Err("ese navegador ya no está".to_owned());
     };
+    if found.custom {
+        if !exists(&edit.exe) {
+            return Err("no hay ningún programa en esa ruta".to_owned());
+        }
+        found.exe = edit.exe;
+    }
     found.name = edit.name;
-    found.exe = edit.exe;
     found.extra_args = edit.args;
     found.private_flag = edit.private_flag.filter(|f| !f.is_empty());
     found.icon_path = edit.icon_path.filter(|p| !p.is_empty());
-    keep(all)
+    Ok(all)
 }
 
 #[tauri::command]
@@ -276,23 +318,33 @@ fn browsers_duplicate(id: String) -> Result<Vec<BrowserView>, String> {
 /// decides which destination sits under the first key.
 #[tauri::command]
 fn browsers_reorder(ids: Vec<String>) -> Result<Vec<BrowserView>, String> {
-    let mut all = catalogue();
+    keep(ordered(catalogue(), &ids))
+}
+
+/// Anything the caller did not name keeps its place at the end: a browser
+/// detected since the screen was drawn must not fall off the list.
+fn ordered(mut all: Vec<Browser>, ids: &[String]) -> Vec<Browser> {
     let mut moved: Vec<Browser> = Vec::with_capacity(all.len());
-    for id in &ids {
+    for id in ids {
         if let Some(at) = all.iter().position(|b| &b.id == id) {
             moved.push(all.remove(at));
         }
     }
     moved.append(&mut all);
-    keep(moved)
+    moved
 }
 
 /// Everything the app decided on its own goes; what the user chose stays.
 #[tauri::command]
 fn maintenance_rescan() -> Result<Vec<BrowserView>, String> {
-    let mut all = catalogue();
+    keep(only_mine(catalogue()))
+}
+
+/// Forgets what detection found so the next read picks it up again. What the
+/// user added by hand is not detectable, so dropping it would be a deletion.
+fn only_mine(mut all: Vec<Browser>) -> Vec<Browser> {
     all.retain(|b| b.custom);
-    keep(all)
+    all
 }
 
 #[tauri::command]
@@ -444,7 +496,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             rules_list,
             rules_remove,
-            rules_reorder,
+            rules_retarget,
             browsers_list,
             browsers_set_hidden,
             browsers_remove,
@@ -491,7 +543,225 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::free_id;
+    use super::{
+        Edit, Store, describe, edited, free_id, hidden_in, keep_in, only_mine, ordered, seen,
+        spoken, without,
+    };
+    use linkunbound_core::{Locale, Preferences, Profile, Rule, Scope, Target};
+
+    fn detected(id: &str) -> linkunbound_core::Browser {
+        linkunbound_core::Browser {
+            id: id.to_owned(),
+            name: "Google Chrome".to_owned(),
+            exe: "chrome.exe".to_owned(),
+            profiles: vec![Profile {
+                id: "Default".to_owned(),
+                name: "Personal".to_owned(),
+                args: Vec::new(),
+            }],
+            extra_args: Vec::new(),
+            private_flag: Some("--incognito".to_owned()),
+            icon_path: None,
+            custom: false,
+            hidden: false,
+        }
+    }
+
+    fn rule_for(browser: &str, profile: Option<&str>) -> Rule {
+        Rule {
+            id: "r1".to_owned(),
+            scope: Scope::Site("github.com".to_owned()),
+            source_app: None,
+            target: Target {
+                browser_id: browser.to_owned(),
+                profile_id: profile.map(str::to_owned),
+            },
+            private: false,
+        }
+    }
+
+    #[test]
+    fn a_rule_pointing_at_a_browser_that_is_gone_is_not_called_resolved() {
+        let installed = [detected("chrome")];
+
+        let live = describe(&rule_for("chrome", Some("Default")), &installed);
+        assert!(live.resolved);
+        assert_eq!(live.browser, "Google Chrome");
+        assert_eq!(live.profile.as_deref(), Some("Personal"));
+
+        let gone = describe(&rule_for("brave", None), &installed);
+        assert!(
+            !gone.resolved,
+            "an uninstalled browser must not read as live"
+        );
+        assert_eq!(gone.browser, "brave", "and it still names what it was");
+    }
+
+    #[test]
+    fn a_rule_carries_the_destination_it_was_saved_with() {
+        let view = describe(&rule_for("chrome", Some("Default")), &[detected("chrome")]);
+        assert_eq!(view.browser_id, "chrome");
+        assert_eq!(view.profile_id.as_deref(), Some("Default"));
+    }
+
+    #[test]
+    fn a_detected_browser_is_not_reported_as_one_the_user_added() {
+        let view = seen(&detected("chrome"));
+        assert!(!view.custom);
+        assert_eq!(view.profiles, 1);
+        assert_eq!(
+            view.profile_names,
+            vec![("Default".to_owned(), "Personal".to_owned())],
+            "named, so a rule can be pointed at one profile"
+        );
+        assert!(view.private, "it declares a private switch");
+
+        let mine = seen(&custom("custom-1"));
+        assert!(mine.custom);
+        assert!(!mine.private);
+    }
+
+    /// `Locale::System` must mean the same in both windows, so it is decided
+    /// here rather than in each webview.
+    #[test]
+    fn the_language_handed_to_the_screen_obeys_the_explicit_choice() {
+        let spanish = Preferences {
+            locale: Locale::Spanish,
+            ..Preferences::default()
+        };
+        let english = Preferences {
+            locale: Locale::English,
+            ..Preferences::default()
+        };
+        assert_eq!(spoken(&spanish), "es");
+        assert_eq!(spoken(&english), "en");
+    }
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("linkunbound-cmd-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("should create");
+        dir
+    }
+
+    /// `SCHEMA_VERSION` exists so a newer file is recognised rather than parsed.
+    /// Writing over it anyway erases the fields this version cannot read.
+    #[test]
+    fn a_file_this_version_cannot_read_is_not_written_over() {
+        let dir = scratch("unreadable");
+        let store = Store::at(&dir);
+        std::fs::write(
+            dir.join("browsers.json"),
+            r#"{"schema_version": 99, "browsers": []}"#,
+        )
+        .expect("should write");
+
+        let before = std::fs::read(dir.join("browsers.json")).expect("should read");
+        assert!(keep_in(&store, vec![custom("custom-1")]).is_err());
+        assert_eq!(
+            std::fs::read(dir.join("browsers.json")).expect("should read"),
+            before,
+            "the file must be left exactly as it was"
+        );
+    }
+
+    #[test]
+    fn what_the_user_added_survives_a_rescan() {
+        let all = vec![detected("chrome"), custom("custom-1"), detected("firefox")];
+        let kept = only_mine(all);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].id, "custom-1", "detection finds the rest again");
+    }
+
+    fn edit_of(name: &str, exe: &str) -> Edit {
+        Edit {
+            name: name.to_owned(),
+            exe: exe.to_owned(),
+            args: vec!["--new-window".to_owned()],
+            private_flag: Some(String::new()),
+            icon_path: None,
+        }
+    }
+
+    /// Detection owns the path of what it found: a rescan would put it back, so
+    /// letting it be typed over promises an edit that does not survive.
+    #[test]
+    fn only_a_browser_the_user_added_may_move_its_path() {
+        let all = vec![detected("chrome"), custom("custom-1")];
+
+        let touched = edited(
+            all.clone(),
+            "chrome",
+            edit_of("Trabajo", "moved.exe"),
+            |_| true,
+        )
+        .expect("a detected browser may still be renamed");
+        assert_eq!(touched[0].name, "Trabajo");
+        assert_eq!(touched[0].exe, "chrome.exe", "but not moved");
+        assert_eq!(
+            touched[0].private_flag, None,
+            "an empty switch clears it rather than saving a blank"
+        );
+
+        let mine = edited(all, "custom-1", edit_of("Mío", "other.exe"), |_| true)
+            .expect("one the user added may move");
+        assert_eq!(mine[1].exe, "other.exe");
+    }
+
+    #[test]
+    fn an_edit_pointing_nowhere_is_refused_before_it_is_saved() {
+        let all = vec![custom("custom-1")];
+        assert!(
+            edited(
+                all.clone(),
+                "custom-1",
+                edit_of("Mío", "ghost.exe"),
+                |_| false
+            )
+            .is_err()
+        );
+        assert!(edited(all, "gone", edit_of("Mío", "x.exe"), |_| true).is_err());
+    }
+
+    /// Removing a detected browser would last until the next scan, so the screen
+    /// offers hiding instead and the command refuses.
+    #[test]
+    fn a_detected_browser_cannot_be_removed_only_hidden() {
+        let all = vec![detected("chrome"), custom("custom-1")];
+
+        assert!(without(all.clone(), "chrome").is_err());
+
+        let hidden = hidden_in(all.clone(), "chrome", true).expect("hiding is allowed");
+        assert!(hidden[0].hidden);
+        let shown = hidden_in(hidden, "chrome", false).expect("and so is showing it again");
+        assert!(!shown[0].hidden, "the switch has to work both ways");
+
+        let gone = without(all, "custom-1").expect("one the user added may go");
+        assert_eq!(gone.len(), 1);
+        assert_eq!(gone[0].id, "chrome");
+    }
+
+    #[test]
+    fn hiding_something_that_is_not_there_says_so() {
+        assert!(hidden_in(vec![detected("chrome")], "brave", true).is_err());
+    }
+
+    /// The order decides which browser sits under the first key of the picker.
+    /// Anything the screen did not know about keeps its place at the end.
+    #[test]
+    fn reordering_keeps_what_the_caller_never_named() {
+        let all = vec![detected("chrome"), custom("custom-1"), detected("firefox")];
+        let asked = vec!["custom-1".to_owned(), "chrome".to_owned()];
+
+        let moved = ordered(all, &asked);
+        let ids: Vec<&str> = moved.iter().map(|b| b.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["custom-1", "chrome", "firefox"],
+            "the unnamed one survives at the end rather than falling off"
+        );
+    }
 
     fn custom(id: &str) -> linkunbound_core::Browser {
         linkunbound_core::Browser {

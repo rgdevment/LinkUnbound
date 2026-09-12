@@ -26,6 +26,9 @@ pub enum Reaches {
     Url,
     Host,
     Site,
+    /// Every link from the app the click came from, whatever the address. What
+    /// the user means by ticking it on a link that arrived from Slack.
+    FromApp,
 }
 
 impl Reaches {
@@ -36,7 +39,15 @@ impl Reaches {
             Self::Url => Some(Scope::Url(url.to_owned())),
             Self::Host => Some(Scope::Host(host.to_owned())),
             Self::Site => Some(Scope::Site(site_of(host))),
+            Self::FromApp => Some(Scope::Any),
         }
+    }
+
+    /// Only this reach binds the rule to where the click came from; the others
+    /// answer the same whatever app produced the link.
+    #[must_use]
+    pub const fn binds_to_the_source(self) -> bool {
+        matches!(self, Self::FromApp)
     }
 
     #[must_use]
@@ -45,6 +56,7 @@ impl Reaches {
             1 => Self::Url,
             2 => Self::Host,
             3 => Self::Site,
+            4 => Self::FromApp,
             _ => Self::Once,
         }
     }
@@ -93,9 +105,15 @@ pub fn destinations(browsers: &[Browser]) -> Vec<Listed> {
 /// A wrapper left unwrapped must not be remembered: the rule would key off
 /// Microsoft's redirector and answer for every link it ever carries.
 #[must_use]
-pub fn reaches(words: &Strings, url: &str, host: &str, site: &str) -> Vec<(String, bool, bool)> {
+pub fn reaches(
+    words: &Strings,
+    url: &str,
+    host: &str,
+    site: &str,
+    source: Option<&str>,
+) -> Vec<(String, bool, bool)> {
     let wrapped = looks_unresolved(url);
-    vec![
+    let mut offered = vec![
         (words.reach_once.to_owned(), false, false),
         (words.reach_url.to_owned(), true, wrapped),
         (
@@ -104,7 +122,15 @@ pub fn reaches(words: &Strings, url: &str, host: &str, site: &str) -> Vec<(Strin
             wrapped || host == site || host.is_empty(),
         ),
         (words.reach_site.to_owned(), true, wrapped),
-    ]
+    ];
+    // Left out rather than greyed when there is no origin: five labels do not
+    // fit the row, and a dead one would cost the other four their space.
+    // A wrapper is no obstacle here — this rule keys off the app, not the
+    // address.
+    if let Some(source) = source {
+        offered.push((Strings::fill(words.reach_from_app, source), true, false));
+    }
+    offered
 }
 
 #[must_use]
@@ -162,7 +188,7 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
         .collect();
     window.set_rows(Rc::new(slint::VecModel::from(listed)).into());
 
-    let scopes: Vec<Reach> = reaches(words, url, &host, &site)
+    let scopes: Vec<Reach> = reaches(words, url, &host, &site, source)
         .into_iter()
         .map(|(label, keeps, dead)| Reach {
             label: label.into(),
@@ -175,6 +201,7 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
 
 #[cfg(test)]
 mod tests {
+    use super::dress;
     use super::{Listed, Reaches, destinations, reaches, split};
     use linkunbound_core::{Browser, Language, Profile, Scope, Strings, looks_unresolved};
 
@@ -233,26 +260,163 @@ mod tests {
 
     const PLAIN: &str = "https://github.com/a";
 
+    fn dressed() -> Vec<Listed> {
+        vec![
+            Listed {
+                browser_id: "firefox".to_owned(),
+                profile_id: None,
+                name: "Mozilla Firefox".to_owned(),
+                profile: String::new(),
+                icon: None,
+                can_private: true,
+            },
+            Listed {
+                browser_id: "chrome".to_owned(),
+                profile_id: Some("Default".to_owned()),
+                name: "Google Chrome".to_owned(),
+                profile: "Personal".to_owned(),
+                icon: None,
+                can_private: false,
+            },
+        ]
+    }
+
+    /// One test: winit allows a single event loop per process, so a second
+    /// `Picker::new()` fails with "EventLoop can't be recreated".
+    #[test]
+    fn what_the_window_is_told_about_a_link() {
+        use slint::Model;
+
+        let window = crate::Picker::new().expect("the software renderer must build a window");
+        let words = Language::Spanish.strings();
+        let rows = dressed();
+
+        dress(
+            &window,
+            &words,
+            "https://docs.google.com/d/1a9F/edit",
+            None,
+            &rows,
+        );
+
+        assert_eq!(window.get_host(), "docs.google.com");
+        assert_eq!(window.get_trail(), "/d/1a9F/edit");
+
+        let listed = window.get_rows();
+        assert_eq!(listed.row_count(), 2);
+        assert_eq!(
+            listed.row_data(0).expect("first row").key,
+            "1",
+            "the keys are what the user presses, counted from one"
+        );
+        assert_eq!(listed.row_data(1).expect("second row").key, "2");
+        assert!(listed.row_data(0).expect("firefox").can_private);
+        assert!(
+            !listed.row_data(1).expect("chrome").can_private,
+            "a browser with no private switch says so, or the row lies"
+        );
+        assert_eq!(listed.row_data(1).expect("chrome").profile, "Personal");
+
+        let offered = window.get_reaches();
+        assert_eq!(offered.row_count(), 4, "no origin, so no origin reach");
+        assert_eq!(offered.row_data(0).expect("first").label, words.reach_once);
+        assert_eq!(window.get_problem(), "", "an ordinary link raises nothing");
+        assert_eq!(window.get_source_line(), "");
+
+        dress(&window, &words, PLAIN, Some("teams"), &rows);
+        assert!(
+            window.get_source_line().contains("teams"),
+            "it names the app: {}",
+            window.get_source_line()
+        );
+        assert_eq!(window.get_reaches().row_count(), 5);
+
+        dress(
+            &window,
+            &words,
+            "https://eu01.safelinks.protection.outlook.com/?whatever=1",
+            None,
+            &rows,
+        );
+        assert_eq!(window.get_problem(), words.wrapper_unresolved);
+        assert!(!window.get_alarming(), "a wrapper is not a failure");
+
+        window.set_private_on(true);
+        window.set_copied(true);
+        window.set_reach_index(3);
+        dress(&window, &words, "https://gitlab.com/b", None, &rows);
+        assert!(!window.get_private_on(), "private must not carry over");
+        assert!(!window.get_copied(), "nor the copied tick");
+        assert_eq!(window.get_reach_index(), 0, "nor the reach that was chosen");
+        assert_eq!(window.get_problem(), "", "nor the previous link's notice");
+    }
+
     #[test]
     fn the_subdomain_reach_is_dead_when_the_host_is_already_its_site() {
-        let same = reaches(&SPOKEN, PLAIN, "github.com", "github.com");
+        let same = reaches(&SPOKEN, PLAIN, "github.com", "github.com", None);
         assert!(same[2].2);
-        let sub = reaches(&SPOKEN, PLAIN, "docs.google.com", "google.com");
+        let sub = reaches(&SPOKEN, PLAIN, "docs.google.com", "google.com", None);
         assert!(!sub[2].2);
     }
 
     #[test]
     fn the_reaches_are_worded_in_the_language_they_are_asked_for() {
-        let spanish = reaches(&SPOKEN, PLAIN, "github.com", "github.com");
+        let spanish = reaches(&SPOKEN, PLAIN, "github.com", "github.com", None);
         let english = reaches(
             &Language::English.strings(),
             PLAIN,
             "github.com",
             "github.com",
+            None,
         );
         assert_eq!(spanish[0].0, "Solo esta vez");
         assert_eq!(english[0].0, "Just this time");
         assert_eq!(english[3].0, "The whole site");
+    }
+
+    /// What the user means by ticking it on a link that came from Slack: every
+    /// link from that app, whatever the address. 1.x built exactly this rule.
+    #[test]
+    fn the_origin_reach_covers_any_address_and_only_that_app() {
+        assert_eq!(
+            Reaches::at(4).scope("https://github.com/a", "github.com"),
+            Some(Scope::Any)
+        );
+        assert!(Reaches::at(4).binds_to_the_source());
+        for other in [0, 1, 2, 3] {
+            assert!(
+                !Reaches::at(other).binds_to_the_source(),
+                "reach {other} must answer whatever app produced the link"
+            );
+        }
+    }
+
+    /// A wrapper we could not unwrap is fine for this one: the rule keys off the
+    /// app, not the address. Without a known origin there is nothing to key on.
+    #[test]
+    fn the_origin_reach_appears_only_when_the_origin_is_known() {
+        let wrapped = "https://eu01.safelinks.protection.outlook.com/?whatever=1";
+        let known = reaches(
+            &SPOKEN,
+            wrapped,
+            "outlook.com",
+            "outlook.com",
+            Some("teams"),
+        );
+        assert_eq!(known.len(), 5);
+        assert!(!known[4].2, "a wrapper does not disable the origin reach");
+        assert!(
+            known[4].0.contains("teams"),
+            "it names the app: {}",
+            known[4].0
+        );
+
+        let unknown = reaches(&SPOKEN, PLAIN, "github.com", "github.com", None);
+        assert_eq!(
+            unknown.len(),
+            4,
+            "five labels do not fit the row, so with no origin it is left out"
+        );
     }
 
     /// Greying the reaches without a word leaves the user with no reason why.
@@ -278,6 +442,7 @@ mod tests {
             wrapped,
             "eu01.safelinks.protection.outlook.com",
             "outlook.com",
+            None,
         );
         assert!(!offered[0].2, "solo esta vez sigue disponible");
         assert!(offered[1].2 && offered[2].2 && offered[3].2);

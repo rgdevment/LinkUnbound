@@ -25,7 +25,10 @@ tray-icon = "0.24"
 muda = "0.19"
 interprocess = "2.4"
 # No tray feature: the resident owns the tray, through the `tray-icon` crate.
-tauri = { version = "2" }
+# `common-controls-v6` is a default feature, and Cargo unifies features across
+# the workspace: it put a TaskDialogIndirect import into the resident, whose
+# test binaries carry no manifest to satisfy it.
+tauri = { version = "2", default-features = false, features = ["wry", "compression"] }
 tauri-build = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-global-shortcut = "2"

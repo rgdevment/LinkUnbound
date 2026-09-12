@@ -48,9 +48,13 @@ pub fn merge(detected: Vec<Browser>, saved: &[Browser]) -> Vec<Browser> {
         if kept.custom {
             out.push(kept.clone());
         } else if let Some(found) = detected.iter().find(|d| d.id == kept.id) {
+            // What the user edited wins; what detection owns is the path, the
+            // profiles and whether the browser can open privately at all.
             out.push(Browser {
                 hidden: kept.hidden,
+                name: kept.name.clone(),
                 extra_args: kept.extra_args.clone(),
+                private_flag: kept.private_flag.clone(),
                 icon_path: kept.icon_path.clone(),
                 ..found.clone()
             });
@@ -297,6 +301,30 @@ mod merging {
         assert!(copy.custom);
         assert!(copy.profiles.is_empty());
         assert!(copy.name.contains("copia"));
+    }
+
+    /// Settings lets a detected browser be renamed and given a private switch.
+    /// Handing those fields back to detection on read undoes the edit in the
+    /// same render that saved it.
+    #[test]
+    fn renaming_a_detected_browser_survives_the_next_merge() {
+        let detected = vec![Browser {
+            private_flag: Some("--incognito".to_owned()),
+            ..browser("chrome", "C:/real/chrome.exe")
+        }];
+        let saved = vec![Browser {
+            name: "Chrome del trabajo".to_owned(),
+            private_flag: Some("--muy-privado".to_owned()),
+            ..browser("chrome", "C:/stale/chrome.exe")
+        }];
+
+        let merged = merge(detected, &saved);
+        assert_eq!(merged[0].name, "Chrome del trabajo", "the edit wins");
+        assert_eq!(merged[0].private_flag.as_deref(), Some("--muy-privado"));
+        assert_eq!(
+            merged[0].exe, "C:/real/chrome.exe",
+            "but the path stays detection's to own"
+        );
     }
 
     #[test]

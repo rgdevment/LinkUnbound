@@ -209,28 +209,49 @@ fn forget(rule_id: &str) {
 /// Reports rather than swallows: the window says the choice was remembered, and
 /// a failed write would leave that claim false with nothing on screen to correct
 /// it.
-fn remember(url: &str, chosen: &Listed, private: bool, reach: Reaches) -> bool {
-    let Some(host) = host_of(url) else {
-        return true;
-    };
-    let Some(scope) = reach.scope(url, &host) else {
+fn remember(
+    url: &str,
+    chosen: &Listed,
+    private: bool,
+    reach: Reaches,
+    source_app: Option<String>,
+) -> bool {
+    let Some(rule) = rule_for(url, chosen, private, reach, source_app) else {
         return true;
     };
     store()
         .edit_rules(|rules| {
-            rules.upsert(Rule {
-                id: String::new(),
-                scope,
-                source_app: None,
-                target: Target {
-                    browser_id: chosen.browser_id.clone(),
-                    profile_id: chosen.profile_id.clone(),
-                },
-                private,
-            });
+            rules.upsert(rule.clone());
             true
         })
         .is_ok()
+}
+
+/// `None` when there is nothing to remember. Only the origin reach carries the
+/// app: the others answer the same link whichever one produced it, and without
+/// a known origin that reach has nothing to bind to.
+fn rule_for(
+    url: &str,
+    chosen: &Listed,
+    private: bool,
+    reach: Reaches,
+    source_app: Option<String>,
+) -> Option<Rule> {
+    let host = host_of(url)?;
+    let scope = reach.scope(url, &host)?;
+    if reach.binds_to_the_source() && source_app.is_none() {
+        return None;
+    }
+    Some(Rule {
+        id: String::new(),
+        scope,
+        source_app: reach.binds_to_the_source().then_some(source_app).flatten(),
+        target: Target {
+            browser_id: chosen.browser_id.clone(),
+            profile_id: chosen.profile_id.clone(),
+        },
+        private,
+    })
 }
 
 fn open_settings() {
@@ -249,6 +270,9 @@ fn open_settings() {
 struct Shown {
     url: Option<String>,
     rows: Vec<Listed>,
+    /// Read when the link arrived, not when the user picks: by then the picker
+    /// itself is the foreground window, and the rule would bind to us.
+    source: Option<String>,
     /// Links that arrived while one was already on screen. Redressing the window
     /// under the user would open the wrong one, and dropping them would lose a
     /// click they already made.
@@ -275,14 +299,27 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
     };
     let listed = rows();
     if listed.is_empty() {
-        open_settings();
+        // Opening settings and dropping the link loses the click: the address is
+        // still on screen here, and settings is one press away.
+        dress(picker, words, &url, host::clicked_in().as_deref(), &listed);
+        picker.set_alarming(false);
+        picker.set_problem(words.no_browsers.into());
+        shown.borrow_mut().url = Some(url);
+        beside_the_pointer(picker);
+        let _ = picker.show();
+        if let Some(handle) = native_handle(picker.window()) {
+            host::keep_off_the_taskbar(handle);
+            host::take_the_keyboard(handle);
+        }
         return;
     }
-    dress(picker, words, &url, host::clicked_in().as_deref(), &listed);
+    let source = host::clicked_in();
+    dress(picker, words, &url, source.as_deref(), &listed);
     {
         let mut held = shown.borrow_mut();
         held.url = Some(url);
         held.rows = listed;
+        held.source = source;
     }
     beside_the_pointer(picker);
     let _ = picker.show();
@@ -308,6 +345,11 @@ fn next_in_line(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>) {
     let queued = shown.borrow_mut().waiting.pop_front();
     if let Some(url) = queued {
         present(picker, words, shown, url);
+        if let Some(ui) = ui() {
+            // The next link needs its own settle: carrying the previous one's
+            // state would dismiss it on the tick after it appeared.
+            ui.watch_focus();
+        }
     }
 }
 
@@ -410,6 +452,9 @@ impl Ui {
                 } else if ui.held_focus.get() {
                     let _ = ui.picker.hide();
                     ui.watch.stop();
+                    // Whatever queued behind this link is still a click the user
+                    // made; dropping it here loses it without a word.
+                    next_in_line(&ui.picker, &ui.words.get(), &ui.shown);
                 }
             },
         );
@@ -531,6 +576,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let reach = Reaches::at(window.get_reach_index());
             let held = shown.borrow();
             let Some(url) = held.url.clone() else { return };
+            let source = held.source.clone();
             let Some(chosen) = held.rows.get(usize::try_from(index).unwrap_or(0)) else {
                 return;
             };
@@ -543,7 +589,7 @@ fn main() -> Result<(), slint::PlatformError> {
             ) {
                 Ok(()) => {
                     let words = ui().map(|ui| ui.words.get());
-                    if remember(&url, chosen, private, reach) {
+                    if remember(&url, chosen, private, reach, source) {
                         let _ = window.hide();
                         drop(held);
                         if let Some(words) = words {
@@ -653,7 +699,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Shown, claims_the_window, link_from};
+    use super::{Listed, Shown, claims_the_window, link_from, rule_for};
+    use linkunbound_core::Scope;
     use linkunbound_core::normalise;
     use linkunbound_shell::Reaches;
 
@@ -713,6 +760,86 @@ mod tests {
             "queued links are answered in the order they were clicked"
         );
         assert_eq!(shown.waiting.len(), 1, "and none of them is dropped");
+    }
+
+    fn chosen() -> Listed {
+        Listed {
+            browser_id: "chrome".to_owned(),
+            profile_id: Some("Default".to_owned()),
+            name: "Google Chrome".to_owned(),
+            profile: "Personal".to_owned(),
+            icon: None,
+            can_private: true,
+        }
+    }
+
+    /// The origin is read when the link arrives, because by the time the user
+    /// picks, the picker itself is the foreground window.
+    #[test]
+    fn only_the_origin_reach_binds_the_rule_to_an_app() {
+        let url = "https://github.com/a";
+
+        let bound = rule_for(
+            url,
+            &chosen(),
+            false,
+            Reaches::FromApp,
+            Some("teams".to_owned()),
+        )
+        .expect("an origin reach with a known origin makes a rule");
+        assert_eq!(bound.source_app.as_deref(), Some("teams"));
+        assert_eq!(bound.scope, Scope::Any, "it covers any address");
+
+        let site = rule_for(
+            url,
+            &chosen(),
+            false,
+            Reaches::Site,
+            Some("teams".to_owned()),
+        )
+        .expect("a site reach makes a rule too");
+        assert_eq!(
+            site.source_app, None,
+            "but it answers whichever app produced the link"
+        );
+        assert_eq!(site.scope, Scope::Site("github.com".to_owned()));
+    }
+
+    #[test]
+    fn an_origin_rule_is_not_written_without_an_origin() {
+        assert!(
+            rule_for(
+                "https://github.com/a",
+                &chosen(),
+                false,
+                Reaches::FromApp,
+                None
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn just_this_time_leaves_nothing_behind() {
+        assert!(
+            rule_for(
+                "https://github.com/a",
+                &chosen(),
+                false,
+                Reaches::Once,
+                None
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn the_rule_carries_the_profile_and_the_private_choice() {
+        let rule = rule_for("https://github.com/a", &chosen(), true, Reaches::Site, None)
+            .expect("should make a rule");
+        assert_eq!(rule.target.browser_id, "chrome");
+        assert_eq!(rule.target.profile_id.as_deref(), Some("Default"));
+        assert!(rule.private);
     }
 
     #[test]

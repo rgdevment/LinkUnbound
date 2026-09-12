@@ -135,12 +135,27 @@ impl RuleSet {
 
     /// The order the user sees is the order that decides, so moving a rule is
     /// how a tie gets broken.
+    /// Points an existing rule at another browser without touching its reach or
+    /// its place in the order: the user is correcting where it opens, not
+    /// rewriting what it covers.
+    pub fn retarget(&mut self, id: &str, target: Target) -> bool {
+        let Some(rule) = self.rules.iter_mut().find(|r| r.id == id) else {
+            return false;
+        };
+        rule.target = target;
+        true
+    }
+
     pub fn remove(&mut self, id: &str) -> bool {
         let before = self.rules.len();
         self.rules.retain(|r| r.id != id);
         before != self.rules.len()
     }
 
+    /// Kept for the file's own order, not as a way to decide anything: which
+    /// rule answers is settled by specificity, and two rules precise in the
+    /// same way cannot both exist — `upsert` collapses them.
+    #[cfg(test)]
     pub fn reorder(&mut self, ids: &[String]) {
         let mut moved: Vec<Rule> = Vec::with_capacity(self.rules.len());
         for id in ids {
@@ -418,6 +433,65 @@ mod tests {
 
     /// Between equally specific rules the first wins, so reordering is the only
     /// way the user can change which one answers.
+    /// The 1.x settings screen let a rule be pointed elsewhere without being
+    /// deleted and made again, which would lose its place in the order.
+    #[test]
+    fn a_rule_can_be_pointed_at_another_browser_without_losing_its_place() {
+        let mut set = RuleSet::default();
+        set.upsert(Rule {
+            id: String::new(),
+            scope: Scope::Site("github.com".to_owned()),
+            source_app: None,
+            target: Target {
+                browser_id: "firefox".to_owned(),
+                profile_id: None,
+            },
+            private: true,
+        });
+        set.upsert(Rule {
+            id: String::new(),
+            scope: Scope::Site("gitlab.com".to_owned()),
+            source_app: None,
+            target: Target {
+                browser_id: "firefox".to_owned(),
+                profile_id: None,
+            },
+            private: false,
+        });
+        let first = set.rules[0].id.clone();
+
+        assert!(set.retarget(
+            &first,
+            Target {
+                browser_id: "chrome".to_owned(),
+                profile_id: Some("Work".to_owned()),
+            }
+        ));
+
+        assert_eq!(set.rules[0].id, first, "it stays where it was");
+        assert_eq!(set.rules[0].target.browser_id, "chrome");
+        assert_eq!(set.rules[0].target.profile_id.as_deref(), Some("Work"));
+        assert_eq!(
+            set.rules[0].scope,
+            Scope::Site("github.com".to_owned()),
+            "the reach is untouched"
+        );
+        assert!(set.rules[0].private, "and so is the private flag");
+        assert_eq!(set.rules[1].target.browser_id, "firefox");
+    }
+
+    #[test]
+    fn retargeting_a_rule_that_is_not_there_says_so() {
+        let mut set = RuleSet::default();
+        assert!(!set.retarget(
+            "nope",
+            Target {
+                browser_id: "chrome".to_owned(),
+                profile_id: None,
+            }
+        ));
+    }
+
     #[test]
     fn reordering_decides_which_of_two_equal_rules_answers() {
         let mut set = RuleSet::default();

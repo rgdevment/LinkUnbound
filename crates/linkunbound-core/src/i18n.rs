@@ -31,7 +31,9 @@ catalogue! {
     reach_url: "Esta URL" | "This URL",
     reach_subdomain: "Subdominio" | "Subdomain",
     reach_site: "Todo el sitio" | "The whole site",
+    reach_from_app: "Desde {}" | "From {}",
     wrapper_unresolved: "Enlace envuelto: el destino real se conocerá al abrirlo" | "Wrapped link: the real destination is known once it opens",
+    no_browsers: "Ningún navegador que ofrecer. Añade uno en Ajustes." | "No browser to offer. Add one in Settings.",
     notice_opened: "Abierto en {}" | "Opened in {}",
     notice_by_rule: "Una regla decidió por {}" | "A rule decided for {}",
     notice_undo: "Deshacer" | "Undo",
@@ -126,6 +128,52 @@ mod tests {
                 spanish.contains("{}"),
                 english.contains("{}"),
                 "{key} disagrees about its placeholder"
+            );
+        }
+    }
+
+    /// Words that are the same in both languages, and would read as an
+    /// oversight rather than as a translation.
+    const SHARED: [&str; 2] = ["picker_private", "tray_settings"];
+
+    /// A string left as the Spanish one ships green otherwise: it is not blank,
+    /// it keeps its placeholders, and no test compares the two languages.
+    #[test]
+    fn an_english_string_is_not_just_the_spanish_one() {
+        for ((key, spanish), (_, english)) in SPANISH.pairs().into_iter().zip(ENGLISH.pairs()) {
+            if SHARED.contains(&key) {
+                continue;
+            }
+            assert_ne!(
+                spanish, english,
+                "{key} reads the same in both languages: untranslated, or a shared word to list"
+            );
+        }
+    }
+
+    /// The reaches sit side by side in one row, so a pair swapped in one
+    /// language alone points the user at the wrong scope without looking odd.
+    #[test]
+    fn each_reach_says_the_same_thing_in_both_languages() {
+        for (spanish, english, widening) in [
+            (SPANISH.reach_url, ENGLISH.reach_url, "url"),
+            (
+                SPANISH.reach_subdomain,
+                ENGLISH.reach_subdomain,
+                "subdomain",
+            ),
+            (SPANISH.reach_site, ENGLISH.reach_site, "site"),
+        ] {
+            let es = spanish.to_lowercase();
+            let en = english.to_lowercase();
+            let agreed = match widening {
+                "url" => es.contains("url") && en.contains("url"),
+                "subdomain" => es.contains("subdominio") && en.contains("subdomain"),
+                _ => es.contains("sitio") && en.contains("site"),
+            };
+            assert!(
+                agreed,
+                "the {widening} reach disagrees: {spanish} / {english}"
             );
         }
     }

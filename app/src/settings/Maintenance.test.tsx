@@ -28,6 +28,26 @@ describe("maintenance", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  /// The confirmation promises the hand-added browsers survive, and that was
+  /// asserted as text and never as the command that runs.
+  it("looks for browsers without wiping anything", async () => {
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    const ask = await screen.findByRole("alertdialog", { name: "Volver a buscar navegadores" });
+    await userEvent.click(within(ask).getByRole("button", { name: "Buscar" }));
+
+    expect(invoke).toHaveBeenCalledWith("maintenance_rescan", {});
+    expect(invoke).not.toHaveBeenCalledWith("maintenance_reset", expect.anything());
+  });
+
+  it("says the rescan is done, so it does not look like nothing happened", async () => {
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    const ask = await screen.findByRole("alertdialog", { name: "Volver a buscar navegadores" });
+    await userEvent.click(within(ask).getByRole("button", { name: "Buscar" }));
+    expect(await screen.findByText(/Hecho/)).toBeInTheDocument();
+  });
+
   it("wipes the configuration once confirmed", async () => {
     render(<Maintenance />);
     await userEvent.click(screen.getByRole("button", { name: "Restablecer" }));
