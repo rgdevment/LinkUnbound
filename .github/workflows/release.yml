@@ -49,7 +49,12 @@ jobs:
             echo "::notice::the updater key carries no password; that is fine if it was made without one"
           fi
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "::warning::no updater key; this release cannot be installed by an existing copy"
+            if [ "${{ github.event_name }}" = "push" ]; then
+              fail "no updater key. Every copy already out there would be told about this release \
+          and none could take it, and a release is not something an installed copy learns was \
+          taken back. Set TAURI_SIGNING_PRIVATE_KEY."
+            fi
+            echo "::warning::no updater key; this build cannot be installed by an existing copy"
           fi
           echo "signing secrets are coherent"
 
@@ -239,9 +244,10 @@ jobs:
           find staged -type f -exec cp {} dist/ \;
           ls -l dist
 
+      # Everything here happens before the release is created. A release published without a
+      # usable signature is one every copy is told about and none can take, and taking it back is
+      # not something an installed copy ever learns about.
       - name: Everything that should be here, is
-        env:
-          SIGNED: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
         run: |
           v="${{ needs.version.outputs.version }}"
           status=0
@@ -250,14 +256,31 @@ jobs:
             echo "::error::$want is missing or empty"
             status=1
           fi
-          # Checked before the release is created, not after: a release published without its
-          # signature is one every copy is told about and none can take, and taking it back is
-          # not something an installed copy ever learns about.
-          if [ "$SIGNED" = "true" ] && [ ! -s "$want.sig" ]; then
+          if [ ! -s "$want.sig" ]; then
             echo "::error::$want.sig is missing; the release would offer an update nobody can take"
             status=1
           fi
           exit $status
+
+      # The key that signed it has to be the key every copy carries. They are two secrets in two
+      # places, and the only thing that says they are halves of the same pair is this. Checked
+      # here, a mismatch costs a failed run; checked after publishing, it costs a release that
+      # verifies nowhere and a feed that already announced it.
+      - name: The signature answers to the key this build ships
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          v="${{ needs.version.outputs.version }}"
+          exe="dist/linkunbound-installer-$v-windows-x86_64.exe"
+
+          jq -r '.plugins.updater.pubkey' app/src-tauri/tauri.conf.json | base64 -d > feed.pub
+          base64 -d < "$exe.sig" > one.minisig
+          if ! minisign -Vm "$exe" -p feed.pub -x one.minisig; then
+            echo "::error::the installer was signed with a key that is not the one in \
+          tauri.conf.json. Every copy built from this tree carries that public key, so nothing \
+          could ever verify this update. Nothing was published."
+            exit 1
+          fi
+          echo "the signature and the shipped key are halves of the same pair"
 
       - name: Checksums
         run: |
