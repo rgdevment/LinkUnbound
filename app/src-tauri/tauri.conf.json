@@ -53,7 +53,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk5OURERjAwQzM2REYyMkIKUldRcjhtM0RBTitkbWJPd0N4Mnk4TXZSTU03bmNVSUtscnJzL0luSzl4SnBrYVNHeGx4UFNacUkK",
       "endpoints": [
-        "https://github.com/rgdevment/LinkUnbound/releases/download/updater-feed/latest.json"
+        "https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/latest.json"
       ],
       "windows": {
         "installMode": "passive"

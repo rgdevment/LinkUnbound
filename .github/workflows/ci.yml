@@ -25,6 +25,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
+      - name: The resident rides along
+        shell: bash
+        run: bash scripts/sidecar.sh
       - run: cargo nextest run --workspace --no-tests=pass
       - run: cargo test --doc --workspace
 
@@ -38,6 +41,9 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
+      - name: The resident rides along
+        shell: bash
+        run: bash scripts/sidecar.sh
       - run: cargo clippy --workspace --all-targets
 
   picker:

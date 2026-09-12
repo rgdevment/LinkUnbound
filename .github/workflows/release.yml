@@ -1,0 +1,405 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build. Publishes nothing."
+        required: false
+        default: "0.0.0-dispatch"
+
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+
+# Two releases at once interleave their writes to the feed, and the one that finishes last wins
+# rather than the newest.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Resolve the version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      PFX_BASE64: ${{ secrets.PFX_BASE64 }}
+      PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
+    steps:
+      - name: Signing secrets come in pairs
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+
+          if [ -n "$PFX_BASE64" ] && [ -z "$PFX_PASSWORD" ]; then
+            fail "PFX_BASE64 is set but PFX_PASSWORD is empty"
+          fi
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::warning::no updater key; this release cannot be installed by an existing copy"
+          fi
+          echo "signing secrets are coherent"
+
+      - id: resolve
+        run: |
+          if [[ "$GITHUB_REF" =~ ^refs/tags/v(.+)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          else
+            version="${{ inputs.version }}"
+          fi
+
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::«$version» is not a version cargo accepts (1.2.3 or 1.2.3-rc1)"
+            exit 1
+          fi
+
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "version $version (pre-release: $prerelease)"
+
+  bundle-windows:
+    name: linkunbound-windows-installer
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      TARGET: x86_64-pc-windows-msvc
+      PFX_BASE64: ${{ secrets.PFX_BASE64 }}
+      PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/prepare
+        with:
+          version: ${{ needs.version.outputs.version }}
+          targets: ${{ env.TARGET }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Frontend
+        working-directory: app
+        run: npm ci
+
+      # The resident is a binary of its own and the bundler only carries what `externalBin` names.
+      # Without this the installer ships the settings window alone, and every link runs nothing.
+      - name: The resident rides along
+        shell: bash
+        run: |
+          cargo build --release --bin linkunbound-shell --target "$TARGET"
+          mkdir -p app/src-tauri/binaries
+          cp "target/$TARGET/release/linkunbound-shell.exe" \
+             "app/src-tauri/binaries/linkunbound-shell-$TARGET.exe"
+
+      # A public key in the config makes the private one a build requirement, so a run without the
+      # secret has to say so rather than fail on a line about an environment variable.
+      - name: Bundle
+        working-directory: app
+        shell: bash
+        run: |
+          sign=""
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then sign="--no-sign"; fi
+          npm run tauri build -- --bundles nsis $sign
+
+      - name: The installer carries both binaries
+        shell: bash
+        run: |
+          setup=$(ls target/release/bundle/nsis/*-setup.exe | head -1)
+          if [ -z "$setup" ]; then
+            echo "::error::the bundler produced no installer"
+            exit 1
+          fi
+          # A sidecar that silently failed to be picked up looks exactly like a working release
+          # until someone installs it and no link opens.
+          if ! grep -qa "linkunbound-shell.exe" "$setup"; then
+            echo "::error::the installer does not mention the resident; the sidecar was not bundled"
+            exit 1
+          fi
+          echo "the installer names the resident"
+
+      - name: Sign the installer
+        if: env.PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String($env:PFX_BASE64)
+          Set-Content -Path signingCert.pfx -Value $bytes -AsByteStream
+
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter "signtool.exe" |
+            Where-Object { $_.FullName -like "*x64*" } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { Write-Error "signtool not found"; exit 1 }
+
+          $setup = Get-ChildItem -Path "target/release/bundle/nsis" -Filter "*-setup.exe" |
+            Select-Object -First 1
+          if (-not $setup) { Write-Error "no installer to sign"; exit 1 }
+
+          & $signtool.FullName sign /f signingCert.pfx /p $env:PFX_PASSWORD `
+            /tr http://timestamp.digicert.com /td sha256 /fd sha256 $setup.FullName
+          if ($LASTEXITCODE -ne 0) { Write-Error "signing failed"; exit 1 }
+          Remove-Item signingCert.pfx
+
+          $sig = Get-AuthenticodeSignature $setup.FullName
+          if (-not $sig.TimeStamperCertificate) {
+            Write-Error "no timestamp: the signature would die with the certificate"; exit 1
+          }
+          Write-Host "status: $($sig.Status)"
+
+      - name: Name it after the release
+        shell: bash
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          mkdir -p dist
+          setup=$(ls target/release/bundle/nsis/*-setup.exe | head -1)
+          cp "$setup" "dist/linkunbound-installer-$v-windows-x86_64.exe"
+          ls -l dist
+
+      # The bundler signed the installer it built, and signtool then rewrote those bytes. The
+      # signature the updater checks has to be made against what actually ships, so it is made
+      # last: a signature over bytes that no longer exist reads exactly like a working release.
+      - name: Sign it for the updater
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        working-directory: app
+        shell: bash
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          exe="../dist/linkunbound-installer-$v-windows-x86_64.exe"
+          rm -f "$exe.sig"
+          npm run tauri -- signer sign "$exe"
+          test -s "$exe.sig" || { echo "::error::no updater signature was written"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-windows
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: GitHub Release
+    needs: [version, bundle-windows]
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: staged
+
+      - name: Gather
+        run: |
+          mkdir -p dist
+          find staged -type f -exec cp {} dist/ \;
+          ls -l dist
+
+      - name: Checksums
+        run: |
+          cd dist
+          for one in linkunbound-*; do
+            case "$one" in *.sha256) continue ;; esac
+            sha256sum "$one" > "$one.sha256"
+          done
+          ls -l
+
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/linkunbound-installer-*.exe
+
+      - name: Notes from the tag
+        id: notes
+        run: |
+          body=$(git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "${GITHUB_REF_NAME}" \
+            | sed '/-----BEGIN SSH SIGNATURE-----/,$d' \
+            | sed -e :a -e '/^\n*$/{$d;N;ba}')
+          {
+            echo "body<<LU_EOF"
+            echo "$body"
+            echo "LU_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          body: ${{ steps.notes.outputs.body }}
+          generate_release_notes: true
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.version.outputs.prerelease == 'false' }}
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Where every installed copy looks: an orphan branch holding the three feeds and nothing
+      # else. Serving them from the release of each version is what cannot work —
+      # releases/latest/download/ follows the date a release was published rather than the version
+      # in it, and never points at a prerelease, so the candidate channel would be dead and a
+      # maintenance release for an older series would walk the feed backwards.
+      - name: The feed
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          base="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}"
+          win="linkunbound-installer-$v-windows-x86_64.exe"
+
+          # Composed before the checkout below swaps the working tree out from under us.
+          if [ -s "dist/$win.sig" ]; then
+            jq -n --arg v "$v" \
+                  --arg n "https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}" \
+                  --arg u "$base/$win" --arg s "$(cat "dist/$win.sig")" \
+              '{version: $v, notes: $n,
+                platforms: {"windows-x86_64": {url: $u, signature: $s}}}' \
+              > "$RUNNER_TEMP/channel.json"
+            cat "$RUNNER_TEMP/channel.json"
+          else
+            # The notice feed and the update feed have to move together. Advertising a version the
+            # updater cannot then find leaves every copy pressing a button that answers "gone".
+            echo "::error::no updater signature for $v; the release would offer an update nobody can take"
+            exit 1
+          fi
+
+          if git fetch origin manifest --depth 1 2>/dev/null; then
+            git checkout -B manifest FETCH_HEAD
+          else
+            # Without a parent, or the branch carries a copy of the whole source beside the feed
+            # and that copy is never updated again.
+            git checkout --orphan manifest
+            git rm -rq --cached . 2>/dev/null || true
+            # The index is cleared but the files are not: the branch we came from carries copies
+            # of these, and they would be read as the feed and committed as it.
+            rm -f release-manifest.json latest.json candidate.json
+          fi
+
+          # Re-running the workflow of a release that has since been passed would otherwise walk
+          # the feed backwards and offer everybody a version they already left behind. Each track
+          # is held against its own: a candidate run never touches the stable one.
+          if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+            was=$(jq -r '.latestPrerelease // ""' release-manifest.json 2>/dev/null || echo "")
+            track="candidates"
+          else
+            was=$(jq -r '.latest // ""' release-manifest.json 2>/dev/null || echo "")
+            track="stable"
+          fi
+          if [ -n "$was" ] && [ "$was" != "$v" ] \
+             && [ "$(printf '%s\n%s\n' "$was" "$v" | sort -V | tail -1)" != "$v" ]; then
+            echo "::error::the $track feed already says $was, and this run would set it back to \
+                  $v. Nothing was written."
+            exit 1
+          fi
+
+          latest=$(jq -r '.latest // ""' release-manifest.json 2>/dev/null || echo "")
+          if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+            jq -n --arg l "${latest:-0.0.0}" --arg c "$v" \
+              '{schema: 1, latest: $l, latestPrerelease: $c}' > release-manifest.json
+            cp "$RUNNER_TEMP/channel.json" candidate.json
+          else
+            jq -n --arg l "$v" '{schema: 1, latest: $l}' > release-manifest.json
+            cp "$RUNNER_TEMP/channel.json" latest.json
+            # A stable release takes the candidate channel away, or a candidate would go on being
+            # offered a version nobody publishes any more.
+            rm -f candidate.json
+          fi
+          cat release-manifest.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Staged one at a time and compared after: naming a file that is not there is a pathspec
+          # error, and a stable release has just taken candidate.json away. Comparing after the
+          # staging keeps a channel file from being skipped on a run where the version manifest
+          # happened not to change.
+          for one in release-manifest.json latest.json candidate.json; do
+            git add -A -- "$one" 2>/dev/null || true
+          done
+          if git diff --cached --quiet; then
+            echo "already says $v"
+            exit 0
+          fi
+          git commit -m "chore: release manifest for $v"
+          for attempt in 1 2 3 4 5; do
+            if git push origin manifest; then
+              exit 0
+            fi
+            echo "the feed would not push (${attempt}/5)"
+            git fetch origin manifest && git rebase origin/manifest || true
+            sleep $((attempt * 5))
+          done
+          echo "::error::the feed could not be pushed; the release is out and nothing announces it"
+          exit 1
+
+  verify:
+    name: The update is installable
+    needs: [version, publish]
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      # What a copy out there will do in a day's time, done here first. A signature made against
+      # the wrong bytes reads exactly like a working release until someone tries to install it.
+      - name: Take the update the way an installed copy would
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          v="${{ needs.version.outputs.version }}"
+          file=latest.json
+          if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then file=candidate.json; fi
+          feed="https://raw.githubusercontent.com/${{ github.repository }}/manifest/$file"
+
+          # raw serves with max-age=300, so the wait has to outlast the cache or it fails on that
+          # rather than on anything being wrong.
+          said=""
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSL -H "Cache-Control: no-cache" -o channel.json "$feed"; then
+              said=$(jq -r .version channel.json)
+              [ "$said" = "$v" ] && break
+            fi
+            echo "the channel still says «${said:-nothing}» (${attempt}/6)"
+            sleep $((attempt * 20))
+          done
+          jq . channel.json
+
+          if [ "$said" != "$v" ]; then
+            echo "::error::$file says $said, this release is $v"
+            exit 1
+          fi
+
+          jq -r '.plugins.updater.pubkey' app/src-tauri/tauri.conf.json | base64 -d > feed.pub
+
+          for os in $(jq -r '.platforms | keys[]' channel.json); do
+            url=$(jq -r --arg os "$os" '.platforms[$os].url' channel.json)
+            jq -r --arg os "$os" '.platforms[$os].signature' channel.json | base64 -d > one.sig
+
+            # The address has to be the tag of the version being offered, or a feed could announce
+            # one version and hand over the signed installer of another — a rollback the signature
+            # alone cannot catch, because those bytes really were ours.
+            case "$url" in
+              "https://github.com/${{ github.repository }}/releases/download/v$v/"*) ;;
+              *) echo "::error::$os points at $url, which is not the v$v release"; exit 1 ;;
+            esac
+
+            curl -fsSL -o one.bin "$url"
+            if minisign -Vm one.bin -p feed.pub -x one.sig; then
+              echo "$os verifies"
+            else
+              echo "::error::$os does not verify against the key this build ships"
+              exit 1
+            fi
+          done

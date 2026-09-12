@@ -1,18 +1,20 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// The three feeds live in a release of their own, under a tag that never moves. The tag is what
-/// makes the address steady: a feed served from whichever release GitHub last called the latest
-/// would follow the date one was published rather than the version in it, and would never serve a
-/// candidate at all, since a candidate is never that release.
+/// The three feeds live on an orphan branch that holds nothing else. Serving them from the
+/// release of each version is what cannot work: `releases/latest/download/` follows the date a
+/// release was published rather than the version in it, and never points at a prerelease at all,
+/// so the candidate channel would be dead and a maintenance release for an older series would
+/// walk the feed backwards. A branch also leaves the feed's history in git, where a bad write is
+/// one revert away.
 const MANIFEST: &str =
-    "https://github.com/rgdevment/LinkUnbound/releases/download/updater-feed/release-manifest.json";
+    "https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/release-manifest.json";
 /// One holds a stable version and the other a candidate, never both, so the track a copy belongs
 /// to can be read off the version it is being offered.
 pub const LATEST: &str =
-    "https://github.com/rgdevment/LinkUnbound/releases/download/updater-feed/latest.json";
+    "https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/latest.json";
 pub const CANDIDATE: &str =
-    "https://github.com/rgdevment/LinkUnbound/releases/download/updater-feed/candidate.json";
+    "https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/candidate.json";
 
 const PATIENCE: Duration = Duration::from_secs(5);
 const APART: u64 = 24 * 60 * 60;
@@ -306,6 +308,23 @@ mod tests {
                 .unwrap()
                 .version,
             "2.2.0-rc1"
+        );
+    }
+
+    /// `2.2.0` is greater than `2.2.0-rc1` in semver, but any comparison that looked at the three
+    /// numbers alone would call them equal and leave the user stuck on the candidate on the very
+    /// day it was meant to be replaced.
+    #[test]
+    fn a_candidate_is_replaced_by_the_release_it_was_a_candidate_for() {
+        let feed = r#"{"latest":"2.2.0","latestPrerelease":"2.2.0-rc1"}"#;
+
+        let found = newer("2.2.0-rc1", feed, Kept::plain(Route::Download), None)
+            .expect("the release it was a candidate for is newer than it");
+        assert_eq!(found.version, "2.2.0");
+
+        assert!(
+            newer("2.2.0", feed, Kept::plain(Route::Download), None).is_none(),
+            "and once taken, the candidate is not offered back"
         );
     }
 

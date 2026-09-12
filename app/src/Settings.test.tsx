@@ -5,6 +5,9 @@ import Settings from "./Settings";
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
+// Without this the window's update listener reaches for a Tauri runtime that is not there, and
+// the suite reports every test passing while the run itself fails.
+vi.mock("@tauri-apps/api/event", () => ({ listen: () => Promise.resolve(() => {}) }));
 
 const BASE = {
   registered: true,
@@ -17,6 +20,14 @@ const BASE = {
   startup_is_ours: true,
   health: "fine",
   edge_installed: false,
+};
+
+const BUILD = {
+  version: "2.0.0",
+  license: "GPL-3.0-only",
+  repository: "https://github.com/rgdevment/LinkUnbound",
+  candidates: false,
+  candidatesApply: true,
 };
 
 const PREFS = {
@@ -39,6 +50,8 @@ function answers(
     if (cmd in overrides) return overrides[cmd]();
     if (cmd === "rules_list") return Promise.resolve([]);
     if (cmd === "prefs_get" || cmd === "prefs_set") return Promise.resolve(PREFS);
+    if (cmd === "update_ready") return Promise.resolve(null);
+    if (cmd === "about") return Promise.resolve(BUILD);
     return Promise.resolve(state);
   });
 }
@@ -48,6 +61,32 @@ async function go(section: string) {
 }
 
 describe("settings", () => {
+  /// The sidebar's corner said "Versión {}" for two different facts: the one you run and the one
+  /// waiting. With an offer in hand it showed the new number where the installed one had been.
+  it("shows the version it is running when there is nothing newer", async () => {
+    answers(BASE);
+    render(<Settings />);
+    expect(await screen.findByText("Versión 2.0.0")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /hay una versión nueva/ })).toBeNull();
+  });
+
+  it("offers a way in when a newer one is waiting, without claiming to be it", async () => {
+    answers(BASE, {
+      update_ready: () =>
+        Promise.resolve({ version: "2.1.0", route: "download", package: null, installs: true }),
+    });
+    render(<Settings />);
+
+    const go = await screen.findByRole("button", {
+      name: "Acerca de · hay una versión nueva",
+    });
+    expect(go).toHaveTextContent("Ver la 2.1.0 disponible");
+    expect(screen.queryByText("Versión 2.1.0")).toBeNull();
+
+    await userEvent.click(go);
+    expect(await screen.findByText("Licencia GPL-3.0")).toBeInTheDocument();
+  });
+
   beforeEach(() => {
     invoke.mockReset();
     answers(BASE);

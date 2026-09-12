@@ -15,6 +15,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: The workflows parse
+        run: |
+          # A workflow that does not parse fails in zero seconds with no job, no line and no
+          # diagnosis — and release only ever runs once the tag is already pushed.
+          status=0
+          for one in .github/workflows/*.yml .github/actions/*/action.yml; do
+            if ! npx --yes js-yaml "$one" >/dev/null; then
+              echo "::error file=$one::this file is not valid YAML"
+              status=1
+            fi
+          done
+          exit $status
+
       - name: The core produces no terminal output
         run: |
           if grep -rn 'println!\|eprintln!\|print!' crates/linkunbound-core/src --include='*.rs'; then
