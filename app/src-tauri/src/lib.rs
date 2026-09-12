@@ -529,52 +529,6 @@ const fn owner(_app: &AppHandle) -> Option<isize> {
     None
 }
 
-/// A copy the store keeps never reads the manifest. It cannot install from a download, so a
-/// version the manifest names is one it could be told about and never take — and the offer would
-/// arrive stripped of `installs`, leaving a notice with no button under it.
-async fn from_the_store(
-    app: &AppHandle,
-    dir: &std::path::Path,
-    looked: &mut update::Looked,
-    now: u64,
-    asked: bool,
-) -> Option<update::Ready> {
-    let remembered = |looked: &update::Looked| {
-        looked
-            .found_version
-            .as_deref()
-            .and_then(|version| update::from_the_shop(version, HERE))
-    };
-
-    // Held to the manifest's interval too: a Store that never answers strands the thread.
-    if !asked && !update::due(looked.checked_at, now) {
-        return remembered(looked);
-    }
-    let window = owner(app)?;
-    let Ok(shelf) = tauri::async_runtime::spawn_blocking(move || shop::asked(window)).await else {
-        return remembered(looked);
-    };
-
-    match shelf {
-        // Not knowing is not being current, so the old wording stands and the interval is left
-        // alone: writing it would buy the silence another day.
-        shop::Shelf::Silent => remembered(looked),
-        shop::Shelf::Current => {
-            looked.checked_at = Some(now);
-            looked.found_version = None;
-            update::keep(dir, looked);
-            None
-        }
-        shop::Shelf::Waiting(version) => {
-            let seen = update::from_the_shop(&version, HERE);
-            looked.checked_at = Some(now);
-            looked.found_version = seen.as_ref().map(|one| one.version.clone());
-            update::keep(dir, looked);
-            seen
-        }
-    }
-}
-
 #[tauri::command]
 async fn update_ready(
     app: AppHandle,
@@ -586,8 +540,31 @@ async fn update_ready(
     let now = update::now();
     let asked = now_please.unwrap_or(false);
 
-    if kept.route == update::Route::Store {
-        return Ok(from_the_store(&app, &dir, &mut looked, now, asked).await);
+    // A copy the Store keeps asks the Store, not the manifest: a release is out for everyone else
+    // while certification still has it. Silence falls through, though — the Store answers for
+    // nothing in a package it did not sell.
+    if kept.route == update::Route::Store
+        && let Some(window) = owner(&app)
+    {
+        // Held to the manifest's interval too: a Store that never answers strands the thread.
+        if !asked && !update::due(looked.checked_at, now) {
+            return Ok(looked
+                .found_version
+                .as_deref()
+                .and_then(|version| update::from_the_shop(version, HERE)));
+        }
+        if let Ok(shelf) = tauri::async_runtime::spawn_blocking(move || shop::asked(window)).await
+            && shelf != shop::Shelf::Silent
+        {
+            let seen = match shelf {
+                shop::Shelf::Waiting(version) => update::from_the_shop(&version, HERE),
+                _ => None,
+            };
+            looked.checked_at = Some(now);
+            looked.found_version = seen.as_ref().map(|one| one.version.clone());
+            update::keep(&dir, &looked);
+            return Ok(seen);
+        }
     }
 
     if !asked && !update::due(looked.checked_at, now) {
@@ -595,6 +572,7 @@ async fn update_ready(
             HERE,
             looked.found_version.as_deref(),
             kept,
+            looked.candidates,
         ));
     }
 
@@ -609,6 +587,7 @@ async fn update_ready(
             HERE,
             looked.found_version.as_deref(),
             kept,
+            looked.candidates,
         ));
     };
 
@@ -658,19 +637,27 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
     }
 
     let dir = store().dir().to_path_buf();
-    let found = update::looked(&dir).found_version;
-    let Some(want) = update::remembered(HERE, found.as_deref(), kept).map(|one| one.version) else {
+    let looked = update::looked(&dir);
+    let Some(want) = update::remembered(
+        HERE,
+        looked.found_version.as_deref(),
+        kept,
+        looked.candidates,
+    )
+    .map(|one| one.version) else {
         return Err("updateGone".to_owned());
     };
 
     let asked = want.clone();
     let update = app
         .updater_builder()
-        .endpoints(vec![
-            update::channel_for(&want)
-                .parse()
+        .endpoints(
+            update::feeds_for(&want)
+                .into_iter()
+                .map(str::parse)
+                .collect::<Result<Vec<_>, _>>()
                 .map_err(|_| "updateFailed".to_owned())?,
-        ])
+        )
         .map_err(|why| why.to_string())?
         // Pinned to what the person was shown, so a feed that moves in between cannot quietly
         // hand them a different version than the one they agreed to.
@@ -731,9 +718,15 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
         .await
         .map_err(|why| why.to_string())?;
 
-    let handle = app.clone();
-    app.run_on_main_thread(move || handle.restart())
-        .map_err(|why| why.to_string())
+    // Only a platform whose installer leaves this process standing reaches here. Windows does
+    // not: the plugin hands over to the installer and ends the process itself.
+    #[cfg(not(windows))]
+    {
+        let handle = app.clone();
+        app.run_on_main_thread(move || handle.restart())
+            .map_err(|why| why.to_string())?;
+    }
+    Ok(())
 }
 
 /// Windows ends the process to put the new package in place, so the progress left behind is the

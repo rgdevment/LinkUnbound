@@ -23,9 +23,18 @@
   ; settings window only reconciles when someone opens it. Without this, a fresh install receives
   ; no links until the user happens to visit the settings.
   ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --register'
+
+  ; And put the resident back. PREINSTALL stopped it to replace the file, the template only ever
+  ; relaunches the main binary, and nothing else in the program starts it — so without this every
+  ; update ends with no tray icon and no shortcut until the next link happens to arrive.
+  Exec '"$INSTDIR\linkunbound-shell.exe"'
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
+  ; Both, and the settings window first: the template kills it only *after* this hook, and the
+  ; single-instance guard makes a second copy hand its arguments to the live one and exit, so
+  ; `--unregister` below would be answered by a window that has no idea what to do with it.
+  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
   !insertmacro CheckIfAppIsRunning "linkunbound-shell.exe" "${PRODUCTNAME}"
 
   ; Windows keeps offering an application whose keys are still there, so the registration is
@@ -45,5 +54,6 @@
   ${If} $UpdateMode <> 1
     Delete "$LOCALAPPDATA\${PRODUCTNAME}\update.json"
     RMDir /r "$LOCALAPPDATA\${PRODUCTNAME}\icons"
+    RMDir "$INSTDIR"
   ${EndIf}
 !macroend

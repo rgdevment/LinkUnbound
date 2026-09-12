@@ -148,6 +148,9 @@ const ES = {
   updateInstalling: "Instalando…",
   updateInstallingStore: "Microsoft Store está instalando la actualización…",
   updateStopped: "La actualización se detuvo",
+  internal: "Algo salió mal — {}",
+  aboutFailed: "No se pudo leer la información de esta copia",
+  tryAgain: "Reintentar",
   updateBusy: "Ya hay una actualización en marcha",
   updateGone: "Ya no hay ninguna versión nueva que instalar",
   updateNotHere: "Esta copia no puede reemplazarse a sí misma",
@@ -181,7 +184,7 @@ const ES = {
   save: "Guardar",
   cancel: "Cancelar",
   remove: "Quitar",
-  errUnreachable: "Con la bandeja oculta y sin atajo no habría forma de volver aquí.",
+  unreachable: "Con la bandeja oculta y sin atajo no habría forma de volver aquí.",
 } as const;
 
 export type Key = keyof typeof ES;
@@ -333,6 +336,9 @@ const EN: Record<Key, string> = {
   updateInstalling: "Installing…",
   updateInstallingStore: "Microsoft Store is installing the update…",
   updateStopped: "The update was stopped",
+  internal: "Something went wrong — {}",
+  aboutFailed: "This copy could not be read",
+  tryAgain: "Try again",
   updateBusy: "An update is already underway",
   updateGone: "There is no newer version left to install",
   updateNotHere: "This copy cannot replace itself",
@@ -366,7 +372,7 @@ const EN: Record<Key, string> = {
   save: "Save",
   cancel: "Cancel",
   remove: "Remove",
-  errUnreachable: "With the tray hidden and no shortcut there would be no way back here.",
+  unreachable: "With the tray hidden and no shortcut there would be no way back here.",
 };
 
 export const SPEECH: Record<Language, Record<Key, string>> = { es: ES, en: EN };
@@ -384,6 +390,10 @@ export const Speaking = Spoken.Provider;
 export function useWords(): (key: Key, ...values: string[]) => string {
   const language = useContext(Spoken);
   return (key, ...values) => fill(SPEECH[language][key], ...values);
+}
+
+export function useSpoken(): Language {
+  return useContext(Spoken);
 }
 
 export function spoken(language: string | undefined): Language {

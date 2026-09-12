@@ -238,7 +238,8 @@ mod platform {
             associations: Vec::new(),
             starts_with_system: false,
             startup_is_ours: true,
-            health: super::Health::NotRegistered,
+            health: Health::NotRegistered,
+            registered_path: None,
             edge_installed: false,
         }
     }

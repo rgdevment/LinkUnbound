@@ -34,6 +34,7 @@ jobs:
       prerelease: ${{ steps.resolve.outputs.prerelease }}
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       PFX_BASE64: ${{ secrets.PFX_BASE64 }}
       PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
     steps:
@@ -43,6 +44,9 @@ jobs:
 
           if [ -n "$PFX_BASE64" ] && [ -z "$PFX_PASSWORD" ]; then
             fail "PFX_BASE64 is set but PFX_PASSWORD is empty"
+          fi
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] && [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+            echo "::notice::the updater key carries no password; that is fine if it was made without one"
           fi
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "::warning::no updater key; this release cannot be installed by an existing copy"
@@ -57,8 +61,20 @@ jobs:
             version="${{ inputs.version }}"
           fi
 
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "::error::«$version» is not a version cargo accepts (1.2.3 or 1.2.3-rc1)"
+          # Strict semver: a leading zero is not a number semver will read, and a copy that
+          # cannot parse the version it is running stops hearing about every release after it.
+          num='(0|[1-9][0-9]*)'
+          pre='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+          if [[ ! "$version" =~ ^$num\.$num\.$num(-$pre(\.$pre)*)?$ ]]; then
+            echo "::error::«$version» is not a version semver reads (1.2.3 or 1.2.3-rc.1)"
+            exit 1
+          fi
+
+          # rc10 is compared letter by letter against rc9, so it sorts *below* it: a copy on rc9
+          # would never be told about rc10. Dotted, the number is compared as a number.
+          if [[ "$version" =~ -rc[0-9]{2,} ]]; then
+            echo "::error::«$version» has to be written rc.${BASH_REMATCH[0]#-rc}: past rc9, \
+          semver reads rc10 as older than rc2"
             exit 1
           fi
 
@@ -123,18 +139,21 @@ jobs:
       - name: The installer carries both binaries
         shell: bash
         run: |
-          setup=$(ls target/release/bundle/nsis/*-setup.exe | head -1)
+          setup=$(ls target/release/bundle/nsis/*-setup.exe 2>/dev/null | head -1) || true
           if [ -z "$setup" ]; then
             echo "::error::the bundler produced no installer"
             exit 1
           fi
+          # Read from the generated script, not the installer: the payload is LZMA-compressed, so
+          # searching the exe for a filename finds nothing whether it is in there or not.
           # A sidecar that silently failed to be picked up looks exactly like a working release
           # until someone installs it and no link opens.
-          if ! grep -qa "linkunbound-shell.exe" "$setup"; then
-            echo "::error::the installer does not mention the resident; the sidecar was not bundled"
+          script=$(ls target/release/nsis/*/installer.nsi | head -1)
+          if [ -z "$script" ] || ! grep -q 'oname=linkunbound-shell.exe' "$script"; then
+            echo "::error::the generated installer script does not lay down the resident; the           sidecar was not bundled"
             exit 1
           fi
-          echo "the installer names the resident"
+          echo "the installer lays down the resident"
 
       - name: Sign the installer
         if: env.PFX_BASE64 != ''
@@ -169,7 +188,11 @@ jobs:
         run: |
           v="${{ needs.version.outputs.version }}"
           mkdir -p dist
-          setup=$(ls target/release/bundle/nsis/*-setup.exe | head -1)
+          setup=$(ls target/release/bundle/nsis/*-setup.exe 2>/dev/null | head -1) || true
+          if [ -z "$setup" ]; then
+            echo "::error::the bundler produced no installer"
+            exit 1
+          fi
           cp "$setup" "dist/linkunbound-installer-$v-windows-x86_64.exe"
           ls -l dist
 
@@ -201,7 +224,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Full history: the feed push retries with a rebase, which a shallow clone cannot do.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -213,9 +239,30 @@ jobs:
           find staged -type f -exec cp {} dist/ \;
           ls -l dist
 
+      - name: Everything that should be here, is
+        env:
+          SIGNED: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          status=0
+          want="dist/linkunbound-installer-$v-windows-x86_64.exe"
+          if [ ! -s "$want" ]; then
+            echo "::error::$want is missing or empty"
+            status=1
+          fi
+          # Checked before the release is created, not after: a release published without its
+          # signature is one every copy is told about and none can take, and taking it back is
+          # not something an installed copy ever learns about.
+          if [ "$SIGNED" = "true" ] && [ ! -s "$want.sig" ]; then
+            echo "::error::$want.sig is missing; the release would offer an update nobody can take"
+            status=1
+          fi
+          exit $status
+
       - name: Checksums
         run: |
           cd dist
+          shopt -s nullglob
           for one in linkunbound-*; do
             case "$one" in *.sha256) continue ;; esac
             sha256sum "$one" > "$one.sha256"
@@ -374,12 +421,11 @@ jobs:
             echo "the channel still says «${said:-nothing}» (${attempt}/6)"
             sleep $((attempt * 20))
           done
-          jq . channel.json
-
           if [ "$said" != "$v" ]; then
-            echo "::error::$file says $said, this release is $v"
+            echo "::error::$file says «${said:-nothing}», this release is $v"
             exit 1
           fi
+          jq . channel.json
 
           jq -r '.plugins.updater.pubkey' app/src-tauri/tauri.conf.json | base64 -d > feed.pub
 

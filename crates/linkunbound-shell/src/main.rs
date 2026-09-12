@@ -666,10 +666,8 @@ fn main() -> Result<(), slint::PlatformError> {
     state.obey(&store().prefs());
     UI.with_borrow_mut(|slot| *slot = Some(Rc::clone(&state)));
 
-    // Down the same path as any other link — reaching `present` directly meant a
-    // rule never answered the first link of a session — but deferred into the
-    // loop: before it runs there is no window handle, so the picker would open
-    // with a taskbar button and without the keyboard.
+    // Deferred into the loop rather than presented here: before it runs there is no window
+    // handle, so the picker would open with a taskbar button and without the keyboard.
     if let Some(url) = incoming {
         let _ = slint::invoke_from_event_loop(move || arrived(url));
     }

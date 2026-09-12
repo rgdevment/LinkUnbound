@@ -37,15 +37,10 @@ jobs:
           # What GitHub calls the latest release is the one published most recently, which is not
           # the highest version: a fix published for an older series after a newer one is out would
           # be it. The feed follows the versions, so this has to as well.
+          # Only the series this feed answers for: 1.x asks GitHub directly and never reads it.
           newest=$(gh release list --limit 100 --json tagName,isPrerelease,isDraft \
             -q '.[] | select(.isPrerelease == false and .isDraft == false) | .tagName' \
-            | sed 's/^v//' | sort -V | tail -1)
-
-          if [ -z "$newest" ]; then
-            echo "::error::there is no stable release at all, and the feed is still announcing \
-                  one to every copy out there"
-            exit 1
-          fi
+            | sed 's/^v//' | grep -E '^[2-9][0-9]*\.' | sort -V | tail -1 || true)
 
           if ! curl -fsSL -H "Cache-Control: no-cache" -o manifest.json "$feed/release-manifest.json"; then
             echo "::error::the feed did not answer. Every copy out there is looking at nothing, \
@@ -59,6 +54,27 @@ jobs:
           fi
 
           said=$(jq -r '.latest // ""' manifest.json)
+
+          if [ -z "$newest" ] && [ "$said" != "0.0.0" ]; then
+            echo "::error::the feed announces «$said» and no release of that series is published"
+            exit 1
+          fi
+
+          # The seed, and only while nothing it answers for has been published. Tied to the
+          # releases rather than to the string, because a release that went out and failed to
+          # write the feed leaves it saying 0.0.0 too — which is the one moment this has to
+          # speak. The 1.x releases are not on this feed at all: that series asks GitHub
+          # directly and never reads this branch.
+          if [ "$said" = "0.0.0" ]; then
+            if [ -z "$newest" ]; then
+              echo "::notice::the feed is still at its seed; nothing is announced to anybody yet"
+              exit 0
+            fi
+            echo "::error::the feed is still at its seed while $newest is published. The release \
+                  went out and the feed was never written, so nobody will be told about it."
+            exit 1
+          fi
+
           echo "the feed says $said; the highest release is $newest"
           if [ "$said" != "$newest" ]; then
             echo "::error::the feed says «$said» and the highest release is «$newest». Every copy \

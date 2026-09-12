@@ -43,6 +43,7 @@ pub fn take(
 #[cfg(windows)]
 mod there {
     use super::{Shelf, Trouble};
+    use windows::ApplicationModel::PackageSignatureKind;
     use windows::ApplicationModel::{Package, PackageVersion};
     use windows::Services::Store::{
         StoreContext, StorePackageUpdateState, StorePackageUpdateStatus,
@@ -70,7 +71,19 @@ mod there {
         hear.recv_timeout(how_long).ok()
     }
 
+    /// A copy the Store did not sell is one the Store will never have an update for, and its
+    /// empty answer reads exactly like «you are on the newest one». Left as that, a package
+    /// installed by hand would be told it was current for the rest of its life.
+    fn sold_here() -> bool {
+        Package::Current()
+            .and_then(|one| one.SignatureKind())
+            .is_ok_and(|kind| kind == PackageSignatureKind::Store)
+    }
+
     pub fn asked(window: isize) -> Shelf {
+        if !sold_here() {
+            return Shelf::Silent;
+        }
         match apart(PATIENCE, move || waiting(window)) {
             Some(Ok(Some(version))) => Shelf::Waiting(version),
             Some(Ok(None)) => Shelf::Current,
