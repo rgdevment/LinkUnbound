@@ -1,12 +1,14 @@
 mod shell;
+mod shop;
 mod shortcut;
 mod system;
+mod update;
 
 use std::sync::Mutex;
 
 use linkunbound_core::{Browser, Language, Preferences, Rule, Scope, Store, Target, merge};
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// The combination actually claimed, which the settings screen needs and only
 /// the registration knows.
@@ -490,9 +492,304 @@ fn system_set_startup(enabled: bool) -> Result<system::SystemState, String> {
     system::set_starts_with_system(enabled)
 }
 
+const HERE: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Build {
+    version: &'static str,
+    license: &'static str,
+    repository: &'static str,
+    candidates: bool,
+    candidates_apply: bool,
+}
+
+#[tauri::command]
+fn about() -> Build {
+    let kept = update::looked(store().dir());
+    Build {
+        version: HERE,
+        license: "GPL-3.0-only",
+        repository: "https://github.com/rgdevment/LinkUnbound",
+        candidates: update::tracking(HERE, kept.candidates),
+        candidates_apply: update::route().route != update::Route::Store,
+    }
+}
+
+#[cfg(windows)]
+fn owner(app: &AppHandle) -> Option<isize> {
+    app.get_webview_window("settings")
+        .or_else(|| app.webview_windows().into_values().next())
+        .and_then(|window| window.hwnd().ok())
+        .map(|window| window.0 as isize)
+}
+
+#[cfg(not(windows))]
+const fn owner(_app: &AppHandle) -> Option<isize> {
+    None
+}
+
+/// A copy the store keeps never reads the manifest. It cannot install from a download, so a
+/// version the manifest names is one it could be told about and never take — and the offer would
+/// arrive stripped of `installs`, leaving a notice with no button under it.
+async fn from_the_store(
+    app: &AppHandle,
+    dir: &std::path::Path,
+    looked: &mut update::Looked,
+    now: u64,
+    asked: bool,
+) -> Option<update::Ready> {
+    let remembered = |looked: &update::Looked| {
+        looked
+            .found_version
+            .as_deref()
+            .and_then(|version| update::from_the_shop(version, HERE))
+    };
+
+    // Held to the manifest's interval too: a Store that never answers strands the thread.
+    if !asked && !update::due(looked.checked_at, now) {
+        return remembered(looked);
+    }
+    let window = owner(app)?;
+    let Ok(shelf) = tauri::async_runtime::spawn_blocking(move || shop::asked(window)).await else {
+        return remembered(looked);
+    };
+
+    match shelf {
+        // Not knowing is not being current, so the old wording stands and the interval is left
+        // alone: writing it would buy the silence another day.
+        shop::Shelf::Silent => remembered(looked),
+        shop::Shelf::Current => {
+            looked.checked_at = Some(now);
+            looked.found_version = None;
+            update::keep(dir, looked);
+            None
+        }
+        shop::Shelf::Waiting(version) => {
+            let seen = update::from_the_shop(&version, HERE);
+            looked.checked_at = Some(now);
+            looked.found_version = seen.as_ref().map(|one| one.version.clone());
+            update::keep(dir, looked);
+            seen
+        }
+    }
+}
+
+#[tauri::command]
+async fn update_ready(
+    app: AppHandle,
+    now_please: Option<bool>,
+) -> Result<Option<update::Ready>, String> {
+    let dir = store().dir().to_path_buf();
+    let kept = update::route();
+    let mut looked = update::looked(&dir);
+    let now = update::now();
+    let asked = now_please.unwrap_or(false);
+
+    if kept.route == update::Route::Store {
+        return Ok(from_the_store(&app, &dir, &mut looked, now, asked).await);
+    }
+
+    if !asked && !update::due(looked.checked_at, now) {
+        return Ok(update::remembered(
+            HERE,
+            looked.found_version.as_deref(),
+            kept,
+        ));
+    }
+
+    let manifest = tauri::async_runtime::spawn_blocking(update::fetch)
+        .await
+        .map_err(|why| why.to_string())?;
+
+    // A look that never answered says nothing about whether an update is owed, so what was found
+    // before stays where it is.
+    let Some(manifest) = manifest else {
+        return Ok(update::remembered(
+            HERE,
+            looked.found_version.as_deref(),
+            kept,
+        ));
+    };
+
+    let seen = update::newer(HERE, &manifest, kept, looked.candidates);
+    looked.checked_at = Some(now);
+    looked.found_version = seen.as_ref().map(|one| one.version.clone());
+    update::keep(&dir, &looked);
+    Ok(seen)
+}
+
+/// The store never carries candidates, so a copy kept there is not offered the choice.
+#[tauri::command]
+fn update_candidates(wants: bool) -> Result<(), String> {
+    let dir = store().dir().to_path_buf();
+    let mut looked = update::looked(&dir);
+    looked.candidates = Some(wants);
+    // What the old track found is not an offer on the new one.
+    looked.checked_at = None;
+    looked.found_version = None;
+    update::keep(&dir, &looked);
+    Ok(())
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Underway {
+    stage: &'static str,
+    far: u64,
+}
+
+#[tauri::command]
+async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let _held = busy
+        .inner()
+        .0
+        .claim()
+        .ok_or_else(|| "updateBusy".to_owned())?;
+
+    let kept = update::route();
+    if kept.route == update::Route::Store {
+        return take_from_the_shop(app).await;
+    }
+    if !update::self_installs(kept.route) || update::from_a_mount() {
+        return Err("updateNotHere".to_owned());
+    }
+
+    let dir = store().dir().to_path_buf();
+    let found = update::looked(&dir).found_version;
+    let Some(want) = update::remembered(HERE, found.as_deref(), kept).map(|one| one.version) else {
+        return Err("updateGone".to_owned());
+    };
+
+    let asked = want.clone();
+    let update = app
+        .updater_builder()
+        .endpoints(vec![
+            update::channel_for(&want)
+                .parse()
+                .map_err(|_| "updateFailed".to_owned())?,
+        ])
+        .map_err(|why| why.to_string())?
+        // Pinned to what the person was shown, so a feed that moves in between cannot quietly
+        // hand them a different version than the one they agreed to.
+        .version_comparator(move |_, release| release.version.to_string() == asked)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|why| why.to_string())?
+        .check()
+        .await
+        .map_err(|why| why.to_string())?;
+
+    let Some(mut update) = update else {
+        return Err("updateGone".to_owned());
+    };
+
+    // The feed names the address the installer comes from, so it is checked against where our
+    // releases actually live before a single byte is asked for.
+    if !update::ours(update.download_url.as_str(), &want) {
+        return Err("updateElsewhere".to_owned());
+    }
+    // The plugin builds the download with no deadline of its own, and a server that dribbles
+    // bytes forever would otherwise be waited on forever.
+    update.timeout = Some(std::time::Duration::from_secs(600));
+
+    let telling = app.clone();
+    let done = app.clone();
+    let mut carried: u64 = 0;
+    let mut said = 0;
+    update
+        .download_and_install(
+            move |chunk, whole| {
+                // The callback hands over the length of one chunk, not how much has arrived.
+                carried += chunk as u64;
+                let far = whole.map_or(0, |all| carried * 100 / all.max(1));
+                if far != said {
+                    said = far;
+                    let _ = telling.emit(
+                        "updating",
+                        Underway {
+                            stage: "getting",
+                            far,
+                        },
+                    );
+                }
+            },
+            // The last thing anyone sees on Windows: the installer takes the process with it and
+            // nothing after the await ever runs.
+            move || {
+                let _ = done.emit(
+                    "updating",
+                    Underway {
+                        stage: "installing",
+                        far: 100,
+                    },
+                );
+            },
+        )
+        .await
+        .map_err(|why| why.to_string())?;
+
+    let handle = app.clone();
+    app.run_on_main_thread(move || handle.restart())
+        .map_err(|why| why.to_string())
+}
+
+/// Windows ends the process to put the new package in place, so the progress left behind is the
+/// last thing anyone sees.
+async fn take_from_the_shop(app: AppHandle) -> Result<(), String> {
+    let window = owner(&app).ok_or_else(|| "updateNotHere".to_owned())?;
+    let telling = app.clone();
+    let taken = tauri::async_runtime::spawn_blocking(move || {
+        let mut said: (&'static str, u64) = ("", 0);
+        shop::take(window, move |stage, far| {
+            if said != (stage, far) {
+                said = (stage, far);
+                let _ = telling.emit("updating", Underway { stage, far });
+            }
+        })
+    })
+    .await
+    .map_err(|why| why.to_string())?;
+
+    match taken {
+        Ok(()) => Ok(()),
+        Err(shop::Trouble::Gone) => Err("updateGone".to_owned()),
+        Err(shop::Trouble::Stopped) => Err("updateStopped".to_owned()),
+        Err(shop::Trouble::Failed(why)) => Err(why),
+    }
+}
+
+/// A second press while the first is still downloading would run two installs over each other.
+#[derive(Default)]
+struct Updating(OneAtATime);
+
+#[derive(Default)]
+struct OneAtATime(std::sync::atomic::AtomicBool);
+
+impl OneAtATime {
+    fn claim(&self) -> Option<Releasing<'_>> {
+        use std::sync::atomic::Ordering;
+        self.0
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+            .then(|| Releasing(&self.0))
+    }
+}
+
+struct Releasing<'a>(&'a std::sync::atomic::AtomicBool);
+
+impl Drop for Releasing<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Release);
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(Held::default()))
+        .manage(Updating::default())
         .invoke_handler(tauri::generate_handler![
             rules_list,
             rules_remove,
@@ -513,8 +810,14 @@ pub fn run() {
             system_set_registered,
             system_set_startup,
             system_open_default_apps,
-            system_repair
+            system_repair,
+            about,
+            update_ready,
+            update_install,
+            update_candidates
         ])
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // Two tray clicks used to mean two processes, each writing the registry
         // and each claiming the shortcut. The second now raises the first.
@@ -525,6 +828,15 @@ pub fn run() {
             let args: Vec<String> = std::env::args_os()
                 .map(|a| a.to_string_lossy().into_owned())
                 .collect();
+
+            // The uninstaller hands the registration back before taking the binary away, so this
+            // runs instead of the reconcile, never after it.
+            if args.iter().any(|a| a == "--unregister") {
+                let _ = system::set_registered(false);
+                app.handle().exit(0);
+                return Ok(());
+            }
+
             system::reconcile();
 
             if args.iter().any(|a| a == "--register") {

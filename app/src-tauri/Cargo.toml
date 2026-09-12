@@ -46,6 +46,12 @@ tauri.workspace = true
 tauri-plugin-single-instance.workspace = true
 
 tauri-plugin-global-shortcut.workspace = true
+tauri-plugin-opener.workspace = true
+tauri-plugin-updater.workspace = true
+reqwest.workspace = true
+semver.workspace = true
+serde_json.workspace = true
+url.workspace = true
 
 serde.workspace = true
 
@@ -55,3 +61,11 @@ serde.workspace = true
 [target."cfg(windows)".dependencies]
 
 linkunbound-win.workspace = true
+windows-future = "0.2"
+windows = { version = "0.61", features = [
+  "ApplicationModel",
+  "Services_Store",
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_UI_Shell",
+] }

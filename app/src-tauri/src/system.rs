@@ -33,6 +33,9 @@ pub enum Health {
     BuildTree,
     /// Registered to our own settings window, which cannot open a link.
     WrongBinary,
+    /// The command names the resident, and the resident is not there. A package that shipped
+    /// without it reads as healthy otherwise, while every link runs nothing.
+    NoResident,
     NotRegistered,
 }
 
@@ -59,12 +62,21 @@ mod platform {
         let Some(handler) = handler() else {
             return Health::NotRegistered;
         };
-        verdict(registration.registered_command().as_deref(), &handler)
+        verdict(
+            registration.registered_command().as_deref(),
+            &handler,
+            handler.exists(),
+        )
     }
 
-    fn verdict(command: Option<&str>, handler: &std::path::Path) -> Health {
+    /// Whether the resident is there is handed in rather than read here, so the verdict stays a
+    /// function of its arguments and every branch can be put in front of it.
+    fn verdict(command: Option<&str>, handler: &std::path::Path, present: bool) -> Health {
         if is_build_tree(&handler.to_string_lossy()) {
             return Health::BuildTree;
+        }
+        if !present {
+            return Health::NoResident;
         }
         match what_is_registered(command, handler) {
             Registered::Correct => Health::Fine,
@@ -84,6 +96,10 @@ mod platform {
     /// executable and the keys keep pointing at a path that no longer exists.
     pub fn reconcile() {
         let Some(handler) = handler() else { return };
+        // Registering a path nothing occupies hands every link to a process that cannot start.
+        if !handler.exists() {
+            return;
+        }
         let registration = Registration::default();
         if registration.register(&handler.to_string_lossy()).is_ok() {
             notify_associations_changed();
@@ -154,14 +170,16 @@ mod platform {
             assert_eq!(
                 verdict(
                     Some(r#""C:\Program Files\LinkUnbound\linkunbound-shell.exe" "%1""#),
-                    installed
+                    installed,
+                    true
                 ),
                 Health::Fine
             );
             assert_eq!(
                 verdict(
                     Some(r#""C:\Program Files\LinkUnbound\linkunbound-settings.exe" "%1""#),
-                    installed
+                    installed,
+                    true
                 ),
                 Health::WrongBinary,
                 "settings cannot open a link, and registering it is the mistake this catches"
@@ -169,11 +187,27 @@ mod platform {
             assert_eq!(
                 verdict(
                     Some(r#""C:\Otra\LinkUnbound\linkunbound-shell.exe" "%1""#),
-                    installed
+                    installed,
+                    true
                 ),
                 Health::Stale
             );
-            assert_eq!(verdict(None, installed), Health::NotRegistered);
+            assert_eq!(verdict(None, installed, true), Health::NotRegistered);
+        }
+
+        /// A build that shipped without the resident read as healthy, because the command and the
+        /// path it was compared against were the same absent file.
+        #[test]
+        fn a_missing_resident_is_named_rather_than_read_as_healthy() {
+            let installed = Path::new(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe");
+            let command = format!("\"{}\" \"%1\"", installed.to_string_lossy());
+
+            assert_eq!(
+                verdict(Some(&command), installed, false),
+                Health::NoResident,
+                "a package that shipped without the resident read as Fine, because the command \
+                 and the path it was compared against were the same absent file"
+            );
         }
 
         /// A build tree cannot own the registration: its path disappears when
@@ -183,7 +217,7 @@ mod platform {
             let built = r"D:\Code\LinkUnbound\target\release\linkunbound-shell.exe";
             let command = format!("\"{built}\" \"%1\"");
             assert_eq!(
-                verdict(Some(&command), Path::new(built)),
+                verdict(Some(&command), Path::new(built), true),
                 Health::BuildTree,
                 "even when the command points at itself"
             );

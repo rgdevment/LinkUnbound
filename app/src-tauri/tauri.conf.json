@@ -15,8 +15,49 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": []
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "publisher": "rgdevment",
+    "copyright": "Copyright © 2026 rgdevment",
+    "category": "Utility",
+    "shortDescription": "Choose which browser opens every link",
+    "longDescription": "LinkUnbound puts itself between a link and your browsers, so every link opens where you want it. Rules remember the choices you make, and everything stays on your machine: no account, no telemetry, no server.",
+    "licenseFile": "../../LICENSE",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "Spanish"
+        ],
+        "displayLanguageSelector": false,
+        "installerHooks": "nsis/hooks.nsh"
+      }
+    },
+    "externalBin": [
+      "binaries/linkunbound-shell"
+    ]
   },
-  "mainBinaryName": "linkunbound-settings"
+  "mainBinaryName": "linkunbound-settings",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk5OURERjAwQzM2REYyMkIKUldRcjhtM0RBTitkbWJPd0N4Mnk4TXZSTU03bmNVSUtscnJzL0luSzl4SnBrYVNHeGx4UFNacUkK",
+      "endpoints": [
+        "https://github.com/rgdevment/LinkUnbound/releases/download/updater-feed/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

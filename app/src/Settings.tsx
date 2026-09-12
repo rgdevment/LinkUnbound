@@ -7,9 +7,10 @@ import Browsers from "./settings/Browsers";
 import Maintenance from "./settings/Maintenance";
 import { Card, Line, Section, Switch } from "./settings/parts";
 import Rules from "./settings/Rules";
+import { useUpdate } from "./settings/update";
 
 type Association = { scheme: string; held: boolean };
-type Health = "fine" | "stale" | "build_tree" | "wrong_binary" | "not_registered";
+type Health = "fine" | "stale" | "build_tree" | "wrong_binary" | "no_resident" | "not_registered";
 type SystemState = {
   registered: boolean;
   is_default: boolean;
@@ -23,10 +24,13 @@ type SystemState = {
 
 type Spoken = { language: string };
 
+type Build = { version: string };
+
 const AILMENT: Partial<Record<Health, { what: Key; fix: Key | null }>> = {
   stale: { what: "healthStale", fix: "healthRepair" },
   build_tree: { what: "healthBuildTree", fix: null },
   wrong_binary: { what: "healthWrongBinary", fix: "healthRepair" },
+  no_resident: { what: "healthNoResident", fix: null },
 };
 
 type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
@@ -196,12 +200,17 @@ export default function Settings() {
 
 function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const t = useWords();
+  const { ready, step, look, settled } = useUpdate();
   const [page, setPage] = useState<Page>("links");
   const [state, setState] = useState<SystemState | null>(null);
+  const [here, setHere] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
     void invoke<SystemState>("system_state").then(setState).catch(noop);
+    void invoke<Build>("about")
+      .then(({ version }) => setHere(version))
+      .catch(noop);
   }, []);
 
   const change = useCallback((command: string, enabled: boolean) => {
@@ -252,9 +261,21 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
             {t(p.label)}
           </button>
         ))}
-        <span className="mt-auto px-2.5 py-2 text-[10.5px] text-neutral-400 dark:text-[#646B7C]">
-          {t("version", "2.0.0")}
-        </span>
+        {ready ? (
+          <button
+            type="button"
+            onClick={() => setPage("about")}
+            aria-label={`${t("navAbout")} · ${t("updateWaiting")}`}
+            className="mt-auto flex items-center gap-1.5 rounded-md bg-[#2F62D8]/[0.11] px-2.5 py-1.5 text-[10.5px] font-medium text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
+          >
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+            {t("updateGoTo", ready.version)}
+          </button>
+        ) : (
+          <span className="mt-auto px-2.5 py-2 text-[10.5px] text-neutral-400 dark:text-[#646B7C]">
+            {here ? t("version", here) : ""}
+          </span>
+        )}
       </nav>
 
       <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
@@ -278,7 +299,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
           />
         )}
         {page === "care" && <Maintenance />}
-        {page === "about" && <About />}
+        {page === "about" && <About ready={ready} step={step} onSettled={settled} onLook={look} />}
       </main>
     </div>
   );

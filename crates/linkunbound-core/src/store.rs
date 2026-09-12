@@ -108,7 +108,8 @@ fn guarded<T>(path: &Path, work: impl FnOnce() -> Result<T, StoreError>) -> Resu
 
 /// `serde_json` refuses the mark Windows editors prepend, which would discard a
 /// whole file over three invisible bytes.
-fn unmarked(raw: &str) -> &str {
+#[must_use]
+pub fn unmarked(raw: &str) -> &str {
     raw.strip_prefix('\u{feff}').unwrap_or(raw)
 }
 
@@ -142,6 +143,11 @@ impl Store {
     #[must_use]
     pub fn at(dir: impl Into<PathBuf>) -> Self {
         Self { dir: dir.into() }
+    }
+
+    #[must_use]
+    pub fn dir(&self) -> &Path {
+        &self.dir
     }
 
     fn rules_path(&self) -> PathBuf {
