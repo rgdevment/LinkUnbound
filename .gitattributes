@@ -1,2 +1,13 @@
+# Line endings are normalised to LF in the repository. Without this, editing from
+# both WSL2 and Windows fills every diff with whole-file changes.
 * text=auto eol=lf
-*.{ico,png,jpg,webp} binary
+
+*.rs   text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary

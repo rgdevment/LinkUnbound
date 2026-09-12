@@ -1,0 +1,99 @@
+name: Rules
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    name: Project conventions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: The workflows parse
+        run: |
+          # A workflow that does not parse fails in zero seconds with no job, no line and no
+          # diagnosis — and release only ever runs once the tag is already pushed.
+          status=0
+          for one in .github/workflows/*.yml .github/actions/*/action.yml; do
+            if ! npx --yes js-yaml "$one" >/dev/null; then
+              echo "::error file=$one::this file is not valid YAML"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: The core produces no terminal output
+        run: |
+          if grep -rn 'println!\|eprintln!\|print!' crates/linkunbound-core/src --include='*.rs'; then
+            echo "::error::linkunbound-core must not print: the picker inherits it as garbage"
+            exit 1
+          fi
+
+      - name: The core stays free of platform and UI dependencies
+        run: |
+          if grep -rn 'use tauri\|use windows\|use winreg\|use objc2' crates/linkunbound-core/src --include='*.rs'; then
+            echo "::error::the core is pure logic; platform code belongs in its own crate"
+            exit 1
+          fi
+
+      - name: No Spanish identifiers
+        run: |
+          if grep -rnE '\b(regla|reglas|navegador|perfil|dominio|origen|ventana) *:' \
+               crates/*/src app/src-tauri/src --include='*.rs' | grep -v '"'; then
+            echo "::error::identifiers are English; user-facing strings live in locales"
+            exit 1
+          fi
+
+      - name: No prose blocks in the code
+        run: |
+          found=$(find crates/*/src app/src-tauri/src -name '*.rs' -print0 \
+            | xargs -0 awk '
+                /^[[:space:]]*\/\/\// { run = 0; next }
+                /^[[:space:]]*\/\// && !/\/\/!|TODO|FIXME|SAFETY|noqa|https?:\/\// { run++; if (run == 4) print FILENAME ":" FNR; next }
+                { run = 0 }')
+          if [ -n "$found" ]; then
+            echo "$found"
+            echo "::error::four lines of comment is prose; that belongs in the planning notes"
+            exit 1
+          fi
+
+      - name: Unsafe stays where it was audited
+        run: |
+          found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs' || true)
+          expected="crates/linkunbound-win/src/native.rs"
+          if [ "$found" != "$expected" ]; then
+            echo "$found"
+            echo "::error::unsafe is allowed somewhere new; audit it and update this list"
+            exit 1
+          fi
+
+      - name: No voseo in the Spanish anywhere
+        run: |
+          if grep -rniE '\b(vos|tenés|querés|podés|andá|mirá|hacé|che)\b' \
+             --include='*.md' --include='*.ts' --include='*.tsx' . 2>/dev/null | grep -v node_modules; then
+            echo "::error::Spanish is neutral: no voseo"
+            exit 1
+          fi
+
+      - name: No peninsular Spanish in what a person reads
+        run: |
+          if grep -rniE '\b(fichero|ficheros|ordenador|pulsa|pulsar|pulsando)\b' \
+             --include='*.md' --include='*.ts' --include='*.tsx' . 2>/dev/null | grep -v node_modules; then
+            echo "::error::use archivo, equipo, presionar"
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Tests are deterministic
+        run: |
+          for i in $(seq 1 20); do
+            cargo test -p linkunbound-core --quiet || exit 1
+          done

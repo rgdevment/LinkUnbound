@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The settings window. The picker is Slint and needs no webview capability.",
+  "windows": [
+    "settings"
+  ],
+  "permissions": [
+    "core:default",
+    "opener:default"
+  ]
+}

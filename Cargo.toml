@@ -1,0 +1,63 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "app/src-tauri"]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.97"
+license = "GPL-3.0-only"
+publish = false
+
+[workspace.dependencies]
+linkunbound-core = { path = "crates/linkunbound-core" }
+linkunbound-win = { path = "crates/linkunbound-win" }
+linkunbound-shell = { path = "crates/linkunbound-shell" }
+slint = { version = "1.17", default-features = false, features = [
+  "compat-1-2",
+  "backend-winit",
+  "raw-window-handle-06",
+  "renderer-software",
+  "std",
+] }
+slint-build = "1.17"
+tray-icon = "0.24"
+muda = "0.19"
+interprocess = "2.4"
+# No tray feature: the resident owns the tray, through the `tray-icon` crate.
+# `common-controls-v6` is a default feature, and Cargo unifies features across
+# the workspace: it put a TaskDialogIndirect import into the resident, whose
+# test binaries carry no manifest to satisfy it.
+tauri = { version = "2", default-features = false, features = ["wry", "compression"] }
+tauri-build = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-updater = "2"
+reqwest = { version = "0.12", default-features = false, features = [
+  "blocking",
+  "rustls-tls-native-roots",
+  "charset",
+  "http2",
+] }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+png = "0.18"
+base64 = "0.22"
+thiserror = "2"
+
+[profile.release]
+# The resident is mapped for the whole session, so its size is working set the
+# user pays for all day. Panics still unwind: aborting would turn a recoverable
+# failure into a crash with no notice.
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }

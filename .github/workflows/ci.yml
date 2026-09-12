@@ -4,157 +4,155 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
 jobs:
-  markdown:
-    name: Markdown Lint
+  test:
+    name: test / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - name: The resident rides along
+        shell: bash
+        run: bash scripts/sidecar.sh
+      - run: cargo nextest run --workspace --no-tests=pass
+      - run: cargo test --doc --workspace
+
+  lint:
+    name: fmt + clippy
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - name: The resident rides along
+        shell: bash
+        run: bash scripts/sidecar.sh
+      - run: cargo clippy --workspace --all-targets
+
+  picker:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+  prose:
+    name: markdown
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Lint Markdown files
-        uses: DavidAnson/markdownlint-cli2-action@v19
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
         with:
-          globs: |
-            *.md
-            .github/**/*.md
-          config: ".markdownlint.yaml"
-        continue-on-error: true
+          node-version: 22
+      - run: npm ci
+      - run: npm run lint:md
 
-  quality:
-    name: Quality
+  audit:
+    name: advisories + licences
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
+      - uses: EmbarkStudios/cargo-deny-action@v2
 
-      - name: Set up Flutter workspace
-        uses: ./.github/actions/setup-flutter
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Check formatting
-        run: dart format --set-exit-if-changed .
-
-      - name: Analyze
-        run: melos analyze
-
-      - name: Check auto-fixable issues
-        run: |
-          OUTPUT=$(dart fix --dry-run . 2>&1)
-          echo "$OUTPUT"
-          echo "$OUTPUT" | grep -q "Nothing to fix!" || { echo "::error::Auto-fixable issues found. Run 'dart fix --apply' and commit."; exit 1; }
-
-      - name: Run core tests with coverage
-        working-directory: packages/core
-        run: |
-          dart pub global activate coverage
-          dart test --coverage=coverage
-          dart pub global run coverage:format_coverage \
-            --lcov \
-            --in=coverage \
-            --out=coverage/lcov.info \
-            --report-on=lib
-
-      - name: Run app tests with coverage
-        working-directory: apps/linkunbound
-        run: flutter test --coverage
-
-      - name: Merge coverage reports
-        run: |
-          sed 's|^SF:lib/|SF:apps/linkunbound/lib/|g' apps/linkunbound/coverage/lcov.info > /tmp/app_lcov.info
-          sed 's|^SF:lib/|SF:packages/core/lib/|g' packages/core/coverage/lcov.info > /tmp/core_lcov.info
-          cat /tmp/core_lcov.info /tmp/app_lcov.info > coverage-merged.info
-
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          name: coverage-reports
-          path: coverage-merged.info
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@nextest
 
-  codecov:
-    name: Codecov
-    needs: quality
+      - name: The crates the picker does not need to build
+        run: cargo llvm-cov nextest -p linkunbound-core --lcov --output-path lcov-rust.info
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: The picker
+        working-directory: app
+        run: |
+          npm ci
+          npm run test:coverage
+
+      - name: Every path is relative to the repository, which is what Sonar reads
+        run: |
+          sed -i "s|^SF:$PWD/|SF:|" lcov-rust.info
+          sed -i -e "s|^SF:$PWD/app/|SF:app/|" -e "s|^SF:src/|SF:app/src/|" \
+            app/coverage/lcov.info
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: |
+            lcov-rust.info
+            app/coverage/lcov.info
+          retention-days: 1
+
+  sonar:
+    name: sonarcloud
+    needs: coverage
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Download coverage reports
-        uses: actions/download-artifact@v8
-        with:
-          name: coverage-reports
-          path: coverage
-
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage/coverage-merged.info
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-
-  sonarcloud:
-    name: SonarCloud
-    needs: quality
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-
-    steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Set up Flutter workspace
-        uses: ./.github/actions/setup-flutter
-
-      - name: Download coverage reports
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v7
         with:
-          name: coverage-reports
-          path: coverage
+          name: coverage
+          path: .
 
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v5
+      - uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
-            -Dsonar.sources=packages/core/lib,apps/linkunbound/lib
-            -Dsonar.tests=packages/core/test,apps/linkunbound/test
-            -Dsonar.dart.lcov.reportPaths=coverage/coverage-merged.info
-            -Dsonar.exclusions=**/*.g.dart,**/*.freezed.dart,**/l10n/app_localizations_*.dart,**/l10n/app_localizations.dart
-            -Dsonar.coverage.exclusions=**/main.dart,**/app.dart,**/platform/**,**/update_service.dart,**/picker_window.dart,**/settings_window.dart,**/settings_view.dart,**/title_bar.dart
-
-  build:
-    name: Build (${{ matrix.name }})
-    needs: quality
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            name: Windows
-            build_cmd: flutter build windows --release
-          - os: macos-15
-            name: macOS
-            build_cmd: flutter build macos --release
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Flutter workspace
-        uses: ./.github/actions/setup-flutter
-
-      - name: Build ${{ matrix.name }} release
-        working-directory: apps/linkunbound
-        run: ${{ matrix.build_cmd }}
+            -Dsonar.sources=crates,app/src,app/src-tauri/src
+            -Dsonar.tests=crates,app/src
+            -Dsonar.test.inclusions=crates/*/tests/**,app/src/**/*.test.tsx
+            -Dsonar.exclusions=crates/*/tests/**,app/src/tests/**
+            -Dsonar.rust.lcov.reportPaths=lcov-rust.info
+            -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info
+            -Dsonar.rust.clippy.enabled=false
+            -Dsonar.coverage.exclusions=app/src/main.tsx,app/src-tauri/src/**
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300

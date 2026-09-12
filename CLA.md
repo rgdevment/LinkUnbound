@@ -1,6 +1,6 @@
 # Contributor License Agreement
 
-LinkUnbound Individual Contributor License Agreement, version 1.1.
+LinkUnbound Individual Contributor License Agreement, version 1.2.
 
 Thank you for contributing to LinkUnbound. This agreement exists for one
 reason: LinkUnbound is released under the GPL-3.0 **and** offered under
@@ -33,9 +33,11 @@ one You submitted before**. Code reaches a project by more routes than a Pull
 Request, and a signature that only looked forward would leave those earlier
 routes unaccounted for.
 
-
 **"Project Owner"** means Mario Hidalgo G. (rgdevment), the copyright holder
-and maintainer of LinkUnbound.
+and maintainer of LinkUnbound, and whoever holds those rights after him — a
+successor, or anyone the project is assigned or transferred to, in whole or in
+part. The licences You grant below run to them on the same terms, and to no
+wider ones.
 
 ## 2. Copyright licence
 
@@ -60,7 +62,6 @@ from the Project Owner, insofar as those rights would prevent the uses granted
 above. Where such rights cannot be waived, You agree not to enforce them in a
 way that blocks those uses. This does not touch attribution: section 6 commits
 the Project Owner to preserving Your authorship.
-
 
 ## 3. Patent licence
 
@@ -126,6 +127,12 @@ mandatory law where You live.
 **If a clause fails.** If any provision is held unenforceable, the rest stays
 in force and that provision is read as narrowly as needed to make it valid.
 
+**This agreement travels with the project.** The Project Owner may assign it,
+together with the rights it grants, to whoever the project passes to. You need
+not be asked, and nothing about what You granted changes: what a successor
+receives is what You gave, neither more nor less. You keep the copyright on
+everything You wrote, and section 6 binds them as it binds him.
+
 **This is the whole agreement** between You and the Project Owner about Your
 Contributions, and it replaces anything discussed before it. A later version
 of this document applies only to Contributions You submit after signing that
@@ -145,6 +152,9 @@ I have read the CLA Document and I hereby sign the CLA
 
 You sign once. Every later Pull Request from the same GitHub account is
 covered automatically.
+
+This signature covers LinkUnbound only. Other projects by the same owner have
+their own agreement and their own signature record.
 
 ## If you would rather not sign
 

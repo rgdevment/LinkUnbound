@@ -137,7 +137,7 @@ LinkUnbound makes **one type of network request**:
 | Detail        | Value                                                                    |
 | :------------ | :----------------------------------------------------------------------- |
 | **Purpose**   | Check if a newer version of LinkUnbound is available                     |
-| **URL**       | `https://api.github.com/repos/rgdevment/LinkUnbound/releases/latest`     |
+| **URL**       | `https://github.com/rgdevment/LinkUnbound/releases/download/updater-feed/release-manifest.json`     |
 | **Method**    | GET (read-only)                                                          |
 | **Data sent** | Standard HTTP headers only — no user data                                |
 | **Frequency** | At most once every 6 hours                                               |
@@ -151,7 +151,7 @@ rather than only once at launch.
 
 - This request is **read-only** — it only downloads a small JSON response containing the latest version number. No data is ever uploaded.
 - **No URLs, no rules, no browser information, no personal data** is ever sent.
-- If an update is found, a non-invasive indicator appears in the app. No automatic download or installation occurs.
+- If an update is found, a non-invasive indicator appears in the app. When you press Update, the installer is downloaded and run. Nothing is downloaded or installed without that press.
 - The app works fully offline if the request fails or is blocked.
 
 ### User-Initiated Navigation
