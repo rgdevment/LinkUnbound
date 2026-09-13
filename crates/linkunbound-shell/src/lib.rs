@@ -123,10 +123,8 @@ pub fn reaches(
         ),
         (words.reach_site.to_owned(), true, wrapped),
     ];
-    // Left out rather than greyed when there is no origin: five labels do not
-    // fit the row, and a dead one would cost the other four their space.
-    // A wrapper is no obstacle here — this rule keys off the app, not the
-    // address.
+    // Left out rather than greyed when there is no origin: five labels do not fit the row, and
+    // a dead one would cost the other four their space.
     if let Some(source) = source {
         offered.push((Strings::fill(words.reach_from_app, source), true, false));
     }

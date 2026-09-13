@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
-import { type Key, useWords } from "../i18n";
+import { type Key, useSpoken, useWords } from "../i18n";
+import { saidPlainly } from "../refusal";
 import { Card, Line, Section } from "./parts";
 
 type Pending = "rescan" | "reset" | "unregister" | null;
@@ -13,6 +14,7 @@ const ASKS: Record<string, { title: Key; body: Key; go: Key }> = {
 
 export default function Maintenance() {
   const t = useWords();
+  const language = useSpoken();
   const [asking, setAsking] = useState<Pending>(null);
   const [done, setDone] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export default function Maintenance() {
         setSaved(path);
         setProblem(null);
       })
-      .catch((e: unknown) => setProblem(String(e)));
+      .catch((e: unknown) => setProblem(saidPlainly(language, e)));
   };
 
   const confirm = () => {
@@ -41,7 +43,7 @@ export default function Maintenance() {
         setDone(t(ASKS[asking].title));
         setProblem(null);
       })
-      .catch((e: unknown) => setProblem(String(e)))
+      .catch((e: unknown) => setProblem(saidPlainly(language, e)))
       .finally(() => setAsking(null));
   };
 

@@ -65,8 +65,11 @@ jobs:
 
       - name: Unsafe stays where it was audited
         run: |
-          found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs' || true)
-          expected="crates/linkunbound-win/src/native.rs"
+          found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs'             | sort || true)
+          # native.rs is the Win32 surface the picker needs; shop.rs talks to the Store, and
+          # reaches unsafe only to hand it a window handle and to join the process apartment.
+          expected=$(printf '%s
+'             "app/src-tauri/src/shop.rs"             "crates/linkunbound-win/src/native.rs" | sort)
           if [ "$found" != "$expected" ]; then
             echo "$found"
             echo "::error::unsafe is allowed somewhere new; audit it and update this list"

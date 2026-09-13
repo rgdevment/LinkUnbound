@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import { type Key, useWords } from "../i18n";
+import { type Key, useSpoken, useWords } from "../i18n";
+import { saidPlainly } from "../refusal";
 import Confirm from "./Confirm";
 import { Card, Section, Switch } from "./parts";
 
@@ -165,20 +166,24 @@ const GHOST =
 
 export default function Browsers() {
   const t = useWords();
+  const language = useSpoken();
   const [list, setList] = useState<BrowserView[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [asking, setAsking] = useState<BrowserView | null>(null);
 
-  const run = useCallback((command: string, params: Record<string, unknown> = {}) => {
-    void invoke<BrowserView[]>(command, params)
-      .then((next) => {
-        setList(next);
-        setProblem(null);
-        setEditing(null);
-      })
-      .catch((e: unknown) => setProblem(String(e)));
-  }, []);
+  const run = useCallback(
+    (command: string, params: Record<string, unknown> = {}) => {
+      void invoke<BrowserView[]>(command, params)
+        .then((next) => {
+          setList(next);
+          setProblem(null);
+          setEditing(null);
+        })
+        .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+    },
+    [language],
+  );
 
   useEffect(() => run("browsers_list"), [run]);
 
