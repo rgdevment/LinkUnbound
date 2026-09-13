@@ -6,8 +6,10 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use linkunbound_core::{Language, Rule, Store, Strings, Target, host_of, normalise};
+#[cfg(windows)]
+use linkunbound_shell::ICON_SIDE;
 use linkunbound_shell::tray::{Asked, Tray};
-use linkunbound_shell::{ICON_SIDE, Listed, Notice, Picker, Reaches, dress, paint, place, single};
+use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, place, single};
 use slint::{ComponentHandle, Model};
 
 fn store() -> Store {
