@@ -521,6 +521,9 @@ fn main() -> Result<(), slint::PlatformError> {
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
     let incoming = link_from(&args);
+    // Sign-in and a click on the icon both start this with no link, and only one of them wants a
+    // window: the startup task passes this, the Start menu tile does not.
+    let hushed = args.iter().any(|a| a == "--hushed");
 
     let Some(_server) = single::claim(|url| {
         let _ = slint::invoke_from_event_loop(move || arrived(url));
@@ -532,6 +535,12 @@ fn main() -> Result<(), slint::PlatformError> {
         }
         return Ok(());
     };
+
+    // Nothing was running, so this copy stays as the resident — and a person who started it by
+    // hand, with no link and no tray icon to click, would otherwise see nothing happen at all.
+    if incoming.is_none() && !hushed {
+        open_settings();
+    }
 
     let picker = Picker::new()?;
     let shown = Rc::new(RefCell::new(Shown::default()));

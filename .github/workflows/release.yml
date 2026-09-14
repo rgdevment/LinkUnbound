@@ -284,29 +284,24 @@ jobs:
         shell: bash
         run: |
           v="${{ needs.version.outputs.version }}"
-          # Four numbers, the last always zero: MSIX has no room for a prerelease suffix, and the
-          # Store reserves the fourth for itself. `numbered()` in shop.rs reads the first three
-          # back, so anything else here makes the Store offer a version nobody published.
-          quad="${v%%-*}.0"
+          # Four numbers, the last always zero: MSIX has no room for a prerelease suffix, and
+          # the Store reserves the fourth for itself. `numbered()` in shop.rs reads the first
+          # three back, so anything else makes the Store offer a version nobody published.
+          export QUAD="${v%%-*}.0"
 
           mkdir -p msix/Assets
           cp target/release/linkunbound-settings.exe msix/
           cp target/release/linkunbound-shell.exe msix/
-          for logo in StoreLogo Square44x44Logo Square71x71Logo Square150x150Logo Square310x310Logo; do
+          for logo in StoreLogo Square44x44Logo Square71x71Logo Square150x150Logo; do
             cp "app/src-tauri/icons/$logo.png" "msix/Assets/$logo.png"
           done
 
-          sed -e "s|@IDENTITY@|$MSIX_IDENTITY|" \
-              -e "s|@PUBLISHER@|$MSIX_PUBLISHER|" \
-              -e "s|@PUBLISHER_DISPLAY@|${MSIX_PUBLISHER_DISPLAY:-RGDevment}|" \
-              -e "s|@VERSION@|$quad|" \
-              app/src-tauri/msix/AppxManifest.xml.in > msix/AppxManifest.xml
+          python3 scripts/fill_manifest.py app/src-tauri/msix/AppxManifest.xml.in msix/AppxManifest.xml
 
           if grep -q "@[A-Z_]*@" msix/AppxManifest.xml; then
             echo "::error::a placeholder survived the manifest"
             exit 1
           fi
-          cat msix/AppxManifest.xml
 
       - name: Pack
         if: steps.gate.outputs.go == 'yes'
@@ -340,8 +335,14 @@ jobs:
           $said = $m.Package.Identity.Name
           $quad = ($v -split '-')[0] + '.0'
           Write-Host "identity: $said   version: $($m.Package.Identity.Version)"
-          if ($said -ne $env:MSIX_IDENTITY) {
-            Write-Host "::error::the package went in as $said, not $env:MSIX_IDENTITY"; exit 1
+
+          # What 1.x published, written down here rather than read from the variable that filled
+          # the manifest: comparing the package against its own input would pass a typo through,
+          # and under any other name the Store sees a different application — so nobody running
+          # LinkUnbound today would ever be offered this one.
+          $was = "rgdevment.LinkUnbound-BrowserPicker"
+          if ($said -ne $was) {
+            Write-Host "::error::the package went in as $said. 1.x shipped as $was, and under any other name nobody who has it installed is offered this."; exit 1
           }
           if ($m.Package.Identity.Version -ne $quad) {
             Write-Host "::error::the package says $($m.Package.Identity.Version) and the tag says $quad"; exit 1

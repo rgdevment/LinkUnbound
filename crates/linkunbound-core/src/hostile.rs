@@ -3,15 +3,19 @@ use crate::browser::Browser;
 /// Switches that make a browser run another binary. The file lives in the
 /// user's profile, and this app is what the shell runs for a link.
 const RUNS_SOMETHING_ELSE: [&str; 8] = [
-    "--gpu-launcher",
-    "--utility-cmd-prefix",
-    "--renderer-cmd-prefix",
-    "--browser-subprocess-path",
-    "--load-extension",
-    "--disable-extensions-except",
-    "--remote-debugging-port",
-    "--headless",
+    "gpu-launcher",
+    "utility-cmd-prefix",
+    "renderer-cmd-prefix",
+    "browser-subprocess-path",
+    "load-extension",
+    "disable-extensions-except",
+    "remote-debugging-port",
+    "headless",
 ];
+
+/// Chromium reads all three on Windows, so a list that only knew `--` let `/gpu-launcher` and
+/// `-gpu-launcher` through to a browser that honours them.
+const PREFIXES: [&str; 3] = ["--", "-", "/"];
 
 /// Reaching a network path authenticates the user against whoever holds it.
 #[must_use]
@@ -28,7 +32,12 @@ pub fn arms_a_launcher(arg: &str) -> bool {
         .unwrap_or(arg)
         .trim()
         .to_ascii_lowercase();
-    RUNS_SOMETHING_ELSE.contains(&named.as_str())
+    // Longest prefix first: `--x` also starts with `-`, and stripping the short one would leave
+    // a name with a dash on it that matches nothing.
+    PREFIXES
+        .iter()
+        .find_map(|prefix| named.strip_prefix(prefix))
+        .is_some_and(|name| RUNS_SOMETHING_ELSE.contains(&name))
 }
 
 /// Strips rather than rejects: an odd switch costs the switch, not the browser.
@@ -203,5 +212,40 @@ mod tests {
         assert!(arms_a_launcher("--GPU-Launcher=calc.exe"));
         assert!(!arms_a_launcher("--incognito"));
         assert!(!arms_a_launcher("--profile-directory=Default"));
+    }
+
+    /// Chromium takes a switch with any of the three prefixes on Windows, so a list that only
+    /// knew the long one was a list the browser did not agree with.
+    #[test]
+    fn a_switch_is_recognised_however_it_is_prefixed() {
+        for said in [
+            "/gpu-launcher=calc.exe",
+            "-gpu-launcher=calc.exe",
+            "--gpu-launcher=calc.exe",
+            "/RENDERER-CMD-PREFIX=calc.exe",
+        ] {
+            assert!(arms_a_launcher(said), "{said}");
+        }
+        for said in ["gpu-launcher=calc.exe", "--incognito", "/new-window", "-P"] {
+            assert!(!arms_a_launcher(said), "{said}");
+        }
+    }
+
+    /// The line a person types is split before it is judged, so what the filter sees has to be
+    /// what the browser would see — quotes and all.
+    #[test]
+    fn a_hostile_switch_does_not_survive_being_quoted() {
+        for line in [
+            r#""--gpu-launcher=calc.exe""#,
+            r#""/gpu-launcher"="calc.exe""#,
+            r#"--gpu-launcher" "=calc.exe"#,
+            r#"" --gpu-launcher=calc.exe""#,
+        ] {
+            let said = crate::split_args(line);
+            assert!(
+                said.iter().any(|one| arms_a_launcher(one)),
+                "{line} became {said:?}"
+            );
+        }
     }
 }

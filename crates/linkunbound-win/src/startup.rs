@@ -33,10 +33,29 @@ fn task() -> Option<StartupTask> {
         .ok()
 }
 
+/// A packaged build has an identity and an unpackaged one does not, which is the only honest way
+/// to tell them apart. It matters because a packaged app's writes to the Run key land in a
+/// container Windows never reads at sign-in: the switch would say yes and nothing would start.
+#[must_use]
+pub fn packaged() -> bool {
+    windows::ApplicationModel::Package::Current().is_ok()
+}
+
 /// A packaged build has a startup task and nothing else: its writes to the Run key land in a
 /// container Windows never reads at sign-in. Everywhere else the Run key is the whole mechanism.
 #[must_use]
 pub fn state() -> Option<Startup> {
+    if packaged() {
+        // Inside a package the startup task is the only mechanism, so a failure to read it is a
+        // failure to answer — not a reason to go looking somewhere Windows does not read.
+        let state = task()?.State().ok()?;
+        return Some(Startup {
+            enabled: state == StartupTaskState::Enabled
+                || state == StartupTaskState::EnabledByPolicy,
+            ours_to_change: state != StartupTaskState::DisabledByUser
+                && state != StartupTaskState::DisabledByPolicy,
+        });
+    }
     if let Some(task) = task() {
         let state = task.State().ok()?;
         return Some(Startup {
@@ -53,6 +72,15 @@ pub fn state() -> Option<Startup> {
 }
 
 pub fn set(enabled: bool) -> Option<Startup> {
+    if packaged() {
+        let task = task()?;
+        if enabled {
+            task.RequestEnableAsync().ok()?.get().ok()?;
+        } else {
+            task.Disable().ok()?;
+        }
+        return state();
+    }
     if let Some(task) = task() {
         if enabled {
             task.RequestEnableAsync().ok()?.get().ok()?;
@@ -75,7 +103,10 @@ fn listed() -> bool {
 /// Quoted, because a path with a space in it is read as a command and its arguments otherwise —
 /// and `%LOCALAPPDATA%\Programs\LinkUnbound` is where the installer puts this.
 fn command(running: &std::path::Path) -> String {
-    format!("\"{}\"", linkunbound_core::link_handler(running).display())
+    format!(
+        "\"{}\" --hushed",
+        linkunbound_core::link_handler(running).display()
+    )
 }
 
 fn list(enabled: bool) -> Option<()> {
@@ -118,6 +149,10 @@ mod tests {
 
         assert!(said.contains("linkunbound-shell"), "{said}");
         assert!(!said.contains("settings"), "{said}");
+        assert!(
+            said.ends_with("--hushed"),
+            "sign-in is the one launch that must not open a window: {said}"
+        );
     }
 
     /// Unquoted, `C:\Program Files\...` is read as `C:\Program` with `Files\...` for arguments,
@@ -127,6 +162,9 @@ mod tests {
         let from = std::path::Path::new(r"C:\Program Files\LinkUnbound\linkunbound-settings.exe");
         let said = command(from);
 
-        assert!(said.starts_with('"') && said.ends_with('"'), "{said}");
+        assert!(
+            said.starts_with(r#""C:\Program Files\"#),
+            "unquoted, the path is read as a command with arguments: {said}"
+        );
     }
 }

@@ -59,6 +59,11 @@ mod platform {
     /// Looking registered is not the same as working: the command can point at a
     /// path this executable no longer occupies, and nothing else would say so.
     fn health(registration: &Registration) -> Health {
+        // The manifest is the registration inside a package, and there is no path by which it can
+        // be wrong: it shipped with the build.
+        if linkunbound_win::packaged() {
+            return Health::Fine;
+        }
         let Some(handler) = handler() else {
             return Health::NotRegistered;
         };
@@ -95,6 +100,12 @@ mod platform {
     /// Reconciles on every launch, the way 1.x did: an update moves the
     /// executable and the keys keep pointing at a path that no longer exists.
     pub fn reconcile() {
+        // A packaged build is registered by its manifest, and its writes to these keys land in a
+        // container the shell never reads — so writing them would only teach the health panel to
+        // report a registration nothing honours.
+        if linkunbound_win::packaged() {
+            return;
+        }
         let Some(handler) = handler() else { return };
         // Registering a path nothing occupies hands every link to a process that cannot start.
         if !handler.exists() {

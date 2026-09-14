@@ -45,7 +45,7 @@ const ES = {
   kindFrom: "Desde",
   rulesEmptyTitle: "Todavía no hay ninguna regla",
   rulesEmptyBody:
-    "Se crean desde el selector, eligiendo un alcance distinto de «Solo esta vez» antes de pulsar un navegador.",
+    "Se crean desde el selector, eligiendo un alcance distinto de «Solo esta vez» antes de presionar un navegador.",
   rulesOne: "1 regla",
   rulesMany: "{} reglas",
   rulesFooter:
@@ -105,9 +105,9 @@ const ES = {
   appQuick: "Acceso rápido",
   shortcutTitle: "Atajo para abrir los ajustes",
   shortcutTaken: "Otra aplicación ya usa esa combinación",
-  shortcutHow: "Pulsa el botón y luego la combinación que quieras",
+  shortcutHow: "Presiona el botón y luego la combinación que quieras",
   shortcutOff: "Desactivado",
-  shortcutPress: "Pulsa una combinación…",
+  shortcutPress: "Presiona una combinación…",
   shortcutNone: "Sin atajo",
   hideTrayTitle: "Ocultar el icono de la bandeja",
   hideTrayWith: "Seguirás pudiendo abrir los ajustes con el atajo",

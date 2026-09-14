@@ -1,3 +1,38 @@
+; Inno wrote the key under the plain app id, with no braces: `AppId={{APP_ID}}` in that template
+; is a placeholder the packaging tool filled, not Inno's own `{{` escape. An earlier 1.x spelled
+; it differently again, so the name is something to look for rather than to guess.
+Function FindLegacyUninstaller
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  StrCpy $4 ""
+  StrCpy $1 0
+  lu_next_key:
+    EnumRegKey $2 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall" $1
+    ${If} $2 == ""
+      Goto lu_no_more
+    ${EndIf}
+    IntOp $1 $1 + 1
+    ; The app id 1.x was built with, however its installer decided to write it down.
+    StrCpy $3 $2 8
+    ${If} $3 != "7B2F4A1E"
+      Goto lu_next_key
+    ${EndIf}
+    ReadRegStr $4 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$2" "UninstallString"
+    ${If} $4 != ""
+      Goto lu_no_more
+    ${EndIf}
+    Goto lu_next_key
+  lu_no_more:
+  StrCpy $0 $4
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Push $0
+FunctionEnd
+
 !macro NSIS_HOOK_PREINSTALL
   ; The program goes under Programs, never into the folder the data lives in: on Windows
   ; $LOCALAPPDATA\LinkUnbound and $LOCALAPPDATA\linkunbound are one folder, so the default would
@@ -17,19 +52,16 @@
   ; that was never replaced.
   !insertmacro CheckIfAppIsRunning "linkunbound-shell.exe" "${PRODUCTNAME}"
 
-  ; 1.x wrote the very same key this one does — HKCU\Software\Classes\LinkUnboundURL — so the
-  ; two do not compete for the browser registration, they overwrite each other, and uninstalling
-  ; either takes the registration away from whichever is left.
+  ; 1.x is not a version this one can sit beside. Its installer wrote the browser keys under
+  ; HKLM, and its uninstaller deletes the HKCU ones the app itself wrote — which are the very
+  ; keys 2.0 writes, so removing 1.4 after this point would take 2.0's registration with it.
   ;
-  ; Offered rather than done: somebody trying 2.0 may want 1.4 back, and taking it away without
-  ; asking is not a decision an installer gets to make. Skipped when nothing can be asked — an
-  ; update, or a passive install — where the install proceeds and 2.0 takes the key.
+  ; Offered rather than done: somebody trying 2.0 may want 1.4 back. Skipped where nothing can be
+  ; asked — an update, or a passive install — and there 2.0 simply takes the keys.
   ${If} $UpdateMode <> 1
   ${AndIf} $PassiveMode <> 1
-    ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\{7B2F4A1E-9C3D-4E5F-A6B8-1D2E3F4A5B6C}_is1" "UninstallString"
-    ${If} $0 == ""
-      ReadRegStr $0 HKLM "Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{7B2F4A1E-9C3D-4E5F-A6B8-1D2E3F4A5B6C}_is1" "UninstallString"
-    ${EndIf}
+    Call FindLegacyUninstaller
+    Pop $0
     ${If} $0 != ""
       ; Named labels, not relative jumps: the LogicLib blocks around this compile to jumps of
       ; their own, so counting instructions from here is counting something that moves.
@@ -37,9 +69,15 @@
       Goto lu_legacy_done
       lu_drop_legacy:
         DetailPrint "Removing LinkUnbound 1.x"
-        ; InnoSetup's own switches. It was installed for all users, so this raises a prompt of
-        ; its own; the install goes on whatever comes of it.
-        ExecWait '$0 /VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
+        ; ExecShellWait, not ExecWait: that uninstaller was installed for all users and asks for
+        ; elevation, which CreateProcess cannot raise — it would fail with no prompt and no word.
+        ; And it has to finish before anything below writes a key, because what it deletes on its
+        ; way out is what this install is about to put there.
+        ClearErrors
+        ExecShellWait "open" "$0" "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+        ${If} ${Errors}
+          DetailPrint "LinkUnbound 1.x was left in place"
+        ${EndIf}
       lu_legacy_done:
     ${EndIf}
   ${EndIf}
@@ -49,12 +87,20 @@
   ; Nothing registers the handler on its own: the resident never writes the registry, and the
   ; settings window only reconciles when someone opens it. Without this, a fresh install receives
   ; no links until the user happens to visit the settings.
-  ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --register'
+  ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --register' $0
+  ${If} $0 <> 0
+    DetailPrint "The browser registration did not complete (code $0)"
+  ${EndIf}
 
   ; And put the resident back. PREINSTALL stopped it to replace the file, the template only ever
   ; relaunches the main binary, and nothing else in the program starts it — so without this every
   ; update ends with no tray icon and no shortcut until the next link happens to arrive.
-  Exec '"$INSTDIR\linkunbound-shell.exe"'
+  ;
+  ; RunAsUser, never Exec: run from an installer somebody elevated, the resident would inherit
+  ; that token, and its single-instance mutex and its pipe would sit at an integrity level the
+  ; processes that actually open links cannot reach. Every click would be dropped in silence.
+  ; --hushed because this is not somebody asking for a window.
+  nsis_tauri_utils::RunAsUser "$INSTDIR\linkunbound-shell.exe" "--hushed"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
@@ -70,8 +116,22 @@
   ; Not while updating: the installer is about to put the same keys back, and an update has no
   ; business dropping the user's default browser in between.
   ${If} $UpdateMode <> 1
-  ${AndIf} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
-    ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --unregister'
+    StrCpy $0 1
+    ${If} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+      ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --unregister' $0
+    ${EndIf}
+
+    ; Whatever happened above, these do not get to survive. A ProgId left behind still answers
+    ; for http and https: the person's UserChoice goes on naming it, its command points at a
+    ; binary that is gone, and every link in the system opens nothing at all, with nothing to
+    ; say why. Nobody but its owner can put UserChoice back.
+    ${If} $0 <> 0
+      DetailPrint "Handing back the browser registration the short way"
+      DeleteRegKey HKCU "Software\Classes\LinkUnboundURL"
+      DeleteRegKey HKCU "Software\Clients\StartMenuInternet\LinkUnbound"
+      DeleteRegKey HKCU "Software\LinkUnbound"
+      DeleteRegValue HKCU "Software\RegisteredApplications" "LinkUnbound"
+    ${EndIf}
   ${EndIf}
 !macroend
 
@@ -81,6 +141,11 @@
   ${If} $UpdateMode <> 1
     Delete "$LOCALAPPDATA\${PRODUCTNAME}\update.json"
     RMDir /r "$LOCALAPPDATA\${PRODUCTNAME}\icons"
-    RMDir "$INSTDIR"
+
+    ; The template's own checkbox deletes ${BUNDLEID}, which holds the webview cache and nothing
+    ; a person would recognise. What they were answering about is this.
+    ${If} $DeleteAppDataCheckboxState = 1
+      RMDir /r "$LOCALAPPDATA\${PRODUCTNAME}"
+    ${EndIf}
   ${EndIf}
 !macroend

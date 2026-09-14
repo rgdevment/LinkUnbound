@@ -112,7 +112,8 @@
         <uap5:Extension
           Category="windows.startupTask"
           Executable="linkunbound-shell.exe"
-          EntryPoint="Windows.FullTrustApplication">
+          EntryPoint="Windows.FullTrustApplication"
+          uap10:Parameters="--hushed">
           <uap5:StartupTask TaskId="LinkUnboundStartup" Enabled="false" DisplayName="LinkUnbound" />
         </uap5:Extension>
       </Extensions>

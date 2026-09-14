@@ -24,7 +24,7 @@ pub use registration::{
     windows_are_light,
 };
 #[cfg(windows)]
-pub use startup::{Startup, set as set_startup, state as startup_state};
+pub use startup::{Startup, packaged, set as set_startup, state as startup_state};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RegistrationError {
