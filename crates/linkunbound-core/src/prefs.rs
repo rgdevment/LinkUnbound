@@ -34,6 +34,9 @@ pub struct Preferences {
     pub hide_tray: bool,
     #[serde(default = "yes")]
     pub notify_on_rule: bool,
+    /// Carried from 1.x so somebody who read the Edge notice once is not told again.
+    #[serde(default)]
+    pub edge_warning_dismissed: bool,
 }
 
 fn default_shortcut() -> Option<String> {
@@ -53,6 +56,7 @@ impl Default for Preferences {
             shortcut: default_shortcut(),
             hide_tray: false,
             notify_on_rule: true,
+            edge_warning_dismissed: false,
         }
     }
 }
@@ -69,11 +73,57 @@ impl Preferences {
         self
     }
 
+    /// 1.x kept each of these in a file of its own, holding one word or the single character
+    /// `1`. Their absence is what the person chose as much as their presence, so a missing file
+    /// means the default rather than nothing.
+    #[must_use]
+    pub fn with_legacy(mut self, named: &str, raw: &str) -> Self {
+        let said = raw.trim();
+        match named {
+            "theme" => return self.with_legacy_theme(said),
+            "locale" => {
+                self.locale = match said.to_ascii_lowercase().as_str() {
+                    "es" => Locale::Spanish,
+                    "en" => Locale::English,
+                    _ => Locale::System,
+                };
+            }
+            "hide_tray" => self.hide_tray = said == "1",
+            "edge_warning_dismissed" => self.edge_warning_dismissed = said == "1",
+            "global_hotkey" => self.shortcut = shortcut_of(said),
+            _ => {}
+        }
+        self
+    }
+
     /// Hiding the tray with no shortcut left would leave no way back in.
     #[must_use]
     pub fn reachable(&self) -> bool {
         !self.hide_tray || self.shortcut.is_some()
     }
+}
+
+/// 1.x wrote `ctrl+shift+l`; this reads `Ctrl+Shift+L`. Same keys, different spelling, and a
+/// shortcut that does not parse is one the person quietly loses.
+fn shortcut_of(said: &str) -> Option<String> {
+    if said.is_empty() {
+        return None;
+    }
+    let spelled = said
+        .split('+')
+        .map(|part| {
+            let part = part.trim();
+            match part.to_ascii_lowercase().as_str() {
+                "ctrl" | "control" => "Ctrl".to_owned(),
+                "alt" => "Alt".to_owned(),
+                "shift" => "Shift".to_owned(),
+                "win" | "super" | "meta" | "cmd" => "Super".to_owned(),
+                _ => part.to_ascii_uppercase(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("+");
+    (!spelled.is_empty()).then_some(spelled)
 }
 
 #[cfg(test)]
@@ -87,6 +137,63 @@ mod tests {
         assert_eq!(p.locale, Locale::System);
         assert_eq!(p.shortcut.as_deref(), Some("Alt+Shift+L"));
         assert!(p.notify_on_rule);
+    }
+
+    /// Everything 1.x kept beside the theme was being dropped on the way in: the language went
+    /// back to the system's, the tray came back, and the shortcut was gone.
+    #[test]
+    fn the_rest_of_what_1_x_chose_is_carried_over_too() {
+        let said = Preferences::default()
+            .with_legacy("locale", "es\n")
+            .with_legacy("hide_tray", "1")
+            .with_legacy("edge_warning_dismissed", "1")
+            .with_legacy("global_hotkey", "ctrl+shift+l");
+
+        assert_eq!(said.locale, Locale::Spanish);
+        assert!(said.hide_tray);
+        assert!(said.edge_warning_dismissed);
+        assert_eq!(said.shortcut.as_deref(), Some("Ctrl+Shift+L"));
+    }
+
+    /// 1.x spelled its shortcut in lower case and this reads it capitalised. A shortcut that does
+    /// not parse is one the person loses without being told.
+    #[test]
+    fn a_shortcut_1_x_wrote_is_spelled_the_way_this_one_reads() {
+        for (was, now) in [
+            ("ctrl+shift+l", "Ctrl+Shift+L"),
+            ("CTRL+ALT+K", "Ctrl+Alt+K"),
+            ("control+shift+l", "Ctrl+Shift+L"),
+            ("win+l", "Super+L"),
+            ("alt+space", "Alt+SPACE"),
+        ] {
+            assert_eq!(
+                Preferences::default()
+                    .with_legacy("global_hotkey", was)
+                    .shortcut
+                    .as_deref(),
+                Some(now),
+                "{was}"
+            );
+        }
+    }
+
+    /// An empty file is somebody who turned the shortcut off, which is not the same as never
+    /// having had one.
+    #[test]
+    fn a_shortcut_turned_off_stays_off() {
+        assert!(
+            Preferences::default()
+                .with_legacy("global_hotkey", "  ")
+                .shortcut
+                .is_none()
+        );
+    }
+
+    /// A file 1.x never wrote means the default, not an empty value.
+    #[test]
+    fn a_name_nobody_knows_changes_nothing() {
+        let said = Preferences::default().with_legacy("something-else", "1");
+        assert_eq!(said, Preferences::default());
     }
 
     #[test]

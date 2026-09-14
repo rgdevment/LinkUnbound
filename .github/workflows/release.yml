@@ -381,6 +381,10 @@ jobs:
         run: |
           mkdir -p dist
           find staged -type f -exec cp {} dist/ \;
+          # The package goes to the Store and nowhere else. Unsigned it cannot be installed by
+          # anybody who downloads it, and the Store signs it on publication — so putting it on the
+          # releases page offers a file that looks installable and is not.
+          rm -f dist/*.msix
           ls -l dist
 
       # Everything here happens before the release is created. A release published without a
@@ -551,6 +555,65 @@ jobs:
           done
           echo "::error::the feed could not be pushed; the release is out and nothing announces it"
           exit 1
+
+  msstore:
+    name: Microsoft Store
+    needs: [version, publish, bundle-msix]
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      && needs.version.outputs.prerelease == 'false'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      STORE_PUBLISH: ${{ vars.STORE_PUBLISH }}
+      STORE_APP_ID: ${{ vars.STORE_APP_ID }}
+      STORE_TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
+      STORE_SELLER_ID: ${{ secrets.STORE_SELLER_ID }}
+      STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
+      STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
+    steps:
+      # Off unless somebody says otherwise. A submission is reviewed by people and cannot be
+      # taken back once it is in their queue, so it is not something a tag should start by
+      # accident on the way to fixing something else.
+      - name: Nothing to submit without being asked
+        id: gate
+        shell: bash
+        run: |
+          if [ "$STORE_PUBLISH" != "true" ]; then
+            echo "::notice::STORE_PUBLISH is not true; the Store gets nothing until it is"
+            echo "go=no" >> "$GITHUB_OUTPUT"
+          elif [ "${{ needs.bundle-msix.outputs.made }}" != "yes" ]; then
+            echo "::notice::no MSIX was built this run; nothing to submit"
+            echo "go=no" >> "$GITHUB_OUTPUT"
+          elif [ -z "$STORE_APP_ID" ] || [ -z "$STORE_TENANT_ID" ] || [ -z "$STORE_SELLER_ID" ] || [ -z "$STORE_CLIENT_ID" ] || [ -z "$STORE_CLIENT_SECRET" ]; then
+            echo "::notice::the Store credentials are not all here; nothing to submit"
+            echo "go=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        if: steps.gate.outputs.go == 'yes'
+        with:
+          name: bundle-msix
+          path: dist
+
+      - uses: microsoft/microsoft-store-apppublisher@v1.4
+        if: steps.gate.outputs.go == 'yes'
+
+      - name: Submit
+        if: steps.gate.outputs.go == 'yes'
+        shell: bash
+        run: |
+          set -euo pipefail
+          msix=$(ls dist/*.msix 2>/dev/null | head -1) || true
+          if [ -z "$msix" ]; then
+            echo "::error::the artifact carried no package to submit"
+            exit 1
+          fi
+          msstore reconfigure --tenantId "$STORE_TENANT_ID" --sellerId "$STORE_SELLER_ID" --clientId "$STORE_CLIENT_ID" --clientSecret "$STORE_CLIENT_SECRET"
+          msstore publish "$msix" --appId "$STORE_APP_ID"
+          echo "submitted $msix; the listing is reviewed by people and appears when they say so"
 
   verify:
     name: The update is installable

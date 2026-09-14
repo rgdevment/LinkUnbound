@@ -198,16 +198,29 @@ impl Store {
         })
     }
 
-    /// Falls back to what 1.x left in its own `theme` file, so an upgrade keeps
-    /// the appearance the user had chosen.
+    /// Falls back to the files 1.x left beside this one — one per setting, holding a word or the
+    /// single character `1`. Reading only the theme, as this did, sent somebody who had chosen
+    /// Spanish, hidden the tray and set a shortcut back to the defaults on all three.
     pub fn prefs(&self) -> crate::Preferences {
         if let Ok(raw) = fs::read_to_string(self.prefs_path())
             && let Ok(found) = serde_json::from_str::<crate::Preferences>(unmarked(&raw))
         {
             return found;
         }
-        let legacy = fs::read_to_string(self.dir.join("theme")).unwrap_or_default();
-        crate::Preferences::default().with_legacy_theme(&legacy)
+        const LEGACY: [&str; 5] = [
+            "theme",
+            "locale",
+            "hide_tray",
+            "edge_warning_dismissed",
+            "global_hotkey",
+        ];
+        LEGACY.iter().fold(
+            crate::Preferences::default(),
+            |said, named| match fs::read_to_string(self.dir.join(named)) {
+                Ok(raw) => said.with_legacy(named, &raw),
+                Err(_) => said,
+            },
+        )
     }
 
     pub fn save_prefs(&self, prefs: &crate::Preferences) -> Result<(), StoreError> {
@@ -233,6 +246,38 @@ impl Store {
 mod tests {
     use super::*;
     use crate::config::SCHEMA_VERSION;
+
+    /// What somebody upgrading from 1.x actually has on disk: no preferences.json, and one small
+    /// file per setting beside it. Reading only the theme put the language, the tray and the
+    /// shortcut back to their defaults without saying so.
+    #[test]
+    fn everything_1_x_left_on_disk_is_read_on_the_way_in() {
+        let dir = std::env::temp_dir().join("lu-legacy-prefs");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a place to put them");
+        for (named, said) in [
+            ("theme", "dark"),
+            ("locale", "es"),
+            ("hide_tray", "1"),
+            ("edge_warning_dismissed", "1"),
+            ("global_hotkey", "ctrl+shift+l"),
+        ] {
+            std::fs::write(dir.join(named), said).expect("written");
+        }
+
+        let said = Store::at(&dir).prefs();
+        assert_eq!(said.theme, crate::Theme::Dark);
+        assert_eq!(said.locale, crate::Locale::Spanish);
+        assert!(said.hide_tray);
+        assert!(said.edge_warning_dismissed);
+        assert_eq!(said.shortcut.as_deref(), Some("Ctrl+Shift+L"));
+        assert!(
+            said.reachable(),
+            "a hidden tray with a shortcut is still reachable"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use crate::rule::{Rule, Scope, Target};
 
     /// Per process: the path was machine-global, so a second `cargo test` wiped
