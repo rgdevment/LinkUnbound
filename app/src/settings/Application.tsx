@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
-import { type Key, type Language, spoken, useWords } from "../i18n";
+import { type Key, type Language, spoken, useSpoken, useWords } from "../i18n";
+import { saidPlainly } from "../refusal";
 import { refresh } from "../theme";
 import { Card, Line, Section, Switch } from "./parts";
 
@@ -101,12 +102,10 @@ export default function Application({
   onLanguage: (next: Language) => void;
 }) {
   const t = useWords();
+  const language = useSpoken();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
-
-  const failure = (reason: string) =>
-    reason.endsWith("unreachable") ? t("errUnreachable") : reason;
 
   const apply = (patch: Partial<Preferences>) => {
     if (!settings) return;
@@ -117,7 +116,7 @@ export default function Application({
         refresh();
         setProblem(null);
       })
-      .catch((e: unknown) => setProblem(failure(String(e))))
+      .catch((e: unknown) => setProblem(saidPlainly(language, e)))
       .finally(() => setCapturing(false));
   };
 

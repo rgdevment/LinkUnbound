@@ -15,7 +15,7 @@ const CHROME = {
   custom: false,
   hidden: false,
   icon: "data:image/png;base64,iVBORw0KGgo=",
-  args: [],
+  args: "",
   private_flag: "--incognito",
   icon_path: null,
 };
@@ -47,7 +47,7 @@ const MINE = {
   custom: true,
   hidden: false,
   icon: null,
-  args: ["--disable-extensions"],
+  args: "--disable-extensions",
   private_flag: null,
   icon_path: null,
 };
@@ -158,18 +158,24 @@ describe("browsers", () => {
     ).toBeInTheDocument();
   });
 
-  it("sends a new browser with its arguments split apart", async () => {
+  /// The line travels whole. Splitting it here is what broke a profile whose name has a space
+  /// in it — the most ordinary argument Chrome and Firefox take — so what an argument is gets
+  /// decided in one place, and that place has tests of its own.
+  it("sends a new browser with the arguments exactly as they were typed", async () => {
     render(<Browsers />);
     await userEvent.click(await screen.findByRole("button", { name: "Añadir un navegador" }));
     await userEvent.type(screen.getByLabelText("Nombre"), "Chrome limpio");
     await userEvent.type(screen.getByLabelText("Ruta del ejecutable"), "C:/x/chrome.exe");
-    await userEvent.type(screen.getByLabelText("Argumentos adicionales"), "--new --foo");
+    await userEvent.type(
+      screen.getByLabelText("Argumentos adicionales"),
+      '--profile-directory="Profile 1"',
+    );
     await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
     expect(invoke).toHaveBeenCalledWith("browsers_add", {
       edit: {
         name: "Chrome limpio",
         exe: "C:/x/chrome.exe",
-        args: ["--new", "--foo"],
+        args: '--profile-directory="Profile 1"',
         private_flag: null,
         icon_path: null,
       },

@@ -18,6 +18,15 @@ CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 
 ICO_SIZES = [16, 20, 24, 32, 48, 64, 128, 256]
 TRAY_SIZES = [16, 20, 24, 32]
+# What an MSIX manifest names, by the names it names them with. The Store rejects a package whose
+# logo is the wrong size, and it rejects it after the upload rather than before.
+STORE_LOGOS = {
+    "StoreLogo": 50,
+    "Square44x44Logo": 44,
+    "Square71x71Logo": 71,
+    "Square150x150Logo": 150,
+    "Square310x310Logo": 310,
+}
 
 
 def render(svg: str, size: int, target: str) -> None:
@@ -79,6 +88,9 @@ def main() -> None:
             render("app-windows.svg", size, os.path.join(OUT, f"{size}x{size}.png"))
     write_ico(frames, os.path.join(OUT, "icon.ico"))
     render("app-windows.svg", 512, os.path.join(OUT, "icon.png"))
+
+    for name, size in STORE_LOGOS.items():
+        render("app-windows.svg", size, os.path.join(OUT, f"{name}.png"))
 
     for variant in ("tray-dark", "tray-light"):
         for size in TRAY_SIZES:

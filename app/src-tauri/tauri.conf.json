@@ -51,7 +51,7 @@
   "mainBinaryName": "linkunbound-settings",
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk5OURERjAwQzM2REYyMkIKUldRcjhtM0RBTitkbWJPd0N4Mnk4TXZSTU03bmNVSUtscnJzL0luSzl4SnBrYVNHeGx4UFNacUkK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUxREVBNzU0QUJCQTRBOUEKUldTYVNycXJWS2ZlVWJjeGFJdFc0ZkQrZTRsSUhubG9FaDdseTZzcUl6MTB1NS9TanAzcEE4S0oK",
       "endpoints": [
         "https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/latest.json"
       ],

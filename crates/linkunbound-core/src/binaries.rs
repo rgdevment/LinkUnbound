@@ -65,7 +65,9 @@ pub fn what_is_registered(command: Option<&str>, expected: &Path) -> Registered 
 
 #[cfg(test)]
 mod tests {
-    use super::{Registered, link_handler, settings_binary, what_is_registered};
+    #[cfg(windows)]
+    use super::settings_binary;
+    use super::{Registered, link_handler, what_is_registered};
     use std::path::{Path, PathBuf};
 
     fn at(dir: &str) -> PathBuf {

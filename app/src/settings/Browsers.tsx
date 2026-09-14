@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import { type Key, useWords } from "../i18n";
+import { type Key, useSpoken, useWords } from "../i18n";
+import { saidPlainly } from "../refusal";
 import Confirm from "./Confirm";
 import { Card, Section, Switch } from "./parts";
 
@@ -13,7 +14,7 @@ type BrowserView = {
   custom: boolean;
   hidden: boolean;
   icon: string | null;
-  args: string[];
+  args: string;
   private_flag: string | null;
   icon_path: string | null;
 };
@@ -21,12 +22,12 @@ type BrowserView = {
 type Edit = {
   name: string;
   exe: string;
-  args: string[];
+  args: string;
   private_flag: string | null;
   icon_path: string | null;
 };
 
-const BLANK: Edit = { name: "", exe: "", args: [], private_flag: null, icon_path: null };
+const BLANK: Edit = { name: "", exe: "", args: "", private_flag: null, icon_path: null };
 
 function describe(browser: BrowserView, t: (key: Key, ...values: string[]) => string): string {
   const parts = [
@@ -77,7 +78,7 @@ function Form({
   const t = useWords();
   const [name, setName] = useState(initial.name);
   const [exe, setExe] = useState(initial.exe);
-  const [args, setArgs] = useState(initial.args.join(" "));
+  const [args, setArgs] = useState(initial.args);
   const [priv, setPriv] = useState(initial.private_flag ?? "");
   const [icon, setIcon] = useState(initial.icon_path ?? "");
 
@@ -89,7 +90,7 @@ function Form({
         onSave({
           name,
           exe,
-          args: args.split(" ").filter(Boolean),
+          args,
           private_flag: priv || null,
           icon_path: icon || null,
         });
@@ -165,20 +166,24 @@ const GHOST =
 
 export default function Browsers() {
   const t = useWords();
+  const language = useSpoken();
   const [list, setList] = useState<BrowserView[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [asking, setAsking] = useState<BrowserView | null>(null);
 
-  const run = useCallback((command: string, params: Record<string, unknown> = {}) => {
-    void invoke<BrowserView[]>(command, params)
-      .then((next) => {
-        setList(next);
-        setProblem(null);
-        setEditing(null);
-      })
-      .catch((e: unknown) => setProblem(String(e)));
-  }, []);
+  const run = useCallback(
+    (command: string, params: Record<string, unknown> = {}) => {
+      void invoke<BrowserView[]>(command, params)
+        .then((next) => {
+          setList(next);
+          setProblem(null);
+          setEditing(null);
+        })
+        .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+    },
+    [language],
+  );
 
   useEffect(() => run("browsers_list"), [run]);
 

@@ -137,15 +137,15 @@ LinkUnbound makes **one type of network request**:
 | Detail        | Value                                                                    |
 | :------------ | :----------------------------------------------------------------------- |
 | **Purpose**   | Check if a newer version of LinkUnbound is available                     |
-| **URL**       | `https://github.com/rgdevment/LinkUnbound/releases/download/updater-feed/release-manifest.json`     |
+| **URL**       | `https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/release-manifest.json` |
 | **Method**    | GET (read-only)                                                          |
 | **Data sent** | Standard HTTP headers only — no user data                                |
-| **Frequency** | At most once every 6 hours                                               |
+| **Frequency** | At most once every 24 hours, and only while the settings window is open  |
 | **Timeout**   | 5 seconds                                                                |
 | **On failure**| Silent — the app continues working normally                              |
 
-The resident process is long-lived, so the check happens on that interval
-rather than only once at launch.
+The check is made by the settings window, not by the resident that sits in the
+tray: a copy whose owner never opens the settings never makes it.
 
 **Important:**
 
@@ -154,9 +154,16 @@ rather than only once at launch.
 - If an update is found, a non-invasive indicator appears in the app. When you press Update, the installer is downloaded and run. Nothing is downloaded or installed without that press.
 - The app works fully offline if the request fails or is blocked.
 
-### User-Initiated Navigation
+### Taking an update
 
-When you click "Download" on an update notification, LinkUnbound opens the GitHub release page in your default browser. This is a standard browser navigation initiated by your action — LinkUnbound does not make this request itself.
+Pressing Update downloads the installer from the releases page and runs it.
+LinkUnbound makes that request itself; nothing is downloaded or installed
+without the press. The installer is verified against a signature key built into
+the copy you are running before a single byte of it is executed, and the address
+it comes from has to be the release of the version you were offered.
+
+A copy installed from the Microsoft Store takes its update from the Store
+instead, and never reads the feed above.
 
 ---
 
@@ -165,7 +172,7 @@ When you click "Download" on an update notification, LinkUnbound opens the GitHu
 LinkUnbound is available through the Microsoft Store. The Store version:
 
 - **Follows the same privacy principles** as the standalone version.
-- **Makes the same single read-only request** to check for updates via the GitHub Releases API.
+- **Asks the Store about updates**, not the feed above: a release reaches the Store when its certification lets it through, which is not when it reaches everyone else.
 - **Uses MSIX packaging** — installs and uninstalls cleanly with standard Windows mechanisms.
 - **Microsoft Store policies** apply to distribution, but LinkUnbound itself does not share any data with Microsoft beyond what the Store platform requires for installation and updates.
 

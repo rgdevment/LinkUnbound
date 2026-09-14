@@ -1,7 +1,13 @@
 use windows::ApplicationModel::{StartupTask, StartupTaskState};
 use windows::core::HSTRING;
+use winreg::RegKey;
+use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
 
 const TASK_ID: &str = "LinkUnboundStartup";
+const RUN: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+/// The resident is what has to be there at sign-in: it owns the tray and the shortcut, and it is
+/// what makes the first link of a session open without waiting for a cold start.
+const RUN_NAME: &str = "LinkUnbound";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Startup {
@@ -27,48 +33,100 @@ fn task() -> Option<StartupTask> {
         .ok()
 }
 
-/// Only a packaged build has a startup task; the plain installer arranges it
-/// through the registry instead.
+/// A packaged build has a startup task and nothing else: its writes to the Run key land in a
+/// container Windows never reads at sign-in. Everywhere else the Run key is the whole mechanism.
 #[must_use]
 pub fn state() -> Option<Startup> {
-    let state = task()?.State().ok()?;
+    if let Some(task) = task() {
+        let state = task.State().ok()?;
+        return Some(Startup {
+            enabled: state == StartupTaskState::Enabled
+                || state == StartupTaskState::EnabledByPolicy,
+            ours_to_change: state != StartupTaskState::DisabledByUser
+                && state != StartupTaskState::DisabledByPolicy,
+        });
+    }
     Some(Startup {
-        enabled: state == StartupTaskState::Enabled || state == StartupTaskState::EnabledByPolicy,
-        ours_to_change: state != StartupTaskState::DisabledByUser
-            && state != StartupTaskState::DisabledByPolicy,
+        enabled: listed(),
+        ours_to_change: true,
     })
 }
 
 pub fn set(enabled: bool) -> Option<Startup> {
-    let task = task()?;
-    if enabled {
-        task.RequestEnableAsync().ok()?.get().ok()?;
-    } else {
-        task.Disable().ok()?;
+    if let Some(task) = task() {
+        if enabled {
+            task.RequestEnableAsync().ok()?.get().ok()?;
+        } else {
+            task.Disable().ok()?;
+        }
+        return state();
     }
+    list(enabled)?;
     state()
+}
+
+fn listed() -> bool {
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(RUN, KEY_READ)
+        .and_then(|run| run.get_value::<String, _>(RUN_NAME))
+        .is_ok()
+}
+
+/// Quoted, because a path with a space in it is read as a command and its arguments otherwise —
+/// and `%LOCALAPPDATA%\Programs\LinkUnbound` is where the installer puts this.
+fn command(running: &std::path::Path) -> String {
+    format!("\"{}\"", linkunbound_core::link_handler(running).display())
+}
+
+fn list(enabled: bool) -> Option<()> {
+    let run = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(RUN, KEY_READ | KEY_WRITE)
+        .ok()?;
+    if enabled {
+        run.set_value(RUN_NAME, &command(&std::env::current_exe().ok()?))
+            .ok()?;
+    } else {
+        // Deleting what is not there is not a failure: the switch reads as off either way.
+        let _ = run.delete_value(RUN_NAME);
+    }
+    Some(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// A `cargo test` binary is never a packaged MSIX identity, so `task()` has no
-    /// startup task to find and this is deterministic rather than environment-dependent.
+    /// A `cargo test` binary is never a packaged MSIX identity, so there is no startup task to
+    /// find and the Run key is what answers — which is the standalone install's whole mechanism.
     #[test]
-    fn asking_outside_a_package_answers_nothing_rather_than_failing() {
-        assert!(state().is_none());
+    fn outside_a_package_the_run_key_is_what_answers() {
+        let said = state().expect("the registry can always be read");
+        assert!(
+            said.ours_to_change,
+            "nothing but a packaged build can have it disabled by policy"
+        );
     }
 
+    /// The resident is what has to be there at sign-in, not the window that was running when the
+    /// switch was flipped.
     #[test]
-    fn setting_it_outside_a_package_answers_nothing_rather_than_panicking() {
-        assert!(set(true).is_none());
+    fn what_would_be_listed_is_the_resident() {
+        let from = std::path::Path::new(
+            r"C:\Users\x\AppData\Local\Programs\LinkUnbound\linkunbound-settings.exe",
+        );
+        let said = command(from);
+
+        assert!(said.contains("linkunbound-shell"), "{said}");
+        assert!(!said.contains("settings"), "{said}");
     }
 
+    /// Unquoted, `C:\Program Files\...` is read as `C:\Program` with `Files\...` for arguments,
+    /// and nothing starts at sign-in.
     #[test]
-    fn nothing_saved_yet_defaults_to_off_but_still_ours_to_change() {
-        let default = Startup::default();
-        assert!(!default.enabled);
-        assert!(default.ours_to_change);
+    fn a_path_with_a_space_is_quoted() {
+        let from = std::path::Path::new(r"C:\Program Files\LinkUnbound\linkunbound-settings.exe");
+        let said = command(from);
+
+        assert!(said.starts_with('"') && said.ends_with('"'), "{said}");
     }
 }

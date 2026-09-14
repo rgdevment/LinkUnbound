@@ -1,0 +1,100 @@
+name: Bundle
+
+# The installer script is generated from tauri.conf.json and the hooks beside it, and until now
+# nothing compiled it before a release did — so `hooks.nsh` was first read by makensis on a run
+# that had already pushed a tag. This builds it on the way in instead.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/src-tauri/nsis/**"
+      - "app/src-tauri/tauri.conf.json"
+      - "app/src-tauri/Cargo.toml"
+      - "app/src-tauri/build.rs"
+      - "scripts/sidecar.sh"
+      - "Cargo.toml"
+      - ".github/workflows/bundle.yml"
+      - ".github/workflows/release.yml"
+  pull_request:
+    paths:
+      - "app/src-tauri/nsis/**"
+      - "app/src-tauri/tauri.conf.json"
+      - "app/src-tauri/Cargo.toml"
+      - "app/src-tauri/build.rs"
+      - "scripts/sidecar.sh"
+      - "Cargo.toml"
+      - ".github/workflows/bundle.yml"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  nsis:
+    name: the installer builds
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Frontend
+        working-directory: app
+        run: npm ci
+
+      - name: The resident rides along
+        shell: bash
+        run: bash scripts/sidecar.sh release
+
+      # Unsigned on purpose: the signing key is a release secret, and what this job is for is the
+      # NSIS script and the bundler configuration, not the signature.
+      - name: Bundle
+        working-directory: app
+        shell: bash
+        run: npm run tauri build -- --bundles nsis --no-sign
+
+      - name: It carries both binaries, and the hooks it was given
+        shell: bash
+        run: |
+          setup=$(ls target/release/bundle/nsis/*-setup.exe 2>/dev/null | head -1) || true
+          if [ -z "$setup" ]; then
+            echo "::error::the bundler produced no installer"
+            exit 1
+          fi
+
+          # Read from the generated script, not the installer: the payload is LZMA-compressed, so
+          # searching the exe for a filename finds nothing whether it is in there or not.
+          script=$(ls target/release/nsis/*/installer.nsi 2>/dev/null | head -1) || true
+          if [ -z "$script" ]; then
+            echo "::error::makensis ran but left no script behind to read"
+            exit 1
+          fi
+
+          status=0
+          want() {
+            if ! grep -q "$1" "$script"; then
+              echo "::error::the generated installer does not $2"
+              status=1
+            fi
+          }
+          want 'oname=linkunbound-shell.exe' "lay down the resident; the sidecar was not bundled"
+          # The hooks arrive as an !include of our own file, so this is what says the bundler
+          # picked it up. Their bodies are not in this script and looking for them here finds
+          # nothing whether they were included or not.
+          want '!include .*nsis.hooks\.nsh' "include our hooks; installerHooks did not resolve"
+          exit $status
+
+      - name: How big it came out
+        shell: bash
+        run: ls -lh target/release/bundle/nsis/*-setup.exe

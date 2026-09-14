@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
-import { type Key, useWords } from "../i18n";
+import { useSpoken, useWords } from "../i18n";
+import { saidPlainly } from "../refusal";
 import { Card, Line, Section, Switch } from "./parts";
 import type { Ready, Underway } from "./update";
 
@@ -29,20 +30,6 @@ function External({ href, children }: { href: string; children: string }) {
   );
 }
 
-const REFUSALS = [
-  "updateBusy",
-  "updateGone",
-  "updateNotHere",
-  "updateElsewhere",
-  "updateStopped",
-  "updateFailed",
-] as const;
-
-function said(t: (key: Key, ...values: string[]) => string, problem: unknown): string {
-  const raw = String(problem).replace(/^Error:\s*/, "");
-  return (REFUSALS as readonly string[]).includes(raw) ? t(raw as Key) : raw;
-}
-
 function Pip({ ok }: { ok?: boolean }) {
   return (
     <span
@@ -68,6 +55,7 @@ function Offer({
   onLook: (nowPlease?: boolean) => Promise<unknown>;
 }) {
   const t = useWords();
+  const language = useSpoken();
   const [looking, setLooking] = useState(false);
   const [asked, setAsked] = useState(false);
 
@@ -75,7 +63,7 @@ function Offer({
     setLooking(true);
     onProblem(null);
     onLook(true)
-      .catch((e: unknown) => onProblem(said(t, e)))
+      .catch((e: unknown) => onProblem(saidPlainly(language, e)))
       .finally(() => setLooking(false));
   };
 
@@ -159,7 +147,7 @@ function Offer({
                 // The progress stops arriving but never says so, and the button stays hidden
                 // behind it: a cancelled store update could not be tried again.
                 onSettled();
-                onProblem(said(t, e));
+                onProblem(saidPlainly(language, e));
               });
           }}
           className="shrink-0 rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white disabled:opacity-50 dark:bg-[#6E9BFF] dark:text-[#12141B]"
@@ -182,9 +170,10 @@ function Candidates({
   on: boolean;
   onChange: (next: boolean) => void;
   onProblem: (why: string | null) => void;
-  onAsked: () => Promise<unknown>;
+  onAsked: () => void;
 }) {
   const t = useWords();
+  const language = useSpoken();
 
   return (
     <Card>
@@ -199,7 +188,7 @@ function Candidates({
               .then(onAsked)
               .catch((e: unknown) => {
                 onChange(!wants);
-                onProblem(said(t, e));
+                onProblem(saidPlainly(language, e));
               });
           }}
         />
@@ -220,12 +209,17 @@ export default function About({
   onLook: (nowPlease?: boolean) => Promise<unknown>;
 }) {
   const t = useWords();
+  const language = useSpoken();
   const [build, setBuild] = useState<Build | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
   const look = useCallback(() => {
-    invoke<Build>("about").then(setBuild).catch(noop);
-  }, []);
+    setTrouble(null);
+    invoke<Build>("about")
+      .then(setBuild)
+      .catch((e: unknown) => setTrouble(saidPlainly(language, e)));
+  }, [language]);
 
   useEffect(look, [look]);
 
@@ -248,6 +242,21 @@ export default function About({
           </p>
         </div>
       </div>
+
+      {trouble && (
+        <div className="rounded-md bg-[#C0362F]/10 px-3 py-2 dark:bg-[#FF8A85]/10">
+          <p role="alert" className="text-[11.5px] text-[#C0362F] dark:text-[#FF8A85]">
+            {t("aboutFailed")} · {trouble}
+          </p>
+          <button
+            type="button"
+            onClick={look}
+            className="mt-1.5 rounded-md border border-black/[0.12] px-2.5 py-1 text-[11.5px] dark:border-white/[0.12]"
+          >
+            {t("tryAgain")}
+          </button>
+        </div>
+      )}
 
       {problem && (
         <p

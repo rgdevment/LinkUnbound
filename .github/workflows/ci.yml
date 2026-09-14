@@ -95,8 +95,11 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@nextest
 
-      - name: The crates the picker does not need to build
-        run: cargo llvm-cov nextest -p linkunbound-core --lcov --output-path lcov-rust.info
+      - name: What a desktop is not needed to build
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libxkbcommon-dev libwayland-dev libxcb1-dev
+          cargo llvm-cov nextest             -p linkunbound-core             -p linkunbound-shell             --lcov --output-path lcov-rust.info
 
       - uses: actions/setup-node@v7
         with:

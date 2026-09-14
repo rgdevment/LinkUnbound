@@ -1,5 +1,3 @@
-#![cfg_attr(windows, allow(unsafe_code))]
-
 /// A shop that answers it has nothing is not a shop that never answered: the first means this copy
 /// is current, the second that nothing is known and the old wording still stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +41,7 @@ pub fn take(
 #[cfg(windows)]
 mod there {
     use super::{Shelf, Trouble};
+    use windows::ApplicationModel::PackageSignatureKind;
     use windows::ApplicationModel::{Package, PackageVersion};
     use windows::Services::Store::{
         StoreContext, StorePackageUpdateState, StorePackageUpdateStatus,
@@ -70,7 +69,19 @@ mod there {
         hear.recv_timeout(how_long).ok()
     }
 
+    /// A copy the Store did not sell is one the Store will never have an update for, and its
+    /// empty answer reads exactly like «you are on the newest one». Left as that, a package
+    /// installed by hand would be told it was current for the rest of its life.
+    fn sold_here() -> bool {
+        Package::Current()
+            .and_then(|one| one.SignatureKind())
+            .is_ok_and(|kind| kind == PackageSignatureKind::Store)
+    }
+
     pub fn asked(window: isize) -> Shelf {
+        if !sold_here() {
+            return Shelf::Silent;
+        }
         match apart(PATIENCE, move || waiting(window)) {
             Some(Ok(Some(version))) => Shelf::Waiting(version),
             Some(Ok(None)) => Shelf::Current,
@@ -151,6 +162,7 @@ mod there {
 
     /// The Store raises dialogs of its own and refuses with ERROR_INVALID_WINDOW_HANDLE unless it
     /// is told which window owns them.
+    #[allow(unsafe_code)]
     fn owned(shop: &StoreContext, window: isize) -> windows::core::Result<()> {
         let owner: IInitializeWithWindow = shop.cast()?;
         unsafe { owner.Initialize(HWND(window as *mut core::ffi::c_void)) }
@@ -158,6 +170,7 @@ mod there {
 
     /// A worker thread of the async runtime belongs to no apartment, and the activation fails there
     /// before it begins.
+    #[allow(unsafe_code)]
     fn apartment() {
         static ONCE: std::sync::OnceLock<()> = std::sync::OnceLock::new();
         ONCE.get_or_init(|| unsafe {

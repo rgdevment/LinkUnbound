@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import { type Key, type Language, Speaking, spoken, useWords } from "./i18n";
+import { type Key, type Language, Speaking, spoken, useSpoken, useWords } from "./i18n";
+import { saidPlainly } from "./refusal";
 import About from "./settings/About";
 import Application from "./settings/Application";
 import Browsers from "./settings/Browsers";
@@ -200,6 +201,7 @@ export default function Settings() {
 
 function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const t = useWords();
+  const language = useSpoken();
   const { ready, step, look, settled } = useUpdate();
   const [page, setPage] = useState<Page>("links");
   const [state, setState] = useState<SystemState | null>(null);
@@ -213,21 +215,27 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
       .catch(noop);
   }, []);
 
-  const change = useCallback((command: string, enabled: boolean) => {
-    setProblem(null);
-    void invoke<SystemState>(command, { enabled })
-      .then(setState)
-      .catch((e: unknown) => setProblem(String(e)));
-  }, []);
+  const change = useCallback(
+    (command: string, enabled: boolean) => {
+      setProblem(null);
+      void invoke<SystemState>(command, { enabled })
+        .then(setState)
+        .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+    },
+    [language],
+  );
 
-  const run = useCallback((command: string) => {
-    setProblem(null);
-    void invoke<SystemState | null>(command)
-      .then((next) => {
-        if (next) setState(next);
-      })
-      .catch((e: unknown) => setProblem(String(e)));
-  }, []);
+  const run = useCallback(
+    (command: string) => {
+      setProblem(null);
+      void invoke<SystemState | null>(command)
+        .then((next) => {
+          if (next) setState(next);
+        })
+        .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+    },
+    [language],
+  );
 
   return (
     <div className="flex h-full bg-white text-[#16181D] dark:bg-[#191A1F] dark:text-[#F0F1F4]">

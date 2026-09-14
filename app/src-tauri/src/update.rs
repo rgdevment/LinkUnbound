@@ -60,9 +60,6 @@ pub const fn self_installs(route: Route) -> bool {
 /// Where a release of ours can possibly come from. The plugin fetches whatever address the feed
 /// names, so a feed that was tampered with could otherwise send the download anywhere.
 const FROM: &str = "github.com";
-/// Where GitHub serves the bytes a release asset redirects to. It carries no path of ours to
-/// recognise, so an asset from here is only ever reached by following our own release.
-const STORED_AT: &str = "objects.githubusercontent.com";
 const RELEASES: &str = "/rgdevment/LinkUnbound/releases/download/";
 
 /// The signature covers the installer's bytes and nothing else: not the manifest, not the version
@@ -77,18 +74,19 @@ pub fn ours(url: &str, version: &str) -> bool {
     if at.scheme() != "https" || at.port().is_some() {
         return false;
     }
-    match at.host_str() {
-        Some(STORED_AT) => true,
-        Some(FROM) => at.path().starts_with(&format!("{RELEASES}v{version}/")),
-        _ => false,
-    }
+    at.host_str() == Some(FROM) && at.path().starts_with(&format!("{RELEASES}v{version}/"))
 }
 
+/// A candidate is looked for among the candidates, and then among the stable releases — because
+/// the release that retires a candidate takes its channel away with it, and a copy still holding
+/// that offer would otherwise meet a refusal from the network rather than an answer. The stable
+/// channel does not have the version it was promised either, so what it is told is that the offer
+/// is gone.
 #[must_use]
-pub fn channel_for(version: &str) -> &'static str {
+pub fn feeds_for(version: &str) -> Vec<&'static str> {
     match version.parse::<semver::Version>() {
-        Ok(said) if !said.pre.is_empty() => CANDIDATE,
-        _ => LATEST,
+        Ok(said) if !said.pre.is_empty() => vec![CANDIDATE, LATEST],
+        _ => vec![LATEST],
     }
 }
 
@@ -155,16 +153,25 @@ fn offered(version: String, kept: Kept) -> Ready {
         version,
         route: kept.route,
         package: kept.package,
-        installs: self_installs(kept.route),
+        // A copy running from a mounted image cannot replace itself either, and the refusal in
+        // `update_install` reads the same thing: offering a button it will take away is worse
+        // than not offering one.
+        installs: self_installs(kept.route) && !from_a_mount(),
     }
 }
 
 /// What the last look found, so closing the window does not take the offer away with it. The copy
-/// may have moved between a download and a cask since, so where it stands is read again.
+/// may have moved between a download and a cask since, so where it stands is read again — and so
+/// may the track it is on, which is why the rule is applied here too rather than trusted to
+/// whatever was true when the answer was written down.
 #[must_use]
-pub fn remembered(now: &str, said: Option<&str>, kept: Kept) -> Option<Ready> {
+pub fn remembered(now: &str, said: Option<&str>, kept: Kept, wants: Option<bool>) -> Option<Ready> {
     let here: semver::Version = now.parse().ok()?;
     let kept_version: semver::Version = said?.parse().ok()?;
+
+    if !tracking(now, wants) && !kept_version.pre.is_empty() {
+        return None;
+    }
 
     (kept_version > here).then(|| offered(kept_version.to_string(), kept))
 }
@@ -402,6 +409,18 @@ mod tests {
                 .version,
             "2.2.0"
         );
+
+        let ahead = r#"{"latest":"2.1.0","latestPrerelease":"2.3.0-rc1"}"#;
+        assert!(
+            newer(
+                "2.2.0-rc1",
+                ahead,
+                Kept::plain(Route::Download),
+                Some(false)
+            )
+            .is_none(),
+            "a candidate that asked to leave waits for a stable release that passes it"
+        );
     }
 
     #[test]
@@ -454,10 +473,10 @@ mod tests {
             "https://github.com/rgdevment/LinkUnbound/releases/download/v2.1.0/linkunbound.exe",
             "2.1.0"
         ));
-        assert!(ours(
-            "https://objects.githubusercontent.com/whatever",
-            "2.1.0"
-        ));
+        assert!(
+            !ours("https://objects.githubusercontent.com/whatever", "2.1.0"),
+            "the host GitHub redirects to carries no path of ours to recognise, and the feed              never names it: the plugin is handed what the feed wrote, before any redirect"
+        );
 
         assert!(
             !ours("http://github.com/rgdevment/LinkUnbound/x.exe", "2.1.0"),
@@ -511,9 +530,47 @@ mod tests {
 
     #[test]
     fn a_candidate_asks_the_candidates_feed_and_a_stable_one_the_stable_feed() {
-        assert_eq!(channel_for("2.1.0"), LATEST);
-        assert_eq!(channel_for("2.2.0-rc1"), CANDIDATE);
-        assert_eq!(channel_for("tomorrow"), LATEST, "unreadable means stable");
+        assert_eq!(feeds_for("2.1.0"), vec![LATEST]);
+        assert_eq!(feeds_for("2.2.0-rc1"), vec![CANDIDATE, LATEST]);
+        assert_eq!(
+            feeds_for("tomorrow"),
+            vec![LATEST],
+            "unreadable means stable"
+        );
+    }
+
+    /// The release that retires a candidate deletes its channel. Asking only there would meet a
+    /// refusal from the network; falling through to the stable channel is what turns it into an
+    /// answer the person can be told.
+    #[test]
+    fn a_candidate_that_was_retired_is_told_it_is_gone_rather_than_met_with_a_refusal() {
+        let asked = feeds_for("2.2.0-rc1");
+
+        assert_eq!(asked.len(), 2, "the candidate channel may not be there");
+        assert_eq!(asked[1], LATEST, "and the stable one answers for it");
+    }
+
+    /// The track can change between writing an answer down and reading it back, so the rule is
+    /// applied again here rather than trusted to whatever was true at the time.
+    #[test]
+    fn a_candidate_written_down_before_the_track_changed_is_not_offered_after_it() {
+        let kept = Kept::plain(Route::Download);
+
+        assert_eq!(
+            remembered("2.1.0", Some("2.2.0-rc1"), kept, Some(true))
+                .unwrap()
+                .version,
+            "2.2.0-rc1",
+            "while the copy is on the candidates"
+        );
+        assert!(
+            remembered("2.1.0", Some("2.2.0-rc1"), kept, Some(false)).is_none(),
+            "and not once it asked to leave them"
+        );
+        assert!(
+            remembered("2.1.0", Some("2.2.0"), kept, Some(false)).is_some(),
+            "a stable offer survives the change"
+        );
     }
 
     #[test]
@@ -523,9 +580,9 @@ mod tests {
             newer("2.2.0-rc1", feed, Kept::plain(Route::Download), None).expect("2.3.0 is newer");
 
         assert_eq!(
-            channel_for(&found.version),
-            LATEST,
-            "a candidate sent to a stable release must be pointed at the stable feed"
+            feeds_for(&found.version),
+            vec![LATEST],
+            "a candidate sent to a stable release is pointed at the stable feed alone"
         );
     }
 
@@ -534,16 +591,33 @@ mod tests {
         let kept = Kept::plain(Route::Download);
 
         assert_eq!(
-            remembered("2.0.0", Some("2.1.0"), kept).unwrap().version,
+            remembered("2.0.0", Some("2.1.0"), kept, None)
+                .unwrap()
+                .version,
             "2.1.0"
         );
-        assert!(remembered("2.1.0", Some("2.1.0"), kept).is_none());
+        assert!(remembered("2.1.0", Some("2.1.0"), kept, None).is_none());
         assert!(
-            remembered("2.2.0", Some("2.1.0"), kept).is_none(),
+            remembered("2.2.0", Some("2.1.0"), kept, None).is_none(),
             "a copy updated by hand is not owed the old offer"
         );
-        assert!(remembered("2.0.0", None, kept).is_none());
-        assert!(remembered("2.0.0", Some("tomorrow"), kept).is_none());
+        assert!(remembered("2.0.0", None, kept, None).is_none());
+        assert!(remembered("2.0.0", Some("tomorrow"), kept, None).is_none());
+    }
+
+    /// `latest` sitting behind the running candidate is what a project looks like before its
+    /// first stable release.
+    #[test]
+    fn a_project_with_no_stable_release_yet_still_works() {
+        let feed = r#"{"schema":1,"latest":"0.0.0","latestPrerelease":"2.0.0-rc6"}"#;
+
+        assert_eq!(
+            newer("2.0.0-rc5", feed, Kept::plain(Route::Download), None)
+                .unwrap()
+                .version,
+            "2.0.0-rc6"
+        );
+        assert!(newer("1.9.0", feed, Kept::plain(Route::Download), None).is_none());
     }
 
     #[test]
