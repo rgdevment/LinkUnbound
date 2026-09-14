@@ -221,11 +221,149 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  bundle-msix:
+    name: linkunbound-windows-msix
+    needs: version
+    if: needs.version.outputs.prerelease == 'false'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    outputs:
+      made: ${{ steps.gate.outputs.go }}
+    env:
+      TARGET: x86_64-pc-windows-msvc
+      MSIX_IDENTITY: ${{ vars.MSIX_IDENTITY }}
+      MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+      MSIX_PUBLISHER_DISPLAY: ${{ vars.MSIX_PUBLISHER_DISPLAY }}
+    steps:
+      # The identity is issued by Partner Center and cannot be guessed. Building a package with
+      # the wrong one produces something the Store refuses on upload, after the whole build.
+      - name: Nothing to build without a reserved identity
+        id: gate
+        shell: bash
+        run: |
+          if [ -z "$MSIX_IDENTITY" ] || [ -z "$MSIX_PUBLISHER" ]; then
+            echo "::notice::MSIX_IDENTITY or MSIX_PUBLISHER not set; no MSIX this run"
+            echo "go=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v6
+        if: steps.gate.outputs.go == 'yes'
+
+      - uses: ./.github/actions/prepare
+        if: steps.gate.outputs.go == 'yes'
+        with:
+          version: ${{ needs.version.outputs.version }}
+          targets: ${{ env.TARGET }}
+
+      - uses: actions/setup-node@v7
+        if: steps.gate.outputs.go == 'yes'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Frontend
+        if: steps.gate.outputs.go == 'yes'
+        working-directory: app
+        run: npm ci
+
+      - name: The resident rides along
+        if: steps.gate.outputs.go == 'yes'
+        shell: bash
+        run: bash scripts/sidecar.sh release
+
+      - name: Build
+        if: steps.gate.outputs.go == 'yes'
+        working-directory: app
+        run: npm run tauri build -- --no-bundle
+
+      - name: Lay the package out
+        if: steps.gate.outputs.go == 'yes'
+        shell: bash
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          # Four numbers, the last always zero: MSIX has no room for a prerelease suffix, and the
+          # Store reserves the fourth for itself. `numbered()` in shop.rs reads the first three
+          # back, so anything else here makes the Store offer a version nobody published.
+          quad="${v%%-*}.0"
+
+          mkdir -p msix/Assets
+          cp target/release/linkunbound-settings.exe msix/
+          cp target/release/linkunbound-shell.exe msix/
+          for logo in StoreLogo Square44x44Logo Square71x71Logo Square150x150Logo Square310x310Logo; do
+            cp "app/src-tauri/icons/$logo.png" "msix/Assets/$logo.png"
+          done
+
+          sed -e "s|@IDENTITY@|$MSIX_IDENTITY|" \
+              -e "s|@PUBLISHER@|$MSIX_PUBLISHER|" \
+              -e "s|@PUBLISHER_DISPLAY@|${MSIX_PUBLISHER_DISPLAY:-RGDevment}|" \
+              -e "s|@VERSION@|$quad|" \
+              app/src-tauri/msix/AppxManifest.xml.in > msix/AppxManifest.xml
+
+          if grep -q "@[A-Z_]*@" msix/AppxManifest.xml; then
+            echo "::error::a placeholder survived the manifest"
+            exit 1
+          fi
+          cat msix/AppxManifest.xml
+
+      - name: Pack
+        if: steps.gate.outputs.go == 'yes'
+        shell: pwsh
+        run: |
+          $sdk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
+            Where-Object { Test-Path "$($_.FullName)\x64\makeappx.exe" } |
+            Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $sdk) { Write-Host "::error::no Windows SDK with makeappx"; exit 1 }
+
+          $v = "${{ needs.version.outputs.version }}"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          & "$($sdk.FullName)\x64\makeappx.exe" pack /d msix /p "dist/linkunbound-$v-windows-x64.msix" /o
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::makeappx refused the package"; exit 1 }
+          Get-ChildItem dist
+
+      # The identity is what decides whether somebody running 1.x is ever offered this. Read back
+      # from the package rather than from the file we wrote, so a pack that dropped it says so.
+      - name: It went in under the identity 1.x shipped with
+        if: steps.gate.outputs.go == 'yes'
+        shell: pwsh
+        run: |
+          $sdk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
+            Where-Object { Test-Path "$($_.FullName)\x64\makeappx.exe" } |
+            Sort-Object Name -Descending | Select-Object -First 1
+          $v = "${{ needs.version.outputs.version }}"
+          $out = "$env:RUNNER_TEMP\unpacked"
+          & "$($sdk.FullName)\x64\makeappx.exe" unpack /p "dist/linkunbound-$v-windows-x64.msix" /d $out /o | Out-Null
+
+          [xml]$m = Get-Content "$out\AppxManifest.xml"
+          $said = $m.Package.Identity.Name
+          $quad = ($v -split '-')[0] + '.0'
+          Write-Host "identity: $said   version: $($m.Package.Identity.Version)"
+          if ($said -ne $env:MSIX_IDENTITY) {
+            Write-Host "::error::the package went in as $said, not $env:MSIX_IDENTITY"; exit 1
+          }
+          if ($m.Package.Identity.Version -ne $quad) {
+            Write-Host "::error::the package says $($m.Package.Identity.Version) and the tag says $quad"; exit 1
+          }
+          $exe = $m.Package.Applications.Application.Executable
+          if ($exe -ne "linkunbound-shell.exe") {
+            Write-Host "::error::the package launches $exe, which is not what the shell runs for a link"; exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: steps.gate.outputs.go == 'yes'
+        with:
+          name: bundle-msix
+          path: dist/*
+          if-no-files-found: error
+
   publish:
     name: GitHub Release
-    needs: [version, bundle-windows]
+    needs: [version, bundle-windows, bundle-msix]
     if: >-
-      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      !cancelled() && needs.bundle-windows.result == 'success'
+      && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

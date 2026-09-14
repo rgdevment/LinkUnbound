@@ -154,7 +154,9 @@ struct BrowserView {
     custom: bool,
     hidden: bool,
     icon: Option<String>,
-    args: Vec<String>,
+    /// Quoted back the way it has to be typed, or a value with a space in it would be split
+    /// the next time the form was saved.
+    args: String,
     private_flag: Option<String>,
     icon_path: Option<String>,
 }
@@ -174,7 +176,7 @@ fn seen(browser: &Browser) -> BrowserView {
         exe: browser.exe.clone(),
         custom: browser.custom,
         hidden: browser.hidden,
-        args: browser.extra_args.clone(),
+        args: linkunbound_core::join_args(&browser.extra_args),
         private_flag: browser.private_flag.clone(),
         icon_path: browser.icon_path.clone(),
     }
@@ -185,7 +187,9 @@ fn seen(browser: &Browser) -> BrowserView {
 struct Edit {
     name: String,
     exe: String,
-    args: Vec<String>,
+    /// The line as it was typed, not the words in it: a value in quotes is one argument, and
+    /// deciding that in the form put the rule somewhere nothing could test it.
+    args: String,
     private_flag: Option<String>,
     icon_path: Option<String>,
 }
@@ -262,7 +266,7 @@ fn browsers_add(edit: Edit) -> Result<Vec<BrowserView>, String> {
         name: edit.name,
         exe: edit.exe,
         profiles: Vec::new(),
-        extra_args: edit.args,
+        extra_args: linkunbound_core::split_args(&edit.args),
         private_flag: edit.private_flag.filter(|f| !f.is_empty()),
         icon_path: edit.icon_path.filter(|p| !p.is_empty()),
         custom: true,
@@ -295,7 +299,7 @@ fn edited(
         found.exe = edit.exe;
     }
     found.name = edit.name;
-    found.extra_args = edit.args;
+    found.extra_args = linkunbound_core::split_args(&edit.args);
     found.private_flag = edit.private_flag.filter(|f| !f.is_empty());
     found.icon_path = edit.icon_path.filter(|p| !p.is_empty());
     Ok(all)
@@ -983,7 +987,7 @@ mod tests {
         Edit {
             name: name.to_owned(),
             exe: exe.to_owned(),
-            args: vec!["--new-window".to_owned()],
+            args: "--new-window".to_owned(),
             private_flag: Some(String::new()),
             icon_path: None,
         }

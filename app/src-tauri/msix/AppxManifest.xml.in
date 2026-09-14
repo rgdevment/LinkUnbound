@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Filled in by .github/workflows/release.yml: @IDENTITY@, @PUBLISHER@,
+  @PUBLISHER_DISPLAY@ and @VERSION@ come from Partner Center and the tag.
+
+  The identity is the one 1.x shipped with. If it changes, the Store treats this
+  as a different application and nobody who has LinkUnbound today is ever
+  offered 2.0 — they keep 1.4 until they find the new listing themselves.
+
+  @VERSION@ is always four numbers ending in 0. MSIX has no room for a
+  prerelease suffix, so `2.1.0-rc1` and `2.1.0` would both become `2.1.0.0` —
+  which is one more reason nothing but a final tag reaches the Store.
+
+  A packaged application cannot write the registry keys that make it a browser:
+  its writes land in a container Windows does not read when it looks for a
+  handler. The protocol and file associations below are the whole registration,
+  and they point at the resident, which is what the shell runs for a link.
+
+  This package is never signed here. The Store signs it on publication, which is
+  what makes its identity mean anything.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 uap5 uap10 desktop rescap">
+
+  <Identity
+    Name="@IDENTITY@"
+    Publisher="@PUBLISHER@"
+    Version="@VERSION@"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>LinkUnbound - Browser Picker</DisplayName>
+    <PublisherDisplayName>@PUBLISHER_DISPLAY@</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Choose which browser opens every link</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+    <Resource Language="es-es" />
+  </Resources>
+
+  <Applications>
+    <Application Id="LinkUnbound" Executable="linkunbound-shell.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="LinkUnbound"
+        Description="Choose which browser opens every link"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <!-- No wide tile: Square310x310Logo would demand a Wide310x150Logo
+             that this icon set does not have. -->
+        <uap:DefaultTile Square71x71Logo="Assets\Square71x71Logo.png" />
+      </uap:VisualElements>
+
+      <Extensions>
+        <!--
+          What makes this a browser at all. Windows offers the application in
+          its default-apps list because of these, and hands it the link when the
+          person picks it. The same two schemes and the same ten extensions the
+          standalone build writes to the registry, because a person who moves
+          between the two should not find a different set of file types.
+        -->
+        <uap3:Extension Category="windows.protocol">
+          <uap3:Protocol Name="http" Parameters="&quot;%1&quot;">
+            <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
+            <uap:DisplayName>LinkUnbound</uap:DisplayName>
+          </uap3:Protocol>
+        </uap3:Extension>
+        <uap3:Extension Category="windows.protocol">
+          <uap3:Protocol Name="https" Parameters="&quot;%1&quot;">
+            <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
+            <uap:DisplayName>LinkUnbound</uap:DisplayName>
+          </uap3:Protocol>
+        </uap3:Extension>
+
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="linkunbound">
+            <uap:DisplayName>LinkUnbound</uap:DisplayName>
+            <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.htm</uap:FileType>
+              <uap:FileType>.html</uap:FileType>
+              <uap:FileType>.xhtml</uap:FileType>
+              <uap:FileType>.xht</uap:FileType>
+              <uap:FileType>.pdf</uap:FileType>
+              <uap:FileType>.svg</uap:FileType>
+              <uap:FileType>.mhtml</uap:FileType>
+              <uap:FileType>.mht</uap:FileType>
+              <uap:FileType>.shtml</uap:FileType>
+              <uap:FileType>.webp</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!--
+          A packaged app writes the Run key into its own container, where
+          Windows never looks: this is the only startup switch the Store
+          honours, and the one `startup.rs` reads and flips. Off until asked.
+        -->
+        <uap5:Extension
+          Category="windows.startupTask"
+          Executable="linkunbound-shell.exe"
+          EntryPoint="Windows.FullTrustApplication">
+          <uap5:StartupTask TaskId="LinkUnboundStartup" Enabled="false" DisplayName="LinkUnbound" />
+        </uap5:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

@@ -25,6 +25,14 @@ jobs:
               echo "::error file=$one::this file is not valid YAML"
               status=1
             fi
+            # A line in column zero ends whatever run block it lands in, which a YAML parser
+            # accepts and GitHub refuses to load — with no job, no line and no diagnosis. It is
+            # what a line continuation leaves behind when an edit does not carry the backslash.
+            if grep -nE '^[^[:space:]#]' "$one" |
+               grep -vE '^[0-9]+:(name|on|permissions|jobs|env|concurrency|defaults|run-name|description|inputs|outputs|runs):'; then
+              echo "::error file=$one::a line starts in column zero that is not a top-level key"
+              status=1
+            fi
           done
           exit $status
 
@@ -65,12 +73,14 @@ jobs:
 
       - name: Unsafe stays where it was audited
         run: |
-          found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs'             | sort || true)
-          # native.rs is the Win32 surface the picker needs; shop.rs talks to the Store, and
+          # native.rs is the Win32 surface the picker needs; shop.rs talks to the Store and
           # reaches unsafe only to hand it a window handle and to join the process apartment.
-          expected=$(printf '%s
-'             "app/src-tauri/src/shop.rs"             "crates/linkunbound-win/src/native.rs" | sort)
-          if [ "$found" != "$expected" ]; then
+          found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs')
+          status=0
+          [ "$(echo "$found" | grep -c .)" = "2" ] || status=1
+          echo "$found" | grep -qx "app/src-tauri/src/shop.rs" || status=1
+          echo "$found" | grep -qx "crates/linkunbound-win/src/native.rs" || status=1
+          if [ "$status" != "0" ]; then
             echo "$found"
             echo "::error::unsafe is allowed somewhere new; audit it and update this list"
             exit 1
