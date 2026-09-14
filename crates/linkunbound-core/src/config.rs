@@ -168,6 +168,37 @@ pub fn write_browsers(config: &BrowserConfig) -> Result<String, ConfigError> {
 
 #[cfg(test)]
 mod tests {
+
+    /// What is written has to be what can be read back, and it has to carry the schema: a file
+    /// that says nothing about its version is one a later reader has to guess at.
+    #[test]
+    fn what_is_written_reads_back_as_the_same_browsers() {
+        let mut config = BrowserConfig::default();
+        config.browsers.push(crate::Browser {
+            id: "chrome".to_owned(),
+            name: "Google Chrome".to_owned(),
+            exe: r"C:\Program Files\chrome.exe".to_owned(),
+            profiles: Vec::new(),
+            extra_args: vec!["--new-window".to_owned()],
+            private_flag: Some("--incognito".to_owned()),
+            icon_path: None,
+            custom: true,
+            hidden: true,
+        });
+
+        let body = write_browsers(&config).expect("written");
+        assert!(
+            body.contains("\"schema_version\""),
+            "the file has to say what it is: {body}"
+        );
+
+        let read = read_browsers(&body).expect("read back");
+        assert_eq!(read.browsers.len(), 1);
+        assert_eq!(read.browsers[0].name, "Google Chrome");
+        assert_eq!(read.browsers[0].extra_args, vec!["--new-window".to_owned()]);
+        assert!(read.browsers[0].hidden, "hidden survives the trip");
+        assert!(read.browsers[0].custom);
+    }
     use super::*;
 
     const LEGACY_RULES: &str = r#"[

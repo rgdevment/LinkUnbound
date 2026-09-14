@@ -66,6 +66,10 @@ impl Drop for Holding {
     }
 }
 
+fn abandoned(held: Duration) -> bool {
+    held > HELD_FOR_LONG_ENOUGH
+}
+
 fn guarded<T>(path: &Path, work: impl FnOnce() -> Result<T, StoreError>) -> Result<T, StoreError> {
     let lock = path.with_extension("lock");
     if let Some(parent) = lock.parent() {
@@ -88,7 +92,7 @@ fn guarded<T>(path: &Path, work: impl FnOnce() -> Result<T, StoreError>) -> Resu
                 // that as stale deleted a lock somebody else had already taken.
                 if fs::metadata(&lock)
                     .and_then(|m| m.modified())
-                    .is_ok_and(|held| held.elapsed().unwrap_or_default() > HELD_FOR_LONG_ENOUGH)
+                    .is_ok_and(|held| abandoned(held.elapsed().unwrap_or_default()))
                 {
                     let _ = fs::remove_file(&lock);
                 }
@@ -246,6 +250,102 @@ impl Store {
 mod tests {
     use super::*;
     use crate::config::SCHEMA_VERSION;
+
+    /// Stealing a lock is destructive: the other process is mid-write and loses what it was
+    /// saving. On the mark it is still somebody's, and only past it is it plainly nobody's.
+    #[test]
+    fn a_lock_is_taken_over_only_once_it_is_plainly_abandoned() {
+        assert!(!abandoned(Duration::ZERO), "just taken");
+        assert!(
+            !abandoned(HELD_FOR_LONG_ENOUGH),
+            "on the mark it is still somebody's"
+        );
+        assert!(abandoned(HELD_FOR_LONG_ENOUGH + Duration::from_millis(1)));
+        assert!(
+            abandoned(Duration::from_secs(3600)),
+            "an hour old is nobody's, or the next save waits for ever"
+        );
+    }
+
+    /// Only a file that is not there is a first run. Anything else that stops the read is a
+    /// fault, and answering it with the defaults reads on screen as rules that vanished — and
+    /// the next save writes the empty set over what was still on disk.
+    #[test]
+    fn a_read_that_fails_for_any_other_reason_is_not_a_first_run() {
+        let dir = std::env::temp_dir().join("lu-unreadable-rules");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("rules.json")).expect("a directory where a file goes");
+
+        assert!(
+            Store::at(&dir).rules().is_err(),
+            "a path that cannot be read is not an empty set of rules"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Saving that answers "fine" without writing anything is the worst kind of failure: the
+    /// screen shows the new value, the file still holds the old one, and the next launch
+    /// silently undoes what the person did.
+    #[test]
+    fn what_was_saved_is_what_comes_back() {
+        let dir = std::env::temp_dir().join("lu-save-roundtrip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a place to write");
+        let store = Store::at(&dir);
+
+        let prefs = crate::Preferences {
+            hide_tray: true,
+            locale: crate::Locale::English,
+            ..Default::default()
+        };
+        store.save_prefs(&prefs).expect("saved");
+        let read = Store::at(&dir).prefs();
+        assert!(read.hide_tray, "the file has to carry it");
+        assert_eq!(read.locale, crate::Locale::English);
+
+        let mut browsers = crate::BrowserConfig::default();
+        browsers.browsers.push(crate::Browser {
+            id: "chrome".to_owned(),
+            name: "Google Chrome".to_owned(),
+            exe: "chrome.exe".to_owned(),
+            profiles: Vec::new(),
+            extra_args: Vec::new(),
+            private_flag: Some("--incognito".to_owned()),
+            icon_path: None,
+            custom: true,
+            hidden: false,
+        });
+        store.save_browsers(&browsers).expect("saved");
+        let read = Store::at(&dir).browsers().expect("read back");
+        assert_eq!(read.browsers.len(), 1, "the file has to carry it");
+        assert_eq!(read.browsers[0].id, "chrome");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A file that is not there is a first run and answers with the defaults. A file that is
+    /// there and cannot be read is a fault, and answering it with the defaults would look like
+    /// somebody's rules had simply vanished.
+    #[test]
+    fn a_missing_file_is_a_first_run_and_a_broken_one_is_a_fault() {
+        let dir = std::env::temp_dir().join("lu-missing-vs-broken");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a place to write");
+
+        let said = Store::at(&dir)
+            .rules()
+            .expect("a first run is not an error");
+        assert!(said.rules.is_empty());
+
+        std::fs::write(dir.join("rules.json"), "{ not json at all").expect("written");
+        assert!(
+            Store::at(&dir).rules().is_err(),
+            "a file that is there and unreadable is not an empty set"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// What somebody upgrading from 1.x actually has on disk: no preferences.json, and one small
     /// file per setting beside it. Reading only the theme put the language, the tray and the

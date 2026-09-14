@@ -139,15 +139,26 @@ fn catalogue() -> Vec<linkunbound_core::Browser> {
     linkunbound_core::merge(host::browsers(), &saved)
 }
 
-fn rows() -> Vec<Listed> {
-    let browsers = catalogue();
-    let mut listed = linkunbound_shell::destinations(&browsers);
+fn with_icons(
+    mut listed: Vec<Listed>,
+    browsers: &[linkunbound_core::Browser],
+    icon: impl Fn(&linkunbound_core::Browser) -> Option<String>,
+) -> Vec<Listed> {
     for row in &mut listed {
         if let Some(found) = browsers.iter().find(|b| b.id == row.browser_id) {
-            row.icon = host::icon(found);
+            row.icon = icon(found);
         }
     }
     listed
+}
+
+fn rows() -> Vec<Listed> {
+    let browsers = catalogue();
+    with_icons(
+        linkunbound_shell::destinations(&browsers),
+        &browsers,
+        host::icon,
+    )
 }
 
 struct Fired {
@@ -355,6 +366,12 @@ fn next_in_line(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>) {
     }
 }
 
+/// The window is asked for in physical pixels because the screen is measured in them: at 150%
+/// the logical width is two thirds of the room it actually takes.
+fn physical(logical: f32, scale: f64) -> i32 {
+    (f64::from(logical) * scale).round() as i32
+}
+
 /// The picker belongs to the click that summoned it, not to the middle of a screen.
 fn beside_the_pointer(picker: &Picker) {
     let Some((cx, cy)) = host::cursor() else {
@@ -364,7 +381,7 @@ fn beside_the_pointer(picker: &Picker) {
         return;
     };
     let scale = f64::from(picker.window().scale_factor());
-    let size = |logical: f32| (f64::from(logical) * scale).round() as i32;
+    let size = |logical: f32| physical(logical, scale);
 
     let (at_x, at_y) = place::beside(
         (cx, cy),
@@ -708,10 +725,80 @@ fn main() -> Result<(), slint::PlatformError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Listed, Shown, claims_the_window, link_from, rule_for};
+    use super::{Listed, Shown, claims_the_window, link_from, physical, rule_for, with_icons};
     use linkunbound_core::Scope;
     use linkunbound_core::normalise;
     use linkunbound_shell::Reaches;
+
+    /// The screen is measured in physical pixels and the window is described in logical ones, so
+    /// on a 150% display the untouched number asks for two thirds of the room it needs and the
+    /// picker opens clipped.
+    #[test]
+    fn a_size_is_asked_for_in_the_pixels_the_screen_is_measured_in() {
+        assert_eq!(physical(364.0, 1.0), 364);
+        assert_eq!(physical(364.0, 1.5), 546);
+        assert_eq!(physical(364.0, 2.0), 728);
+        assert_eq!(physical(100.4, 1.0), 100, "rounded, never truncated");
+        assert_eq!(physical(100.5, 1.0), 101);
+    }
+
+    /// Each row carries the icon of the browser it opens. Paired by anything else, every row
+    /// shows somebody else's icon and the picker becomes a guess.
+    #[test]
+    fn every_row_carries_the_icon_of_its_own_browser() {
+        let browsers = vec![
+            browser_named("chrome"),
+            browser_named("firefox"),
+            browser_named("edge"),
+        ];
+        let listed: Vec<Listed> = browsers.iter().rev().map(|b| row_for(&b.id)).collect();
+
+        let dressed = with_icons(listed, &browsers, |b| Some(format!("{}.png", b.id)));
+
+        for row in &dressed {
+            assert_eq!(
+                row.icon.as_deref(),
+                Some(format!("{}.png", row.browser_id).as_str()),
+                "{} was handed another browser's icon",
+                row.browser_id
+            );
+        }
+    }
+
+    /// A row naming a browser that is no longer installed keeps whatever it had rather than
+    /// taking the first icon that comes along.
+    #[test]
+    fn a_row_with_no_browser_behind_it_is_left_as_it_was() {
+        let dressed = with_icons(vec![row_for("gone")], &[browser_named("chrome")], |_| {
+            Some("chrome.png".to_owned())
+        });
+
+        assert_eq!(dressed[0].icon, None);
+    }
+
+    fn row_for(browser_id: &str) -> Listed {
+        Listed {
+            browser_id: browser_id.to_owned(),
+            profile_id: None,
+            name: browser_id.to_owned(),
+            profile: String::new(),
+            icon: None,
+            can_private: false,
+        }
+    }
+    fn browser_named(id: &str) -> linkunbound_core::Browser {
+        linkunbound_core::Browser {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            exe: "x.exe".to_owned(),
+            profiles: Vec::new(),
+            extra_args: Vec::new(),
+            private_flag: None,
+            icon_path: None,
+            custom: false,
+            hidden: false,
+        }
+    }
 
     fn args(rest: &[&str]) -> Vec<String> {
         std::iter::once("linkunbound.exe")

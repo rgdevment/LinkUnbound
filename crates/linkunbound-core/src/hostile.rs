@@ -93,6 +93,37 @@ pub fn as_file_name(id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// `disarm` answers whether it took anything away, and each place it looks has to be able to
+    /// say yes on its own — an `and` in place of an `or` would let one clean field speak for the
+    /// rest.
+    #[test]
+    fn it_reports_a_change_wherever_the_change_was() {
+        let mut only_extra = hostile();
+        only_extra.profiles[0].args = vec!["--profile-directory=Default".to_owned()];
+        only_extra.private_flag = Some("--incognito".to_owned());
+        assert!(disarm(&mut only_extra), "the extra args alone");
+
+        let mut only_profile = hostile();
+        only_profile.extra_args = vec!["--new-window".to_owned()];
+        only_profile.private_flag = Some("--incognito".to_owned());
+        assert!(disarm(&mut only_profile), "the profile args alone");
+
+        let mut only_private = hostile();
+        only_private.extra_args = vec!["--new-window".to_owned()];
+        only_private.profiles[0].args = vec!["--profile-directory=Default".to_owned()];
+        only_private.private_flag = Some("--headless".to_owned());
+        assert!(disarm(&mut only_private), "the private flag alone");
+    }
+
+    /// Letters, digits, dash and underscore each stay; everything else becomes a dash. Reading
+    /// that as one condition rather than three would turn every name into dashes.
+    #[test]
+    fn a_name_keeps_what_is_safe_to_keep() {
+        assert_eq!(as_file_name("chrome-2_beta"), "chrome-2_beta");
+        assert_eq!(as_file_name("Edge9"), "Edge9");
+        assert_eq!(as_file_name("a.b c"), "a-b-c");
+    }
     use super::{arms_a_launcher, as_file_name, disarm, is_remote};
     use crate::browser::{Browser, Profile};
 

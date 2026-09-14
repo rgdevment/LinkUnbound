@@ -241,13 +241,16 @@ describe("browsers", () => {
   });
 
   it("keeps the form open and says why when the path is wrong", async () => {
-    answers([CHROME], { browsers_add: () => Promise.reject("no hay ningún programa en esa ruta") });
+    answers([CHROME], { browsers_add: () => Promise.reject("browserNoProgram") });
     render(<Browsers />);
     await userEvent.click(await screen.findByRole("button", { name: "Añadir un navegador" }));
     await userEvent.type(screen.getByLabelText("Nombre"), "Roto");
     await userEvent.type(screen.getByLabelText("Ruta del ejecutable"), "C:/nope.exe");
     await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
-    expect(await screen.findByText(/ningún programa en esa ruta/)).toBeInTheDocument();
+    expect(
+      await screen.findByText("No hay ningún programa en esa ruta"),
+      "the key has to arrive as a sentence, not as the key",
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
   });
 });

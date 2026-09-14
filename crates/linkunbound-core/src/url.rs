@@ -111,6 +111,82 @@ pub fn normalise(raw: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    /// A wrapper is a link somebody else wrote, and what it carries is not ours to trust. The
+    /// scheme and the host are checked before anything is handed on, or a SafeLink could deliver
+    /// `javascript:` or a path on somebody else's machine and this would pass it along as if
+    /// Microsoft had vouched for it.
+    #[test]
+    fn a_wrapper_does_not_get_to_hand_over_whatever_it_likes() {
+        for inner in [
+            "javascript:alert(1)",
+            "file:///C:/Windows/System32/calc.exe",
+            "file://attacker.test/share/x",
+            "vbscript:msgbox",
+            "data:text/html,<script>x</script>",
+            "ms-settings:defaultapps",
+        ] {
+            let wrapped = format!(
+                "https://eur01.safelinks.protection.outlook.com/?url={}",
+                percent(inner)
+            );
+            assert_eq!(
+                unwrap_safe_link(&wrapped),
+                wrapped,
+                "«{inner}» came back out of a wrapper"
+            );
+        }
+    }
+
+    /// `file://` is the one that makes both halves of that check earn their place: it carries a
+    /// host, so a check that asked only about hosts would hand it over — and a path on somebody
+    /// else's machine is a login handed to whoever holds it.
+    #[test]
+    fn a_wrapper_carrying_a_path_on_another_machine_is_left_alone() {
+        let wrapped = "https://eur01.safelinks.protection.outlook.com/?url=file%3A%2F%2Fattacker.test%2Fshare%2Fx";
+
+        assert_eq!(unwrap_safe_link(wrapped), wrapped);
+    }
+
+    /// What it is for, so it has to still do it.
+    #[test]
+    fn an_ordinary_wrapped_link_is_handed_over() {
+        let wrapped =
+            "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fgithub.com%2Fa";
+
+        assert_eq!(unwrap_safe_link(wrapped), "https://github.com/a");
+    }
+
+    /// The picker says a link is still wrapped so the person knows why the reaches are greyed.
+    /// Answering no to everything takes the explanation away and leaves the greying unexplained.
+    #[test]
+    fn a_wrapper_is_recognised_as_one_and_a_plain_link_is_not() {
+        assert!(looks_unresolved(
+            "https://eur01.safelinks.protection.outlook.com/?url=x"
+        ));
+        assert!(!looks_unresolved("https://github.com/a"));
+        assert!(!looks_unresolved("not a url at all"));
+    }
+
+    /// Either one is reason enough to refuse: nothing to open, or something that reads as a
+    /// switch to the browser it would be handed to.
+    #[test]
+    fn a_link_is_refused_for_being_empty_or_for_looking_like_a_switch() {
+        assert!(!is_launchable(""), "nothing to open");
+        for said in ["--gpu-launcher=calc.exe", "/c calc.exe", r"\server\share"] {
+            assert!(!is_launchable(said), "{said}");
+        }
+        assert!(is_launchable("https://github.com/a"));
+    }
+
+    fn percent(said: &str) -> String {
+        said.chars()
+            .map(|c| match c {
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+                _ => format!("%{:02X}", c as u32),
+            })
+            .collect()
+    }
     use super::*;
 
     #[test]

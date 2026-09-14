@@ -1,6 +1,7 @@
 /// A shop that answers it has nothing is not a shop that never answered: the first means this copy
 /// is current, the second that nothing is known and the old wording still stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub enum Shelf {
     Waiting(String),
     Current,
@@ -8,6 +9,7 @@ pub enum Shelf {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub enum Trouble {
     Gone,
     Stopped,
@@ -16,9 +18,11 @@ pub enum Trouble {
 
 /// The Store counts the download as the first four fifths of the errand and the install as the
 /// rest, so what it hands over is stretched back into a download of its own.
+#[cfg_attr(not(windows), allow(dead_code))]
 const DOWNLOADED: f64 = 0.8;
 
 #[must_use]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn step(far: f64) -> (&'static str, u64) {
     if far >= DOWNLOADED {
         return ("installing", 100);

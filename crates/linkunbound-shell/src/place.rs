@@ -46,25 +46,51 @@ mod tests {
         assert_eq!(beside((400, 300), WINDOW, SCREEN), (412, 312));
     }
 
+    /// The flipped side is the mirror of the offset one, not merely somewhere that fits: the
+    /// window has to hang off the pointer by the same gap on whichever side it opens.
     #[test]
     fn near_the_right_edge_it_flips_to_the_other_side() {
-        let (x, _) = beside((1900, 300), WINDOW, SCREEN);
-        assert!(x + WINDOW.0 <= SCREEN.width);
-        assert!(x < 1900);
+        assert_eq!(beside((1900, 300), WINDOW, SCREEN), (1524, 312));
     }
 
     #[test]
     fn near_the_bottom_it_opens_upwards() {
-        let (_, y) = beside((400, 1070), WINDOW, SCREEN);
-        assert!(y + WINDOW.1 <= SCREEN.height);
-        assert!(y < 1070);
+        assert_eq!(beside((400, 1070), WINDOW, SCREEN), (412, 758));
+    }
+
+    /// Fitting exactly is still fitting. Flipping here would send the window to the far side of
+    /// the pointer every time it landed on the edge, which is where a maximised window puts it.
+    #[test]
+    fn a_window_that_ends_flush_with_the_edge_does_not_flip() {
+        assert_eq!(beside((1544, 300), WINDOW, SCREEN), (1556, 312));
+        assert_eq!(beside((400, 768), WINDOW, SCREEN), (412, 780));
+    }
+
+    /// The taskbar is outside the work area and the pointer can be on top of it, which puts the
+    /// flipped window past the last row that is still visible. The clamp is what pulls it back,
+    /// and without it the picker opens underneath the taskbar.
+    #[test]
+    fn the_pointer_on_the_taskbar_does_not_push_the_window_under_it() {
+        let side_bar = Bounds {
+            x: 0,
+            y: 0,
+            width: 1860,
+            height: 1080,
+        };
+        assert_eq!(beside((1910, 300), WINDOW, side_bar), (1496, 312));
+
+        let bottom_bar = Bounds {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1040,
+        };
+        assert_eq!(beside((400, 1075), WINDOW, bottom_bar), (412, 740));
     }
 
     #[test]
     fn a_corner_is_handled_on_both_axes_at_once() {
-        let (x, y) = beside((1918, 1078), WINDOW, SCREEN);
-        assert!(x >= 0 && x + WINDOW.0 <= SCREEN.width);
-        assert!(y >= 0 && y + WINDOW.1 <= SCREEN.height);
+        assert_eq!(beside((1918, 1078), WINDOW, SCREEN), (1542, 766));
     }
 
     #[test]
@@ -75,10 +101,7 @@ mod tests {
             width: 1920,
             height: 1080,
         };
-        let (x, y) = beside((-1000, 500), WINDOW, left);
-        assert!(x < 0);
-        assert!(x >= left.x);
-        assert_eq!(y, 512);
+        assert_eq!(beside((-1000, 500), WINDOW, left), (-988, 512));
     }
 
     #[test]

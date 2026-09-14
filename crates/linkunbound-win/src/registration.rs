@@ -289,6 +289,72 @@ mod tests {
         let _ = RegKey::predef(HKEY_CURRENT_USER).delete_subkey_all(root);
     }
 
+    /// Windows lists a browser in "Default apps" from this key alone. Without it the app is
+    /// registered, the ProgId is right, and there is still no way for anyone to choose it.
+    #[test]
+    fn the_start_menu_entry_names_the_binary_windows_should_run() {
+        let root = scratch("start-menu");
+        scrub(&root);
+        let exe = r"C:\Program Files\LinkUnbound\linkunbound-shell.exe";
+
+        Registration::under(&root)
+            .register(exe)
+            .expect("the registration is written");
+
+        let key = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(format!(r"{root}\Clients\StartMenuInternet\{APP_NAME}"))
+            .expect("Windows looks for the client here");
+
+        assert_eq!(
+            key.get_value::<String, _>("").expect("the display name"),
+            APP_NAME
+        );
+        assert_eq!(
+            key.open_subkey(r"shell\open\command")
+                .and_then(|k| k.get_value::<String, _>(""))
+                .expect("the command"),
+            quoted(exe),
+            "quoted, or a path with a space runs the first word"
+        );
+        assert_eq!(
+            key.open_subkey("DefaultIcon")
+                .and_then(|k| k.get_value::<String, _>(""))
+                .expect("the icon"),
+            format!("{},0", quoted(exe))
+        );
+        assert_eq!(
+            key.open_subkey("InstallInfo")
+                .and_then(|k| k.get_value::<u32, _>("IconsVisible"))
+                .expect("IconsVisible"),
+            1
+        );
+
+        scrub(&root);
+    }
+
+    /// "Open with" offers the app for each of these, and the value is the ProgId rather than the
+    /// command: the command lives once under the ProgId, and every extension points at it.
+    #[test]
+    fn every_extension_offers_the_app_under_open_with() {
+        let root = scratch("open-with");
+        scrub(&root);
+
+        Registration::under(&root)
+            .register(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe")
+            .expect("the registration is written");
+
+        for ext in FILE_EXTENSIONS {
+            let path = format!(r"{root}\Classes\{ext}\OpenWithProgIds");
+            let key = RegKey::predef(HKEY_CURRENT_USER)
+                .open_subkey(&path)
+                .unwrap_or_else(|_| panic!("nothing offers to open {ext}"));
+            key.get_value::<String, _>(PROG_ID)
+                .unwrap_or_else(|_| panic!("{ext} does not name our ProgId"));
+        }
+
+        scrub(&root);
+    }
+
     #[test]
     fn registering_writes_the_keys_the_shell_looks_for() {
         let root = scratch("writes");
@@ -360,12 +426,29 @@ mod tests {
             hkcu.open_subkey(format!(r"{test_root}\Clients\StartMenuInternet\{APP_NAME}"))
                 .is_err()
         );
+        assert!(
+            hkcu.open_subkey(format!(r"{test_root}\{APP_NAME}"))
+                .is_err(),
+            "the capabilities outlived the registration"
+        );
 
+        assert!(
+            hkcu.open_subkey(format!(r"{test_root}\RegisteredApplications"))
+                .and_then(|k| k.get_value::<String, _>(APP_NAME))
+                .is_err(),
+            "Windows still lists the app, pointing at capabilities that are gone"
+        );
+
+        // Unregistering empties the value and leaves the key, so failing to open it is a failure
+        // to clean up rather than a reason to skip the check.
         for ext in FILE_EXTENSIONS {
-            if let Ok(key) = hkcu.open_subkey(format!(r"{test_root}\Classes\{ext}\OpenWithProgIds"))
-            {
-                assert!(key.get_value::<String, _>(PROG_ID).is_err());
-            }
+            let key = hkcu
+                .open_subkey(format!(r"{test_root}\Classes\{ext}\OpenWithProgIds"))
+                .unwrap_or_else(|_| panic!("{ext} lost the key registering created"));
+            assert!(
+                key.get_value::<String, _>(PROG_ID).is_err(),
+                "{ext} still offers a copy that is gone"
+            );
         }
         scrub(test_root);
     }

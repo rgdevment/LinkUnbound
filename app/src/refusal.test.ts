@@ -31,6 +31,10 @@ describe("refusals", () => {
   /// The catalogue is a list written by hand, and the backend grows without asking it. This walks
   /// the Rust looking for what it can send, so a refusal added without a sentence fails here
   /// rather than reaching somebody as a camelCase identifier in a red box.
+  ///
+  /// Every literal is read, not only the ones already shaped like a key: a refusal written as a
+  /// finished sentence in Rust is the worse case, because it reaches the reader looking like
+  /// prose while being in whichever language the author happened to be writing in.
   it("has a sentence for every refusal the core can send", () => {
     const rust = import.meta.glob("../src-tauri/src/**/*.rs", {
       eager: true,
@@ -41,7 +45,7 @@ describe("refusals", () => {
 
     for (const body of Object.values(rust)) {
       for (const [, key] of body.matchAll(
-        /(?:Err|ok_or_else)\(\s*(?:\|\|\s*)?"([a-z][A-Za-z]+)"\.to_owned\(\)\s*\)/g,
+        /(?:Err|ok_or_else)\(\s*(?:\|\|\s*)?"([^"]+)"\.to_owned\(\)\s*\)/g,
       )) {
         said.add(key);
       }
@@ -53,6 +57,10 @@ describe("refusals", () => {
       expect(
         SPEECH.es,
         `the core can send «${key}» and the window has no sentence for it`,
+      ).toHaveProperty(key);
+      expect(
+        SPEECH.en,
+        `«${key}» has a sentence in Spanish and none in English`,
       ).toHaveProperty(key);
     }
   });

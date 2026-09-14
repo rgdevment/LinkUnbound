@@ -150,6 +150,15 @@ mod tests {
             .with_legacy("global_hotkey", "ctrl+shift+l");
 
         assert_eq!(said.locale, Locale::Spanish);
+        assert_eq!(
+            Preferences::default().with_legacy("locale", "en").locale,
+            Locale::English
+        );
+        assert_eq!(
+            Preferences::default().with_legacy("locale", "fr").locale,
+            Locale::System,
+            "a language this one does not speak follows the system"
+        );
         assert!(said.hide_tray);
         assert!(said.edge_warning_dismissed);
         assert_eq!(said.shortcut.as_deref(), Some("Ctrl+Shift+L"));

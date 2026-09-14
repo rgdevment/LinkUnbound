@@ -199,8 +199,11 @@ pub fn route() -> Kept {
 /// the plugin only finds that out after the whole download.
 #[must_use]
 pub fn mounted(running: Option<&Path>) -> bool {
-    cfg!(target_os = "macos")
-        && running.is_some_and(|at| at.starts_with("/Volumes/") || at.starts_with("/private/tmp/"))
+    cfg!(target_os = "macos") && running.is_some_and(on_a_mount)
+}
+
+fn on_a_mount(at: &Path) -> bool {
+    at.starts_with("/Volumes/") || at.starts_with("/private/tmp/")
 }
 
 #[must_use]
@@ -289,6 +292,41 @@ pub fn keep(dir: &Path, looked: &Looked) {
 
 #[cfg(test)]
 mod tests {
+
+    /// A look that just happened is not a look that is due: counting it as due turns every call
+    /// into a fetch, which for a Store copy is a round trip to the shop on every window.
+    #[test]
+    fn a_look_taken_this_very_second_is_not_due_again() {
+        assert!(!due(Some(1_800_000_000), 1_800_000_000));
+        assert!(!due(Some(1_800_000_000), 1_800_000_000 + APART - 1));
+        assert!(
+            due(Some(1_800_000_000), 1_800_000_000 + APART),
+            "a day apart to the second is a day apart"
+        );
+    }
+
+    /// Both places a disk image is opened from. The check is per path, so either one on its own
+    /// has to be enough — reading it as "both" would never match anything.
+    #[test]
+    fn either_place_a_disk_image_opens_from_counts() {
+        assert!(on_a_mount(Path::new(
+            "/Volumes/LinkUnbound/LinkUnbound.app"
+        )));
+        assert!(on_a_mount(Path::new(
+            "/private/tmp/AppTranslocation/X/LinkUnbound.app"
+        )));
+        assert!(!on_a_mount(Path::new("/Applications/LinkUnbound.app")));
+        assert!(!on_a_mount(Path::new("/Users/x/Downloads/LinkUnbound.app")));
+    }
+
+    /// Seconds since the epoch, which is what everything stored beside it is compared against. A
+    /// clock reading zero makes every look overdue for ever.
+    #[test]
+    fn the_clock_answers_in_seconds_since_the_epoch() {
+        let said = now();
+        assert!(said > 1_700_000_000, "a clock stuck before 2023: {said}");
+        assert!(said < 4_000_000_000, "a clock past 2096: {said}");
+    }
     use super::*;
 
     const FEED: &str = r#"{"schema":1,"latest":"2.1.0","latestPrerelease":"2.2.0-rc1"}"#;

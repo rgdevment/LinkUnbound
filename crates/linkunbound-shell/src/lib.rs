@@ -200,8 +200,9 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
 #[cfg(test)]
 mod tests {
     use super::dress;
-    use super::{Listed, Reaches, destinations, reaches, split};
+    use super::{Listed, Palette, Reaches, destinations, image_for, paint, reaches, split};
     use linkunbound_core::{Browser, Language, Profile, Scope, Strings, looks_unresolved};
+    use slint::ComponentHandle;
 
     const SPOKEN: Strings = Language::Spanish.strings();
 
@@ -279,12 +280,17 @@ mod tests {
         ]
     }
 
-    /// One test: winit allows a single event loop per process, so a second
-    /// `Picker::new()` fails with "EventLoop can't be recreated".
+    /// Slint's testing backend, so the window needs neither a screen nor the main thread: winit
+    /// wants both, and a runner has neither.
+    fn headless() {
+        i_slint_backend_testing::init_no_event_loop();
+    }
+
     #[test]
     fn what_the_window_is_told_about_a_link() {
         use slint::Model;
 
+        headless();
         let window = crate::Picker::new().expect("the software renderer must build a window");
         let words = Language::Spanish.strings();
         let rows = dressed();
@@ -505,5 +511,40 @@ mod tests {
         let rows: Vec<Listed> = destinations(&[browser("chrome", &["Work"], true)]);
         assert_eq!(rows[0].browser_id, "chrome");
         assert_eq!(rows[0].profile_id.as_deref(), Some("Work"));
+    }
+
+    /// Both windows are told once, and each has its own copy of the palette: telling only the
+    /// picker leaves the notice painted in the other theme.
+    #[test]
+    fn both_windows_are_told_which_palette_to_paint() {
+        headless();
+        let picker = crate::Picker::new().expect("a picker");
+        let notice = crate::Notice::new().expect("a notice");
+
+        paint(&picker, &notice, true);
+        assert!(picker.global::<Palette>().get_light());
+        assert!(notice.global::<Palette>().get_light());
+
+        paint(&picker, &notice, false);
+        assert!(!picker.global::<Palette>().get_light());
+        assert!(!notice.global::<Palette>().get_light());
+    }
+
+    /// An icon that fails to load leaves a blank square rather than stopping the picker, so
+    /// nothing complains when loading quietly stops working — only the rows go empty.
+    #[test]
+    fn an_icon_on_disk_is_loaded_and_a_missing_one_is_not_fatal() {
+        headless();
+        let real = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../app/src-tauri/icons/32x32.png");
+
+        let loaded = image_for(real.to_str());
+        assert!(
+            loaded.size().width > 0,
+            "an icon that is there has to reach the row"
+        );
+
+        assert_eq!(image_for(None).size().width, 0);
+        assert_eq!(image_for(Some("nothing/like/it.png")).size().width, 0);
     }
 }

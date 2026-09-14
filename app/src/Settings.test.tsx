@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Settings from "./Settings";
@@ -121,7 +121,7 @@ describe("settings", () => {
     answers(BASE, { prefs_get: () => Promise.resolve({ ...PREFS, language: "en" }) });
     render(<Settings />);
     await screen.findByRole("button", { name: "Links" });
-    expect(document.documentElement.lang).toBe("en");
+    await waitFor(() => expect(document.documentElement.lang).toBe("en"));
   });
 
   it("names the binary the registration really points at", async () => {

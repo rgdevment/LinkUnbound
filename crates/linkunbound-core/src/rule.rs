@@ -182,6 +182,90 @@ impl RuleSet {
 
 #[cfg(test)]
 mod tests {
+
+    /// Which rule answers is this arithmetic and nothing else, and the bands have to stay apart:
+    /// any URL beats any subdomain, any subdomain beats any site, and a longer match inside a
+    /// band beats a shorter one. Tested as an order rather than as numbers, because the numbers
+    /// are an implementation detail and the order is the promise.
+    #[test]
+    fn precision_is_ordered_band_by_band_and_length_inside_each() {
+        let ranked = [
+            Scope::Any,
+            Scope::Site("a.test".to_owned()),
+            Scope::Site("longer.example.test".to_owned()),
+            Scope::Host("a.test".to_owned()),
+            Scope::Host("longer.example.test".to_owned()),
+            Scope::Url("https://a.test".to_owned()),
+            Scope::Url("https://a.test/a/longer/path".to_owned()),
+        ];
+
+        for pair in ranked.windows(2) {
+            assert!(
+                pair[0].specificity() < pair[1].specificity(),
+                "{:?} should be less precise than {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
+
+    /// Length breaks the tie inside a band one character at a time. Were it to scale the band
+    /// instead, a long enough match would climb into the next one and answer links it was never
+    /// written for.
+    #[test]
+    fn one_more_character_is_worth_exactly_one_more_point() {
+        for (short, long) in [
+            (Scope::Site("a".to_owned()), Scope::Site("ab".to_owned())),
+            (Scope::Host("a".to_owned()), Scope::Host("ab".to_owned())),
+            (Scope::Url("a".to_owned()), Scope::Url("ab".to_owned())),
+        ] {
+            assert_eq!(
+                long.specificity() - short.specificity(),
+                1,
+                "{short:?} against {long:?}"
+            );
+        }
+    }
+
+    /// The longest site there is must still lose to the shortest subdomain, or a rule for one
+    /// long site would quietly outrank every subdomain rule.
+    #[test]
+    fn no_length_inside_a_band_can_reach_the_next_one() {
+        let longest = "a".repeat(10_000);
+
+        assert!(
+            Scope::Site(longest.clone()).specificity() < Scope::Host("a".to_owned()).specificity()
+        );
+        assert!(Scope::Host(longest).specificity() < Scope::Url("a".to_owned()).specificity());
+    }
+
+    /// The return value is what tells a caller whether anything happened, and the screen shows a
+    /// rule as removed on the strength of it.
+    #[test]
+    fn removing_says_whether_it_removed_anything() {
+        let mut set = RuleSet::default();
+        set.rules.push(rule(
+            "site:a.test",
+            Scope::Site("a.test".to_owned()),
+            None,
+            "chrome",
+        ));
+        set.rules.push(rule(
+            "site:b.test",
+            Scope::Site("b.test".to_owned()),
+            None,
+            "chrome",
+        ));
+
+        assert!(set.remove("site:a.test"), "it was there");
+        assert_eq!(set.rules.len(), 1);
+        assert_eq!(set.rules[0].id, "site:b.test", "and the other one stayed");
+
+        assert!(!set.remove("site:a.test"), "it is not there any more");
+        assert!(!set.remove("nothing-like-it"));
+        assert_eq!(set.rules.len(), 1);
+    }
+
     use super::{Rule, RuleSet, Scope, Target, site_of};
 
     const URL: &str = "https://github.com/rgdevment/LinkUnbound";

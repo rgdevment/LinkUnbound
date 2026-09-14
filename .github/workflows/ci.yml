@@ -97,9 +97,9 @@ jobs:
 
       - name: What a desktop is not needed to build
         run: |
-          # The picker pulls in a tray and a window even where neither is used: tray-icon
-          # wants GTK on Linux and winit wants the display libraries. None of it runs here —
-          # these tests are pure logic — but all of it has to link.
+          # The picker pulls in a tray and a window: tray-icon wants GTK and winit wants the
+          # display libraries. All of it has to link; none of it has to run, because the tests
+          # that need a window ask Slint's testing backend for one instead of the screen.
           sudo apt-get update -qq
           sudo apt-get install -y -qq libgtk-3-dev libayatana-appindicator3-dev libxdo-dev libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libwayland-dev libxcb1-dev
           cargo llvm-cov nextest -p linkunbound-core -p linkunbound-shell --lcov --output-path lcov-rust.info

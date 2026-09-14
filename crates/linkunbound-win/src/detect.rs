@@ -44,6 +44,14 @@ fn normalise_id(key_name: &str) -> String {
     out.trim_matches('-').to_owned()
 }
 
+/// The same browser is listed under both hives when it was installed for the machine and then
+/// updated for the user, and the picker would offer it twice.
+fn add_unseen(found: &mut Vec<Browser>, browser: Browser) {
+    if !found.iter().any(|b| b.id == browser.id) {
+        found.push(browser);
+    }
+}
+
 fn read_entry(root: &RegKey, key_name: &str) -> Option<Browser> {
     let key = root.open_subkey(key_name).ok()?;
     let exe = key
@@ -89,9 +97,7 @@ pub fn installed_browsers() -> Vec<Browser> {
             let Some(browser) = read_entry(&root, &key_name) else {
                 continue;
             };
-            if !found.iter().any(|b| b.id == browser.id) {
-                found.push(browser);
-            }
+            add_unseen(&mut found, browser);
         }
     }
     found.sort_by_key(|b| b.name.to_lowercase());
@@ -125,7 +131,11 @@ pub fn chromium_profiles(exe: &str) -> Vec<Profile> {
     let Ok(raw) = std::fs::read_to_string(dir.join("Local State")) else {
         return Vec::new();
     };
-    let Ok(state) = serde_json::from_str::<serde_json::Value>(&raw) else {
+    profiles_from(&raw)
+}
+
+fn profiles_from(raw: &str) -> Vec<Profile> {
+    let Ok(state) = serde_json::from_str::<serde_json::Value>(raw) else {
         return Vec::new();
     };
     let Some(cache) = state
@@ -159,6 +169,157 @@ pub fn chromium_profiles(exe: &str) -> Vec<Profile> {
 mod tests {
     use super::*;
 
+    /// We register under this same key, so without this the picker offers itself as a
+    /// destination and a link handed to it comes straight back. Either half is reason enough:
+    /// Internet Explorer matches by key name, and a copy of ours installed anywhere matches by
+    /// path.
+    #[test]
+    fn neither_ourselves_nor_internet_explorer_is_a_destination() {
+        assert!(is_destination(
+            "Firefox",
+            r"C:\Program Files\Mozilla Firefoxirefox.exe"
+        ));
+        assert!(is_destination(
+            "Google Chrome",
+            r"C:\Program Files\Google\Chrome\chrome.exe"
+        ));
+        assert!(is_destination("firefox-308046b0af4a39cb", r"C:firefox.exe"));
+
+        assert!(
+            !is_destination("IEXPLORE.EXE", r"C:\Program Files\Internet Explorer\ie.exe"),
+            "the key name alone has to be enough"
+        );
+        assert!(
+            !is_destination(
+                "Some Browser",
+                r"C:\Program Files\LinkUnbound\linkunbound-shell.exe"
+            ),
+            "the path alone has to be enough"
+        );
+    }
+
+    /// A browser installed for the machine and then updated for the user is listed under both
+    /// hives, and the picker would offer it twice.
+    #[test]
+    fn a_browser_listed_under_both_hives_is_offered_once() {
+        let mut found = Vec::new();
+        add_unseen(&mut found, named("chrome", "Google Chrome"));
+        add_unseen(&mut found, named("chrome", "Google Chrome (user)"));
+        add_unseen(&mut found, named("firefox", "Firefox"));
+
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].name, "Google Chrome", "the first one seen stays");
+        assert_eq!(found[1].id, "firefox");
+    }
+
+    /// The directory name is what the browser is launched with; the name in `Local State` is
+    /// only what the person reads. A profile whose name was never set has an empty one there,
+    /// and an empty label leaves a nameless row in the picker.
+    #[test]
+    fn a_profile_with_no_name_of_its_own_is_read_by_its_directory() {
+        let profiles = profiles_from(
+            r#"{"profile":{"info_cache":{
+                "Default":{"name":"Personal"},
+                "Profile 2":{"name":""},
+                "Profile 3":{}
+            }}}"#,
+        );
+
+        assert_eq!(profiles.len(), 3);
+        let named: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(
+            named,
+            vec!["Personal", "Profile 2", "Profile 3"],
+            "sorted by what the person reads"
+        );
+
+        let personal = &profiles[0];
+        assert_eq!(personal.id, "Default");
+        assert_eq!(
+            personal.args,
+            vec!["--profile-directory=Default".to_owned()],
+            "the directory launches it, whatever it is called"
+        );
+    }
+
+    /// Chromium rewrites this file on every run and a half-written one is what a crash leaves
+    /// behind. Nothing there means no profiles, not no browser.
+    #[test]
+    fn a_local_state_that_says_nothing_useful_yields_no_profiles() {
+        assert!(profiles_from("{ not json at all").is_empty());
+        assert!(profiles_from("{}").is_empty());
+        assert!(profiles_from(r#"{"profile":{}}"#).is_empty());
+        assert!(profiles_from(r#"{"profile":{"info_cache":[]}}"#).is_empty());
+    }
+
+    /// `read_entry` reads what Windows wrote, so it is given keys shaped the way Windows shapes
+    /// them rather than a stand-in.
+    #[test]
+    fn an_entry_becomes_a_browser_and_a_useless_one_is_left_out() {
+        let root_path = r"Software\LinkUnbound-test\detect";
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let _ = hkcu.delete_subkey_all(root_path);
+        let (root, _) = hkcu.create_subkey(root_path).expect("a place to write");
+
+        let write = |key_name: &str, display: &str, command: &str| {
+            let (key, _) = root.create_subkey(key_name).expect("the entry");
+            key.set_value("", &display).expect("the display name");
+            let (cmd, _) = key
+                .create_subkey(r"shell\open\command")
+                .expect("the command");
+            cmd.set_value("", &command).expect("the command line");
+        };
+
+        write(
+            "Firefox",
+            "Mozilla Firefox",
+            r#""C:\Program Files\Mozilla Firefoxirefox.exe" -osint -url "%1""#,
+        );
+        write("Nameless", "", r#""C:\Apps\other.exe""#);
+        write("IEXPLORE.EXE", "Internet Explorer", r#""C:\Apps\ie.exe""#);
+        write("Broken", "No Command At All", "");
+
+        let firefox = read_entry(&root, "Firefox").expect("a browser");
+        assert_eq!(firefox.name, "Mozilla Firefox");
+        assert_eq!(firefox.id, "firefox");
+        assert_eq!(
+            firefox.private_flag.as_deref(),
+            Some("-private-window"),
+            "the private switch comes from the executable, not the key"
+        );
+
+        assert_eq!(
+            read_entry(&root, "Nameless").expect("still a browser").name,
+            "Nameless",
+            "an entry with no display name is read by its key"
+        );
+        assert!(
+            read_entry(&root, "IEXPLORE.EXE").is_none(),
+            "not a destination"
+        );
+        assert!(
+            read_entry(&root, "Broken").is_none(),
+            "an entry with no command cannot open anything"
+        );
+        assert!(read_entry(&root, "NotThere").is_none());
+
+        let _ = hkcu.delete_subkey_all(root_path);
+    }
+
+    fn named(id: &str, name: &str) -> Browser {
+        Browser {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            exe: "x.exe".to_owned(),
+            profiles: Vec::new(),
+            extra_args: Vec::new(),
+            private_flag: None,
+            icon_path: None,
+            custom: false,
+            hidden: false,
+        }
+    }
+
     #[test]
     fn a_quoted_command_yields_the_executable_alone() {
         assert_eq!(
@@ -184,19 +345,6 @@ mod tests {
             "firefox-308046b0af4a39cb"
         );
         assert_eq!(normalise_id("Brave"), "brave");
-    }
-
-    #[test]
-    fn neither_internet_explorer_nor_ourselves_count_as_destinations() {
-        assert!(!is_destination(
-            "IEXPLORE.EXE",
-            r"C:\Program Files\Internet Explorer\iexplore.exe"
-        ));
-        assert!(!is_destination("LinkUnbound", r"C:\Apps\linkunbound.exe"));
-        assert!(is_destination(
-            "firefox-308046b0af4a39cb",
-            r"C:firefox.exe"
-        ));
     }
 
     #[test]

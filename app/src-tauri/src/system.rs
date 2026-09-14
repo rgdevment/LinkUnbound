@@ -25,6 +25,7 @@ pub struct SystemState {
 /// Why the app might not be receiving links even though it looks registered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub enum Health {
     Fine,
     /// The registration points somewhere this executable no longer lives.
@@ -148,7 +149,7 @@ mod platform {
     pub fn set_registered(enabled: bool) -> Result<SystemState, String> {
         let registration = Registration::default();
         let outcome = if enabled {
-            let handler = handler().ok_or_else(|| "cannot find our own path".to_owned())?;
+            let handler = handler().ok_or_else(|| "ownPathUnknown".to_owned())?;
             registration.register(&handler.to_string_lossy())
         } else {
             registration.unregister()
@@ -159,7 +160,7 @@ mod platform {
     }
 
     pub fn set_starts_with_system(enabled: bool) -> Result<SystemState, String> {
-        set_startup(enabled).ok_or_else(|| "no startup task in this build".to_owned())?;
+        set_startup(enabled).ok_or_else(|| "noStartupTask".to_owned())?;
         Ok(state())
     }
 
@@ -256,11 +257,11 @@ mod platform {
     }
 
     pub fn set_registered(_enabled: bool) -> Result<SystemState, String> {
-        Err("not supported on this platform yet".to_owned())
+        Err("notOnThisPlatform".to_owned())
     }
 
     pub fn set_starts_with_system(_enabled: bool) -> Result<SystemState, String> {
-        Err("not supported on this platform yet".to_owned())
+        Err("notOnThisPlatform".to_owned())
     }
 
     pub fn browsers() -> Vec<linkunbound_core::Browser> {
@@ -268,7 +269,7 @@ mod platform {
     }
 
     pub fn open_default_apps() -> Result<(), String> {
-        Err("only Windows has a default apps panel".to_owned())
+        Err("notOnThisPlatform".to_owned())
     }
 }
 

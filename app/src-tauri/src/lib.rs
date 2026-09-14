@@ -136,7 +136,7 @@ fn rules_retarget(
         .edit_rules(|rules| rules.retarget(&id, target.clone()))
         .map_err(|e| e.to_string())?;
     if !changed {
-        return Err("that rule is no longer there".to_owned());
+        return Err("ruleGone".to_owned());
     }
     rules_list()
 }
@@ -225,7 +225,7 @@ fn browsers_set_hidden(id: String, hidden: bool) -> Result<Vec<BrowserView>, Str
 
 fn hidden_in(mut all: Vec<Browser>, id: &str, hidden: bool) -> Result<Vec<Browser>, String> {
     let Some(found) = all.iter_mut().find(|b| b.id == id) else {
-        return Err("that browser is no longer installed".to_owned());
+        return Err("browserGone".to_owned());
     };
     found.hidden = hidden;
     Ok(all)
@@ -240,7 +240,7 @@ fn browsers_remove(id: String) -> Result<Vec<BrowserView>, String> {
 /// back and the deletion would look like it failed.
 fn without(mut all: Vec<Browser>, id: &str) -> Result<Vec<Browser>, String> {
     if !all.iter().any(|b| b.id == id && b.custom) {
-        return Err("only a browser you added can be removed".to_owned());
+        return Err("browserNotYours".to_owned());
     }
     all.retain(|b| b.id != id);
     Ok(all)
@@ -257,10 +257,17 @@ fn free_id(all: &[Browser]) -> String {
 
 #[tauri::command]
 fn browsers_add(edit: Edit) -> Result<Vec<BrowserView>, String> {
-    if !readable(&edit.exe) {
-        return Err("no hay ningún programa en esa ruta".to_owned());
+    keep(added(catalogue(), edit, readable)?)
+}
+
+fn added(
+    mut all: Vec<Browser>,
+    edit: Edit,
+    exists: impl Fn(&str) -> bool,
+) -> Result<Vec<Browser>, String> {
+    if !exists(&edit.exe) {
+        return Err("browserNoProgram".to_owned());
     }
-    let mut all = catalogue();
     all.push(Browser {
         id: free_id(&all),
         name: edit.name,
@@ -272,7 +279,7 @@ fn browsers_add(edit: Edit) -> Result<Vec<BrowserView>, String> {
         custom: true,
         hidden: false,
     });
-    keep(all)
+    Ok(all)
 }
 
 /// A detected browser can be renamed and given arguments or an icon, the way
@@ -290,11 +297,11 @@ fn edited(
     exists: impl Fn(&str) -> bool,
 ) -> Result<Vec<Browser>, String> {
     let Some(found) = all.iter_mut().find(|b| b.id == id) else {
-        return Err("ese navegador ya no está".to_owned());
+        return Err("browserGone".to_owned());
     };
     if found.custom {
         if !exists(&edit.exe) {
-            return Err("no hay ningún programa en esa ruta".to_owned());
+            return Err("browserNoProgram".to_owned());
         }
         found.exe = edit.exe;
     }
@@ -305,11 +312,23 @@ fn edited(
     Ok(all)
 }
 
+/// What the bar shows. The plugin reports the size of each chunk rather than the total so far,
+/// and a whole it does not know yet is nought rather than everything. Capped, because a server
+/// that declares one size and sends another would otherwise put a number like 40000 on screen.
+fn far_along(carried: u64, whole: Option<u64>) -> u64 {
+    whole.map_or(0, |all| (carried * 100 / all.max(1)).min(100))
+}
+
 #[tauri::command]
 fn browsers_duplicate(id: String) -> Result<Vec<BrowserView>, String> {
-    let mut all = catalogue();
+    keep(duplicated_in(catalogue(), &id)?)
+}
+
+/// The copy goes next to what it was copied from: at the end of a long list it reads as a new
+/// browser somebody else added rather than as the copy just asked for.
+fn duplicated_in(mut all: Vec<Browser>, id: &str) -> Result<Vec<Browser>, String> {
     let Some(source) = all.iter().find(|b| b.id == id) else {
-        return Err("ese navegador ya no está".to_owned());
+        return Err("browserGone".to_owned());
     };
     let copy = source.duplicated(free_id(&all));
     let at = all
@@ -317,7 +336,7 @@ fn browsers_duplicate(id: String) -> Result<Vec<BrowserView>, String> {
         .position(|b| b.id == id)
         .map_or(all.len(), |i| i + 1);
     all.insert(at, copy);
-    keep(all)
+    Ok(all)
 }
 
 /// The order here is the order of the picker, so moving one is how the user
@@ -695,7 +714,7 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
             move |chunk, whole| {
                 // The callback hands over the length of one chunk, not how much has arrived.
                 carried += chunk as u64;
-                let far = whole.map_or(0, |all| carried * 100 / all.max(1));
+                let far = far_along(carried, whole);
                 if far != said {
                     said = far;
                     let _ = telling.emit(
@@ -853,10 +872,143 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        Edit, Store, describe, edited, free_id, hidden_in, keep_in, only_mine, ordered, seen,
-        spoken, without,
+        Edit, Store, added, describe, duplicated_in, edited, far_along, free_id, hidden_in,
+        keep_in, only_mine, ordered, readable, seen, spoken, without,
     };
     use linkunbound_core::{Locale, Preferences, Profile, Rule, Scope, Target};
+
+    /// A copy that lands at the end of a long list reads as a browser somebody else added, and
+    /// the person who just pressed «duplicate» goes looking for it.
+    #[test]
+    fn a_copy_lands_next_to_what_it_was_copied_from() {
+        let all = vec![detected("a"), detected("b"), detected("c")];
+
+        let done = duplicated_in(all.clone(), "b").expect("b is there");
+        assert_eq!(
+            done.iter().map(|b| b.id.as_str()).collect::<Vec<_>>(),
+            vec!["a", "b", "custom-1", "c"]
+        );
+
+        let done = duplicated_in(all.clone(), "c").expect("c is there");
+        assert_eq!(done.last().expect("a copy").id, "custom-1");
+        assert_eq!(done.len(), 4);
+
+        assert_eq!(
+            duplicated_in(all, "nothing-like-it").unwrap_err(),
+            "browserGone"
+        );
+    }
+
+    /// The bar reads out of this, and an installer whose size the server never declared is the
+    /// ordinary case rather than a fault.
+    #[test]
+    fn the_bar_reads_what_has_arrived_against_what_was_promised() {
+        assert_eq!(far_along(0, Some(1_000)), 0);
+        assert_eq!(far_along(500, Some(1_000)), 50);
+        assert_eq!(far_along(1_000, Some(1_000)), 100);
+        assert_eq!(
+            far_along(400, None),
+            0,
+            "a size nobody declared is nought, not everything"
+        );
+        assert_eq!(
+            far_along(400, Some(0)),
+            100,
+            "a size declared as zero neither divides by it nor overflows the bar"
+        );
+        assert_eq!(
+            far_along(1_500, Some(1_000)),
+            100,
+            "more than was promised is still a full bar"
+        );
+    }
+    /// The form hands over whatever was typed, and an empty box arrives as an empty string rather
+    /// than as nothing. Kept as it comes, the browser claims a private window it cannot open and
+    /// an icon that is not there.
+    #[test]
+    fn a_box_left_empty_is_nothing_rather_than_an_empty_value() {
+        let all = added(
+            Vec::new(),
+            Edit {
+                name: "Roto".to_owned(),
+                exe: r"C:\Apps\roto.exe".to_owned(),
+                args: String::new(),
+                private_flag: Some(String::new()),
+                icon_path: Some(String::new()),
+            },
+            |_| true,
+        )
+        .expect("the path is there");
+
+        assert_eq!(all[0].private_flag, None);
+        assert_eq!(all[0].icon_path, None);
+        assert!(all[0].custom, "one somebody added is theirs to edit");
+        assert!(!all[0].hidden);
+    }
+
+    /// A browser whose path names nothing is a row that fails only when somebody clicks it, by
+    /// which time they are looking at a link that went nowhere.
+    #[test]
+    fn a_path_with_no_program_at_it_is_refused_before_it_is_saved() {
+        let said = added(
+            Vec::new(),
+            Edit {
+                name: "Roto".to_owned(),
+                exe: r"C:\nope.exe".to_owned(),
+                args: String::new(),
+                private_flag: None,
+                icon_path: None,
+            },
+            |_| false,
+        );
+
+        assert_eq!(said.unwrap_err(), "browserNoProgram");
+    }
+
+    /// What is typed is a command line, so the quoted parts stay together.
+    #[test]
+    fn the_arguments_are_read_as_a_command_line() {
+        let all = added(
+            Vec::new(),
+            Edit {
+                name: "Chrome".to_owned(),
+                exe: r"C:\Apps\chrome.exe".to_owned(),
+                args: r#"--new-window --user-data-dir="C:\My Data""#.to_owned(),
+                private_flag: Some("--incognito".to_owned()),
+                icon_path: None,
+            },
+            |_| true,
+        )
+        .expect("the path is there");
+
+        assert_eq!(
+            all[0].extra_args,
+            vec![
+                "--new-window".to_owned(),
+                r"--user-data-dir=C:\My Data".to_owned()
+            ]
+        );
+        assert_eq!(all[0].private_flag.as_deref(), Some("--incognito"));
+    }
+
+    /// A directory is not a program, and the form accepts one as readily as a path.
+    #[test]
+    fn only_a_file_counts_as_a_program_to_run() {
+        let dir = std::env::temp_dir().join("lu-readable");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a place to write");
+        let file = dir.join("browser.exe");
+        std::fs::write(&file, b"not really a program").expect("written");
+
+        assert!(readable(&file.to_string_lossy()));
+        assert!(
+            !readable(&dir.to_string_lossy()),
+            "a directory is not a program"
+        );
+        assert!(!readable(&dir.join("gone.exe").to_string_lossy()));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn detected(id: &str) -> linkunbound_core::Browser {
         linkunbound_core::Browser {

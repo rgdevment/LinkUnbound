@@ -94,7 +94,9 @@ impl Browser {
     }
 
     pub fn supports_private(&self) -> bool {
-        self.private_flag.is_some()
+        self.private_flag
+            .as_deref()
+            .is_some_and(|f| !f.trim().is_empty())
     }
 
     /// Never degrades quietly: a rule asking for a profile that is gone, or for
@@ -130,6 +132,57 @@ impl Browser {
 
 #[cfg(test)]
 mod tests {
+
+    /// A copy is made to be used, so it starts visible even when what it was copied from is
+    /// hidden — otherwise duplicating a hidden browser produces something that cannot be found.
+    #[test]
+    fn a_copy_starts_visible_whatever_it_was_copied_from() {
+        let mut original = Browser {
+            id: "chrome".to_owned(),
+            name: "Google Chrome".to_owned(),
+            exe: "chrome.exe".to_owned(),
+            profiles: Vec::new(),
+            extra_args: Vec::new(),
+            private_flag: Some("--incognito".to_owned()),
+            icon_path: None,
+            custom: false,
+            hidden: true,
+        };
+
+        assert!(
+            !original.duplicated("custom-1".to_owned()).hidden,
+            "a copy of a hidden one is still there to be used"
+        );
+
+        original.hidden = false;
+        assert!(!original.duplicated("custom-2".to_owned()).hidden);
+    }
+
+    /// The picker lights the private icon on the strength of this, and the keyboard acts on it.
+    #[test]
+    fn private_is_offered_only_where_there_is_a_flag_to_do_it_with() {
+        let mut browser = Browser {
+            id: "chrome".to_owned(),
+            name: "Google Chrome".to_owned(),
+            exe: "chrome.exe".to_owned(),
+            profiles: Vec::new(),
+            extra_args: Vec::new(),
+            private_flag: Some("--incognito".to_owned()),
+            icon_path: None,
+            custom: false,
+            hidden: false,
+        };
+        assert!(browser.supports_private());
+
+        browser.private_flag = None;
+        assert!(!browser.supports_private());
+
+        browser.private_flag = Some(String::new());
+        assert!(
+            !browser.supports_private(),
+            "an empty flag is a field somebody left blank, not a way to open a private window"
+        );
+    }
     use super::*;
 
     fn chrome() -> Browser {

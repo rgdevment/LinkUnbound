@@ -21,6 +21,9 @@ raw-window-handle = "0.6"
 [target."cfg(windows)".dependencies]
 linkunbound-win.workspace = true
 
+[dev-dependencies]
+i-slint-backend-testing = "1.17"
+
 [build-dependencies]
 slint-build.workspace = true
 
