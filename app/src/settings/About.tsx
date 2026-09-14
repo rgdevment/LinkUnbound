@@ -3,12 +3,14 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
 import { useSpoken, useWords } from "../i18n";
 import { saidPlainly } from "../refusal";
-import { Card, Line, Section, Switch } from "./parts";
+import { Card, Line, Switch } from "./parts";
 import type { Ready, Underway } from "./update";
 
 const REPO = "https://github.com/rgdevment/LinkUnbound";
 const COFFEE = "https://buymeacoffee.com/rgdevment";
 const COPYPASTE = "https://github.com/rgdevment/CopyPaste";
+const TISTY = "https://github.com/rgdevment/Tisty";
+const SPONSOR = "https://github.com/sponsors/rgdevment";
 
 type Build = {
   version: string;
@@ -26,6 +28,85 @@ function External({ href, children }: { href: string; children: string }) {
       className="shrink-0 rounded-md px-3 py-1.5 text-[11.5px] text-[#2F62D8] dark:text-[#6E9BFF]"
     >
       {children}
+    </button>
+  );
+}
+
+function Rule({ said }: { said: string }) {
+  return (
+    <div className="mt-6 mb-2 flex items-center gap-2.5 text-[11.5px] font-semibold uppercase tracking-[0.05em] text-neutral-500 dark:text-[#8B92A1]">
+      <span>{said}</span>
+      <span className="h-px flex-1 bg-black/[0.08] dark:bg-white/[0.08]" />
+    </div>
+  );
+}
+
+function Gives({
+  said,
+  where,
+  onPick,
+  children,
+}: {
+  said: string;
+  where: string;
+  onPick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="flex items-center gap-2.5 rounded-[10px] border border-black/[0.08] px-3 py-2.5 text-left hover:bg-black/[0.03] dark:border-white/[0.08] dark:hover:bg-white/[0.04]"
+    >
+      <svg viewBox="0 0 16 16" aria-hidden="true" className="h-[17px] w-[17px] shrink-0">
+        {children}
+      </svg>
+      <span className="min-w-0">
+        <span className="block text-[12.5px] font-medium">{said}</span>
+        <span className="block truncate text-[11.5px] text-neutral-500 dark:text-[#8B92A1]">
+          {where}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/// The mark is the app's own initial rather than a copied icon: the picture lives in the other
+/// project, and a missing file here would leave a broken image in a row that is only a pointer.
+function Tool({
+  mark,
+  tone,
+  said,
+  note,
+  onPick,
+}: {
+  mark: string;
+  tone: string;
+  said: string;
+  note: string;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="mb-2 flex w-full items-start gap-3 rounded-[10px] border border-black/[0.08] px-3.5 py-3 text-left hover:bg-black/[0.03] dark:border-white/[0.08] dark:hover:bg-white/[0.04]"
+    >
+      <span
+        aria-hidden="true"
+        className={`mt-px grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-semibold text-white ${tone}`}
+      >
+        {mark}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-semibold">{said}</span>
+        <span className="mt-0.5 block text-[12.5px] leading-relaxed text-neutral-500 dark:text-[#8B92A1]">
+          {note}
+        </span>
+      </span>
+      <span aria-hidden="true" className="mt-0.5 text-[13px] text-neutral-400 dark:text-[#6B7280]">
+        ↗
+      </span>
     </button>
   );
 }
@@ -225,23 +306,32 @@ export default function About({
 
   return (
     <>
-      <div className="flex items-center gap-3.5 rounded-lg border border-black/[0.08] bg-black/[0.015] px-4 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.02]">
+      <div className="flex items-center gap-3.5">
         <span
           aria-hidden="true"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-[10px] bg-[#2F62D8] text-[17px] font-semibold text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+          className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-[10px] bg-[#2F62D8] text-[21px] font-semibold text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
         >
           L
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold">LinkUnbound</p>
-          <p className="mt-0.5 text-[11.5px] text-neutral-500 tabular-nums dark:text-[#8B92A1]">
-            {build ? `${build.version} · ${build.license}` : "—"}
-          </p>
-          <p className="mt-1 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]">
-            {t("aboutTagline")}
-          </p>
-        </div>
+        <span className="min-w-0">
+          <h2 className="text-[21px] font-semibold tracking-[-0.015em]">LinkUnbound</h2>
+          <span className="mt-px flex items-center gap-2 text-[11.5px] text-neutral-500 tabular-nums dark:text-[#8B92A1]">
+            <span>{build?.version ?? "—"}</span>
+            <span
+              aria-hidden="true"
+              className="h-[3px] w-[3px] rounded-full bg-black/20 dark:bg-white/20"
+            />
+            <span>{build?.license ?? "—"}</span>
+          </span>
+        </span>
       </div>
+
+      <p className="mt-4 text-[13px] leading-relaxed text-neutral-600 dark:text-[#A8AEBC]">
+        {t("aboutWhat")}
+      </p>
+      <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-500 dark:text-[#8B92A1]">
+        {t("aboutPrivacy")}
+      </p>
 
       {trouble && (
         <div className="rounded-md bg-[#C0362F]/10 px-3 py-2 dark:bg-[#FF8A85]/10">
@@ -284,35 +374,53 @@ export default function About({
         />
       )}
 
-      <Section title={t("aboutProject")}>
-        <Card>
-          <Line title={t("aboutSource")} note={t("aboutSourceNote")}>
-            <External href={build?.repository ?? REPO}>{t("open")}</External>
-          </Line>
-          <Line title={t("aboutLicense")} note={t("aboutLicenseNote")}>
-            <External href={`${REPO}/blob/main/LICENSE`}>{t("open")}</External>
-          </Line>
-          <Line title={t("aboutIssue")} note={t("aboutIssueNote")}>
-            <External href={`${REPO}/issues`}>{t("open")}</External>
-          </Line>
-        </Card>
-      </Section>
+      <Rule said={t("aboutSponsorSection")} />
+      <p className="text-[13px] leading-relaxed text-neutral-600 dark:text-[#A8AEBC]">
+        {t("aboutSupportWhy")}
+      </p>
+      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+        <Gives
+          said={t("aboutGitHubSponsor")}
+          where="github.com/sponsors"
+          onPick={() => void openUrl(SPONSOR).catch(noop)}
+        >
+          <path
+            fill="#db61a2"
+            d="M8 14.25 6.84 13.2C2.72 9.47 0 7.01 0 4.5 0 2.42 1.57 1 3.5 1c1.1 0 2.16.51 2.84 1.32h1.32C8.34 1.51 9.4 1 10.5 1 12.43 1 14 2.42 14 4.5c0 2.51-2.72 4.97-6.84 8.7L8 14.25Z"
+          />
+        </Gives>
+        <Gives
+          said={t("aboutSponsor")}
+          where="buymeacoffee.com"
+          onPick={() => void openUrl(COFFEE).catch(noop)}
+        >
+          <path
+            fill="#c8892a"
+            d="M2 5h9v5a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5Zm10 0h1.5A2.5 2.5 0 0 1 16 7.5 2.5 2.5 0 0 1 13.5 10H12V5ZM2 14h9v1H2v-1Z"
+          />
+        </Gives>
+      </div>
 
-      <Section title={t("aboutSponsor")}>
-        <Card>
-          <Line title={t("aboutSponsor")} note={t("aboutSponsorNote")}>
-            <External href={COFFEE}>{t("open")}</External>
-          </Line>
-        </Card>
-      </Section>
+      <Rule said={t("aboutOtherTools")} />
+      <Tool
+        mark="T"
+        tone="bg-[#6f4bd8]"
+        said={t("aboutTisty")}
+        note={t("aboutTistyNote")}
+        onPick={() => void openUrl(TISTY).catch(noop)}
+      />
+      <Tool
+        mark="CP"
+        tone="bg-[#1E7A52] dark:bg-[#2E9B6B]"
+        said={t("aboutCopyPaste")}
+        note={t("aboutCopyPasteNote")}
+        onPick={() => void openUrl(COPYPASTE).catch(noop)}
+      />
 
-      <Section title={t("aboutOtherTools")}>
-        <Card>
-          <Line title={t("aboutCopyPaste")} note={t("aboutCopyPasteNote")}>
-            <External href={COPYPASTE}>{t("open")}</External>
-          </Line>
-        </Card>
-      </Section>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <External href={build?.repository ?? REPO}>{t("aboutRepo")}</External>
+        <External href={`${REPO}/issues`}>{t("aboutIssue")}</External>
+      </div>
     </>
   );
 }

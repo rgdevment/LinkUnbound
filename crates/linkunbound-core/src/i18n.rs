@@ -32,6 +32,7 @@ catalogue! {
     reach_subdomain: "Subdominio" | "Subdomain",
     reach_site: "Todo el sitio" | "The whole site",
     reach_from_app: "Desde {}" | "From {}",
+    reach_more: "Más" | "More",
     wrapper_unresolved: "Enlace envuelto: el destino real se conocerá al abrirlo" | "Wrapped link: the real destination is known once it opens",
     no_browsers: "Ningún navegador que ofrecer. Añade uno en Ajustes." | "No browser to offer. Add one in Settings.",
     notice_opened: "Abierto en {}" | "Opened in {}",

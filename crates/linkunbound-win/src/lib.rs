@@ -16,7 +16,8 @@ pub use icons::cached_or_extract as icon_for;
 #[cfg(windows)]
 pub use native::{
     copy_text, cursor, digit_behind, is_in_front, keep_off_the_taskbar,
-    notify_associations_changed, source_app, take_the_keyboard, work_area_at,
+    let_whoever_opens_next_come_forward, notify_associations_changed, shift_is_down, source_app,
+    take_the_keyboard, work_area_at,
 };
 #[cfg(windows)]
 pub use registration::{

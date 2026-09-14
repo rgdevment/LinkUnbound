@@ -123,12 +123,22 @@ pub fn reaches(
         ),
         (words.reach_site.to_owned(), true, wrapped),
     ];
-    // Left out rather than greyed when there is no origin: five labels do not fit the row, and
-    // a dead one would cost the other four their space.
+    // Left out rather than greyed when there is no origin: a dead label would cost the live
+    // ones their space.
     if let Some(source) = source {
         offered.push((Strings::fill(words.reach_from_app, source), true, false));
     }
     offered
+}
+
+/// The two the row shows. Everything else goes behind «More», because five labels never fit a
+/// width the rows can also live at — and two of the five are dead half the time: a URL reach on
+/// a wrapped link, a subdomain reach on a host that has none.
+pub const IN_THE_ROW: [i32; 2] = [0, 3];
+
+#[must_use]
+pub fn in_the_row(index: i32) -> bool {
+    IN_THE_ROW.contains(&index)
 }
 
 #[must_use]
@@ -186,15 +196,50 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
         .collect();
     window.set_rows(Rc::new(slint::VecModel::from(listed)).into());
 
-    let scopes: Vec<Reach> = reaches(words, url, &host, &site, source)
+    let said = reaches(words, url, &host, &site, source);
+    let all: Vec<Reach> = said
         .into_iter()
-        .map(|(label, keeps, dead)| Reach {
+        .enumerate()
+        .map(|(at, (label, keeps, dead))| Reach {
             label: label.into(),
             keeps,
             dead,
+            index: i32::try_from(at).unwrap_or(0),
         })
         .collect();
-    window.set_reaches(Rc::new(slint::VecModel::from(scopes)).into());
+
+    window.set_reach_labels(
+        Rc::new(slint::VecModel::from(
+            all.iter().map(|one| one.label.clone()).collect::<Vec<_>>(),
+        ))
+        .into(),
+    );
+    window.set_in_the_row(
+        Rc::new(slint::VecModel::from(
+            all.iter()
+                .map(|one| in_the_row(one.index))
+                .collect::<Vec<_>>(),
+        ))
+        .into(),
+    );
+    window.set_reach_more_label(words.reach_more.into());
+
+    // What the row draws, so the window can be measured against the words it will actually show
+    // rather than against every reach there is.
+    window.set_reaches_line(
+        all.iter()
+            .filter(|one| in_the_row(one.index))
+            .map(|one| one.label.to_string())
+            .chain(std::iter::once(words.reach_more.to_owned()))
+            .collect::<Vec<_>>()
+            .join(" · ")
+            .into(),
+    );
+
+    let (row, rest): (Vec<Reach>, Vec<Reach>) =
+        all.into_iter().partition(|one| in_the_row(one.index));
+    window.set_reaches(Rc::new(slint::VecModel::from(row)).into());
+    window.set_reaches_more(Rc::new(slint::VecModel::from(rest)).into());
 }
 
 #[cfg(test)]
@@ -280,6 +325,143 @@ mod tests {
         ]
     }
 
+    /// The reaches used to grow the window: five labels needed more room than the rows do, and
+    /// the fifth carries an app name no fixed width can be drawn for. Two live in the row now and
+    /// the rest behind «More», so the window is the same size whatever the link or its origin.
+    #[test]
+    fn the_window_is_the_same_width_whatever_the_link_came_from() {
+        headless();
+        let window = crate::Picker::new().expect("a window");
+        let words = Language::Spanish.strings();
+        let rows = dressed();
+
+        dress(&window, &words, "https://docs.google.com/a", None, &rows);
+        let alone = window.get_wanted_width();
+        assert_eq!(alone, 348.0);
+
+        for from in ["ms-teams", "Microsoft Teams Classic"] {
+            dress(
+                &window,
+                &words,
+                "https://docs.google.com/a",
+                Some(from),
+                &rows,
+            );
+            assert_eq!(
+                window.get_wanted_width(),
+                alone,
+                "«{from}» moved the window's width"
+            );
+        }
+    }
+
+    /// The arrows step through this list rather than through the row, and the row is now two
+    /// entries long. Were the walk bounded by the row, the three reaches behind the opener would
+    /// be out of the keyboard's reach entirely.
+    #[test]
+    fn the_keyboard_still_has_every_reach_to_walk() {
+        use slint::Model;
+
+        headless();
+        let window = crate::Picker::new().expect("a window");
+        let words = Language::Spanish.strings();
+        let rows = dressed();
+
+        dress(
+            &window,
+            &words,
+            "https://docs.google.com/a",
+            Some("ms-teams"),
+            &rows,
+        );
+        assert_eq!(
+            window.get_reach_labels().row_count(),
+            5,
+            "the arrows walk all five, not the two on show"
+        );
+
+        dress(&window, &words, "https://docs.google.com/a", None, &rows);
+        assert_eq!(window.get_reach_labels().row_count(), 4);
+    }
+
+    /// The index is the whole contract between the window and the rule that gets written: the row
+    /// hands one back and `Reaches::at` turns it into a scope. Splitting the reaches into a row
+    /// and a menu must not renumber them, or choosing «the whole site» writes something else.
+    #[test]
+    fn splitting_the_reaches_leaves_every_index_where_it_was() {
+        use slint::Model;
+
+        headless();
+        let window = crate::Picker::new().expect("a window");
+        let words = Language::Spanish.strings();
+        let rows = dressed();
+
+        dress(
+            &window,
+            &words,
+            "https://docs.google.com/a",
+            Some("ms-teams"),
+            &rows,
+        );
+
+        let row = window.get_reaches();
+        let menu = window.get_reaches_more();
+        assert_eq!(row.row_count(), 2);
+        assert_eq!(menu.row_count(), 3);
+
+        let mut seen: Vec<(i32, String)> = row
+            .iter()
+            .chain(menu.iter())
+            .map(|one| (one.index, one.label.to_string()))
+            .collect();
+        seen.sort_by_key(|(at, _)| *at);
+
+        assert_eq!(
+            seen,
+            vec![
+                (0, words.reach_once.to_owned()),
+                (1, words.reach_url.to_owned()),
+                (2, words.reach_subdomain.to_owned()),
+                (3, words.reach_site.to_owned()),
+                (4, Strings::fill(words.reach_from_app, "ms-teams")),
+            ],
+            "every reach kept the number Reaches::at reads"
+        );
+
+        assert_eq!(
+            row.iter().map(|one| one.index).collect::<Vec<_>>(),
+            vec![0, 3],
+            "the row shows «just this time» and «the whole site»"
+        );
+    }
+
+    /// With a reach the row does not show, the opener has to name it: left saying «More», the
+    /// choice is made and nothing on screen says what it was.
+    #[test]
+    fn the_opener_names_the_reach_when_it_is_one_the_row_hides() {
+        headless();
+        let window = crate::Picker::new().expect("a window");
+        let words = Language::Spanish.strings();
+        let rows = dressed();
+
+        dress(
+            &window,
+            &words,
+            "https://docs.google.com/a",
+            Some("ms-teams"),
+            &rows,
+        );
+
+        for at in [0, 3] {
+            window.set_reach_index(at);
+            assert!(!window.get_more_holds(), "{at} is drawn in the row");
+        }
+        for at in [1, 2, 4] {
+            window.set_reach_index(at);
+            assert!(window.get_more_holds(), "{at} is only behind the opener");
+        }
+    }
+
     /// Slint's testing backend, so the window needs neither a screen nor the main thread: winit
     /// wants both, and a runner has neither.
     fn headless() {
@@ -322,8 +504,17 @@ mod tests {
         assert_eq!(listed.row_data(1).expect("chrome").profile, "Personal");
 
         let offered = window.get_reaches();
-        assert_eq!(offered.row_count(), 4, "no origin, so no origin reach");
+        assert_eq!(
+            offered.row_count(),
+            2,
+            "the row shows two and keeps the rest behind More"
+        );
         assert_eq!(offered.row_data(0).expect("first").label, words.reach_once);
+        assert_eq!(
+            window.get_reaches_more().row_count(),
+            2,
+            "no origin, so no origin reach"
+        );
         assert_eq!(window.get_problem(), "", "an ordinary link raises nothing");
         assert_eq!(window.get_source_line(), "");
 
@@ -333,7 +524,11 @@ mod tests {
             "it names the app: {}",
             window.get_source_line()
         );
-        assert_eq!(window.get_reaches().row_count(), 5);
+        assert_eq!(
+            window.get_reaches().row_count() + window.get_reaches_more().row_count(),
+            5,
+            "the origin reach joins the ones behind the opener"
+        );
 
         dress(
             &window,

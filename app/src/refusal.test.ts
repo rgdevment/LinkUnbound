@@ -58,10 +58,9 @@ describe("refusals", () => {
         SPEECH.es,
         `the core can send «${key}» and the window has no sentence for it`,
       ).toHaveProperty(key);
-      expect(
-        SPEECH.en,
-        `«${key}» has a sentence in Spanish and none in English`,
-      ).toHaveProperty(key);
+      expect(SPEECH.en, `«${key}» has a sentence in Spanish and none in English`).toHaveProperty(
+        key,
+      );
     }
   });
 });

@@ -75,32 +75,45 @@ describe("about", () => {
     answers();
   });
 
-  it("names the licence, the coffee and the sibling tool", async () => {
+  it("names the licence, the ways to give and the sibling tools", async () => {
     show();
-    expect(screen.getByText("Licencia GPL-3.0")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Invítame un café" })).toBeInTheDocument();
-    expect(screen.getByText("CopyPaste")).toBeInTheDocument();
+    expect(await screen.findByText("GPL-3.0-only")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Invítame un café/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Patrocinar en GitHub/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CopyPaste/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tisty/ })).toBeInTheDocument();
   });
 
+  /// Version and licence sit in separate nodes with a dot drawn between them, so the screen is
+  /// asked for each fact rather than for one string that happens to contain both.
   it("reads the version from the build instead of a number typed into the screen", async () => {
     show();
-    expect(await screen.findByText(/2\.0\.0 · GPL-3\.0-only/)).toBeInTheDocument();
+    expect(await screen.findByText("2.0.0")).toBeInTheDocument();
+    expect(screen.getByText("GPL-3.0-only")).toBeInTheDocument();
   });
 
   /// A link that navigates the webview would trap the user in the settings window with no way
   /// back, and one that reaches nothing at all is what a plain anchor does here.
   it("hands every link to the system browser", async () => {
     show();
-    for (const open of screen.getAllByRole("button", { name: "Abrir" })) {
-      await userEvent.click(open);
+    for (const name of [
+      "Patrocinar en GitHub",
+      "Invítame un café",
+      "Tisty",
+      "CopyPaste",
+      "Abrir el repositorio",
+      "Informar de un problema",
+    ]) {
+      await userEvent.click(screen.getByRole("button", { name: new RegExp(name) }));
     }
 
     expect(opened).toEqual([
-      "https://github.com/rgdevment/LinkUnbound",
-      "https://github.com/rgdevment/LinkUnbound/blob/main/LICENSE",
-      "https://github.com/rgdevment/LinkUnbound/issues",
+      "https://github.com/sponsors/rgdevment",
       "https://buymeacoffee.com/rgdevment",
+      "https://github.com/rgdevment/Tisty",
       "https://github.com/rgdevment/CopyPaste",
+      "https://github.com/rgdevment/LinkUnbound",
+      "https://github.com/rgdevment/LinkUnbound/issues",
     ]);
   });
 

@@ -21,15 +21,15 @@ use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentThreadId, OpenProcess, PROCESS_NAME_WIN32,
     PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::{SetFocus, VkKeyScanW};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, SetFocus, VK_SHIFT, VkKeyScanW};
 use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW};
-use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId,
-    HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
-    WS_EX_TOOLWINDOW,
+    ASFW_ANY, AllowSetForegroundWindow, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow,
+    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE,
+    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WS_EX_TOOLWINDOW,
 };
+use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
 /// Tells the shell the association keys changed. Without it Explorer keeps
 /// serving the previous default until something else invalidates its cache.
@@ -128,6 +128,21 @@ pub fn take_the_keyboard(window: isize) {
         let _ = unsafe { SetForegroundWindow(hwnd) };
         let _ = unsafe { SetFocus(Some(hwnd)) };
     }
+}
+
+/// Asked at the moment of the click rather than remembered from a key event: a modifier held
+/// down while the pointer does the work may never produce one.
+#[must_use]
+pub fn shift_is_down() -> bool {
+    // The high bit is "down now"; the low one is the toggle, which for Shift is Caps Lock.
+    (unsafe { GetKeyState(i32::from(VK_SHIFT.0)) } & (1 << 15)) != 0
+}
+
+/// Windows only lets the window that already holds the foreground give it away. The browser is
+/// usually running already, so the copy we start just forwards the URL and dies — and the window
+/// that does have it is a process that was never granted the right to come forward.
+pub fn let_whoever_opens_next_come_forward() {
+    let _ = unsafe { AllowSetForegroundWindow(ASFW_ANY) };
 }
 
 /// The clipboard is a global the whole desktop shares: it has to be opened,

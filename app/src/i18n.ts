@@ -30,8 +30,8 @@ const ES = {
   offerTitle: "Ofrecerse como navegador",
   offerNote: "Aparece en la lista de Windows para que puedas elegirlo",
   chooseTitle: "Elegir LinkUnbound en Windows",
-  chooseNote: "Solo tú puedes fijar el predeterminado, y se hace en el panel del sistema",
-  chooseGo: "Abrir Windows",
+  chooseNote: "Windows solo deja que lo fijes tú, desde su propia Configuración",
+  chooseGo: "Abrir Configuración",
   edgeTitle: "Por qué Teams y Outlook abren Edge",
   edgeBody:
     "Algunas aplicaciones de Microsoft no abren los enlaces como lo haría cualquier otra: se los pasan directamente a Edge por un canal propio, saltándose el navegador predeterminado del sistema. Windows 11 ya no permite que otra aplicación se ponga en medio de ese canal, así que no hay nada que LinkUnbound pueda hacer para interceptarlo.",
@@ -172,6 +172,18 @@ const ES = {
   lookNow: "Buscar ahora",
   lookingNow: "Buscando…",
   lookNowNone: "Estás en la última versión",
+  aboutWhat:
+    "Cuando abres un enlace, LinkUnbound te pregunta en qué navegador quieres que se abra. Y si siempre respondes lo mismo, deja de preguntar.",
+  aboutPrivacy:
+    "Sin cuenta, sin publicidad, sin telemetría, sin servidor. Los enlaces que abres no salen de este equipo.",
+  aboutSupportWhy:
+    "LinkUnbound es gratuito y lo seguirá siendo. Si te ahorra un fastidio al día, un café mantiene el trabajo en marcha.",
+  aboutGitHubSponsor: "Patrocinar en GitHub",
+  aboutSponsorSection: "Apoyar a LinkUnbound",
+  aboutRepo: "Abrir el repositorio",
+  aboutTisty: "Tisty",
+  aboutTistyNote:
+    "Notas, documentos y tareas en tu propio equipo. Misma filosofía: sin anuncios, sin telemetría, todo local.",
   aboutProject: "Proyecto",
   aboutSource: "Código fuente",
   aboutSourceNote: "GPL-3.0 · las aportaciones son bienvenidas",
@@ -224,8 +236,8 @@ const EN: Record<Key, string> = {
   offerTitle: "Offer itself as a browser",
   offerNote: "Appears in the Windows list so that you can pick it",
   chooseTitle: "Choose LinkUnbound in Windows",
-  chooseNote: "Only you can set the default, and it is done in the system panel",
-  chooseGo: "Open Windows",
+  chooseNote: "Windows only lets you set it yourself, from its own Settings",
+  chooseGo: "Open Settings",
   edgeTitle: "Why Teams and Outlook open Edge",
   edgeBody:
     "Some Microsoft applications do not open links the way any other one would: they hand them straight to Edge down a channel of their own, skipping the system default browser. Windows 11 no longer lets another application stand in the middle of that channel, so there is nothing LinkUnbound can do to intercept it.",
@@ -367,6 +379,18 @@ const EN: Record<Key, string> = {
   lookNow: "Check now",
   lookingNow: "Checking…",
   lookNowNone: "You are on the latest version",
+  aboutWhat:
+    "When you open a link, LinkUnbound asks which browser you want it in. And once you keep giving the same answer, it stops asking.",
+  aboutPrivacy:
+    "No account, no ads, no telemetry, no server. The links you open never leave this machine.",
+  aboutSupportWhy:
+    "LinkUnbound is free and will stay free. If it saves you an annoyance a day, a coffee keeps the work going.",
+  aboutGitHubSponsor: "Sponsor on GitHub",
+  aboutSponsorSection: "Support LinkUnbound",
+  aboutRepo: "Open the repository",
+  aboutTisty: "Tisty",
+  aboutTistyNote:
+    "Notes, documents and tasks on your own machine. Same idea: no ads, no telemetry, all local.",
   aboutProject: "Project",
   aboutSource: "Source code",
   aboutSourceNote: "GPL-3.0 · contributions are welcome",

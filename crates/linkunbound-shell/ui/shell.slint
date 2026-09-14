@@ -10,6 +10,7 @@ struct Reach {
     label: string,
     keeps: bool,
     dead: bool,
+    index: int,
 }
 
 export global Palette {
@@ -114,30 +115,56 @@ component Row inherits Rectangle {
 component Segment inherits Rectangle {
     in property <Reach> reach;
     in property <bool> active;
+    in property <bool> last;
     callback picked();
 
-    height: 28px;
-    border-radius: 6px;
+    height: 22px;
+    // A Rectangle contributes nothing to the layout around it unless it says what it wants, and
+    // the row's width is the sum of what its segments ask for.
+    preferred-width: body.preferred-width;
     opacity: root.reach.dead ? 0.4 : 1.0;
-    background: root.active
-        ? (root.reach.keeps ? Palette.accent-soft : Palette.neutral)
-        : (touch.has-hover ? Palette.hover : Palette.chip);
+
+    body := HorizontalLayout {
+        spacing: 7px;
+
+        VerticalLayout {
+            spacing: 2px;
+            alignment: center;
+
+            label := Text {
+                text: root.reach.label;
+                font-size: 11.5px;
+                color: root.active
+                    ? (root.reach.keeps ? Palette.accent : Palette.neutral-ink)
+                    : (touch.has-hover ? Palette.neutral-ink : Palette.dim);
+                font-weight: root.active ? 700 : 400;
+                vertical-alignment: center;
+            }
+
+            // The mark sits under the word rather than around it, so a row of four reads as one
+            // line of text with one of them chosen.
+            Rectangle {
+                height: 2px;
+                border-radius: 1px;
+                background: root.active
+                    ? (root.reach.keeps ? Palette.accent : Palette.neutral-ink)
+                    : transparent;
+            }
+        }
+
+        if !root.last: Text {
+            text: "·";
+            font-size: 11.5px;
+            color: Palette.dimmer;
+            vertical-alignment: center;
+        }
+    }
 
     touch := TouchArea {
         enabled: !root.reach.dead;
+        width: label.width;
+        x: 0;
         clicked => { root.picked(); }
-    }
-
-    Text {
-        text: root.reach.label;
-        font-size: 12px;
-        color: root.active ? (root.reach.keeps ? Palette.accent : Palette.neutral-ink) : Palette.dim;
-        font-weight: root.active ? 700 : 400;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        width: 100%;
-        height: 100%;
-        overflow: elide;
     }
 }
 
@@ -166,10 +193,21 @@ export component Picker inherits Window {
     in property <string> private-label;
     in property <[Destination]> rows;
     in property <[Reach]> reaches;
+    in property <[Reach]> reaches-more;
+    in property <[string]> reach-labels;
+    in property <string> reach-more-label;
+    in property <string> reaches-line;
     in property <string> problem;
     in property <bool> alarming: true;
     in-out property <int> reach-index: 0;
     in-out property <bool> private-on: false;
+    in-out property <bool> more-open: false;
+
+    // True while the chosen reach is one the row does not show, which is when the opener has to
+    // say which one rather than «More»: otherwise the choice is made and nothing on screen says
+    // what it was.
+    out property <bool> more-holds: !root.in-the-row[root.reach-index];
+    in property <[bool]> in-the-row;
     in-out property <bool> pinned-private: false;
     in-out property <bool> copied: false;
 
@@ -187,14 +225,26 @@ export component Picker inherits Window {
     default-font-family: "Segoe UI";
     forward-focus: keys;
 
-    // A fifth reach appears when the click came from a known app, and five
-    // labels do not fit the width four were drawn for.
-    out property <length> wanted-width: root.reaches.length > 4 ? 428px : 368px;
+    // A fifth reach appears when the click came from a known app, and its label carries that
+    // app's name — which no fixed width can be drawn for. The reaches ask for the room they
+    // need; the floor is the width the rows were designed at and the ceiling keeps one long
+    // name from stretching the window across the screen.
+    out property <length> wanted-width: min(
+        max(348px, ruler.preferred-width + 30px + (root.reaches.length - 1) * 8px),
+        560px);
+    // Repeated elements reach the layout only once they are drawn, so the row cannot be asked
+    // how wide it wants to be before the window has a width. This measures the same words in one
+    // go instead, and the spacing the row puts around each separator is added on.
+    ruler := Text {
+        text: root.reaches-line;
+        font-size: 11.5px;
+        visible: false;
+    }
 
     out property <length> wanted-height:
         66px + 1px
         + (root.rows.length * 42px) + 16px
-        + 1px + 38px + 28px + 12px
+        + 1px + 38px + 22px + 12px
         + (root.problem == "" ? 0px : 36px);
 
     keys := FocusScope {
@@ -208,12 +258,16 @@ export component Picker inherits Window {
             // Reach, copy and private are the rest of what this window does, and
             // a TouchArea answers to nothing but a pointer: without these, a
             // keyboard could open a link but never remember one.
+            // Every reach, not only the two the row draws: the keyboard reaches the ones behind
+            // the opener without having to open it.
             if (event.text == Key.LeftArrow) {
                 root.reach-index = max(0, root.reach-index - 1);
+                root.more-open = false;
                 return accept;
             }
             if (event.text == Key.RightArrow || event.text == Key.Tab) {
-                root.reach-index = min(root.reaches.length - 1, root.reach-index + 1);
+                root.reach-index = min(root.reach-labels.length - 1, root.reach-index + 1);
+                root.more-open = false;
                 return accept;
             }
             if (event.text == "c" && event.modifiers.control) {
@@ -236,6 +290,11 @@ export component Picker inherits Window {
         key-released(event) => {
             root.private-on = event.modifiers.shift || root.pinned-private;
             return reject;
+        }
+
+        if root.more-open: TouchArea {
+            // Anywhere else puts it away, the way a menu does.
+            clicked => { root.more-open = false; }
         }
 
         Rectangle {
@@ -404,20 +463,115 @@ export component Picker inherits Window {
                     }
                 }
 
-                HorizontalLayout {
+                scopes := HorizontalLayout {
                     padding-left: 15px;
                     padding-right: 15px;
                     padding-bottom: 12px;
-                    spacing: 4px;
-                    for item[i] in root.reaches: Segment {
+                    spacing: 7px;
+                    alignment: end;
+
+                    for item in root.reaches: Segment {
                         reach: item;
-                        active: i == root.reach-index;
-                        picked => { root.reach-index = i; }
+                        active: item.index == root.reach-index;
+                        last: false;
+                        picked => {
+                            root.reach-index = item.index;
+                            root.more-open = false;
+                        }
+                    }
+
+                    more := Rectangle {
+                        height: 22px;
+                        preferred-width: opener.preferred-width;
+
+                        opener := HorizontalLayout {
+                            spacing: 4px;
+                            VerticalLayout {
+                                spacing: 2px;
+                                alignment: center;
+                                said := Text {
+                                    text: root.more-holds ? root.reach-labels[root.reach-index]
+                                                          : root.reach-more-label;
+                                    font-size: 11.5px;
+                                    max-width: 150px;
+                                    overflow: elide;
+                                    color: root.more-holds
+                                        ? Palette.accent
+                                        : (more-touch.has-hover ? Palette.neutral-ink : Palette.dim);
+                                    font-weight: root.more-holds ? 700 : 400;
+                                    vertical-alignment: center;
+                                }
+                                Rectangle {
+                                    height: 2px;
+                                    border-radius: 1px;
+                                    background: root.more-holds ? Palette.accent : transparent;
+                                }
+                            }
+                            Text {
+                                text: root.more-open ? "▴" : "▾";
+                                font-size: 9px;
+                                color: Palette.dimmer;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        more-touch := TouchArea {
+                            clicked => { root.more-open = !root.more-open; }
+                        }
                     }
                 }
             }
         }
     }
+
+        // Drawn over the rows rather than below the row that opens it: the reaches sit at the
+        // bottom edge, and a list growing downwards would fall outside the window.
+        if root.more-open: Rectangle {
+            // Hangs from the opener, which sits at the right edge with the row.
+            x: root.width - 15px - self.width;
+            y: root.height - 12px - 22px - self.height - 6px;
+            width: 190px;
+            height: shelf.preferred-height;
+            border-radius: 8px;
+            background: Palette.ground;
+            border-width: 1px;
+            border-color: Palette.edge;
+
+            TouchArea {}
+
+            shelf := VerticalLayout {
+                padding: 4px;
+                for item in root.reaches-more: Rectangle {
+                    height: 26px;
+                    border-radius: 5px;
+                    opacity: item.dead ? 0.4 : 1.0;
+                    background: item.index == root.reach-index
+                        ? Palette.accent-soft
+                        : (option.has-hover ? Palette.hover : transparent);
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: item.label;
+                            font-size: 11.5px;
+                            color: item.index == root.reach-index ? Palette.accent : Palette.dim;
+                            font-weight: item.index == root.reach-index ? 700 : 400;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+
+                    option := TouchArea {
+                        enabled: !item.dead;
+                        clicked => {
+                            root.reach-index = item.index;
+                            root.more-open = false;
+                        }
+                    }
+                }
+            }
+        }
 }
 
 export component Notice inherits Window {

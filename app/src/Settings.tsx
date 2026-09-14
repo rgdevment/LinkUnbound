@@ -208,8 +208,19 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const [here, setHere] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
+  // Choosing the default browser happens in Windows, not here, so the answer to «does Windows
+  // send links our way» changes while this window is in the background. Asked again every time
+  // it comes back, or it keeps showing what was true when it opened.
   useEffect(() => {
-    void invoke<SystemState>("system_state").then(setState).catch(noop);
+    const ask = () => {
+      void invoke<SystemState>("system_state").then(setState).catch(noop);
+    };
+    ask();
+    window.addEventListener("focus", ask);
+    return () => window.removeEventListener("focus", ask);
+  }, []);
+
+  useEffect(() => {
     void invoke<Build>("about")
       .then(({ version }) => setHere(version))
       .catch(noop);
@@ -286,7 +297,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
         )}
       </nav>
 
-      <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+      <main className="scroller flex min-w-0 flex-1 flex-col gap-4 p-5">
         <h1 className="text-[15px] font-semibold">
           {t(PAGES.find((p) => p.id === page)?.label ?? "navLinks")}
         </h1>

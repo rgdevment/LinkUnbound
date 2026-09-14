@@ -84,7 +84,7 @@ describe("settings", () => {
     expect(screen.queryByText("Versión 2.1.0")).toBeNull();
 
     await userEvent.click(go);
-    expect(await screen.findByText("Licencia GPL-3.0")).toBeInTheDocument();
+    expect(await screen.findByText("GPL-3.0-only")).toBeInTheDocument();
   });
 
   beforeEach(() => {
@@ -154,17 +154,31 @@ describe("settings", () => {
     expect(await screen.findByText(/recibe los enlaces/)).toBeInTheDocument();
   });
 
+  /// The default browser is chosen in Windows, not here, so the answer changes while this window
+  /// sits in the background. Asked once at startup, it went on saying the links do not arrive
+  /// after the person had just made them arrive.
+  it("asks again when it comes back from the Windows panel", async () => {
+    answers({ ...BASE, is_default: false, associations: [] });
+    render(<Settings />);
+    expect(await screen.findByText(/todavía no envía/)).toBeInTheDocument();
+
+    answers(BASE);
+    window.dispatchEvent(new Event("focus"));
+
+    expect(await screen.findByText(/recibe los enlaces/)).toBeInTheDocument();
+  });
+
   it("opens the Windows panel when another browser holds the links", async () => {
     answers({ ...BASE, is_default: false });
     render(<Settings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Abrir Windows" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Abrir Configuración" }));
     expect(invoke).toHaveBeenCalledWith("system_open_default_apps");
   });
 
   it("offers no Windows button once the links already arrive here", async () => {
     render(<Settings />);
     await screen.findByText(/recibe los enlaces/);
-    expect(screen.queryByRole("button", { name: "Abrir Windows" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abrir Configuración" })).toBeNull();
   });
 
   /// Looking registered is not the same as working: the command can point at a

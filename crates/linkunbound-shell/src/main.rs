@@ -76,6 +76,14 @@ mod host {
         linkunbound_win::is_in_front(window)
     }
 
+    pub fn shift_is_down() -> bool {
+        linkunbound_win::shift_is_down()
+    }
+
+    pub fn let_whoever_opens_next_come_forward() {
+        linkunbound_win::let_whoever_opens_next_come_forward();
+    }
+
     pub fn copy_text(text: &str) -> bool {
         linkunbound_win::copy_text(text)
     }
@@ -125,6 +133,12 @@ mod host {
         true
     }
 
+    pub fn shift_is_down() -> bool {
+        false
+    }
+
+    pub fn let_whoever_opens_next_come_forward() {}
+
     pub fn copy_text(_text: &str) -> bool {
         false
     }
@@ -173,6 +187,7 @@ fn answered_by_rule(url: &str, source: Option<&str>) -> Option<Fired> {
     let host = host_of(url)?;
     let rule = rules.resolve(url, &host, source)?;
     let browsers = catalogue();
+    host::let_whoever_opens_next_come_forward();
     linkunbound_core::launch(
         &browsers,
         &rule.target.browser_id,
@@ -466,6 +481,10 @@ impl Ui {
                 let Some(ours) = native_handle(ui.picker.window()) else {
                     return;
                 };
+                // The icon has to say what a click would do, and a modifier held while the
+                // pointer works may produce no key event to learn it from.
+                ui.picker
+                    .set_private_on(ui.picker.get_pinned_private() || host::shift_is_down());
                 if host::is_in_front(ours) {
                     ui.held_focus.set(true);
                 } else if ui.held_focus.get() {
@@ -608,6 +627,10 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(chosen) = held.rows.get(usize::try_from(index).unwrap_or(0)) else {
                 return;
             };
+            // The pointer can do the whole errand with Shift held and never produce a key event,
+            // so the modifier is read now rather than recalled from one.
+            let private = private || host::shift_is_down();
+            host::let_whoever_opens_next_come_forward();
             match linkunbound_core::launch(
                 &catalogue(),
                 &chosen.browser_id,

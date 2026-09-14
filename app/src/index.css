@@ -15,3 +15,17 @@ body {
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   user-select: none;
 }
+
+/* The webview draws the platform's own scrollbar otherwise: a wide grey slab that has nothing to
+   do with the rest of the window, and that sits there whether or not anybody is scrolling. */
+.scroller {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scroller:hover {
+  scrollbar-color: rgb(0 0 0 / 0.2) transparent;
+}
+.dark .scroller:hover {
+  scrollbar-color: rgb(255 255 255 / 0.2) transparent;
+}

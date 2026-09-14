@@ -138,9 +138,17 @@ mod platform {
 
     /// Only Windows may pick the default, so the most we can do is open the very
     /// panel where the user picks it.
+    /// Straight to our own page rather than the list of every app on the machine: the person
+    /// pressed a button that named us, and landing on an alphabetical list of a hundred entries
+    /// leaves them to find us. The name is the one under `RegisteredApplications`.
     pub fn open_default_apps() -> Result<(), String> {
         std::process::Command::new("cmd")
-            .args(["/C", "start", "", "ms-settings:defaultapps"])
+            .args([
+                "/C",
+                "start",
+                "",
+                "ms-settings:defaultapps?registeredAppUser=LinkUnbound",
+            ])
             .spawn()
             .map(|_| ())
             .map_err(|e| e.to_string())
