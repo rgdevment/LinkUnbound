@@ -2,6 +2,7 @@ mod args;
 mod binaries;
 mod browser;
 mod config;
+mod detect;
 mod hostile;
 mod i18n;
 mod launch;
@@ -19,6 +20,7 @@ pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,
 };
+pub use detect::{id_for, profiles_in};
 pub use hostile::{as_file_name, disarm, is_remote};
 pub use i18n::{Language, Strings};
 pub use launch::{LaunchError, open as launch};
@@ -26,7 +28,7 @@ pub use prefs::{Locale, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{Rule, RuleSet, Scope, Target, site_of};
-pub use store::{Store, StoreError, unmarked};
+pub use store::{Store, StoreError, data_dir, unmarked};
 pub use url::{
     host_of, is_launchable, looks_unresolved, normalise, unwrap_edge_protocol, unwrap_safe_link,
 };

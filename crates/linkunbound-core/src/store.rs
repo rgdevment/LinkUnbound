@@ -138,6 +138,36 @@ where
 }
 
 /// Where the 1.x line kept its files, so an upgrade finds them where they are.
+#[must_use]
+pub fn data_dir() -> PathBuf {
+    under(base())
+}
+
+fn under(base: Option<PathBuf>) -> PathBuf {
+    base.unwrap_or_else(std::env::temp_dir).join("LinkUnbound")
+}
+
+#[cfg(windows)]
+fn base() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA")
+        .or_else(|| std::env::var_os("APPDATA"))
+        .map(PathBuf::from)
+}
+
+#[cfg(target_os = "macos")]
+fn base() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| {
+        PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+    })
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn base() -> Option<PathBuf> {
+    None
+}
+
 #[derive(Debug, Clone)]
 pub struct Store {
     dir: PathBuf,
@@ -250,6 +280,19 @@ impl Store {
 mod tests {
     use super::*;
     use crate::config::SCHEMA_VERSION;
+
+    #[test]
+    fn the_files_live_in_a_directory_of_their_own() {
+        let home = under(Some(PathBuf::from("/somewhere")));
+        assert_eq!(home, Path::new("/somewhere").join("LinkUnbound"));
+    }
+
+    #[test]
+    fn a_system_that_names_no_home_still_yields_somewhere_absolute() {
+        let nowhere = under(None);
+        assert!(nowhere.is_absolute(), "{nowhere:?}");
+        assert!(nowhere.ends_with("LinkUnbound"));
+    }
 
     /// Stealing a lock is destructive: the other process is mid-write and loses what it was
     /// saving. On the mark it is still somebody's, and only past it is it plainly nobody's.

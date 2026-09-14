@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use linkunbound_core::{Language, Rule, Store, Strings, Target, host_of, normalise};
+use linkunbound_core::{Language, Rule, Store, Strings, Target, data_dir, host_of, normalise};
 #[cfg(windows)]
 use linkunbound_shell::ICON_SIDE;
 use linkunbound_shell::tray::{Asked, Tray};
@@ -13,10 +13,7 @@ use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, place, si
 use slint::{ComponentHandle, Model};
 
 fn store() -> Store {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .or_else(|| std::env::var_os("APPDATA"))
-        .map_or_else(std::env::temp_dir, std::path::PathBuf::from);
-    Store::at(base.join("LinkUnbound"))
+    Store::at(data_dir())
 }
 
 /// Every separator inside the single argument the shell passes is part of the link.
@@ -36,10 +33,7 @@ mod host {
     }
 
     pub fn icon(browser: &Browser) -> Option<String> {
-        let dir = std::env::var_os("LOCALAPPDATA")
-            .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
-            .join("LinkUnbound")
-            .join("icons");
+        let dir = super::data_dir().join("icons");
         linkunbound_win::icon_for(browser.icon_source(), &browser.id, &dir, super::ICON_SIDE)
             .map(|p| p.to_string_lossy().into_owned())
     }
@@ -93,7 +87,62 @@ mod host {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod host {
+    use linkunbound_core::Browser;
+
+    pub fn browsers() -> Vec<Browser> {
+        linkunbound_mac::installed_browsers()
+    }
+
+    pub fn icon(_browser: &Browser) -> Option<String> {
+        None
+    }
+
+    pub fn clicked_in() -> Option<String> {
+        linkunbound_mac::source_app()
+    }
+
+    pub fn light_taskbar() -> bool {
+        linkunbound_mac::menu_bar_is_light()
+    }
+
+    pub fn light_windows() -> bool {
+        linkunbound_mac::windows_are_light()
+    }
+
+    pub fn cursor() -> Option<(i32, i32)> {
+        linkunbound_mac::cursor()
+    }
+
+    pub fn work_area_at(x: i32, y: i32) -> Option<(i32, i32, i32, i32)> {
+        linkunbound_mac::work_area_at(x, y)
+    }
+
+    pub fn keep_off_the_taskbar(_window: isize) {}
+
+    pub fn take_the_keyboard(_window: isize) {}
+
+    pub fn is_in_front(_window: isize) -> bool {
+        true
+    }
+
+    pub fn shift_is_down() -> bool {
+        linkunbound_mac::shift_is_down()
+    }
+
+    pub fn let_whoever_opens_next_come_forward() {}
+
+    pub fn copy_text(text: &str) -> bool {
+        linkunbound_mac::copy_text(text)
+    }
+
+    pub fn digit_behind(typed: char) -> Option<u32> {
+        typed.to_digit(10).filter(|d| (1..=9).contains(d))
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod host {
     use linkunbound_core::Browser;
 
@@ -222,10 +271,7 @@ fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
 
 /// Settings runs in another process: the file is the only channel between them.
 fn prefs_touched_at() -> Option<std::time::SystemTime> {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .or_else(|| std::env::var_os("APPDATA"))
-        .map_or_else(std::env::temp_dir, std::path::PathBuf::from);
-    std::fs::metadata(base.join("LinkUnbound").join("preferences.json"))
+    std::fs::metadata(store().dir().join("preferences.json"))
         .and_then(|m| m.modified())
         .ok()
 }
@@ -537,6 +583,10 @@ fn arrived(raw: String) {
     ui.watch_focus();
 }
 
+fn handed_to_the_loop(url: String) {
+    let _ = slint::invoke_from_event_loop(move || arrived(url));
+}
+
 fn wants_light(theme: linkunbound_core::Theme) -> bool {
     match theme {
         linkunbound_core::Theme::Light => true,
@@ -561,15 +611,24 @@ fn main() -> Result<(), slint::PlatformError> {
     // window: the startup task passes this, the Start menu tile does not.
     let hushed = args.iter().any(|a| a == "--hushed");
 
-    let Some(_server) = single::claim(|url| {
-        let _ = slint::invoke_from_event_loop(move || arrived(url));
-    }) else {
-        if let Some(url) = incoming {
-            single::hand_over(&url);
-        } else {
-            open_settings();
+    let _server = match single::claim(handed_to_the_loop) {
+        Some(server) => server,
+        None => {
+            let Some(url) = incoming.as_deref() else {
+                open_settings();
+                return Ok(());
+            };
+            if single::hand_over(url) {
+                return Ok(());
+            }
+            // A resident that will not take the link is one that is no longer
+            // there: the socket it held is free again, and leaving here dropped
+            // a click already made.
+            match single::claim(handed_to_the_loop) {
+                Some(server) => server,
+                None => return Ok(()),
+            }
         }
-        return Ok(());
     };
 
     // Nothing was running, so this copy stays as the resident — and a person who started it by

@@ -19,10 +19,7 @@ struct Held {
 
 #[cfg(windows)]
 fn icons_dir() -> std::path::PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
-        .join("LinkUnbound")
-        .join("icons")
+    linkunbound_core::data_dir().join("icons")
 }
 
 #[cfg(windows)]
@@ -43,10 +40,7 @@ fn icon_data(_exe: &str, _id: &str) -> Option<String> {
 
 /// Where the 1.x line kept its files, so an upgrade finds them in place.
 fn store() -> Store {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .or_else(|| std::env::var_os("APPDATA"))
-        .map_or_else(std::env::temp_dir, std::path::PathBuf::from);
-    Store::at(base.join("LinkUnbound"))
+    Store::at(linkunbound_core::data_dir())
 }
 
 /// Detection plus what the user saved, which is the only place the two meet.

@@ -11,6 +11,7 @@ publish = false
 
 [workspace.dependencies]
 linkunbound-core = { path = "crates/linkunbound-core" }
+linkunbound-mac = { path = "crates/linkunbound-mac" }
 linkunbound-win = { path = "crates/linkunbound-win" }
 linkunbound-shell = { path = "crates/linkunbound-shell" }
 slint = { version = "1.17", default-features = false, features = [

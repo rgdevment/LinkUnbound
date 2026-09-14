@@ -1,5 +1,3 @@
-use std::process::Command;
-
 use crate::{Browser, LaunchRefused};
 
 #[derive(Debug, thiserror::Error)]
@@ -27,8 +25,83 @@ pub fn open(
         .ok_or_else(|| LaunchError::UnknownBrowser(browser_id.to_owned()))?;
 
     let args = browser.launch(profile_id, private, url)?;
-    Command::new(&browser.exe).args(&args).spawn()?;
+    spawn(&browser.exe, &args)?;
     Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn spawn(exe: &str, args: &[String]) -> Result<(), std::io::Error> {
+    std::process::Command::new(exe).args(args).spawn()?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+use mac::spawn;
+
+#[cfg(target_os = "macos")]
+mod mac {
+    use std::io;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum How {
+        Itself,
+        Bundle,
+        Inside,
+    }
+
+    /// `open` drops everything after `--args` when the app is already running, so
+    /// a link carrying a switch has to reach the executable directly. A link
+    /// carrying none goes through `open`, which is what puts the browser in front
+    /// and what reaches Safari at all.
+    pub fn how(app: &Path, args: &[String]) -> How {
+        if !app.is_dir() {
+            return How::Itself;
+        }
+        if args.len() > 1 {
+            How::Inside
+        } else {
+            How::Bundle
+        }
+    }
+
+    /// Firefox keeps twenty other files beside it in there and spells itself in
+    /// lower case, so the bundle's own name is not the executable's.
+    pub fn inside(app: &Path) -> Result<PathBuf, io::Error> {
+        let info = plist::Value::from_file(app.join("Contents").join("Info.plist"))
+            .map_err(|why| io::Error::new(io::ErrorKind::InvalidData, why.to_string()))?;
+        let named = info
+            .as_dictionary()
+            .and_then(|d| d.get("CFBundleExecutable"))
+            .and_then(plist::Value::as_string)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("{} names no executable", app.display()),
+                )
+            })?;
+        Ok(app.join("Contents").join("MacOS").join(named))
+    }
+
+    pub fn spawn(exe: &str, args: &[String]) -> Result<(), io::Error> {
+        let app = Path::new(exe);
+        // `open` reports a missing app on its own exit code, which nothing here
+        // waits for: the failure would reach the picker as success.
+        if !app.exists() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, exe.to_owned()));
+        }
+        match how(app, args) {
+            How::Itself => Command::new(app).args(args).spawn()?,
+            How::Bundle => Command::new("/usr/bin/open")
+                .arg("-a")
+                .arg(app)
+                .args(args)
+                .spawn()?,
+            How::Inside => Command::new(inside(app)?).args(args).spawn()?,
+        };
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -74,5 +147,77 @@ mod tests {
             err,
             LaunchError::Refused(LaunchRefused::ProfileGone(_))
         ));
+    }
+
+    /// A path that names nothing has to fail here rather than at the browser, which nothing
+    /// waits for: `open` would exit non-zero into a void and the picker would report success.
+    #[test]
+    fn a_browser_whose_path_names_nothing_is_reported_rather_than_handed_over() {
+        let err = open(&catalogue(), "chrome", None, false, "https://a.test").unwrap_err();
+        assert!(matches!(err, LaunchError::Spawn(_)));
+    }
+
+    #[cfg(target_os = "macos")]
+    mod macos {
+        use super::super::mac::{How, how, inside};
+        use std::path::Path;
+
+        fn args(list: &[&str]) -> Vec<String> {
+            list.iter().map(|a| (*a).to_owned()).collect()
+        }
+
+        /// The bundle is a directory, so handing it to a process is handing over a directory.
+        /// A link with nothing but the URL goes through `open`, which is the only way Safari
+        /// receives one at all and what brings the browser to the front.
+        #[test]
+        fn a_bundle_with_nothing_but_a_link_is_opened_the_way_the_system_opens_one() {
+            let app = Path::new("/Applications");
+            assert_eq!(how(app, &args(&["https://a.test"])), How::Bundle);
+        }
+
+        /// `open` drops everything past `--args` when the app is already running, and the
+        /// link would never arrive: a private window or a profile has to reach the executable.
+        #[test]
+        fn a_link_carrying_a_switch_reaches_the_executable_instead() {
+            let app = Path::new("/Applications");
+            assert_eq!(
+                how(app, &args(&["--incognito", "https://a.test"])),
+                How::Inside
+            );
+            assert_eq!(
+                how(
+                    app,
+                    &args(&["--profile-directory=Profile 2", "https://a.test"])
+                ),
+                How::Inside
+            );
+        }
+
+        /// Somebody who added a browser by hand named a program, not a bundle.
+        #[test]
+        fn a_path_that_is_already_a_program_is_run_as_one() {
+            assert_eq!(
+                how(Path::new("/bin/echo"), &args(&["https://a.test"])),
+                How::Itself
+            );
+        }
+
+        /// The bundle's own name is not the executable's: Firefox spells itself in lower case
+        /// and keeps twenty other files beside it, so a guess from the folder name misses.
+        #[test]
+        fn the_executable_is_read_from_the_bundle_rather_than_guessed_from_its_name() {
+            let firefox = Path::new("/Applications/Firefox.app");
+            if !firefox.exists() {
+                return;
+            }
+            let found = inside(firefox).expect("Firefox names its executable");
+            assert!(found.is_file(), "{found:?}");
+            assert_eq!(found.file_name().and_then(|n| n.to_str()), Some("firefox"));
+        }
+
+        #[test]
+        fn a_bundle_that_is_not_one_is_reported_rather_than_launched() {
+            assert!(inside(Path::new("/Applications")).is_err());
+        }
     }
 }
