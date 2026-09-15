@@ -347,7 +347,7 @@ fn open_settings() {
     } else {
         "linkunbound-settings"
     });
-    let _ = std::process::Command::new(beside).spawn();
+    let _ = linkunbound_core::spawn_and_forget(&mut std::process::Command::new(beside));
 }
 
 #[derive(Default)]

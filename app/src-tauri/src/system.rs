@@ -297,11 +297,10 @@ mod platform {
     }
 
     pub fn open_default_apps() -> Result<(), String> {
-        std::process::Command::new("/usr/bin/open")
-            .arg(DEFAULT_BROWSER_PANE)
-            .spawn()
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+        linkunbound_core::spawn_and_forget(
+            std::process::Command::new("/usr/bin/open").arg(DEFAULT_BROWSER_PANE),
+        )
+        .map_err(|e| e.to_string())
     }
 
     /// The system has no "no default browser", so letting go hands the schemes

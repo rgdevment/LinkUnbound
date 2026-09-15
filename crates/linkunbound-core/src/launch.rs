@@ -29,10 +29,28 @@ pub fn open(
     Ok(())
 }
 
+/// A child nobody waits for stays a zombie on Unix for as long as this process lives.
+pub fn spawn_and_forget(command: &mut std::process::Command) -> Result<(), std::io::Error> {
+    let child = command.spawn()?;
+    forget(child);
+    Ok(())
+}
+
+#[cfg(unix)]
+fn forget(mut child: std::process::Child) {
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+}
+
+#[cfg(not(unix))]
+fn forget(child: std::process::Child) {
+    drop(child);
+}
+
 #[cfg(not(target_os = "macos"))]
 fn spawn(exe: &str, args: &[String]) -> Result<(), std::io::Error> {
-    std::process::Command::new(exe).args(args).spawn()?;
-    Ok(())
+    spawn_and_forget(std::process::Command::new(exe).args(args))
 }
 
 #[cfg(target_os = "macos")]
@@ -92,15 +110,12 @@ mod mac {
             return Err(io::Error::new(io::ErrorKind::NotFound, exe.to_owned()));
         }
         match how(app, args) {
-            How::Itself => Command::new(app).args(args).spawn()?,
-            How::Bundle => Command::new("/usr/bin/open")
-                .arg("-a")
-                .arg(app)
-                .args(args)
-                .spawn()?,
-            How::Inside => Command::new(inside(app)?).args(args).spawn()?,
-        };
-        Ok(())
+            How::Itself => super::spawn_and_forget(Command::new(app).args(args)),
+            How::Bundle => {
+                super::spawn_and_forget(Command::new("/usr/bin/open").arg("-a").arg(app).args(args))
+            }
+            How::Inside => super::spawn_and_forget(Command::new(inside(app)?).args(args)),
+        }
     }
 }
 
@@ -155,6 +170,30 @@ mod tests {
     fn a_browser_whose_path_names_nothing_is_reported_rather_than_handed_over() {
         let err = open(&catalogue(), "chrome", None, false, "https://a.test").unwrap_err();
         assert!(matches!(err, LaunchError::Spawn(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_child_that_has_exited_is_not_left_as_a_zombie() {
+        use std::process::Command;
+        for _ in 0..3 {
+            spawn_and_forget(&mut Command::new("/usr/bin/true")).expect("true runs");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        let me = std::process::id().to_string();
+        let listed = Command::new("ps")
+            .args(["-o", "ppid=,stat=", "-ax"])
+            .output()
+            .expect("ps runs");
+        let zombies = String::from_utf8_lossy(&listed.stdout)
+            .lines()
+            .filter(|line| {
+                let mut parts = line.split_whitespace();
+                parts.next() == Some(me.as_str()) && parts.next().is_some_and(|s| s.contains('Z'))
+            })
+            .count();
+        assert_eq!(zombies, 0);
     }
 
     #[cfg(target_os = "macos")]
