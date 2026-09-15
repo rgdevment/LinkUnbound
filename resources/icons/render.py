@@ -8,7 +8,6 @@ back to a build step.
 
 import io
 import os
-import re
 import shutil
 import struct
 import subprocess
@@ -63,35 +62,46 @@ def source(svg: str) -> str:
 
 def render(svg: str, size: int, target: str) -> None:
     if sys.platform == "darwin":
-        quicklook(svg, size, target)
+        appkit(svg, size, target)
     else:
         headless(svg, size, target)
 
 
-def quicklook(svg: str, size: int, target: str) -> None:
-    """Quick Look draws an SVG at the size it declares and never scales it up, so
-    a 32-wide glyph asked for at 256 lands in a corner of an empty square."""
-    body = re.sub(
-        r'<svg\s+width="\d+"\s+height="\d+"',
-        f'<svg width="{size}" height="{size}"',
-        source(svg),
-        count=1,
-    )
-    work = tempfile.mkdtemp()
-    drawn = os.path.join(work, "icon.svg")
-    with io.open(drawn, "w", encoding="utf-8") as handle:
-        handle.write(body)
+APPKIT = """
+import AppKit
+let args = CommandLine.arguments
+let svg = args[1]
+let size = Int(args[2])!
+let target = args[3]
+guard let image = NSImage(contentsOfFile: svg) else { exit(2) }
+let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
+    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+rep.size = NSSize(width: size, height: size)
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+NSGraphicsContext.current?.imageInterpolation = .high
+image.draw(in: NSRect(x: 0, y: 0, width: size, height: size), from: .zero,
+    operation: .sourceOver, fraction: 1)
+NSGraphicsContext.restoreGraphicsState()
+guard let png = rep.representation(using: .png, properties: [:]) else { exit(3) }
+try! png.write(to: URL(fileURLWithPath: target))
+"""
 
+
+def appkit(svg: str, size: int, target: str) -> None:
+    """Quick Look flattens an SVG onto white; CoreSVG through NSImage keeps the alpha."""
+    work = tempfile.mkdtemp()
+    script = os.path.join(work, "render.swift")
+    with io.open(script, "w", encoding="utf-8") as handle:
+        handle.write(APPKIT)
     subprocess.run(
-        ["qlmanage", "-t", "-s", str(size), "-o", work, drawn],
+        ["swift", script, os.path.join(HERE, svg), str(size), target],
         check=True,
         capture_output=True,
     )
-    # It answers zero whether or not it drew anything.
-    made = f"{drawn}.png"
-    if not os.path.isfile(made):
-        sys.exit(f"Quick Look no dibujó {svg} a {size}px")
-    shutil.move(made, target)
+    if not os.path.isfile(target):
+        sys.exit(f"AppKit no dibujó {svg} a {size}px")
 
 
 def headless(svg: str, size: int, target: str) -> None:
@@ -154,9 +164,6 @@ def main() -> None:
 
 
 def macos_icons() -> None:
-    # No menu bar picture is drawn here: Quick Look fits a bare glyph to its own
-    # bounding box rather than to the viewBox, and the one the tray already
-    # ships is the same drawing with the alpha a template needs.
     write_icns(tempfile.mkdtemp())
 
 

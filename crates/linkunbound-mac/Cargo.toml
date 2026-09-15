@@ -70,6 +70,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
   "block2",
   "objc2-uniform-type-identifiers",
   "objc2-quartz-core",
+  "NSAppearance",
   "NSApplication",
   "NSBitmapImageRep",
   "NSColor",

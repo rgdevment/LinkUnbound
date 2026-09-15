@@ -22,6 +22,12 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>LinkUnbound opens a web page you double-clicked on your Desktop with the browser you pick.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>LinkUnbound opens a web page you double-clicked in your Documents with the browser you pick.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>LinkUnbound opens a web page you double-clicked in your Downloads with the browser you pick.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

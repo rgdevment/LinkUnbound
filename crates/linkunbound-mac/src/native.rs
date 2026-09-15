@@ -1,10 +1,19 @@
+use std::ptr::NonNull;
+use std::sync::Mutex;
+
+use block2::RcBlock;
 use objc2::rc::Retained;
+use objc2::runtime::ProtocolObject;
 use objc2_app_kit::{
+    NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
     NSApplication, NSApplicationActivationPolicy, NSColor, NSEvent, NSEventModifierFlags,
-    NSFloatingWindowLevel, NSPasteboard, NSPasteboardTypeString, NSScreen, NSView, NSWindow,
-    NSWindowCollectionBehavior, NSWorkspace,
+    NSFloatingWindowLevel, NSPasteboard, NSPasteboardTypeString, NSRunningApplication, NSScreen,
+    NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
+    NSWorkspaceDidActivateApplicationNotification,
 };
-use objc2_foundation::{MainThreadMarker, NSPoint, NSString, NSUserDefaults};
+use objc2_foundation::{
+    MainThreadMarker, NSNotification, NSObjectProtocol, NSPoint, NSString, NSUserDefaults,
+};
 
 /// AppKit measures upwards from the bottom of the primary screen; the picker is
 /// placed downwards from the top. A point is a rectangle of no height.
@@ -77,8 +86,6 @@ fn window_of(view: isize) -> Option<Retained<NSWindow>> {
     unsafe { &*view }.window()
 }
 
-/// The software renderer hands the window opaque pixels, so the rounded card is cut out of
-/// them here and the shadow follows the cut rather than the rectangle.
 pub fn keep_off_the_taskbar(view: isize, corner: f64) {
     let Some(window) = window_of(view) else {
         return;
@@ -102,8 +109,6 @@ pub fn keep_off_the_taskbar(view: isize, corner: f64) {
     window.invalidateShadow();
 }
 
-/// An accessory application is not always allowed to take the keyboard; a regular one is, and
-/// the Dock icon it gains stays only as long as the picker does.
 pub fn take_the_keyboard(view: isize) {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
@@ -131,22 +136,96 @@ pub fn let_whoever_opens_next_come_forward() {
     }
 }
 
+#[allow(unsafe_code)]
+pub fn dress_window(window: isize, dark: Option<bool>) {
+    let window = window as *const NSWindow;
+    if window.is_null() {
+        return;
+    }
+    let appearance = dark.and_then(|dark| {
+        let name = unsafe {
+            if dark {
+                NSAppearanceNameDarkAqua
+            } else {
+                NSAppearanceNameAqua
+            }
+        };
+        NSAppearance::appearanceNamed(name)
+    });
+    unsafe { &*window }.setAppearance(appearance.as_deref());
+}
+
 #[must_use]
 pub fn shift_is_down() -> bool {
     NSEvent::modifierFlags_class().contains(NSEventModifierFlags::Shift)
 }
 
-/// The system names no originator for an opened link, so the application that
-/// held the foreground at that instant stands in for one.
-#[must_use]
-pub fn source_app() -> Option<String> {
-    let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
+fn named_unless_ours(app: &NSRunningApplication) -> Option<String> {
     let bundle_id = app.bundleIdentifier()?.to_string();
     if crate::is_one_of_ours(&bundle_id) {
         return None;
     }
     let name = app.localizedName()?.to_string().to_lowercase();
     (!name.is_empty()).then_some(name)
+}
+
+static LAST_SEEN: Mutex<Option<String>> = Mutex::new(None);
+
+fn note_activation(app: Option<Retained<NSRunningApplication>>) {
+    if let Some(name) = app.as_deref().and_then(named_unless_ours)
+        && let Ok(mut seen) = LAST_SEEN.lock()
+    {
+        *seen = Some(name);
+    }
+}
+
+pub struct Watching(Retained<ProtocolObject<dyn NSObjectProtocol>>);
+
+#[allow(unsafe_code)]
+#[must_use]
+pub fn watch_activations() -> Watching {
+    let block = RcBlock::new(|_: NonNull<NSNotification>| {
+        note_activation(NSWorkspace::sharedWorkspace().frontmostApplication());
+    });
+    let observer = unsafe {
+        NSWorkspace::sharedWorkspace()
+            .notificationCenter()
+            .addObserverForName_object_queue_usingBlock(
+                Some(NSWorkspaceDidActivateApplicationNotification),
+                None,
+                None,
+                &block,
+            )
+    };
+    note_activation(NSWorkspace::sharedWorkspace().frontmostApplication());
+    Watching(observer)
+}
+
+impl Drop for Watching {
+    #[allow(unsafe_code)]
+    fn drop(&mut self) {
+        unsafe {
+            NSWorkspace::sharedWorkspace()
+                .notificationCenter()
+                .removeObserver(self.0.as_ref());
+        }
+    }
+}
+
+#[must_use]
+pub fn source_app() -> Option<String> {
+    let workspace = NSWorkspace::sharedWorkspace();
+    workspace
+        .frontmostApplication()
+        .as_deref()
+        .and_then(named_unless_ours)
+        .or_else(|| {
+            workspace
+                .menuBarOwningApplication()
+                .as_deref()
+                .and_then(named_unless_ours)
+        })
+        .or_else(|| LAST_SEEN.lock().ok().and_then(|seen| seen.clone()))
 }
 
 #[allow(unsafe_code)]

@@ -678,6 +678,8 @@ fn main() -> Result<(), slint::PlatformError> {
     // hand, with no link and no tray icon to click, would otherwise see nothing happen at all.
     let plain_launch = incoming.is_none() && !hushed;
     #[cfg(target_os = "macos")]
+    let _origins = linkunbound_mac::watch_activations();
+    #[cfg(target_os = "macos")]
     let _events = linkunbound_mac::listen({
         let quiet = !plain_launch || !host::is_bundled();
         move |event| {

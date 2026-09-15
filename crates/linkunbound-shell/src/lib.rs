@@ -19,7 +19,6 @@ pub fn paint(picker: &Picker, notice: &Notice, light: bool) {
     notice.set_family(FAMILY.into());
 }
 
-/// `.SF NS` is how CoreText lists the system face; empty falls through to Helvetica.
 pub const FAMILY: &str = if cfg!(windows) {
     "Segoe UI"
 } else if cfg!(target_os = "macos") {
@@ -28,7 +27,6 @@ pub const FAMILY: &str = if cfg!(windows) {
     ""
 };
 
-/// The radius both windows draw their card with, for a system that has to cut the window itself.
 pub const CORNER: f64 = 10.0;
 
 /// Extracted and drawn at this same side: any other ratio scales, and blurs.

@@ -156,9 +156,25 @@ fn point_documents(app: &NSURL, identifier: &str) -> Result<(), String> {
     waited(&rx)
 }
 
+fn bundle_id_of(app: &NSURL) -> Option<String> {
+    NSBundle::bundleWithURL(app)?
+        .bundleIdentifier()
+        .map(|id| id.to_string())
+}
+
+fn points_at(app: &NSURL, scheme: &str) -> bool {
+    match (handler_for(scheme), bundle_id_of(app)) {
+        (Some(held), Some(wanted)) => held.eq_ignore_ascii_case(&wanted),
+        _ => false,
+    }
+}
+
 fn point_everything(app: &NSURL) -> Result<(), String> {
+    point(app, "http")?;
     for scheme in SCHEMES {
-        point(app, scheme)?;
+        if !points_at(app, scheme) {
+            point(app, scheme)?;
+        }
     }
     for document in DOCUMENTS {
         point_documents(app, document)?;
