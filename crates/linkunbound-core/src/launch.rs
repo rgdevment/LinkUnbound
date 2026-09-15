@@ -29,7 +29,6 @@ pub fn open(
     Ok(())
 }
 
-/// A child nobody waits for stays a zombie on Unix for as long as this process lives.
 pub fn spawn_and_forget(command: &mut std::process::Command) -> Result<(), std::io::Error> {
     let child = command.spawn()?;
     forget(child);

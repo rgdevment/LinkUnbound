@@ -94,7 +94,6 @@ pub fn looks_unresolved(url: &str) -> bool {
 #[cfg(target_os = "macos")]
 const WEB_FILE_EXTENSIONS: [&str; 4] = ["html", "htm", "xhtml", "svg"];
 
-/// An existing file with a web extension, symlinks resolved, as the link a browser receives.
 #[cfg(target_os = "macos")]
 #[must_use]
 pub fn local_web_file(path: &std::path::Path) -> Option<String> {

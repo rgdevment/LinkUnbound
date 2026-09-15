@@ -1,8 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Identifies the entry by the source rather than by the browser id, which is recycled:
-/// deleting `custom-2` and adding another browser would hand the newcomer the dead one's icon.
 fn fingerprint(source: &str) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in source.to_ascii_lowercase().bytes() {
@@ -12,8 +10,6 @@ fn fingerprint(source: &str) -> u64 {
     hash
 }
 
-/// The side rides in the name so another size misses the cache, and a source that changed
-/// since the picture was made is read again.
 pub fn cached_icon(
     source: &str,
     id: &str,
