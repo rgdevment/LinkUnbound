@@ -75,12 +75,17 @@ jobs:
         run: |
           # native.rs is the Win32 surface the picker needs; shop.rs talks to the Store and
           # reaches unsafe only to hand it a window handle and to join the process apartment.
-          found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs')
-          status=0
-          [ "$(echo "$found" | grep -c .)" = "2" ] || status=1
-          echo "$found" | grep -qx "app/src-tauri/src/shop.rs" || status=1
-          echo "$found" | grep -qx "crates/linkunbound-win/src/native.rs" || status=1
-          if [ "$status" != "0" ]; then
+          # The Mac crate reaches it for framework statics, blocks, a class of its own and the
+          # window behind a raw handle; its own audit test lists the same files.
+          audited="app/src-tauri/src/shop.rs
+          crates/linkunbound-mac/src/events.rs
+          crates/linkunbound-mac/src/icons.rs
+          crates/linkunbound-mac/src/native.rs
+          crates/linkunbound-mac/src/registration.rs
+          crates/linkunbound-mac/src/startup.rs
+          crates/linkunbound-win/src/native.rs"
+          found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs' | sort)
+          if [ "$found" != "$(echo "$audited" | sed 's/^ *//' | sort)" ]; then
             echo "$found"
             echo "::error::unsafe is allowed somewhere new; audit it and update this list"
             exit 1

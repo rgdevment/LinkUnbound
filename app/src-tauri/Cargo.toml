@@ -69,3 +69,6 @@ windows = { version = "0.61", features = [
   "Win32_System_Com",
   "Win32_UI_Shell",
 ] }
+
+[target."cfg(target_os = \"macos\")".dependencies]
+linkunbound-mac.workspace = true

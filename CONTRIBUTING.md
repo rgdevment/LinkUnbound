@@ -136,6 +136,8 @@ not rebuild the front end and produces a binary whose window opens empty.
 | `cargo deny check`             | Audit licences and advisories       |
 | `npm run lint --prefix app`    | Lint and format the front end       |
 | `npm test --prefix app`        | Run the front-end tests             |
+| `cargo mutants -p <crate>`     | Hunt for mutants the tests miss     |
+| `npm run mutants --prefix app` | The same, for the front end         |
 
 ---
 

@@ -10,9 +10,11 @@ pub enum Asked {
     Quit,
 }
 
-/// The taskbar never recolours what it is handed, so both variants ship.
+/// The taskbar never recolours what it is handed, so both variants ship. The
+/// menu bar does, from the alpha alone, and the dark drawing is the one that
+/// carries it: handed the light one it would recolour a picture of nothing.
 fn artwork(light_taskbar: bool) -> Option<Icon> {
-    let bytes: &[u8] = if light_taskbar {
+    let bytes: &[u8] = if light_taskbar || cfg!(target_os = "macos") {
         include_bytes!("../../../app/src-tauri/icons/tray-light-32.png")
     } else {
         include_bytes!("../../../app/src-tauri/icons/tray-dark-32.png")
@@ -48,6 +50,7 @@ impl Tray {
             .with_menu(Box::new(menu))
             .with_tooltip("LinkUnbound")
             .with_icon(artwork(light_taskbar)?)
+            .with_icon_as_template(cfg!(target_os = "macos"))
             .with_menu_on_left_click(false)
             .build()
             .ok()?;
@@ -110,6 +113,26 @@ mod tests {
             assert_eq!((width, height), (32, 32));
             assert_eq!(pixels.len(), (width * height * 4) as usize);
         }
+    }
+
+    /// A template is recoloured from its alpha, so the drawing handed over has to be the one
+    /// that has any: the light-taskbar picture is the dark glyph, and the other is a white one
+    /// that would arrive as a silhouette of nothing.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_menu_bar_is_handed_the_drawing_that_carries_the_glyph() {
+        let template = super::artwork(false).is_some();
+        assert!(template, "the menu bar picture has to decode");
+
+        let light = include_bytes!("../../../app/src-tauri/icons/tray-light-32.png").as_slice();
+        let (_, _, pixels) = image_from_png(light).expect("should decode");
+        let ink = pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[3] > 0)
+            .count();
+        assert!(ink > 0, "a template with no alpha is an empty menu bar");
     }
 
     #[test]

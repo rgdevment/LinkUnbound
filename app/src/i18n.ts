@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import { platform } from "./platform";
 
 export type Language = "es" | "en";
 
@@ -32,6 +33,9 @@ const ES = {
   chooseTitle: "Elegir LinkUnbound en Windows",
   chooseNote: "Windows solo deja que lo fijes tú, desde su propia Configuración",
   chooseGo: "Abrir Configuración",
+  makeDefaultTitle: "Establecer como navegador predeterminado",
+  makeDefaultNote: "macOS te pedirá confirmación",
+  makeDefaultGo: "Establecer",
   edgeTitle: "Por qué Teams y Outlook abren Edge",
   edgeBody:
     "Algunas aplicaciones de Microsoft no abren los enlaces como lo haría cualquier otra: se los pasan directamente a Edge por un canal propio, saltándose el navegador predeterminado del sistema. Windows 11 ya no permite que otra aplicación se ponga en medio de ese canal, así que no hay nada que LinkUnbound pueda hacer para interceptarlo.",
@@ -157,6 +161,10 @@ const ES = {
   noStartupTask: "Esta versión no trae tarea de inicio",
   notOnThisPlatform: "Todavía no está disponible en este sistema",
   ownPathUnknown: "No se encuentra la ruta de esta copia",
+  notBundled: "Esta copia no está empaquetada como aplicación, así que macOS no puede registrarla",
+  defaultNoAnswer: "macOS no respondió a tiempo; vuelve a intentarlo",
+  defaultDeclined: "Rechazaste el cambio en el aviso de macOS",
+  noPreviousBrowser: "No se encuentra ningún navegador al que devolver los enlaces",
   ruleGone: "Esa regla ya no está",
   updateBusy: "Ya hay una actualización en marcha",
   updateGone: "Ya no hay ninguna versión nueva que instalar",
@@ -238,6 +246,9 @@ const EN: Record<Key, string> = {
   chooseTitle: "Choose LinkUnbound in Windows",
   chooseNote: "Windows only lets you set it yourself, from its own Settings",
   chooseGo: "Open Settings",
+  makeDefaultTitle: "Set as the default browser",
+  makeDefaultNote: "macOS will ask you to confirm",
+  makeDefaultGo: "Set",
   edgeTitle: "Why Teams and Outlook open Edge",
   edgeBody:
     "Some Microsoft applications do not open links the way any other one would: they hand them straight to Edge down a channel of their own, skipping the system default browser. Windows 11 no longer lets another application stand in the middle of that channel, so there is nothing LinkUnbound can do to intercept it.",
@@ -364,6 +375,10 @@ const EN: Record<Key, string> = {
   noStartupTask: "This build has no startup task",
   notOnThisPlatform: "Not supported on this platform yet",
   ownPathUnknown: "This copy's own path cannot be found",
+  notBundled: "This copy is not packaged as an application, so macOS cannot register it",
+  defaultNoAnswer: "macOS did not answer in time; try again",
+  defaultDeclined: "You declined the change in the macOS prompt",
+  noPreviousBrowser: "No browser can be found to hand the links back to",
   ruleGone: "That rule is no longer there",
   updateBusy: "An update is already underway",
   updateGone: "There is no newer version left to install",
@@ -415,6 +430,60 @@ const EN: Record<Key, string> = {
 
 export const SPEECH: Record<Language, Record<Key, string>> = { es: ES, en: EN };
 
+const MAC_ES: Partial<Record<Key, string>> = {
+  fieldExe: "Ruta de la aplicación (.app)",
+  browserNoProgram: "No hay ninguna aplicación en esa ruta",
+  healthBuildTree:
+    "Estás ejecutando una copia fuera de un paquete de aplicación. macOS solo confía los enlaces a una aplicación empaquetada, así que esta copia no se registra.",
+  healthPointsAt: "Registrada como: {}",
+  defaultNo: "macOS todavía no envía los enlaces aquí",
+  chooseTitle: "Elegirlo en Ajustes del Sistema",
+  chooseNote: "En Escritorio y Dock > Navegador web por omisión",
+  chooseGo: "Abrir Ajustes del Sistema",
+  browsersNone: "macOS no reporta ningún navegador instalado.",
+  startupWindows: "Desactivado desde Ajustes del Sistema > General > Ítems de inicio",
+  hideTrayTitle: "Ocultar el icono de la barra de menús",
+  rescanBody:
+    "Se olvida lo detectado y se vuelve a preguntar al sistema. Los navegadores que añadiste a mano se conservan; lo que hayas ocultado se mostrará de nuevo.",
+  unregisterTitle: "Dejar de ser el navegador predeterminado",
+  unregisterNote: "Los enlaces vuelven al navegador que los abría antes",
+  unregisterBody:
+    "macOS te pedirá confirmación. Podrás volver a elegir LinkUnbound desde la pestaña Enlaces.",
+  unreachable:
+    "Con el icono de la barra de menús oculto y sin atajo no habría forma de volver aquí.",
+};
+
+const MAC_EN: Partial<Record<Key, string>> = {
+  fieldExe: "Application path (.app)",
+  browserNoProgram: "There is no application at that path",
+  healthBuildTree:
+    "You are running a copy outside an application bundle. macOS only trusts links to a bundled application, so this copy does not register.",
+  healthPointsAt: "Registered as: {}",
+  defaultNo: "macOS is not sending links here yet",
+  chooseTitle: "Pick it in System Settings",
+  chooseNote: "Under Desktop & Dock > Default web browser",
+  chooseGo: "Open System Settings",
+  browsersNone: "macOS reports no installed browser.",
+  startupWindows: "Turned off in System Settings > General > Login Items",
+  hideTrayTitle: "Hide the menu bar icon",
+  rescanBody:
+    "What was detected is forgotten and the system is asked again. The browsers you added by hand are kept; whatever you hid will show up again.",
+  unregisterTitle: "Stop being the default browser",
+  unregisterNote: "Links go back to the browser that opened them before",
+  unregisterBody:
+    "macOS will ask you to confirm. You can pick LinkUnbound again from the Links tab.",
+  unreachable: "With the menu bar icon hidden and no shortcut there would be no way back here.",
+};
+
+export const MAC: Record<Language, Partial<Record<Key, string>>> = { es: MAC_ES, en: MAC_EN };
+
+export function said(language: Language, key: Key): string {
+  if (platform() === "macos") {
+    return MAC[language][key] ?? SPEECH[language][key];
+  }
+  return SPEECH[language][key];
+}
+
 export function fill(template: string, ...values: string[]): string {
   let at = 0;
   return template.replace(/\{\}/g, () => values[at++] ?? "");
@@ -427,7 +496,7 @@ export const Speaking = Spoken.Provider;
 
 export function useWords(): (key: Key, ...values: string[]) => string {
   const language = useContext(Spoken);
-  return (key, ...values) => fill(SPEECH[language][key], ...values);
+  return (key, ...values) => fill(said(language, key), ...values);
 }
 
 export function useSpoken(): Language {

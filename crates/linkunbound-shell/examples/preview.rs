@@ -7,11 +7,7 @@ use linkunbound_shell::{Listed, Picker, dress};
 use slint::ComponentHandle;
 
 fn main() -> Result<(), slint::PlatformError> {
-    let icons = std::env::var_os("LOCALAPPDATA")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_default()
-        .join("LinkUnbound")
-        .join("icons");
+    let icons = linkunbound_core::data_dir().join("icons");
     let icon = |id: &str| {
         let path = icons.join(format!("{id}.png"));
         path.is_file().then(|| path.to_string_lossy().into_owned())

@@ -1,0 +1,91 @@
+[package]
+name = "linkunbound-mac"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+linkunbound-core.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+png.workspace = true
+
+[lib]
+name = "linkunbound_mac"
+
+[target."cfg(target_os = \"macos\")".dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "block2",
+  "objc2-core-services",
+  "NSAppleEventDescriptor",
+  "NSAppleEventManager",
+  "NSArray",
+  "NSBundle",
+  "NSData",
+  "NSDictionary",
+  "NSError",
+  "NSEnumerator",
+  "NSGeometry",
+  "NSNotification",
+  "NSObject",
+  "NSOperation",
+  "NSString",
+  "NSURL",
+  "NSUserDefaults",
+  "FoundationErrors",
+] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = [
+  "std",
+  "objc2-core-foundation",
+  "CALayer",
+] }
+objc2-uniform-type-identifiers = { version = "0.3", default-features = false, features = [
+  "std",
+  "UTType",
+] }
+objc2-core-services = { version = "0.3", default-features = false, features = [
+  "std",
+  "AE",
+  "AEDataModel",
+  "AERegistry",
+  "AppleEvents",
+] }
+objc2-service-management = { version = "0.3", default-features = false, features = [
+  "std",
+  "objc2",
+  "objc2-foundation",
+  "SMAppService",
+] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+  "std",
+  "libc",
+  "objc2-core-foundation",
+  "block2",
+  "objc2-uniform-type-identifiers",
+  "objc2-quartz-core",
+  "NSAppearance",
+  "NSApplication",
+  "NSBitmapImageRep",
+  "NSColor",
+  "NSEvent",
+  "NSGraphics",
+  "NSGraphicsContext",
+  "NSImage",
+  "NSImageRep",
+  "NSPasteboard",
+  "NSResponder",
+  "NSRunningApplication",
+  "NSScreen",
+  "NSView",
+  "NSWindow",
+  "NSWorkspace",
+] }

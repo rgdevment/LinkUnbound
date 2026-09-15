@@ -245,7 +245,119 @@ mod platform {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod platform {
+    use super::{Association, Health, SystemState};
+    use linkunbound_mac::{
+        association_report, is_bundled, is_default_browser, own_bundle_id, register, set_startup,
+        startup_state, unregister,
+    };
+
+    /// Where the person is sent to choose. Ventura moved the default browser out
+    /// of its own pane and into Desktop & Dock.
+    const DEFAULT_BROWSER_PANE: &str =
+        "x-apple.systempreferences:com.apple.Desktop-Settings.extension";
+
+    /// The declaration lives in the bundle's `Info.plist` and ships with the
+    /// build: there is nothing to reconcile at launch, and Launch Services owns
+    /// the final choice the way `UserChoice` does on Windows.
+    pub fn reconcile() {}
+
+    /// Only two states can be true here. A copy outside a bundle declares no
+    /// schemes at all, and the registration it would claim is the directory it
+    /// happens to sit in.
+    fn health(bundled: bool, default: bool) -> Health {
+        if !bundled {
+            return Health::BuildTree;
+        }
+        if default {
+            Health::Fine
+        } else {
+            Health::NotRegistered
+        }
+    }
+
+    pub fn state() -> SystemState {
+        let startup = startup_state();
+        let bundled = is_bundled();
+        let default = is_default_browser();
+        SystemState {
+            health: health(bundled, default),
+            registered_path: own_bundle_id(),
+            edge_installed: false,
+            registered: bundled,
+            is_default: default,
+            associations: association_report()
+                .into_iter()
+                .map(|(scheme, held)| Association { scheme, held })
+                .collect(),
+            starts_with_system: startup.as_ref().is_some_and(|s| s.enabled),
+            startup_is_ours: startup.is_none_or(|s| s.ours_to_change),
+        }
+    }
+
+    pub fn open_default_apps() -> Result<(), String> {
+        linkunbound_core::spawn_and_forget(
+            std::process::Command::new("/usr/bin/open").arg(DEFAULT_BROWSER_PANE),
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    /// The system has no "no default browser", so letting go hands the schemes
+    /// back to Safari rather than leaving links with nowhere to arrive.
+    pub fn set_registered(enabled: bool) -> Result<SystemState, String> {
+        if enabled { register() } else { unregister() }?;
+        Ok(state())
+    }
+
+    pub fn set_starts_with_system(enabled: bool) -> Result<SystemState, String> {
+        set_startup(enabled).ok_or_else(|| "noStartupTask".to_owned())?;
+        Ok(state())
+    }
+
+    pub fn browsers() -> Vec<linkunbound_core::Browser> {
+        linkunbound_mac::installed_browsers()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::super::Health;
+        use super::health;
+
+        /// The screen draws a different panel for each, and a copy running outside a bundle
+        /// has to be told so rather than shown a button that cannot work.
+        #[test]
+        fn each_state_gets_the_verdict_the_screen_draws() {
+            assert_eq!(health(true, true), Health::Fine);
+            assert_eq!(health(true, false), Health::NotRegistered);
+            assert_eq!(
+                health(false, false),
+                Health::BuildTree,
+                "a bare executable declares no schemes and owns no registration"
+            );
+            assert_eq!(
+                health(false, true),
+                Health::BuildTree,
+                "whatever the system says, an unbundled copy is not what it named"
+            );
+        }
+
+        #[test]
+        fn the_bundle_launches_the_resident_for_a_link() {
+            let plist = include_str!("../Info.plist");
+            let executable = plist
+                .split("<key>CFBundleExecutable</key>")
+                .nth(1)
+                .and_then(|rest| rest.split("<string>").nth(1))
+                .and_then(|rest| rest.split("</string>").next())
+                .expect("the plist names an executable");
+            assert_eq!(executable, "linkunbound-shell");
+            assert!(plist.contains("<key>LSUIElement</key>"));
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod platform {
     use super::{Health, SystemState};
 

@@ -5,18 +5,15 @@ use std::rc::Rc;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use linkunbound_core::{Language, Rule, Store, Strings, Target, host_of, normalise};
-#[cfg(windows)]
+use linkunbound_core::{Language, Rule, Store, Strings, Target, data_dir, host_of, normalise};
+#[cfg(any(windows, target_os = "macos"))]
 use linkunbound_shell::ICON_SIDE;
 use linkunbound_shell::tray::{Asked, Tray};
 use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, place, single};
 use slint::{ComponentHandle, Model};
 
 fn store() -> Store {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .or_else(|| std::env::var_os("APPDATA"))
-        .map_or_else(std::env::temp_dir, std::path::PathBuf::from);
-    Store::at(base.join("LinkUnbound"))
+    Store::at(data_dir())
 }
 
 /// Every separator inside the single argument the shell passes is part of the link.
@@ -36,10 +33,7 @@ mod host {
     }
 
     pub fn icon(browser: &Browser) -> Option<String> {
-        let dir = std::env::var_os("LOCALAPPDATA")
-            .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
-            .join("LinkUnbound")
-            .join("icons");
+        let dir = super::data_dir().join("icons");
         linkunbound_win::icon_for(browser.icon_source(), &browser.id, &dir, super::ICON_SIDE)
             .map(|p| p.to_string_lossy().into_owned())
     }
@@ -93,7 +87,79 @@ mod host {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod host {
+    use linkunbound_core::Browser;
+
+    pub fn browsers() -> Vec<Browser> {
+        linkunbound_mac::installed_browsers()
+    }
+
+    pub fn icon(browser: &Browser) -> Option<String> {
+        let dir = super::data_dir().join("icons");
+        linkunbound_mac::icon_for(
+            browser.icon_source(),
+            &browser.id,
+            &dir,
+            super::ICON_SIDE * 2,
+        )
+        .map(|p| p.to_string_lossy().into_owned())
+    }
+
+    pub fn clicked_in() -> Option<String> {
+        linkunbound_mac::source_app()
+    }
+
+    pub fn light_taskbar() -> bool {
+        linkunbound_mac::menu_bar_is_light()
+    }
+
+    pub fn light_windows() -> bool {
+        linkunbound_mac::windows_are_light()
+    }
+
+    pub fn cursor() -> Option<(i32, i32)> {
+        linkunbound_mac::cursor()
+    }
+
+    pub fn work_area_at(x: i32, y: i32) -> Option<(i32, i32, i32, i32)> {
+        linkunbound_mac::work_area_at(x, y)
+    }
+
+    pub fn keep_off_the_taskbar(window: isize) {
+        linkunbound_mac::keep_off_the_taskbar(window, linkunbound_shell::CORNER);
+    }
+
+    pub fn take_the_keyboard(window: isize) {
+        linkunbound_mac::take_the_keyboard(window);
+    }
+
+    pub fn is_in_front(window: isize) -> bool {
+        linkunbound_mac::is_in_front(window)
+    }
+
+    pub fn shift_is_down() -> bool {
+        linkunbound_mac::shift_is_down()
+    }
+
+    pub fn let_whoever_opens_next_come_forward() {
+        linkunbound_mac::let_whoever_opens_next_come_forward();
+    }
+
+    pub fn copy_text(text: &str) -> bool {
+        linkunbound_mac::copy_text(text)
+    }
+
+    pub fn digit_behind(typed: char) -> Option<u32> {
+        typed.to_digit(10).filter(|d| (1..=9).contains(d))
+    }
+
+    pub fn is_bundled() -> bool {
+        linkunbound_mac::is_bundled()
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod host {
     use linkunbound_core::Browser;
 
@@ -222,10 +288,7 @@ fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
 
 /// Settings runs in another process: the file is the only channel between them.
 fn prefs_touched_at() -> Option<std::time::SystemTime> {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .or_else(|| std::env::var_os("APPDATA"))
-        .map_or_else(std::env::temp_dir, std::path::PathBuf::from);
-    std::fs::metadata(base.join("LinkUnbound").join("preferences.json"))
+    std::fs::metadata(store().dir().join("preferences.json"))
         .and_then(|m| m.modified())
         .ok()
 }
@@ -291,7 +354,7 @@ fn open_settings() {
     } else {
         "linkunbound-settings"
     });
-    let _ = std::process::Command::new(beside).spawn();
+    let _ = linkunbound_core::spawn_and_forget(&mut std::process::Command::new(beside));
 }
 
 #[derive(Default)]
@@ -363,6 +426,7 @@ fn native_handle(window: &slint::Window) -> Option<isize> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     match window.window_handle().window_handle().ok()?.as_raw() {
         RawWindowHandle::Win32(win32) => Some(win32.hwnd.get()),
+        RawWindowHandle::AppKit(appkit) => Some(appkit.ns_view.as_ptr() as isize),
         _ => None,
     }
 }
@@ -430,6 +494,8 @@ struct Ui {
     countdown: slint::Timer,
     prefs_seen: Cell<Option<std::time::SystemTime>>,
     held_focus: Cell<bool>,
+    #[cfg(target_os = "macos")]
+    launch_decided: Cell<bool>,
 }
 
 thread_local! {
@@ -456,7 +522,7 @@ impl Ui {
         self.words.set(Language::chosen(prefs.locale).strings());
         paint(&self.picker, &self.notice, wants_light(prefs.theme));
         if let Some(tray) = self.tray.as_ref() {
-            tray.show(!prefs.hide_tray);
+            tray.show(!prefs.hide_tray || cfg!(target_os = "macos"));
             tray.relabel(&self.words.get());
         }
     }
@@ -489,6 +555,7 @@ impl Ui {
                     ui.held_focus.set(true);
                 } else if ui.held_focus.get() {
                     let _ = ui.picker.hide();
+                    host::let_whoever_opens_next_come_forward();
                     ui.watch.stop();
                     // Whatever queued behind this link is still a click the user
                     // made; dropping it here loses it without a word.
@@ -537,6 +604,32 @@ fn arrived(raw: String) {
     ui.watch_focus();
 }
 
+fn handed_to_the_loop(url: String) {
+    let _ = slint::invoke_from_event_loop(move || arrived(url));
+}
+
+#[cfg(target_os = "macos")]
+fn sent_by_launch_services(event: linkunbound_mac::Event, quiet: bool) {
+    use linkunbound_mac::Event;
+    if let Some(ui) = ui() {
+        ui.launch_decided.set(true);
+    }
+    match event {
+        Event::Link(url) => arrived(url),
+        Event::Document(path) => {
+            if let Some(url) = linkunbound_core::local_web_file(&path) {
+                arrived(url);
+            }
+        }
+        Event::Launched { as_login_item } => {
+            if !as_login_item && !quiet {
+                open_settings();
+            }
+        }
+        Event::Reopened => open_settings(),
+    }
+}
+
 fn wants_light(theme: linkunbound_core::Theme) -> bool {
     match theme {
         linkunbound_core::Theme::Light => true,
@@ -561,20 +654,39 @@ fn main() -> Result<(), slint::PlatformError> {
     // window: the startup task passes this, the Start menu tile does not.
     let hushed = args.iter().any(|a| a == "--hushed");
 
-    let Some(_server) = single::claim(|url| {
-        let _ = slint::invoke_from_event_loop(move || arrived(url));
-    }) else {
-        if let Some(url) = incoming {
-            single::hand_over(&url);
-        } else {
-            open_settings();
+    let _server = match single::claim(handed_to_the_loop) {
+        Some(server) => server,
+        None => {
+            let Some(url) = incoming.as_deref() else {
+                open_settings();
+                return Ok(());
+            };
+            if single::hand_over(url) {
+                return Ok(());
+            }
+            // A resident that will not take the link is one that is no longer
+            // there: the socket it held is free again, and leaving here dropped
+            // a click already made.
+            match single::claim(handed_to_the_loop) {
+                Some(server) => server,
+                None => return Ok(()),
+            }
         }
-        return Ok(());
     };
 
     // Nothing was running, so this copy stays as the resident — and a person who started it by
     // hand, with no link and no tray icon to click, would otherwise see nothing happen at all.
-    if incoming.is_none() && !hushed {
+    let plain_launch = incoming.is_none() && !hushed;
+    #[cfg(target_os = "macos")]
+    let _origins = linkunbound_mac::watch_activations();
+    #[cfg(target_os = "macos")]
+    let _events = linkunbound_mac::listen({
+        let quiet = !plain_launch || !host::is_bundled();
+        move |event| {
+            let _ = slint::invoke_from_event_loop(move || sent_by_launch_services(event, quiet));
+        }
+    });
+    if plain_launch && !cfg!(target_os = "macos") {
         open_settings();
     }
 
@@ -589,6 +701,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             };
             let _ = window.hide();
+            host::let_whoever_opens_next_come_forward();
             if let Some(ui) = ui() {
                 next_in_line(&window, &ui.words.get(), &shown);
             }
@@ -711,6 +824,8 @@ fn main() -> Result<(), slint::PlatformError> {
         countdown: slint::Timer::default(),
         prefs_seen: Cell::new(prefs_touched_at()),
         held_focus: Cell::new(false),
+        #[cfg(target_os = "macos")]
+        launch_decided: Cell::new(false),
     });
     // Applied here rather than only on a later change: the tray was built
     // visible and the theme never left settings at all.
@@ -721,6 +836,18 @@ fn main() -> Result<(), slint::PlatformError> {
     // handle, so the picker would open with a taskbar button and without the keyboard.
     if let Some(url) = incoming {
         let _ = slint::invoke_from_event_loop(move || arrived(url));
+    }
+
+    #[cfg(target_os = "macos")]
+    if plain_launch {
+        slint::Timer::single_shot(Duration::from_secs(2), || {
+            if let Some(ui) = ui()
+                && !ui.launch_decided.get()
+            {
+                ui.launch_decided.set(true);
+                open_settings();
+            }
+        });
     }
 
     // The tray hands its events to a global queue rather than a callback, so

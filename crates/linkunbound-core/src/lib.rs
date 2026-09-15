@@ -2,8 +2,10 @@ mod args;
 mod binaries;
 mod browser;
 mod config;
+mod detect;
 mod hostile;
 mod i18n;
+mod icons;
 mod launch;
 mod prefs;
 mod private;
@@ -13,22 +15,27 @@ mod store;
 mod url;
 
 pub use args::{join as join_args, split as split_args};
-pub use binaries::{Registered, link_handler, settings_binary, what_is_registered};
+pub use binaries::{RESIDENT, Registered, link_handler, settings_binary, what_is_registered};
 pub use browser::{Browser, LaunchRefused, Profile, merge};
 pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,
 };
+pub use detect::{id_for, profiles_in};
 pub use hostile::{as_file_name, disarm, is_remote};
 pub use i18n::{Language, Strings};
-pub use launch::{LaunchError, open as launch};
+pub use icons::cached_icon;
+pub use launch::{LaunchError, open as launch, spawn_and_forget};
 pub use prefs::{Locale, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{Rule, RuleSet, Scope, Target, site_of};
-pub use store::{Store, StoreError, unmarked};
+pub use store::{Store, StoreError, data_dir, unmarked};
+#[cfg(target_os = "macos")]
+pub use url::local_web_file;
 pub use url::{
-    host_of, is_launchable, looks_unresolved, normalise, unwrap_edge_protocol, unwrap_safe_link,
+    host_of, is_launchable, local_file_parts, looks_unresolved, normalise, unwrap_edge_protocol,
+    unwrap_safe_link,
 };
 
 #[cfg(test)]

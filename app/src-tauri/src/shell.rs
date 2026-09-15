@@ -1,10 +1,50 @@
+use linkunbound_core::Theme;
 use tauri::{AppHandle, Manager, Runtime};
 
 pub const SETTINGS: &str = "settings";
 
+#[must_use]
+pub fn dressed_as(theme: Theme) -> Option<tauri::Theme> {
+    match theme {
+        Theme::System => None,
+        Theme::Light => Some(tauri::Theme::Light),
+        Theme::Dark => Some(tauri::Theme::Dark),
+    }
+}
+
+#[must_use]
+pub fn ground(theme: Theme) -> Option<tauri::window::Color> {
+    match dressed_as(theme)? {
+        tauri::Theme::Dark => Some(tauri::window::Color(25, 26, 31, 255)),
+        _ => Some(tauri::window::Color(255, 255, 255, 255)),
+    }
+}
+
+pub fn repaint<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
+    if let Some(window) = app.get_webview_window(SETTINGS) {
+        let _ = window.set_theme(dressed_as(theme));
+        let _ = window.set_background_color(ground(theme));
+        dress_natively(&window, theme);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn dress_natively<R: Runtime>(window: &tauri::WebviewWindow<R>, theme: Theme) {
+    let Ok(handle) = window.ns_window().map(|p| p as isize) else {
+        return;
+    };
+    let dark = dressed_as(theme).map(|t| t == tauri::Theme::Dark);
+    let _ = window.run_on_main_thread(move || {
+        linkunbound_mac::dress_window(handle, dark);
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn dress_natively<R: Runtime>(_window: &tauri::WebviewWindow<R>, _theme: Theme) {}
+
 /// Built on demand: an idle webview costs tens of megabytes and this window is
 /// opened rarely. The resident owns the tray, the picker and the notice.
-pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
+pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     if let Some(window) = app.get_webview_window(SETTINGS) {
         let _ = window.show();
         let _ = window.unminimize();
@@ -12,20 +52,33 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
         return;
     }
 
-    let built = tauri::WebviewWindowBuilder::new(app, SETTINGS, tauri::WebviewUrl::default())
+    let mut builder = tauri::WebviewWindowBuilder::new(app, SETTINGS, tauri::WebviewUrl::default())
         .title("LinkUnbound")
         .inner_size(780.0, 560.0)
         .min_inner_size(640.0, 480.0)
         .resizable(true)
-        .build();
+        .theme(dressed_as(theme));
+    if let Some(color) = ground(theme) {
+        builder = builder.background_color(color);
+    }
+    let built = builder.build();
     if let Ok(window) = built {
+        dress_natively(&window, theme);
         let _ = window.set_focus();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::SETTINGS;
+    use super::{SETTINGS, dressed_as};
+    use linkunbound_core::Theme;
+
+    #[test]
+    fn the_title_bar_is_told_the_theme_and_left_alone_for_the_system() {
+        assert_eq!(dressed_as(Theme::Dark), Some(tauri::Theme::Dark));
+        assert_eq!(dressed_as(Theme::Light), Some(tauri::Theme::Light));
+        assert_eq!(dressed_as(Theme::System), None);
+    }
 
     /// Declaring it would pre-create its webview at startup, which is the tens
     /// of megabytes `open_settings` exists to avoid.

@@ -18,7 +18,9 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": [
-      "nsis"
+      "nsis",
+      "app",
+      "dmg"
     ],
     "icon": [
       "icons/32x32.png",
@@ -28,7 +30,7 @@
       "icons/icon.ico"
     ],
     "publisher": "rgdevment",
-    "copyright": "Copyright © 2026 rgdevment",
+    "copyright": "Copyright \u00a9 2026 rgdevment",
     "category": "Utility",
     "shortDescription": "Choose which browser opens every link",
     "longDescription": "LinkUnbound puts itself between a link and your browsers, so every link opens where you want it. Rules remember the choices you make, and everything stays on your machine: no account, no telemetry, no server.",
@@ -46,7 +48,20 @@
     },
     "externalBin": [
       "binaries/linkunbound-shell"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        }
+      }
+    }
   },
   "mainBinaryName": "linkunbound-settings",
   "plugins": {

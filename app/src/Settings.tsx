@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { type Key, type Language, Speaking, spoken, useSpoken, useWords } from "./i18n";
+import { platform } from "./platform";
 import { saidPlainly } from "./refusal";
 import About from "./settings/About";
 import Application from "./settings/Application";
@@ -141,15 +142,31 @@ function Links({
             {t("associations", String(held), String(total))}
           </span>
         </div>
-        <Card>
-          <Line title={t("offerTitle")} note={t("offerNote")}>
-            <Switch
-              on={state?.registered ?? false}
-              label={t("offerTitle")}
-              onChange={(next) => change("system_set_registered", next)}
-            />
-          </Line>
-        </Card>
+        {platform() === "macos" ? (
+          !ok && (
+            <Card>
+              <Line title={t("makeDefaultTitle")} note={t("makeDefaultNote")}>
+                <button
+                  type="button"
+                  onClick={() => change("system_set_registered", true)}
+                  className="shrink-0 rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+                >
+                  {t("makeDefaultGo")}
+                </button>
+              </Line>
+            </Card>
+          )
+        ) : (
+          <Card>
+            <Line title={t("offerTitle")} note={t("offerNote")}>
+              <Switch
+                on={state?.registered ?? false}
+                label={t("offerTitle")}
+                onChange={(next) => change("system_set_registered", next)}
+              />
+            </Line>
+          </Card>
+        )}
         {!ok && (
           <Card>
             <Line title={t("chooseTitle")} note={t("chooseNote")}>
