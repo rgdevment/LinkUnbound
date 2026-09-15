@@ -43,6 +43,10 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
   "NSUserDefaults",
   "FoundationErrors",
 ] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = [
+  "std",
+  "CALayer",
+] }
 objc2-uniform-type-identifiers = { version = "0.3", default-features = false, features = [
   "std",
   "UTType",
@@ -65,8 +69,10 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
   "objc2-core-foundation",
   "block2",
   "objc2-uniform-type-identifiers",
+  "objc2-quartz-core",
   "NSApplication",
   "NSBitmapImageRep",
+  "NSColor",
   "NSEvent",
   "NSGraphics",
   "NSGraphicsContext",

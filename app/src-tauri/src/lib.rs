@@ -36,7 +36,7 @@ fn icon_data(exe: &str, id: &str) -> Option<String> {
 #[cfg(target_os = "macos")]
 fn icon_data(app: &str, id: &str) -> Option<String> {
     use base64::Engine;
-    let path = linkunbound_mac::icon_for(app, id, &icons_dir(), linkunbound_shell::ICON_SIDE)?;
+    let path = linkunbound_mac::icon_for(app, id, &icons_dir(), linkunbound_shell::ICON_SIDE * 2)?;
     let bytes = std::fs::read(path).ok()?;
     Some(format!(
         "data:image/png;base64,{}",
@@ -435,6 +435,7 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
         return Err("unreachable".to_owned());
     }
     store().save_prefs(&prefs).map_err(|e| e.to_string())?;
+    shell::repaint(&app, prefs.theme);
     Ok(claim(&app, &prefs))
 }
 
@@ -843,7 +844,7 @@ pub fn run() {
         // Two tray clicks used to mean two processes, each writing the registry
         // and each claiming the shortcut. The second now raises the first.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            shell::open_settings(app);
+            shell::open_settings(app, store().prefs().theme);
         }))
         .setup(|app| {
             let args: Vec<String> = std::env::args_os()
@@ -867,7 +868,7 @@ pub fn run() {
             // The resident owns the tray and the shortcut; this binary is only
             // the settings window, opened and closed on demand.
             claim(app.handle(), &store().prefs());
-            shell::open_settings(app.handle());
+            shell::open_settings(app.handle(), store().prefs().theme);
             Ok(())
         })
         .run(tauri::generate_context!())

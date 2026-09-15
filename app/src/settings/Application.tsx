@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { type Key, type Language, spoken, useSpoken, useWords } from "../i18n";
+import { platform } from "../platform";
 import { saidPlainly } from "../refusal";
 import { refresh } from "../theme";
 import { Card, Line, Section, Switch } from "./parts";
@@ -215,17 +216,19 @@ export default function Application({
               )}
             </div>
           </Line>
-          <Line
-            title={t("hideTrayTitle")}
-            note={prefs.shortcut ? t("hideTrayWith") : t("hideTrayNeeds")}
-          >
-            <Switch
-              on={prefs.hide_tray}
-              disabled={!prefs.shortcut}
-              label={t("hideTrayTitle")}
-              onChange={(hide_tray) => apply({ hide_tray })}
-            />
-          </Line>
+          {platform() !== "macos" && (
+            <Line
+              title={t("hideTrayTitle")}
+              note={prefs.shortcut ? t("hideTrayWith") : t("hideTrayNeeds")}
+            >
+              <Switch
+                on={prefs.hide_tray}
+                disabled={!prefs.shortcut}
+                label={t("hideTrayTitle")}
+                onChange={(hide_tray) => apply({ hide_tray })}
+              />
+            </Line>
+          )}
         </Card>
       </Section>
 

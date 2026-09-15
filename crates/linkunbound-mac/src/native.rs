@@ -1,7 +1,8 @@
 use objc2::rc::Retained;
 use objc2_app_kit::{
-    NSApplication, NSEvent, NSEventModifierFlags, NSFloatingWindowLevel, NSPasteboard,
-    NSPasteboardTypeString, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
+    NSApplication, NSApplicationActivationPolicy, NSColor, NSEvent, NSEventModifierFlags,
+    NSFloatingWindowLevel, NSPasteboard, NSPasteboardTypeString, NSScreen, NSView, NSWindow,
+    NSWindowCollectionBehavior, NSWorkspace,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSString, NSUserDefaults};
 
@@ -76,7 +77,9 @@ fn window_of(view: isize) -> Option<Retained<NSWindow>> {
     unsafe { &*view }.window()
 }
 
-pub fn keep_off_the_taskbar(view: isize) {
+/// The software renderer hands the window opaque pixels, so the rounded card is cut out of
+/// them here and the shadow follows the cut rather than the rectangle.
+pub fn keep_off_the_taskbar(view: isize, corner: f64) {
     let Some(window) = window_of(view) else {
         return;
     };
@@ -86,8 +89,21 @@ pub fn keep_off_the_taskbar(view: isize) {
             | NSWindowCollectionBehavior::FullScreenAuxiliary,
     );
     window.setHidesOnDeactivate(false);
+    window.setOpaque(false);
+    window.setBackgroundColor(Some(&NSColor::clearColor()));
+    window.setHasShadow(true);
+    if let Some(content) = window.contentView() {
+        content.setWantsLayer(true);
+        if let Some(layer) = content.layer() {
+            layer.setCornerRadius(corner);
+            layer.setMasksToBounds(true);
+        }
+    }
+    window.invalidateShadow();
 }
 
+/// An accessory application is not always allowed to take the keyboard; a regular one is, and
+/// the Dock icon it gains stays only as long as the picker does.
 pub fn take_the_keyboard(view: isize) {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
@@ -95,8 +111,10 @@ pub fn take_the_keyboard(view: isize) {
     let Some(window) = window_of(view) else {
         return;
     };
+    let app = NSApplication::sharedApplication(mtm);
+    app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
     #[allow(deprecated)]
-    NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+    app.activateIgnoringOtherApps(true);
     window.makeKeyAndOrderFront(None);
 }
 
@@ -107,7 +125,9 @@ pub fn is_in_front(view: isize) -> bool {
 
 pub fn let_whoever_opens_next_come_forward() {
     if let Some(mtm) = MainThreadMarker::new() {
-        NSApplication::sharedApplication(mtm).deactivate();
+        let app = NSApplication::sharedApplication(mtm);
+        app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+        app.deactivate();
     }
 }
 

@@ -97,8 +97,13 @@ mod host {
 
     pub fn icon(browser: &Browser) -> Option<String> {
         let dir = super::data_dir().join("icons");
-        linkunbound_mac::icon_for(browser.icon_source(), &browser.id, &dir, super::ICON_SIDE)
-            .map(|p| p.to_string_lossy().into_owned())
+        linkunbound_mac::icon_for(
+            browser.icon_source(),
+            &browser.id,
+            &dir,
+            super::ICON_SIDE * 2,
+        )
+        .map(|p| p.to_string_lossy().into_owned())
     }
 
     pub fn clicked_in() -> Option<String> {
@@ -122,7 +127,7 @@ mod host {
     }
 
     pub fn keep_off_the_taskbar(window: isize) {
-        linkunbound_mac::keep_off_the_taskbar(window);
+        linkunbound_mac::keep_off_the_taskbar(window, linkunbound_shell::CORNER);
     }
 
     pub fn take_the_keyboard(window: isize) {
@@ -517,7 +522,7 @@ impl Ui {
         self.words.set(Language::chosen(prefs.locale).strings());
         paint(&self.picker, &self.notice, wants_light(prefs.theme));
         if let Some(tray) = self.tray.as_ref() {
-            tray.show(!prefs.hide_tray);
+            tray.show(!prefs.hide_tray || cfg!(target_os = "macos"));
             tray.relabel(&self.words.get());
         }
     }
@@ -550,6 +555,7 @@ impl Ui {
                     ui.held_focus.set(true);
                 } else if ui.held_focus.get() {
                     let _ = ui.picker.hide();
+                    host::let_whoever_opens_next_come_forward();
                     ui.watch.stop();
                     // Whatever queued behind this link is still a click the user
                     // made; dropping it here loses it without a word.

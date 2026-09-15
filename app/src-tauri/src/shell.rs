@@ -1,10 +1,27 @@
+use linkunbound_core::Theme;
 use tauri::{AppHandle, Manager, Runtime};
 
 pub const SETTINGS: &str = "settings";
 
+/// The title bar is the system's, and it only follows the page when told which way.
+#[must_use]
+pub fn dressed_as(theme: Theme) -> Option<tauri::Theme> {
+    match theme {
+        Theme::System => None,
+        Theme::Light => Some(tauri::Theme::Light),
+        Theme::Dark => Some(tauri::Theme::Dark),
+    }
+}
+
+pub fn repaint<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
+    if let Some(window) = app.get_webview_window(SETTINGS) {
+        let _ = window.set_theme(dressed_as(theme));
+    }
+}
+
 /// Built on demand: an idle webview costs tens of megabytes and this window is
 /// opened rarely. The resident owns the tray, the picker and the notice.
-pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
+pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     if let Some(window) = app.get_webview_window(SETTINGS) {
         let _ = window.show();
         let _ = window.unminimize();
@@ -17,6 +34,7 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
         .inner_size(780.0, 560.0)
         .min_inner_size(640.0, 480.0)
         .resizable(true)
+        .theme(dressed_as(theme))
         .build();
     if let Ok(window) = built {
         let _ = window.set_focus();
@@ -25,7 +43,15 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
 
 #[cfg(test)]
 mod tests {
-    use super::SETTINGS;
+    use super::{SETTINGS, dressed_as};
+    use linkunbound_core::Theme;
+
+    #[test]
+    fn the_title_bar_is_told_the_theme_and_left_alone_for_the_system() {
+        assert_eq!(dressed_as(Theme::Dark), Some(tauri::Theme::Dark));
+        assert_eq!(dressed_as(Theme::Light), Some(tauri::Theme::Light));
+        assert_eq!(dressed_as(Theme::System), None);
+    }
 
     /// Declaring it would pre-create its webview at startup, which is the tens
     /// of megabytes `open_settings` exists to avoid.

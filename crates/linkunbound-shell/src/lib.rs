@@ -19,8 +19,17 @@ pub fn paint(picker: &Picker, notice: &Notice, light: bool) {
     notice.set_family(FAMILY.into());
 }
 
-/// Empty names no family, and the window falls through to the system's own.
-pub const FAMILY: &str = if cfg!(windows) { "Segoe UI" } else { "" };
+/// `.SF NS` is how CoreText lists the system face; empty falls through to Helvetica.
+pub const FAMILY: &str = if cfg!(windows) {
+    "Segoe UI"
+} else if cfg!(target_os = "macos") {
+    ".SF NS"
+} else {
+    ""
+};
+
+/// The radius both windows draw their card with, for a system that has to cut the window itself.
+pub const CORNER: f64 = 10.0;
 
 /// Extracted and drawn at this same side: any other ratio scales, and blurs.
 pub const ICON_SIDE: u32 = 24;
@@ -751,7 +760,10 @@ mod tests {
         assert!(!notice.global::<Palette>().get_light());
         assert_eq!(picker.get_family(), crate::FAMILY);
         assert_eq!(notice.get_family(), crate::FAMILY);
-        assert_eq!(crate::FAMILY.is_empty(), !cfg!(windows));
+        assert_eq!(
+            crate::FAMILY.is_empty(),
+            !cfg!(any(windows, target_os = "macos"))
+        );
     }
 
     /// An icon that fails to load leaves a blank square rather than stopping the picker, so

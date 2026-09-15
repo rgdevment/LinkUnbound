@@ -3683,6 +3683,7 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-core-services",
  "objc2-foundation 0.3.2",
+ "objc2-quartz-core 0.3.2",
  "objc2-service-management",
  "objc2-uniform-type-identifiers 0.3.2",
  "png 0.18.1",
