@@ -17,7 +17,7 @@ struct Held {
     shortcut: Option<String>,
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn icons_dir() -> std::path::PathBuf {
     linkunbound_core::data_dir().join("icons")
 }
@@ -33,7 +33,18 @@ fn icon_data(exe: &str, id: &str) -> Option<String> {
     ))
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn icon_data(app: &str, id: &str) -> Option<String> {
+    use base64::Engine;
+    let path = linkunbound_mac::icon_for(app, id, &icons_dir(), linkunbound_shell::ICON_SIDE)?;
+    let bytes = std::fs::read(path).ok()?;
+    Some(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn icon_data(_exe: &str, _id: &str) -> Option<String> {
     None
 }

@@ -6,7 +6,7 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use linkunbound_core::{Language, Rule, Store, Strings, Target, data_dir, host_of, normalise};
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use linkunbound_shell::ICON_SIDE;
 use linkunbound_shell::tray::{Asked, Tray};
 use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, place, single};
@@ -95,8 +95,10 @@ mod host {
         linkunbound_mac::installed_browsers()
     }
 
-    pub fn icon(_browser: &Browser) -> Option<String> {
-        None
+    pub fn icon(browser: &Browser) -> Option<String> {
+        let dir = super::data_dir().join("icons");
+        linkunbound_mac::icon_for(browser.icon_source(), &browser.id, &dir, super::ICON_SIDE)
+            .map(|p| p.to_string_lossy().into_owned())
     }
 
     pub fn clicked_in() -> Option<String> {

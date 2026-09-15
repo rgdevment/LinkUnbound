@@ -5,6 +5,7 @@ mod config;
 mod detect;
 mod hostile;
 mod i18n;
+mod icons;
 mod launch;
 mod prefs;
 mod private;
@@ -23,6 +24,7 @@ pub use config::{
 pub use detect::{id_for, profiles_in};
 pub use hostile::{as_file_name, disarm, is_remote};
 pub use i18n::{Language, Strings};
+pub use icons::cached_icon;
 pub use launch::{LaunchError, open as launch, spawn_and_forget};
 pub use prefs::{Locale, Preferences, Theme};
 pub use private::private_flag_for;

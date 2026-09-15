@@ -1,15 +1,23 @@
 #![allow(unsafe_code)]
 
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{Receiver, channel};
 use std::time::Duration;
 
 use block2::RcBlock;
+use objc2::rc::Retained;
 use objc2_app_kit::NSWorkspace;
-use objc2_foundation::{NSBundle, NSError, NSString, NSURL};
+use objc2_foundation::{
+    NSBundle, NSCocoaErrorDomain, NSError, NSString, NSURL, NSUserCancelledError, NSUserDefaults,
+};
+use objc2_uniform_type_identifiers::UTType;
 
 pub const SCHEMES: [&str; 2] = ["http", "https"];
 
+const DOCUMENTS: [&str; 3] = ["public.html", "public.xhtml", "public.svg-image"];
+
 const SAFARI: &str = "com.apple.Safari";
+
+const HANDED_FROM: &str = "HandedFrom";
 
 /// The person is asked by the system and may take their time, or say no.
 const LONG_ENOUGH_TO_ANSWER: Duration = Duration::from_secs(120);
@@ -18,7 +26,7 @@ const LONG_ENOUGH_TO_ANSWER: Duration = Duration::from_secs(120);
 /// the system happens to prefer, so with a debug build on the machine it would
 /// register a path inside the build tree, and the association dies with the next
 /// `cargo clean`.
-fn ours() -> Option<objc2::rc::Retained<NSURL>> {
+fn ours() -> Option<Retained<NSURL>> {
     let bundle = NSBundle::mainBundle();
     bundle.bundleIdentifier()?;
     Some(bundle.bundleURL())
@@ -66,57 +74,124 @@ pub fn association_report() -> Vec<(String, bool)> {
         .collect()
 }
 
-/// Waits for the system's answer rather than firing and reporting success. The
-/// person is prompted and may refuse; discarding that left the screen claiming a
-/// registration nobody had granted.
-fn point(app: &NSURL, scheme: &str) -> Result<(), String> {
+fn is_ours(bundle_id: &str) -> bool {
+    own_bundle_id().is_some_and(|mine| mine.eq_ignore_ascii_case(bundle_id))
+}
+
+fn remember(handed_from: Option<&str>, key: &str) {
+    let Some(previous) = handed_from.filter(|id| !is_ours(id)) else {
+        return;
+    };
+    unsafe {
+        NSUserDefaults::standardUserDefaults().setObject_forKey(
+            Some(&NSString::from_str(previous)),
+            &NSString::from_str(key),
+        );
+    }
+}
+
+fn remembered(key: &str) -> Option<String> {
+    NSUserDefaults::standardUserDefaults()
+        .stringForKey(&NSString::from_str(key))
+        .map(|id| id.to_string())
+}
+
+fn declined(error: &NSError) -> bool {
+    let cocoa = unsafe { NSCocoaErrorDomain };
+    error.domain().isEqualToString(cocoa) && error.code() == NSUserCancelledError
+}
+
+fn answer(error: *mut NSError) -> Result<(), String> {
+    if error.is_null() {
+        return Ok(());
+    }
+    let error = unsafe { &*error };
+    if declined(error) {
+        return Err("defaultDeclined".to_owned());
+    }
+    Err(error.localizedDescription().to_string())
+}
+
+type Answer = Result<(), String>;
+
+fn answered() -> (RcBlock<dyn Fn(*mut NSError)>, Receiver<Answer>) {
     let (tx, rx) = channel();
     let handler = RcBlock::new(move |error: *mut NSError| {
-        let said = if error.is_null() {
-            Ok(())
-        } else {
-            // SAFETY: not null, and the framework owns it for the call.
-            Err(unsafe { &*error }.localizedDescription().to_string())
-        };
-        let _ = tx.send(said);
+        let _ = tx.send(answer(error));
     });
+    (handler, rx)
+}
 
-    NSWorkspace::sharedWorkspace()
-        .setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(
-            app,
-            &NSString::from_str(scheme),
-            Some(&handler),
-        );
-
+fn waited(rx: &Receiver<Answer>) -> Answer {
     match rx.recv_timeout(LONG_ENOUGH_TO_ANSWER) {
         Ok(said) => said,
         Err(_) => Err("defaultNoAnswer".to_owned()),
     }
 }
 
-pub fn register() -> Result<(), String> {
-    let app = ours().ok_or_else(|| "notBundled".to_owned())?;
+/// Waits for the system's answer rather than firing and reporting success. The
+/// person is prompted and may refuse; discarding that left the screen claiming a
+/// registration nobody had granted.
+fn point(app: &NSURL, scheme: &str) -> Result<(), String> {
+    let (handler, rx) = answered();
+    NSWorkspace::sharedWorkspace()
+        .setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(
+            app,
+            &NSString::from_str(scheme),
+            Some(&handler),
+        );
+    waited(&rx)
+}
+
+fn point_documents(app: &NSURL, identifier: &str) -> Result<(), String> {
+    let Some(kind) = UTType::typeWithIdentifier(&NSString::from_str(identifier)) else {
+        return Ok(());
+    };
+    let (handler, rx) = answered();
+    NSWorkspace::sharedWorkspace().setDefaultApplicationAtURL_toOpenContentType_completionHandler(
+        app,
+        &kind,
+        Some(&handler),
+    );
+    waited(&rx)
+}
+
+fn point_everything(app: &NSURL) -> Result<(), String> {
     for scheme in SCHEMES {
-        point(&app, scheme)?;
+        point(app, scheme)?;
+    }
+    for document in DOCUMENTS {
+        point_documents(app, document)?;
     }
     Ok(())
 }
 
-/// The system has no "no default browser", so letting go means handing the
-/// schemes back to Safari, which is where they were before.
+pub fn register() -> Result<(), String> {
+    let app = ours().ok_or_else(|| "notBundled".to_owned())?;
+    remember(handler_for("https").as_deref(), HANDED_FROM);
+    point_everything(&app)
+}
+
+/// The system has no "no default browser", so letting go hands the schemes
+/// back to whoever held them before, and to Safari when nobody is remembered.
 pub fn unregister() -> Result<(), String> {
-    let safari = NSWorkspace::sharedWorkspace()
-        .URLForApplicationWithBundleIdentifier(&NSString::from_str(SAFARI))
-        .ok_or_else(|| "noSafari".to_owned())?;
-    for scheme in SCHEMES {
-        point(&safari, scheme)?;
-    }
-    Ok(())
+    let workspace = NSWorkspace::sharedWorkspace();
+    let previous = remembered(HANDED_FROM)
+        .filter(|id| !is_ours(id))
+        .and_then(|id| workspace.URLForApplicationWithBundleIdentifier(&NSString::from_str(&id)));
+    let target = previous
+        .or_else(|| workspace.URLForApplicationWithBundleIdentifier(&NSString::from_str(SAFARI)))
+        .ok_or_else(|| "noPreviousBrowser".to_owned())?;
+    point_everything(&target)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SCHEMES, association_report, handler_for, is_bundled, is_default_browser};
+    use super::{
+        SCHEMES, association_report, handler_for, is_bundled, is_default_browser, remember,
+        remembered,
+    };
+    use objc2_foundation::{NSString, NSUserDefaults};
 
     /// Both are what a browser is asked to carry, and holding one without the other is the
     /// state the screen has to be able to describe.
@@ -145,5 +220,16 @@ mod tests {
         let held = handler_for("https");
         assert!(held.is_some(), "no application opens https here");
         assert!(held.is_some_and(|id| id.contains('.')), "not a bundle id");
+    }
+
+    #[test]
+    fn the_browser_that_held_the_links_is_remembered_and_nothing_is_not() {
+        let key = format!("HandedFromTest{}", std::process::id());
+        remember(None, &key);
+        assert!(remembered(&key).is_none());
+        remember(Some("com.example.browser"), &key);
+        assert_eq!(remembered(&key).as_deref(), Some("com.example.browser"));
+        NSUserDefaults::standardUserDefaults().removeObjectForKey(&NSString::from_str(&key));
+        assert!(remembered(&key).is_none());
     }
 }

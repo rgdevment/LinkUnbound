@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Settings from "./Settings";
 
 const invoke = vi.fn();
@@ -243,6 +243,59 @@ describe("settings", () => {
     render(<Settings />);
     await userEvent.click(await screen.findByRole("switch", { name: "Ofrecerse como navegador" }));
     expect(await screen.findByText(/registry refused/)).toBeInTheDocument();
+  });
+
+  describe("on a Mac", () => {
+    beforeEach(() => {
+      Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
+    });
+    afterEach(() => {
+      Object.defineProperty(navigator, "platform", { value: "", configurable: true });
+    });
+
+    it("offers to become the default, which macOS confirms with its own prompt", async () => {
+      answers({ ...BASE, is_default: false });
+      render(<Settings />);
+      expect(await screen.findByText(/macOS todavía no envía/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Establecer" }));
+      expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: true });
+      expect(screen.queryByRole("switch", { name: "Ofrecerse como navegador" })).toBeNull();
+    });
+
+    it("sends to System Settings as the second way, never as the first", async () => {
+      answers({ ...BASE, is_default: false });
+      render(<Settings />);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Abrir Ajustes del Sistema" }),
+      );
+      expect(invoke).toHaveBeenCalledWith("system_open_default_apps");
+    });
+
+    it("offers nothing to press once the links already arrive here", async () => {
+      render(<Settings />);
+      await screen.findByText(/recibe los enlaces/);
+      expect(screen.queryByRole("button", { name: "Establecer" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Abrir Ajustes del Sistema" })).toBeNull();
+    });
+
+    it("says the prompt was declined in the reader's words", async () => {
+      answers(
+        { ...BASE, is_default: false },
+        {
+          system_set_registered: () => Promise.reject("defaultDeclined"),
+        },
+      );
+      render(<Settings />);
+      await userEvent.click(await screen.findByRole("button", { name: "Establecer" }));
+      expect(await screen.findByText(/Rechazaste el cambio/)).toBeInTheDocument();
+    });
+
+    it("names the login items pane rather than a Windows one", async () => {
+      answers({ ...BASE, starts_with_system: false, startup_is_ours: false });
+      render(<Settings />);
+      await go("Aplicación");
+      expect(await screen.findByText(/Ítems de inicio/)).toBeInTheDocument();
+    });
   });
 
   it("opens on the links section, not on a blank pane", async () => {

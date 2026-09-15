@@ -3,6 +3,8 @@ mod detect;
 #[cfg(target_os = "macos")]
 mod events;
 #[cfg(target_os = "macos")]
+mod icons;
+#[cfg(target_os = "macos")]
 mod native;
 #[cfg(target_os = "macos")]
 mod registration;
@@ -13,6 +15,8 @@ mod startup;
 pub use detect::installed_browsers;
 #[cfg(target_os = "macos")]
 pub use events::{Event, Listening, listen};
+#[cfg(target_os = "macos")]
+pub use icons::icon_for;
 #[cfg(target_os = "macos")]
 pub use native::{
     copy_text, cursor, is_in_front, keep_off_the_taskbar, let_whoever_opens_next_come_forward,
@@ -31,7 +35,13 @@ mod audit {
     use std::fs;
     use std::path::Path;
 
-    const AUDITED: [&str; 4] = ["events.rs", "native.rs", "registration.rs", "startup.rs"];
+    const AUDITED: [&str; 5] = [
+        "events.rs",
+        "icons.rs",
+        "native.rs",
+        "registration.rs",
+        "startup.rs",
+    ];
 
     /// Split so this file does not match its own search.
     const NEEDLE: &str = concat!("allow(unsafe", "_code)");
