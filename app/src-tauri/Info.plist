@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleExecutable</key>
+	<string>linkunbound-shell</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>CFBundleURLTypes</key>
@@ -24,7 +26,7 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>HTML document</string>
+			<string>Web document</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>
@@ -33,6 +35,7 @@
 			<array>
 				<string>public.html</string>
 				<string>public.xhtml</string>
+				<string>public.svg-image</string>
 			</array>
 		</dict>
 	</array>

@@ -140,6 +140,10 @@ mod host {
     pub fn digit_behind(typed: char) -> Option<u32> {
         typed.to_digit(10).filter(|d| (1..=9).contains(d))
     }
+
+    pub fn is_bundled() -> bool {
+        linkunbound_mac::is_bundled()
+    }
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -476,6 +480,8 @@ struct Ui {
     countdown: slint::Timer,
     prefs_seen: Cell<Option<std::time::SystemTime>>,
     held_focus: Cell<bool>,
+    #[cfg(target_os = "macos")]
+    launch_decided: Cell<bool>,
 }
 
 thread_local! {
@@ -587,6 +593,28 @@ fn handed_to_the_loop(url: String) {
     let _ = slint::invoke_from_event_loop(move || arrived(url));
 }
 
+#[cfg(target_os = "macos")]
+fn sent_by_launch_services(event: linkunbound_mac::Event, quiet: bool) {
+    use linkunbound_mac::Event;
+    if let Some(ui) = ui() {
+        ui.launch_decided.set(true);
+    }
+    match event {
+        Event::Link(url) => arrived(url),
+        Event::Document(path) => {
+            if let Some(url) = linkunbound_core::local_web_file(&path) {
+                arrived(url);
+            }
+        }
+        Event::Launched { as_login_item } => {
+            if !as_login_item && !quiet {
+                open_settings();
+            }
+        }
+        Event::Reopened => open_settings(),
+    }
+}
+
 fn wants_light(theme: linkunbound_core::Theme) -> bool {
     match theme {
         linkunbound_core::Theme::Light => true,
@@ -633,7 +661,15 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Nothing was running, so this copy stays as the resident — and a person who started it by
     // hand, with no link and no tray icon to click, would otherwise see nothing happen at all.
-    if incoming.is_none() && !hushed {
+    let plain_launch = incoming.is_none() && !hushed;
+    #[cfg(target_os = "macos")]
+    let _events = linkunbound_mac::listen({
+        let quiet = !plain_launch || !host::is_bundled();
+        move |event| {
+            let _ = slint::invoke_from_event_loop(move || sent_by_launch_services(event, quiet));
+        }
+    });
+    if plain_launch && !cfg!(target_os = "macos") {
         open_settings();
     }
 
@@ -770,6 +806,8 @@ fn main() -> Result<(), slint::PlatformError> {
         countdown: slint::Timer::default(),
         prefs_seen: Cell::new(prefs_touched_at()),
         held_focus: Cell::new(false),
+        #[cfg(target_os = "macos")]
+        launch_decided: Cell::new(false),
     });
     // Applied here rather than only on a later change: the tray was built
     // visible and the theme never left settings at all.
@@ -780,6 +818,18 @@ fn main() -> Result<(), slint::PlatformError> {
     // handle, so the picker would open with a taskbar button and without the keyboard.
     if let Some(url) = incoming {
         let _ = slint::invoke_from_event_loop(move || arrived(url));
+    }
+
+    #[cfg(target_os = "macos")]
+    if plain_launch {
+        slint::Timer::single_shot(Duration::from_secs(2), || {
+            if let Some(ui) = ui()
+                && !ui.launch_decided.get()
+            {
+                ui.launch_decided.set(true);
+                open_settings();
+            }
+        });
     }
 
     // The tray hands its events to a global queue rather than a callback, so

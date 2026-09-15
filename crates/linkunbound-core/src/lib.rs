@@ -29,8 +29,11 @@ pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{Rule, RuleSet, Scope, Target, site_of};
 pub use store::{Store, StoreError, data_dir, unmarked};
+#[cfg(target_os = "macos")]
+pub use url::local_web_file;
 pub use url::{
-    host_of, is_launchable, looks_unresolved, normalise, unwrap_edge_protocol, unwrap_safe_link,
+    host_of, is_launchable, local_file_parts, looks_unresolved, normalise, unwrap_edge_protocol,
+    unwrap_safe_link,
 };
 
 #[cfg(test)]

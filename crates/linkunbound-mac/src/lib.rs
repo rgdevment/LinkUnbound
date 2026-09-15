@@ -1,6 +1,8 @@
 #[cfg(target_os = "macos")]
 mod detect;
 #[cfg(target_os = "macos")]
+mod events;
+#[cfg(target_os = "macos")]
 mod native;
 #[cfg(target_os = "macos")]
 mod registration;
@@ -9,6 +11,8 @@ mod startup;
 
 #[cfg(target_os = "macos")]
 pub use detect::installed_browsers;
+#[cfg(target_os = "macos")]
+pub use events::{Event, Listening, listen};
 #[cfg(target_os = "macos")]
 pub use native::{
     copy_text, cursor, menu_bar_is_light, shift_is_down, source_app, windows_are_light,
@@ -26,10 +30,7 @@ mod audit {
     use std::fs;
     use std::path::Path;
 
-    /// `native.rs` is the audited exception, and reaches for it in one place: the pasteboard
-    /// type is a framework constant, which `objc2` cannot declare safe. Anything else reaching
-    /// for `unsafe` has to be reviewed and added here deliberately, never by accident.
-    const AUDITED: [&str; 3] = ["native.rs", "registration.rs", "startup.rs"];
+    const AUDITED: [&str; 4] = ["events.rs", "native.rs", "registration.rs", "startup.rs"];
 
     /// Split so this file does not match its own search.
     const NEEDLE: &str = concat!("allow(unsafe", "_code)");

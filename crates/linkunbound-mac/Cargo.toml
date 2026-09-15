@@ -21,16 +21,30 @@ objc2 = "0.6"
 block2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = [
   "std",
+  "block2",
+  "objc2-core-services",
+  "NSAppleEventDescriptor",
+  "NSAppleEventManager",
   "NSArray",
   "NSBundle",
+  "NSData",
   "NSDictionary",
   "NSError",
   "NSEnumerator",
   "NSGeometry",
+  "NSNotification",
   "NSObject",
+  "NSOperation",
   "NSString",
   "NSURL",
   "NSUserDefaults",
+] }
+objc2-core-services = { version = "0.3", default-features = false, features = [
+  "std",
+  "AE",
+  "AEDataModel",
+  "AERegistry",
+  "AppleEvents",
 ] }
 objc2-service-management = { version = "0.3", default-features = false, features = [
   "std",
@@ -42,6 +56,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
   "std",
   "objc2-core-foundation",
   "block2",
+  "NSApplication",
   "NSEvent",
   "NSPasteboard",
   "NSResponder",

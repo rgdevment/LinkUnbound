@@ -4,18 +4,37 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # The resident is a binary of its own, and the bundler only carries what `externalBin` names —
-# with the host triple appended, which is how Tauri tells one platform's sidecar from another's.
-target=$(rustc -vV | sed -n 's/^host: //p')
+# with the target triple appended, which is how Tauri tells one platform's sidecar from another's.
+host=$(rustc -vV | sed -n 's/^host: //p')
 suffix=""
-case "$target" in *windows*) suffix=".exe" ;; esac
+case "$host" in *windows*) suffix=".exe" ;; esac
 
 profile="${1:-debug}"
-case "$profile" in
-  release) cargo build --release --bin linkunbound-shell ;;
-  *) cargo build --bin linkunbound-shell ;;
-esac
+target="${2:-$host}"
+out="app/src-tauri/binaries"
+mkdir -p "$out"
 
-mkdir -p app/src-tauri/binaries
-cp "target/$profile/linkunbound-shell$suffix" \
-   "app/src-tauri/binaries/linkunbound-shell-$target$suffix"
-echo "app/src-tauri/binaries/linkunbound-shell-$target$suffix"
+flags=()
+case "$profile" in release) flags+=(--release) ;; esac
+
+build() {
+  local triple="$1"
+  if [ "$triple" = "$host" ]; then
+    cargo build ${flags[@]+"${flags[@]}"} --bin linkunbound-shell
+    echo "target/$profile/linkunbound-shell$suffix"
+  else
+    cargo build ${flags[@]+"${flags[@]}"} --bin linkunbound-shell --target "$triple"
+    echo "target/$triple/$profile/linkunbound-shell$suffix"
+  fi
+}
+
+if [ "$target" = "universal-apple-darwin" ]; then
+  arm=$(build aarch64-apple-darwin | tail -1)
+  intel=$(build x86_64-apple-darwin | tail -1)
+  lipo -create -output "$out/linkunbound-shell-$target" "$arm" "$intel"
+  lipo -archs "$out/linkunbound-shell-$target"
+else
+  built=$(build "$target" | tail -1)
+  cp "$built" "$out/linkunbound-shell-$target$suffix"
+fi
+echo "$out/linkunbound-shell-$target$suffix"

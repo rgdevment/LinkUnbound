@@ -8,7 +8,7 @@ pub mod tray;
 
 use std::rc::Rc;
 
-use linkunbound_core::{Browser, Scope, Strings, looks_unresolved, site_of};
+use linkunbound_core::{Browser, Scope, Strings, local_file_parts, looks_unresolved, site_of};
 
 /// Both windows read the same palette, so the choice is applied once per window
 /// rather than threaded through every component that draws.
@@ -112,7 +112,7 @@ pub fn reaches(
     site: &str,
     source: Option<&str>,
 ) -> Vec<(String, bool, bool)> {
-    let wrapped = looks_unresolved(url);
+    let wrapped = looks_unresolved(url) || local_file_parts(url).is_some();
     let mut offered = vec![
         (words.reach_once.to_owned(), false, false),
         (words.reach_url.to_owned(), true, wrapped),
@@ -143,6 +143,9 @@ pub fn in_the_row(index: i32) -> bool {
 
 #[must_use]
 pub fn split(url: &str) -> (String, String) {
+    if let Some(parts) = local_file_parts(url) {
+        return parts;
+    }
     let Some(rest) = url.split_once("://").map(|(_, r)| r) else {
         return (url.to_owned(), String::new());
     };
@@ -664,6 +667,24 @@ mod tests {
             split("https://example.test"),
             ("example.test".to_owned(), String::new())
         );
+    }
+
+    #[test]
+    fn a_local_file_is_headed_by_its_name_and_remembered_by_nothing() {
+        let document = "file:///Users/ana/Documents/My%20Page.html";
+        assert_eq!(
+            split(document),
+            ("My Page.html".to_owned(), "…/Documents".to_owned())
+        );
+        let offered = reaches(
+            &SPOKEN,
+            document,
+            "My Page.html",
+            "my page.html",
+            Some("finder"),
+        );
+        assert!(!offered[0].2, "once is the one reach a file has");
+        assert!(offered[1].2 && offered[2].2 && offered[3].2);
     }
 
     #[test]

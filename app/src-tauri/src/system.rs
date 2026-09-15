@@ -342,6 +342,19 @@ mod platform {
                 "whatever the system says, an unbundled copy is not what it named"
             );
         }
+
+        #[test]
+        fn the_bundle_launches_the_resident_for_a_link() {
+            let plist = include_str!("../Info.plist");
+            let executable = plist
+                .split("<key>CFBundleExecutable</key>")
+                .nth(1)
+                .and_then(|rest| rest.split("<string>").nth(1))
+                .and_then(|rest| rest.split("</string>").next())
+                .expect("the plist names an executable");
+            assert_eq!(executable, "linkunbound-shell");
+            assert!(plist.contains("<key>LSUIElement</key>"));
+        }
     }
 }
 
