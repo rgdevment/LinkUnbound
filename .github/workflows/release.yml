@@ -23,6 +23,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  BUILD_MACOS: "true"
 
 jobs:
   version:
@@ -32,11 +33,18 @@ jobs:
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
+      macos: ${{ steps.resolve.outputs.macos }}
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       PFX_BASE64: ${{ secrets.PFX_BASE64 }}
       PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
     steps:
       - name: Signing secrets come in pairs
         run: |
@@ -44,6 +52,21 @@ jobs:
 
           if [ -n "$PFX_BASE64" ] && [ -z "$PFX_PASSWORD" ]; then
             fail "PFX_BASE64 is set but PFX_PASSWORD is empty"
+          fi
+          if [ -n "$MACOS_CERTIFICATE_P12" ] && [ -z "$MACOS_CERTIFICATE_PASSWORD" ]; then
+            fail "MACOS_CERTIFICATE_P12 is set but MACOS_CERTIFICATE_PASSWORD is empty"
+          fi
+          if [ -n "$APPLE_ID" ] && { [ -z "$APPLE_APP_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; }; then
+            fail "APPLE_ID is set but APPLE_APP_PASSWORD or APPLE_TEAM_ID is empty"
+          fi
+          if [ -n "$MACOS_CERTIFICATE_P12" ] && [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            fail "MACOS_CERTIFICATE_P12 is set but APPLE_SIGNING_IDENTITY is empty: the app would be bundled unsigned"
+          fi
+          if [ "${{ github.event_name }}" = "push" ] && [ "$BUILD_MACOS" = "true" ]; then
+            if [ -z "$MACOS_CERTIFICATE_P12" ] || [ -z "$APPLE_ID" ]; then
+              fail "no Apple signing or notarization secrets. A disk image that is not notarized \
+          is one Gatekeeper refuses, and the README promises otherwise."
+            fi
           fi
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] && [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
             echo "::notice::the updater key carries no password; that is fine if it was made without one"
@@ -90,6 +113,7 @@ jobs:
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "macos=${BUILD_MACOS}" >> "$GITHUB_OUTPUT"
           echo "version $version (pre-release: $prerelease)"
 
   bundle-windows:
@@ -218,6 +242,163 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: bundle-windows
+          path: dist/*
+          if-no-files-found: error
+
+  bundle-macos:
+    name: linkunbound-macos-installer
+    needs: version
+    if: needs.version.outputs.macos == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      TARGET: universal-apple-darwin
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/prepare
+        with:
+          version: ${{ needs.version.outputs.version }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Frontend
+        working-directory: app
+        run: npm ci
+
+      - name: The resident rides along, for both chips
+        run: bash scripts/sidecar.sh release "$TARGET"
+
+      - name: Bundle
+        working-directory: app
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          sign=""
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then sign="--no-sign"; fi
+          npm run tauri build -- --target "$TARGET" --bundles app,dmg $sign
+
+      - name: It launches the resident, for a link, from the menu bar
+        run: |
+          app="target/$TARGET/release/bundle/macos/LinkUnbound.app"
+          plist="$app/Contents/Info.plist"
+          test -d "$app" || { echo "::error::the bundler produced no app"; exit 1; }
+          status=0
+          want() {
+            if [ "$(plutil -extract "$1" raw -o - "$plist" 2>/dev/null)" != "$2" ]; then
+              echo "::error::$1 is «$(plutil -extract "$1" raw -o - "$plist" 2>/dev/null)», not «$2»"
+              status=1
+            fi
+          }
+          want CFBundleExecutable linkunbound-shell
+          want LSUIElement true
+          want CFBundleIdentifier dev.rgdevment.linkunbound
+          want CFBundleShortVersionString "${{ needs.version.outputs.version }}"
+          for one in linkunbound-shell linkunbound-settings; do
+            bin="$app/Contents/MacOS/$one"
+            test -x "$bin" || { echo "::error::$one is not in the bundle"; status=1; continue; }
+            archs=$(lipo -archs "$bin")
+            case "$archs" in
+              *x86_64*arm64*|*arm64*x86_64*) echo "$one: $archs" ;;
+              *) echo "::error::$one is not universal: $archs"; status=1 ;;
+            esac
+          done
+          exit $status
+
+      - name: The app is really signed
+        if: env.MACOS_CERTIFICATE_P12 != ''
+        run: |
+          app="target/$TARGET/release/bundle/macos/LinkUnbound.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          if codesign -dv "$app" 2>&1 | grep -q "Signature=adhoc"; then
+            echo "::error::$app came out ad-hoc signed; notarisation would refuse it"
+            exit 1
+          fi
+
+      - name: Notarize
+        if: env.APPLE_ID != '' && env.MACOS_CERTIFICATE_P12 != ''
+        run: |
+          dmg=$(ls target/$TARGET/release/bundle/dmg/*.dmg | head -1)
+          xcrun notarytool submit "$dmg" \
+            --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" --wait --timeout 900
+          xcrun stapler staple "$dmg"
+
+      # The updater replaces the .app, not the disk image, and the bundler tars it long before any
+      # of the above. Left alone that tarball carries an app with no ticket stapled to it, and every
+      # launch after an update would wait on Gatekeeper asking Apple over the network.
+      - name: Staple the app itself, and tar it again
+        if: env.APPLE_ID != '' && env.MACOS_CERTIFICATE_P12 != ''
+        run: |
+          out="target/$TARGET/release/bundle/macos"
+          app="$out/LinkUnbound.app"
+
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/app.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/app.zip" \
+            --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" --wait --timeout 900
+          xcrun stapler staple "$app"
+          xcrun stapler validate "$app"
+
+          rm -f "$out"/*.app.tar.gz "$out"/*.app.tar.gz.sig
+          COPYFILE_DISABLE=1 tar --no-xattrs -czf "$out/LinkUnbound.app.tar.gz" -C "$out" LinkUnbound.app
+
+          # The tarball is what a copy out there will unpack over itself. If the ticket did not
+          # survive the round trip, better it fails here than on someone's machine.
+          rm -rf "$RUNNER_TEMP/rt" && mkdir -p "$RUNNER_TEMP/rt"
+          tar -xzf "$out/LinkUnbound.app.tar.gz" -C "$RUNNER_TEMP/rt"
+          codesign --verify --deep --strict "$RUNNER_TEMP/rt/LinkUnbound.app"
+          xcrun stapler validate "$RUNNER_TEMP/rt/LinkUnbound.app"
+
+      - name: Sign it for the updater
+        if: env.TAURI_SIGNING_PRIVATE_KEY != '' && env.APPLE_ID != ''
+        working-directory: app
+        run: |
+          out="../target/$TARGET/release/bundle/macos"
+          npm run tauri -- signer sign "$out/LinkUnbound.app.tar.gz"
+          test -s "$out/LinkUnbound.app.tar.gz.sig"
+
+      - name: Name it after the release
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          mkdir -p dist
+          out="target/$TARGET/release/bundle/macos"
+          # The bundler leaves a tarball of its own during the build, before any of the stapling.
+          # Publishing that one would replace a notarised app with an unnotarised one, so it only
+          # travels when the ticket is on it.
+          app="$out/LinkUnbound.app"
+          if xcrun stapler validate "$app" >/dev/null 2>&1 \
+            && [ -s "$out/LinkUnbound.app.tar.gz.sig" ]; then
+            cp "$out/LinkUnbound.app.tar.gz" "dist/linkunbound-$v-macos-universal.app.tar.gz"
+            cp "$out/LinkUnbound.app.tar.gz.sig" "dist/linkunbound-$v-macos-universal.app.tar.gz.sig"
+          else
+            echo "::warning::no stapled, signed tarball; macOS gets no self-update this release"
+            rm -f "$out/LinkUnbound.app.tar.gz" "$out/LinkUnbound.app.tar.gz.sig"
+          fi
+          dmg=$(ls target/$TARGET/release/bundle/dmg/*.dmg 2>/dev/null | head -1) || true
+          if [ -z "$dmg" ]; then
+            echo "::error::the bundler produced no disk image"
+            exit 1
+          fi
+          cp "$dmg" "dist/linkunbound-installer-$v-macos-universal.dmg"
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-macos
           path: dist/*
           if-no-files-found: error
 
@@ -361,9 +542,10 @@ jobs:
 
   publish:
     name: GitHub Release
-    needs: [version, bundle-windows, bundle-msix]
+    needs: [version, bundle-windows, bundle-macos, bundle-msix]
     if: >-
       !cancelled() && needs.bundle-windows.result == 'success'
+      && (needs.bundle-macos.result == 'success' || needs.bundle-macos.result == 'skipped')
       && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -395,14 +577,23 @@ jobs:
           v="${{ needs.version.outputs.version }}"
           status=0
           want="dist/linkunbound-installer-$v-windows-x86_64.exe"
-          if [ ! -s "$want" ]; then
-            echo "::error::$want is missing or empty"
-            status=1
+          if [ "${BUILD_MACOS}" = "true" ]; then
+            want="$want dist/linkunbound-$v-macos-universal.app.tar.gz"
+            if [ ! -s "dist/linkunbound-installer-$v-macos-universal.dmg" ]; then
+              echo "::error::the macOS disk image is missing"
+              status=1
+            fi
           fi
-          if [ ! -s "$want.sig" ]; then
-            echo "::error::$want.sig is missing; the release would offer an update nobody can take"
-            status=1
-          fi
+          for one in $want; do
+            if [ ! -s "$one" ]; then
+              echo "::error::$one is missing or empty"
+              status=1
+            fi
+            if [ ! -s "$one.sig" ]; then
+              echo "::error::$one.sig is missing; the release would offer an update nobody can take"
+              status=1
+            fi
+          done
           exit $status
 
       # The key that signed it has to be the key every copy carries. They are two secrets in two
@@ -416,14 +607,17 @@ jobs:
           exe="dist/linkunbound-installer-$v-windows-x86_64.exe"
 
           jq -r '.plugins.updater.pubkey' app/src-tauri/tauri.conf.json | base64 -d > feed.pub
-          base64 -d < "$exe.sig" > one.minisig
-          if ! minisign -Vm "$exe" -p feed.pub -x one.minisig; then
-            echo "::error::the installer was signed with a key that is not the one in \
+          for one in "$exe" "dist/linkunbound-$v-macos-universal.app.tar.gz"; do
+            [ -s "$one" ] || continue
+            base64 -d < "$one.sig" > one.minisig
+            if ! minisign -Vm "$one" -p feed.pub -x one.minisig; then
+              echo "::error::$one was signed with a key that is not the one in \
           tauri.conf.json. Every copy built from this tree carries that public key, so nothing \
           could ever verify this update. Nothing was published."
-            exit 1
-          fi
-          echo "the signature and the shipped key are halves of the same pair"
+              exit 1
+            fi
+          done
+          echo "the signatures and the shipped key are halves of the same pair"
 
       - name: Checksums
         run: |
@@ -437,7 +631,9 @@ jobs:
 
       - uses: actions/attest-build-provenance@v4
         with:
-          subject-path: dist/linkunbound-installer-*.exe
+          subject-path: |
+            dist/linkunbound-installer-*.exe
+            dist/linkunbound-installer-*.dmg
 
       - name: Notes from the tag
         id: notes
@@ -471,14 +667,22 @@ jobs:
           v="${{ needs.version.outputs.version }}"
           base="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}"
           win="linkunbound-installer-$v-windows-x86_64.exe"
+          mac="linkunbound-$v-macos-universal.app.tar.gz"
 
-          # Composed before the checkout below swaps the working tree out from under us.
+          # Composed before the checkout below swaps the working tree out from under us. The
+          # updater asks for its own chip by name, so the one universal archive is listed twice.
           if [ -s "dist/$win.sig" ]; then
+            ws=$(cat "dist/$win.sig")
+            ms=$(cat "dist/$mac.sig" 2>/dev/null || true)
             jq -n --arg v "$v" \
                   --arg n "https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}" \
-                  --arg u "$base/$win" --arg s "$(cat "dist/$win.sig")" \
-              '{version: $v, notes: $n,
-                platforms: {"windows-x86_64": {url: $u, signature: $s}}}' \
+                  --arg wu "$base/$win" --arg ws "$ws" \
+                  --arg mu "$base/$mac" --arg ms "$ms" \
+              '{version: $v, notes: $n, platforms:
+                 ({"windows-x86_64": {url: $wu, signature: $ws}}
+                  + (if $ms == "" then {}
+                     else {"darwin-aarch64": {url: $mu, signature: $ms},
+                           "darwin-x86_64":  {url: $mu, signature: $ms}} end))}' \
               > "$RUNNER_TEMP/channel.json"
             cat "$RUNNER_TEMP/channel.json"
           else
@@ -674,3 +878,89 @@ jobs:
               exit 1
             fi
           done
+
+  homebrew:
+    name: Homebrew tap
+    needs: [version, publish]
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      && needs.version.outputs.macos == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+    steps:
+      - name: Update the tap
+        if: env.GIST_TOKEN != ''
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${{ needs.version.outputs.version }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          DMG="linkunbound-installer-${VERSION}-macos-universal.dmg"
+
+          if [[ "$VERSION" == *-* ]]; then
+            CASK="linkunbound-beta"; CASK_OTHER="linkunbound"; SUFFIX=" (beta)"
+          else
+            CASK="linkunbound"; CASK_OTHER="linkunbound-beta"; SUFFIX=""
+          fi
+
+          for attempt in 1 2 3 4 5; do
+            if curl -fSL -o "/tmp/$DMG" "$BASE/$DMG" && [ -s "/tmp/$DMG" ]; then
+              break
+            fi
+            echo "$DMG not downloadable yet (attempt ${attempt}/5)"
+            sleep $((attempt * 10))
+          done
+          [ -s "/tmp/$DMG" ] || { echo "::error::could not download $DMG"; exit 1; }
+          DMG_SHA=$(sha256sum "/tmp/$DMG" | awk '{print $1}')
+
+          git clone "https://x-access-token:${GIST_TOKEN}@github.com/rgdevment/homebrew-tap.git" /tmp/tap
+          cd /tmp/tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p Casks
+
+          cat > "Casks/${CASK}.rb" <<-CASK
+          	cask "${CASK}" do
+          	  version "${VERSION}"
+          	  sha256 "${DMG_SHA}"
+
+          	  url "${BASE}/${DMG}"
+          	  name "LinkUnbound"
+          	  desc "Browser picker that asks which browser opens each link${SUFFIX}"
+          	  homepage "https://github.com/${{ github.repository }}"
+
+          	  auto_updates true
+
+          	  conflicts_with cask: "${CASK_OTHER}"
+          	  depends_on macos: :ventura
+
+          	  app "LinkUnbound.app"
+
+          	  zap trash: [
+          	    "~/Library/Application Support/LinkUnbound",
+          	    "~/Library/Preferences/dev.rgdevment.linkunbound.plist",
+          	    "~/Library/Preferences/com.rgdevment.linkunbound.plist",
+          	  ]
+          	end
+          CASK
+
+          git add Casks
+          if git diff --cached --quiet; then
+            echo "tap already at ${VERSION}"
+            exit 0
+          fi
+          git commit -m "linkunbound ${VERSION}"
+
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "push rejected (attempt ${attempt}/5); rebasing onto the concurrent release"
+            git fetch origin main
+            git rebase origin/main
+          done
+          echo "::error::could not push the tap after 5 attempts"
+          exit 1

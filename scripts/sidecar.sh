@@ -31,6 +31,8 @@ build() {
 if [ "$target" = "universal-apple-darwin" ]; then
   arm=$(build aarch64-apple-darwin | tail -1)
   intel=$(build x86_64-apple-darwin | tail -1)
+  cp "$arm" "$out/linkunbound-shell-aarch64-apple-darwin"
+  cp "$intel" "$out/linkunbound-shell-x86_64-apple-darwin"
   lipo -create -output "$out/linkunbound-shell-$target" "$arm" "$intel"
   lipo -archs "$out/linkunbound-shell-$target"
 else

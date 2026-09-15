@@ -1,10 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use linkunbound_core::{Browser, Profile, id_for, private_flag_for, profiles_in};
+use objc2::Message;
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSString, NSURL};
-
-const OWN_BUNDLE_ID: &str = "dev.rgdevment.linkunbound";
 
 /// Asked of a link rather than of a scheme: `LSCopyAllHandlersForURLScheme` is
 /// the deprecated half of this pair and answers the same question.
@@ -17,9 +16,7 @@ const WEB_SCHEMES: [&str; 2] = ["http", "https"];
 const NOT_A_BROWSER: [&str; 2] = ["alternate", "none"];
 
 fn is_destination(bundle_id: &str, web_ranks: &[String]) -> bool {
-    if bundle_id.eq_ignore_ascii_case(OWN_BUNDLE_ID)
-        || bundle_id.eq_ignore_ascii_case("com.rgdevment.linkunbound")
-    {
+    if crate::is_one_of_ours(bundle_id) {
         return false;
     }
     // A bundle whose declaration cannot be read is left to Launch Services,
@@ -104,6 +101,12 @@ fn user_data_dir(app: &Path) -> Option<PathBuf> {
         "BraveSoftware/Brave-Browser"
     } else if needle.contains("vivaldi") {
         "Vivaldi"
+    } else if needle.contains("chrome canary") {
+        "Google/Chrome Canary"
+    } else if needle.contains("chrome beta") {
+        "Google/Chrome Beta"
+    } else if needle.contains("chrome dev") {
+        "Google/Chrome Dev"
     } else if needle.contains("chrome") {
         "Google/Chrome"
     } else {
@@ -128,10 +131,16 @@ pub fn chromium_profiles(app: &str) -> Vec<Profile> {
     profiles_in(&raw)
 }
 
-fn read_bundle(url: &NSURL) -> Option<Browser> {
+fn preferred(bundle_id: &str) -> Option<objc2::rc::Retained<NSURL>> {
+    NSWorkspace::sharedWorkspace()
+        .URLForApplicationWithBundleIdentifier(&NSString::from_str(bundle_id))
+}
+
+fn read_bundle(found: &NSURL) -> Option<Browser> {
+    let bundle_id = text(NSBundle::bundleWithURL(found)?.bundleIdentifier())?;
+    let url = preferred(&bundle_id).unwrap_or_else(|| found.retain());
     let path = text(url.path())?;
-    let bundle = NSBundle::bundleWithURL(url)?;
-    let bundle_id = text(bundle.bundleIdentifier())?;
+    let bundle = NSBundle::bundleWithURL(&url)?;
     if !is_destination(&bundle_id, &web_ranks(&bundle)) {
         return None;
     }
@@ -248,6 +257,19 @@ mod tests {
         assert!(of("/Applications/Vivaldi.app").ends_with("Application Support/Vivaldi"));
     }
 
+    #[test]
+    fn each_chrome_channel_keeps_its_own_profiles() {
+        let of = |app: &str| {
+            user_data_dir(Path::new(app))
+                .map(|d| d.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        assert!(of("/Applications/Google Chrome Canary.app").ends_with("Google/Chrome Canary"));
+        assert!(of("/Applications/Google Chrome Beta.app").ends_with("Google/Chrome Beta"));
+        assert!(of("/Applications/Google Chrome Dev.app").ends_with("Google/Chrome Dev"));
+        assert!(of("/Applications/Google Chrome.app").ends_with("Google/Chrome"));
+    }
+
     /// Edge is Chromium but keeps its profiles somewhere of its own, and the generic marker
     /// would send it to Chrome's directory: the profiles shown would be another browser's.
     #[test]
@@ -260,6 +282,14 @@ mod tests {
     fn a_browser_outside_the_chromium_families_reports_no_profiles() {
         assert!(chromium_profiles("/Applications/Firefox.app").is_empty());
         assert!(chromium_profiles("/Applications/Safari.app").is_empty());
+    }
+
+    #[test]
+    fn a_browser_is_named_by_the_copy_the_system_would_launch() {
+        let safari = super::preferred("com.apple.Safari").expect("Safari is always there");
+        let path = safari.path().expect("a path").to_string();
+        assert!(path.ends_with("Safari.app"), "{path}");
+        assert!(super::preferred("com.example.nothing.installed").is_none());
     }
 
     #[test]

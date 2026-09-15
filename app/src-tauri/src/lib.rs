@@ -445,7 +445,7 @@ fn system_open_default_apps() -> Result<(), String> {
 
 /// Re-registers against this executable, which is the only repair there is: the
 /// command pointed somewhere this binary no longer lives.
-#[tauri::command]
+#[tauri::command(async)]
 fn system_repair() -> Result<system::SystemState, String> {
     system::set_registered(true)
 }
@@ -510,7 +510,7 @@ fn system_state() -> system::SystemState {
     system::state()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn system_set_registered(enabled: bool) -> Result<system::SystemState, String> {
     system::set_registered(enabled)
 }

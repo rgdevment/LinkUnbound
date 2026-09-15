@@ -12,6 +12,17 @@ mod registration;
 mod startup;
 
 #[cfg(target_os = "macos")]
+pub(crate) const OWN_BUNDLE_IDS: [&str; 2] =
+    ["dev.rgdevment.linkunbound", "com.rgdevment.linkunbound"];
+
+#[cfg(target_os = "macos")]
+pub(crate) fn is_one_of_ours(bundle_id: &str) -> bool {
+    OWN_BUNDLE_IDS
+        .iter()
+        .any(|ours| bundle_id.eq_ignore_ascii_case(ours))
+}
+
+#[cfg(target_os = "macos")]
 pub use detect::installed_browsers;
 #[cfg(target_os = "macos")]
 pub use events::{Event, Listening, listen};

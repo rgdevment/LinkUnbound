@@ -1,13 +1,9 @@
-#![allow(unsafe_code)]
-
 use objc2::rc::Retained;
 use objc2_app_kit::{
     NSApplication, NSEvent, NSEventModifierFlags, NSFloatingWindowLevel, NSPasteboard,
     NSPasteboardTypeString, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSString, NSUserDefaults};
-
-const OWN_BUNDLE_IDS: [&str; 2] = ["dev.rgdevment.linkunbound", "com.rgdevment.linkunbound"];
 
 /// AppKit measures upwards from the bottom of the primary screen; the picker is
 /// placed downwards from the top. A point is a rectangle of no height.
@@ -71,6 +67,7 @@ pub fn work_area_at(x: i32, y: i32) -> Option<(i32, i32, i32, i32)> {
     ))
 }
 
+#[allow(unsafe_code)]
 fn window_of(view: isize) -> Option<Retained<NSWindow>> {
     let view = view as *const NSView;
     if view.is_null() {
@@ -125,16 +122,14 @@ pub fn shift_is_down() -> bool {
 pub fn source_app() -> Option<String> {
     let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
     let bundle_id = app.bundleIdentifier()?.to_string();
-    if OWN_BUNDLE_IDS
-        .iter()
-        .any(|ours| bundle_id.eq_ignore_ascii_case(ours))
-    {
+    if crate::is_one_of_ours(&bundle_id) {
         return None;
     }
     let name = app.localizedName()?.to_string().to_lowercase();
     (!name.is_empty()).then_some(name)
 }
 
+#[allow(unsafe_code)]
 pub fn copy_text(text: &str) -> bool {
     let board = NSPasteboard::generalPasteboard();
     board.clearContents();

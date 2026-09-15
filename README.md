@@ -187,10 +187,10 @@ Since LinkUnbound is an independent open source project, the installer uses a se
 
 **macOS:**
 
-1. Launch **LinkUnbound** from Applications (or Spotlight)
-2. Open **Settings** from the menu bar icon → click **Set as default**
-3. macOS prompts you to choose the default browser → select LinkUnbound
-4. Done — every link now goes through LinkUnbound
+1. Launch **LinkUnbound** from Applications (or Spotlight); the settings window opens
+2. In **Links**, click **Set** under *Set as the default browser*
+3. macOS asks you to confirm the change → **Use "LinkUnbound"**
+4. Done — every link now goes through LinkUnbound. Local `.html`, `.xhtml` and `.svg` files go through it too
 
 ---
 
@@ -231,7 +231,9 @@ One binary, two modes:
 
 **Windows.** A named pipe (`\\.\pipe\LinkUnbound`) links second instances to the resident process. A Windows mutex prevents duplicate residents. Registration writes the app's own ProgId, `RegisteredApplications` and `StartMenuInternet` keys, and is reconciled on every launch; Windows itself owns the final choice through `UserChoice`, which no application may write.
 
-**macOS.** Single-instance launching is handled by Launch Services; URLs arrive through `application:openURLs:` (Apple Events) which are forwarded to Dart via a `MethodChannel`. Default-browser registration uses `NSWorkspace.setDefaultApplication`. The app runs as `LSUIElement` so it lives in the menu bar instead of the Dock.
+**macOS.** The bundle's `CFBundleExecutable` is the resident, so Launch Services starts it — or talks to the running copy — for every link. Nothing arrives on the command line: links, documents, launches and reopens come in as Apple Events (`GURL`, `odoc`, `oapp`, `rapp`), and the launch event says whether the session started the app as a login item, which is what keeps the settings window closed at sign-in. A Unix socket under `~/Library/Application Support/LinkUnbound/` carries links handed over from a terminal. Default-browser registration goes through `NSWorkspace.setDefaultApplication` for `http`, `https` and the web document types, which the system confirms with its own prompt; the browser that held the links before is remembered and gets them back on unregistering. Login items use `SMAppService`. The app runs as `LSUIElement`, so it lives in the menu bar instead of the Dock, and the picker floats above every Space, full-screen apps included.
+
+**Coming from 1.x on macOS.** 2.0 ships under the bundle identifier `dev.rgdevment.linkunbound`; 1.x was `com.rgdevment.linkunbound`. macOS treats them as two applications: after upgrading, open Settings and set LinkUnbound as the default once more, and remove the old entry under System Settings → General → Login Items if one is left behind. Rules and browsers carry over unchanged.
 
 ---
 
