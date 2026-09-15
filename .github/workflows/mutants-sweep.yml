@@ -113,7 +113,7 @@ jobs:
         id: run
         run: |
           set +e
-          cargo mutants -p linkunbound-settings --shard $(( ${{ matrix.shard }} - 1 ))/2 -j 2
+          cargo mutants -p linkunbound-settings --shard $(( ${{ matrix.shard }} - 1 ))/2 --in-place
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived

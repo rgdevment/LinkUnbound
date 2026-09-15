@@ -155,6 +155,23 @@ pub fn dress_window(window: isize, dark: Option<bool>) {
     unsafe { &*window }.setAppearance(appearance.as_deref());
 }
 
+pub fn retire(executable: &str) -> usize {
+    let Some(mine) = crate::registration::own_bundle_id() else {
+        return 0;
+    };
+    let me = std::process::id();
+    NSRunningApplication::runningApplicationsWithBundleIdentifier(&NSString::from_str(&mine))
+        .iter()
+        .filter(|app| u32::try_from(app.processIdentifier()).ok() != Some(me))
+        .filter(|app| {
+            app.executableURL()
+                .and_then(|url| url.lastPathComponent())
+                .is_some_and(|name| name.to_string() == executable)
+        })
+        .filter(|app| app.terminate())
+        .count()
+}
+
 #[must_use]
 pub fn shift_is_down() -> bool {
     NSEvent::modifierFlags_class().contains(NSEventModifierFlags::Shift)
@@ -219,13 +236,13 @@ pub fn source_app() -> Option<String> {
         .frontmostApplication()
         .as_deref()
         .and_then(named_unless_ours)
+        .or_else(|| LAST_SEEN.lock().ok().and_then(|seen| seen.clone()))
         .or_else(|| {
             workspace
                 .menuBarOwningApplication()
                 .as_deref()
                 .and_then(named_unless_ours)
         })
-        .or_else(|| LAST_SEEN.lock().ok().and_then(|seen| seen.clone()))
 }
 
 #[allow(unsafe_code)]

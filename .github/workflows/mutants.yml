@@ -162,7 +162,7 @@ jobs:
         if: steps.touched.outputs.any == 'yes'
         run: |
           set +e
-          cargo mutants --in-diff branch.diff -p linkunbound-settings -j 2
+          cargo mutants --in-diff branch.diff -p linkunbound-settings --in-place
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived

@@ -285,6 +285,32 @@ mod tests {
     }
 
     #[test]
+    fn a_real_bundle_reads_back_its_name_and_the_rank_it_claims_for_the_web() {
+        use objc2_foundation::{NSBundle, NSString};
+        let safari = super::preferred("com.apple.Safari").expect("Safari is always there");
+        let bundle = NSBundle::bundleWithURL(&safari).expect("a bundle");
+        let path = std::path::PathBuf::from(safari.path().expect("a path").to_string());
+        assert_eq!(super::name_of(&bundle, &path).as_deref(), Some("Safari"));
+        let ranks = super::web_ranks(&bundle);
+        assert!(!ranks.is_empty(), "Safari declares http and https");
+        assert!(ranks.iter().all(|r| !r.is_empty()));
+        assert!(super::is_destination("com.apple.Safari", &ranks));
+        assert_eq!(super::text(Some(NSString::from_str(""))), None);
+        assert_eq!(
+            super::text(Some(NSString::from_str("x"))).as_deref(),
+            Some("x")
+        );
+        assert_eq!(super::text(None), None);
+        let ours = super::preferred("dev.rgdevment.linkunbound");
+        if let Some(ours) = ours {
+            assert!(
+                super::read_bundle(&ours).is_none(),
+                "this app is never a destination"
+            );
+        }
+    }
+
+    #[test]
     fn a_browser_is_named_by_the_copy_the_system_would_launch() {
         let safari = super::preferred("com.apple.Safari").expect("Safari is always there");
         let path = safari.path().expect("a path").to_string();

@@ -100,6 +100,41 @@ mod tests {
     }
 
     #[test]
+    fn a_source_that_changed_since_is_drawn_again() {
+        let source = scratch("fresh.bin");
+        std::fs::write(&source, b"x").expect("a source");
+        let dir = scratch("icons-fresh");
+        let mut drawn = 0;
+        let mut draw = |_: &std::path::Path, _: u32| {
+            drawn += 1;
+            Some(b"png".to_vec())
+        };
+        let first =
+            cached_icon(&source.to_string_lossy(), "b", &dir, 24, &mut draw).expect("a picture");
+        let stale = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+        std::fs::File::open(&first)
+            .and_then(|f| f.set_modified(stale))
+            .expect("an older picture");
+        cached_icon(&source.to_string_lossy(), "b", &dir, 24, &mut draw).expect("redrawn");
+        assert_eq!(drawn, 2);
+    }
+
+    #[test]
+    fn a_source_that_is_gone_still_serves_the_picture_it_left() {
+        let source = scratch("gone.bin");
+        std::fs::write(&source, b"x").expect("a source");
+        let dir = scratch("icons-gone");
+        let first = cached_icon(&source.to_string_lossy(), "b", &dir, 24, |_, _| {
+            Some(b"png".to_vec())
+        })
+        .expect("a picture");
+        std::fs::remove_file(&source).expect("taken away");
+        let again = cached_icon(&source.to_string_lossy(), "b", &dir, 24, |_, _| None)
+            .expect("served from the cache");
+        assert_eq!(first, again);
+    }
+
+    #[test]
     fn an_id_that_names_a_path_stays_inside_the_directory() {
         let source = scratch("safe.bin");
         std::fs::write(&source, b"x").expect("a source");

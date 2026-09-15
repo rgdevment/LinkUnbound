@@ -31,7 +31,7 @@ pub use icons::icon_for;
 #[cfg(target_os = "macos")]
 pub use native::{
     Watching, copy_text, cursor, dress_window, is_in_front, keep_off_the_taskbar,
-    let_whoever_opens_next_come_forward, menu_bar_is_light, shift_is_down, source_app,
+    let_whoever_opens_next_come_forward, menu_bar_is_light, retire, shift_is_down, source_app,
     take_the_keyboard, watch_activations, windows_are_light, work_area_at,
 };
 #[cfg(target_os = "macos")]

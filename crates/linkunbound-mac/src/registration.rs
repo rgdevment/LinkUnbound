@@ -143,6 +143,16 @@ fn point(app: &NSURL, scheme: &str) -> Result<(), String> {
     waited(&rx)
 }
 
+fn document_handler(identifier: &str) -> Option<String> {
+    let kind = UTType::typeWithIdentifier(&NSString::from_str(identifier))?;
+    let app = NSWorkspace::sharedWorkspace().URLForApplicationToOpenContentType(&kind)?;
+    bundle_id_of(&app)
+}
+
+fn key_for(identifier: &str) -> String {
+    format!("{HANDED_FROM}.{identifier}")
+}
+
 fn point_documents(app: &NSURL, identifier: &str) -> Result<(), String> {
     let Some(kind) = UTType::typeWithIdentifier(&NSString::from_str(identifier)) else {
         return Ok(());
@@ -185,20 +195,37 @@ fn point_everything(app: &NSURL) -> Result<(), String> {
 pub fn register() -> Result<(), String> {
     let app = ours().ok_or_else(|| "notBundled".to_owned())?;
     remember(handler_for("https").as_deref(), HANDED_FROM);
+    for document in DOCUMENTS {
+        remember(document_handler(document).as_deref(), &key_for(document));
+    }
     point_everything(&app)
+}
+
+fn app_remembered_as(key: &str) -> Option<Retained<NSURL>> {
+    let id = remembered(key).filter(|id| !is_ours(id))?;
+    NSWorkspace::sharedWorkspace().URLForApplicationWithBundleIdentifier(&NSString::from_str(&id))
 }
 
 /// The system has no "no default browser", so letting go hands the schemes
 /// back to whoever held them before, and to Safari when nobody is remembered.
 pub fn unregister() -> Result<(), String> {
-    let workspace = NSWorkspace::sharedWorkspace();
-    let previous = remembered(HANDED_FROM)
-        .filter(|id| !is_ours(id))
-        .and_then(|id| workspace.URLForApplicationWithBundleIdentifier(&NSString::from_str(&id)));
-    let target = previous
-        .or_else(|| workspace.URLForApplicationWithBundleIdentifier(&NSString::from_str(SAFARI)))
+    let browser = app_remembered_as(HANDED_FROM)
+        .or_else(|| {
+            NSWorkspace::sharedWorkspace()
+                .URLForApplicationWithBundleIdentifier(&NSString::from_str(SAFARI))
+        })
         .ok_or_else(|| "noPreviousBrowser".to_owned())?;
-    point_everything(&target)
+    point(&browser, "http")?;
+    for scheme in SCHEMES {
+        if !points_at(&browser, scheme) {
+            point(&browser, scheme)?;
+        }
+    }
+    for document in DOCUMENTS {
+        let target = app_remembered_as(&key_for(document)).unwrap_or_else(|| browser.clone());
+        point_documents(&target, document)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -236,6 +263,58 @@ mod tests {
         let held = handler_for("https");
         assert!(held.is_some(), "no application opens https here");
         assert!(held.is_some_and(|id| id.contains('.')), "not a bundle id");
+    }
+
+    #[test]
+    fn the_system_saying_nothing_is_a_yes_and_a_refusal_is_named() {
+        use objc2_foundation::{NSCocoaErrorDomain, NSError, NSUserCancelledError};
+        assert_eq!(super::answer(std::ptr::null_mut()), Ok(()));
+        let cocoa = unsafe { NSCocoaErrorDomain };
+        let declined =
+            unsafe { NSError::errorWithDomain_code_userInfo(cocoa, NSUserCancelledError, None) };
+        assert!(super::declined(&declined));
+        assert_eq!(
+            super::answer(objc2::rc::Retained::as_ptr(&declined).cast_mut()),
+            Err("defaultDeclined".to_owned())
+        );
+        let other = unsafe { NSError::errorWithDomain_code_userInfo(cocoa, 256, None) };
+        assert!(!super::declined(&other));
+        assert!(super::answer(objc2::rc::Retained::as_ptr(&other).cast_mut()).is_err());
+    }
+
+    #[test]
+    fn a_bundle_is_known_by_its_identifier_and_never_taken_for_us() {
+        use objc2_app_kit::NSWorkspace;
+        use objc2_foundation::NSString;
+        let safari = NSWorkspace::sharedWorkspace()
+            .URLForApplicationWithBundleIdentifier(&NSString::from_str("com.apple.Safari"))
+            .expect("Safari is always there");
+        assert_eq!(
+            super::bundle_id_of(&safari).as_deref(),
+            Some("com.apple.Safari")
+        );
+        assert!(!super::is_ours("com.apple.Safari"));
+        let holds_https =
+            handler_for("https").is_some_and(|id| id.eq_ignore_ascii_case("com.apple.Safari"));
+        assert_eq!(super::points_at(&safari, "https"), holds_https);
+    }
+
+    #[test]
+    fn each_document_type_remembers_its_own_previous_handler() {
+        assert_eq!(
+            super::key_for("public.svg-image"),
+            "HandedFrom.public.svg-image"
+        );
+        assert_ne!(
+            super::key_for("public.html"),
+            super::key_for("public.xhtml")
+        );
+        let held = super::document_handler("public.html");
+        assert!(
+            held.is_some_and(|id| id.contains('.')),
+            "html has a handler on any Mac"
+        );
+        assert!(super::document_handler("com.example.no.such.type").is_none());
     }
 
     #[test]

@@ -176,9 +176,15 @@ mod tests {
     #[test]
     fn a_child_that_has_exited_is_not_left_as_a_zombie() {
         use std::process::Command;
+        let mark = std::env::temp_dir().join(format!("linkunbound-ran-{}", std::process::id()));
+        let _ = std::fs::remove_file(&mark);
+        spawn_and_forget(Command::new("/usr/bin/touch").arg(&mark)).expect("touch runs");
         for _ in 0..3 {
             spawn_and_forget(&mut Command::new("/usr/bin/true")).expect("true runs");
         }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(mark.is_file(), "the child never ran");
+        let _ = std::fs::remove_file(&mark);
         std::thread::sleep(std::time::Duration::from_millis(300));
 
         let me = std::process::id().to_string();
@@ -199,6 +205,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     mod macos {
         use super::super::mac::{How, how, inside};
+        use super::super::open;
+        use crate::{Browser, Profile};
         use std::path::Path;
 
         fn args(list: &[&str]) -> Vec<String> {
@@ -257,6 +265,67 @@ mod tests {
         #[test]
         fn a_bundle_that_is_not_one_is_reported_rather_than_launched() {
             assert!(inside(Path::new("/Applications")).is_err());
+        }
+
+        #[test]
+        fn a_link_with_a_switch_reaches_the_program_inside_the_bundle_with_the_link_last() {
+            use std::os::unix::fs::PermissionsExt;
+            let dir =
+                std::env::temp_dir().join(format!("linkunbound-bundle-{}", std::process::id()));
+            let app = dir.join("Fake.app");
+            let bin = app.join("Contents").join("MacOS");
+            std::fs::create_dir_all(&bin).expect("a bundle");
+            let record = dir.join("argv.txt");
+            std::fs::write(
+                app.join("Contents").join("Info.plist"),
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>CFBundleExecutable</key><string>fake</string></dict></plist>"#,
+            )
+            .expect("a plist");
+            let script = bin.join("fake");
+            let body = format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\n",
+                record.display()
+            );
+            std::fs::write(&script, body).expect("a script");
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+                .expect("executable");
+
+            let browser = Browser {
+                id: "fake".to_owned(),
+                name: "Fake".to_owned(),
+                exe: app.to_string_lossy().into_owned(),
+                profiles: vec![Profile {
+                    id: "Work".to_owned(),
+                    name: "Work".to_owned(),
+                    args: vec!["--profile-directory=Work".to_owned()],
+                }],
+                extra_args: vec!["--extra".to_owned()],
+                private_flag: Some("--incognito".to_owned()),
+                icon_path: None,
+                custom: true,
+                hidden: false,
+            };
+            open(&[browser], "fake", Some("Work"), true, "https://a.test/--x").expect("launched");
+            let mut written = String::new();
+            for _ in 0..50 {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                written = std::fs::read_to_string(&record).unwrap_or_default();
+                if !written.is_empty() {
+                    break;
+                }
+            }
+            assert_eq!(
+                written.lines().collect::<Vec<_>>(),
+                vec![
+                    "--extra",
+                    "--profile-directory=Work",
+                    "--incognito",
+                    "https://a.test/--x"
+                ]
+            );
+            let _ = std::fs::remove_dir_all(&dir);
         }
     }
 }

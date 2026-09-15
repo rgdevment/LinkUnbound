@@ -15,7 +15,7 @@ mod store;
 mod url;
 
 pub use args::{join as join_args, split as split_args};
-pub use binaries::{Registered, link_handler, settings_binary, what_is_registered};
+pub use binaries::{RESIDENT, Registered, link_handler, settings_binary, what_is_registered};
 pub use browser::{Browser, LaunchRefused, Profile, merge};
 pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,

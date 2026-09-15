@@ -288,6 +288,20 @@ mod tests {
     }
 
     #[test]
+    fn the_data_lives_where_the_readme_says() {
+        let dir = data_dir();
+        assert!(dir.is_absolute());
+        assert!(dir.ends_with("LinkUnbound"));
+        if cfg!(target_os = "macos") {
+            assert!(dir.starts_with(std::env::var_os("HOME").expect("a home")));
+            assert!(
+                dir.to_string_lossy()
+                    .contains("Library/Application Support")
+            );
+        }
+    }
+
+    #[test]
     fn a_system_that_names_no_home_still_yields_somewhere_absolute() {
         let nowhere = under(None);
         assert!(nowhere.is_absolute(), "{nowhere:?}");

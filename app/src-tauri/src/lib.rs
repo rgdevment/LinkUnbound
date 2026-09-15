@@ -200,7 +200,20 @@ struct Edit {
 }
 
 fn readable(path: &str) -> bool {
-    std::path::Path::new(path).is_file()
+    let path = std::path::Path::new(path);
+    path.is_file() || is_bundle(path)
+}
+
+#[cfg(target_os = "macos")]
+fn is_bundle(path: &std::path::Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("app"))
+        && path.join("Contents").join("Info.plist").is_file()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_bundle(_path: &std::path::Path) -> bool {
+    false
 }
 
 #[tauri::command]
@@ -749,6 +762,8 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
 
     // Only a platform whose installer leaves this process standing reaches here. Windows does
     // not: the plugin hands over to the installer and ends the process itself.
+    #[cfg(target_os = "macos")]
+    relaunch_resident();
     #[cfg(not(windows))]
     {
         let handle = app.clone();
@@ -756,6 +771,46 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
             .map_err(|why| why.to_string())?;
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn relay_links(app: AppHandle) {
+    use linkunbound_mac::Event;
+    let listening = linkunbound_mac::listen(move |event| match event {
+        Event::Link(url) => hand_to_the_resident(url),
+        Event::Document(path) => {
+            if let Some(url) = linkunbound_core::local_web_file(&path) {
+                hand_to_the_resident(url);
+            }
+        }
+        Event::Reopened => shell::open_settings(&app, store().prefs().theme),
+        Event::Launched { .. } => {}
+    });
+    std::mem::forget(listening);
+}
+
+#[cfg(target_os = "macos")]
+fn hand_to_the_resident(url: String) {
+    if linkunbound_shell::single::hand_over(&url) {
+        return;
+    }
+    let Ok(here) = std::env::current_exe() else {
+        return;
+    };
+    let _ = linkunbound_core::spawn_and_forget(
+        std::process::Command::new(linkunbound_core::link_handler(&here)).arg(url),
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn relaunch_resident() {
+    let Ok(here) = std::env::current_exe() else {
+        return;
+    };
+    let resident = linkunbound_core::link_handler(&here);
+    let _ = linkunbound_mac::retire(linkunbound_core::RESIDENT);
+    let _ =
+        linkunbound_core::spawn_and_forget(std::process::Command::new(resident).arg("--hushed"));
 }
 
 /// Windows ends the process to put the new package in place, so the progress left behind is the
@@ -868,6 +923,8 @@ pub fn run() {
             // The resident owns the tray and the shortcut; this binary is only
             // the settings window, opened and closed on demand.
             claim(app.handle(), &store().prefs());
+            #[cfg(target_os = "macos")]
+            relay_links(app.handle().clone());
             shell::open_settings(app.handle(), store().prefs().theme);
             Ok(())
         })
@@ -1012,6 +1069,19 @@ mod tests {
             "a directory is not a program"
         );
         assert!(!readable(&dir.join("gone.exe").to_string_lossy()));
+
+        let bundle = dir.join("Browser.app");
+        std::fs::create_dir_all(bundle.join("Contents")).expect("a bundle");
+        assert!(
+            !readable(&bundle.to_string_lossy()),
+            "a folder called .app with nothing inside is not an application"
+        );
+        std::fs::write(bundle.join("Contents").join("Info.plist"), b"<plist/>").expect("a plist");
+        assert_eq!(
+            readable(&bundle.to_string_lossy()),
+            cfg!(target_os = "macos"),
+            "a bundle is a program on a Mac and a folder anywhere else"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

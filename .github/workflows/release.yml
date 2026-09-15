@@ -943,6 +943,8 @@ jobs:
           	    "~/Library/Application Support/LinkUnbound",
           	    "~/Library/Preferences/dev.rgdevment.linkunbound.plist",
           	    "~/Library/Preferences/com.rgdevment.linkunbound.plist",
+          	    "~/Library/Saved Application State/dev.rgdevment.linkunbound.savedState",
+          	    "~/Library/Saved Application State/com.rgdevment.linkunbound.savedState",
           	  ]
           	end
           CASK

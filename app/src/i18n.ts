@@ -431,6 +431,8 @@ const EN: Record<Key, string> = {
 export const SPEECH: Record<Language, Record<Key, string>> = { es: ES, en: EN };
 
 const MAC_ES: Partial<Record<Key, string>> = {
+  fieldExe: "Ruta de la aplicación (.app)",
+  browserNoProgram: "No hay ninguna aplicación en esa ruta",
   healthBuildTree:
     "Estás ejecutando una copia fuera de un paquete de aplicación. macOS solo confía los enlaces a una aplicación empaquetada, así que esta copia no se registra.",
   healthPointsAt: "Registrada como: {}",
@@ -452,6 +454,8 @@ const MAC_ES: Partial<Record<Key, string>> = {
 };
 
 const MAC_EN: Partial<Record<Key, string>> = {
+  fieldExe: "Application path (.app)",
+  browserNoProgram: "There is no application at that path",
   healthBuildTree:
     "You are running a copy outside an application bundle. macOS only trusts links to a bundled application, so this copy does not register.",
   healthPointsAt: "Registered as: {}",

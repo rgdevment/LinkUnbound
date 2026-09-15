@@ -374,7 +374,10 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn whatever_address_is_chosen_is_one_that_fits() {
-        assert!(super::fits(std::path::Path::new(&super::address())));
+        let chosen = super::address();
+        assert!(super::fits(std::path::Path::new(&chosen)));
+        assert!(chosen.ends_with(".sock"), "{chosen}");
+        assert!(std::path::Path::new(&chosen).is_absolute(), "{chosen}");
     }
 
     /// A lock nobody can release is worse than the race it prevents: a copy that died holding

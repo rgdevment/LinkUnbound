@@ -49,6 +49,12 @@ jobs:
         shell: bash
         run: bash scripts/sidecar.sh
       - run: cargo clippy --workspace --all-targets
+      - name: Each crate builds on its own, without the features its neighbours bring along
+        shell: bash
+        run: |
+          for one in linkunbound-core linkunbound-win linkunbound-mac linkunbound-shell linkunbound-settings; do
+            cargo check -p "$one" --all-targets
+          done
 
   picker:
     name: frontend
