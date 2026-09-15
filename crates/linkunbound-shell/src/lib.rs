@@ -15,7 +15,12 @@ use linkunbound_core::{Browser, Scope, Strings, local_file_parts, looks_unresolv
 pub fn paint(picker: &Picker, notice: &Notice, light: bool) {
     picker.global::<Palette>().set_light(light);
     notice.global::<Palette>().set_light(light);
+    picker.set_family(FAMILY.into());
+    notice.set_family(FAMILY.into());
 }
+
+/// Empty names no family, and the window falls through to the system's own.
+pub const FAMILY: &str = if cfg!(windows) { "Segoe UI" } else { "" };
 
 /// Extracted and drawn at this same side: any other ratio scales, and blurs.
 pub const ICON_SIDE: u32 = 24;
@@ -744,6 +749,9 @@ mod tests {
         paint(&picker, &notice, false);
         assert!(!picker.global::<Palette>().get_light());
         assert!(!notice.global::<Palette>().get_light());
+        assert_eq!(picker.get_family(), crate::FAMILY);
+        assert_eq!(notice.get_family(), crate::FAMILY);
+        assert_eq!(crate::FAMILY.is_empty(), !cfg!(windows));
     }
 
     /// An icon that fails to load leaves a blank square rather than stopping the picker, so

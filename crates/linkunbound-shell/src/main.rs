@@ -119,19 +119,25 @@ mod host {
         linkunbound_mac::work_area_at(x, y)
     }
 
-    pub fn keep_off_the_taskbar(_window: isize) {}
+    pub fn keep_off_the_taskbar(window: isize) {
+        linkunbound_mac::keep_off_the_taskbar(window);
+    }
 
-    pub fn take_the_keyboard(_window: isize) {}
+    pub fn take_the_keyboard(window: isize) {
+        linkunbound_mac::take_the_keyboard(window);
+    }
 
-    pub fn is_in_front(_window: isize) -> bool {
-        true
+    pub fn is_in_front(window: isize) -> bool {
+        linkunbound_mac::is_in_front(window)
     }
 
     pub fn shift_is_down() -> bool {
         linkunbound_mac::shift_is_down()
     }
 
-    pub fn let_whoever_opens_next_come_forward() {}
+    pub fn let_whoever_opens_next_come_forward() {
+        linkunbound_mac::let_whoever_opens_next_come_forward();
+    }
 
     pub fn copy_text(text: &str) -> bool {
         linkunbound_mac::copy_text(text)
@@ -413,6 +419,7 @@ fn native_handle(window: &slint::Window) -> Option<isize> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     match window.window_handle().window_handle().ok()?.as_raw() {
         RawWindowHandle::Win32(win32) => Some(win32.hwnd.get()),
+        RawWindowHandle::AppKit(appkit) => Some(appkit.ns_view.as_ptr() as isize),
         _ => None,
     }
 }
@@ -684,6 +691,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             };
             let _ = window.hide();
+            host::let_whoever_opens_next_come_forward();
             if let Some(ui) = ui() {
                 next_in_line(&window, &ui.words.get(), &shown);
             }

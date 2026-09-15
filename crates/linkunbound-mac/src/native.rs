@@ -1,7 +1,9 @@
 #![allow(unsafe_code)]
 
+use objc2::rc::Retained;
 use objc2_app_kit::{
-    NSEvent, NSEventModifierFlags, NSPasteboard, NSPasteboardTypeString, NSScreen, NSWorkspace,
+    NSApplication, NSEvent, NSEventModifierFlags, NSFloatingWindowLevel, NSPasteboard,
+    NSPasteboardTypeString, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSString, NSUserDefaults};
 
@@ -67,6 +69,49 @@ pub fn work_area_at(x: i32, y: i32) -> Option<(i32, i32, i32, i32)> {
         physical(usable.size.width, scale),
         physical(usable.size.height, scale),
     ))
+}
+
+fn window_of(view: isize) -> Option<Retained<NSWindow>> {
+    let view = view as *const NSView;
+    if view.is_null() {
+        return None;
+    }
+    unsafe { &*view }.window()
+}
+
+pub fn keep_off_the_taskbar(view: isize) {
+    let Some(window) = window_of(view) else {
+        return;
+    };
+    window.setLevel(NSFloatingWindowLevel);
+    window.setCollectionBehavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces
+            | NSWindowCollectionBehavior::FullScreenAuxiliary,
+    );
+    window.setHidesOnDeactivate(false);
+}
+
+pub fn take_the_keyboard(view: isize) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let Some(window) = window_of(view) else {
+        return;
+    };
+    #[allow(deprecated)]
+    NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+    window.makeKeyAndOrderFront(None);
+}
+
+#[must_use]
+pub fn is_in_front(view: isize) -> bool {
+    window_of(view).is_some_and(|window| window.isKeyWindow())
+}
+
+pub fn let_whoever_opens_next_come_forward() {
+    if let Some(mtm) = MainThreadMarker::new() {
+        NSApplication::sharedApplication(mtm).deactivate();
+    }
 }
 
 #[must_use]

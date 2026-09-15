@@ -222,7 +222,8 @@ export component Picker inherits Window {
     background: transparent;
     width: root.wanted-width;
     height: root.wanted-height;
-    default-font-family: "Segoe UI";
+    in property <string> family;
+    default-font-family: root.family;
     forward-focus: keys;
 
     // A fifth reach appears when the click came from a known app, and its label carries that
@@ -588,7 +589,8 @@ export component Notice inherits Window {
     background: transparent;
     width: 356px;
     height: 76px;
-    default-font-family: "Segoe UI";
+    in property <string> family;
+    default-font-family: root.family;
 
     Rectangle {
         border-radius: 10px;
