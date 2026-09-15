@@ -15,8 +15,14 @@
   <a href="https://sonarcloud.io/summary/overall?id=rgdevment_LinkUnbound">
     <img src="https://img.shields.io/sonar/quality_gate/rgdevment_LinkUnbound?server=https%3A%2F%2Fsonarcloud.io&style=flat-square&logo=sonarcloud&label=Quality%20Gate" alt="Quality Gate"/>
   </a>
-  <a href="https://codecov.io/gh/rgdevment/LinkUnbound">
-    <img src="https://codecov.io/gh/rgdevment/LinkUnbound/branch/main/graph/badge.svg?style=flat-square" alt="Coverage"/>
+  <a href="https://github.com/rgdevment/LinkUnbound/actions/workflows/mutants-sweep.yml">
+    <img src="https://img.shields.io/endpoint?style=flat-square&url=https%3A%2F%2Fraw.githubusercontent.com%2Frgdevment%2FLinkUnbound%2Fscore%2Fmutants.json" alt="Mutation score"/>
+  </a>
+  <a href="https://dashboard.stryker-mutator.io/reports/github.com/rgdevment/LinkUnbound/main">
+    <img src="https://img.shields.io/endpoint?style=flat-square&label=window%20logic&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2Frgdevment%2FLinkUnbound%2Fmain" alt="Window mutation score"/>
+  </a>
+  <a href="https://sonarcloud.io/summary/overall?id=rgdevment_LinkUnbound">
+    <img src="https://img.shields.io/sonar/coverage/rgdevment_LinkUnbound?server=https%3A%2F%2Fsonarcloud.io&style=flat-square&logo=sonarcloud&label=Coverage" alt="Coverage"/>
   </a>
   <a href="https://github.com/rgdevment/LinkUnbound/releases">
     <img src="https://img.shields.io/github/v/release/rgdevment/LinkUnbound?include_prereleases&style=flat-square&label=Latest&color=0078D4" alt="Latest Release"/>

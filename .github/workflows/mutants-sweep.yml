@@ -1,0 +1,297 @@
+name: Mutants sweep
+
+on:
+  schedule:
+    - cron: "0 4 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  DESKTOP_LIBS: libgtk-3-dev libayatana-appindicator3-dev libxdo-dev libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libwayland-dev libxcb1-dev
+
+jobs:
+  core:
+    name: core / every mutant
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@cargo-mutants
+
+      - name: Every mutant the core carries
+        id: run
+        run: |
+          set +e
+          cargo mutants -p linkunbound-core -j 2
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: What survived
+        if: always()
+        env:
+          CODE: ${{ steps.run.outputs.code }}
+          TITLE: linkunbound-core
+        run: bash scripts/mutants-report.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-core
+          path: mutants.out/
+          retention-days: 14
+
+  shell:
+    name: shell / shard ${{ matrix.shard }} of 4
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@cargo-mutants
+
+      - name: What a desktop is not needed to build
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq $DESKTOP_LIBS
+
+      - name: One quarter of every mutant the picker carries
+        id: run
+        run: |
+          set +e
+          cargo mutants -p linkunbound-shell --shard $(( ${{ matrix.shard }} - 1 ))/4 -j 2
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: What survived
+        if: always()
+        env:
+          CODE: ${{ steps.run.outputs.code }}
+          TITLE: linkunbound-shell, shard ${{ matrix.shard }} of 4
+        run: bash scripts/mutants-report.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-shell-${{ matrix.shard }}
+          path: mutants.out/
+          retention-days: 14
+
+  settings:
+    name: settings / shard ${{ matrix.shard }} of 2
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@cargo-mutants
+
+      - name: What a desktop is not needed to build
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq $DESKTOP_LIBS libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - name: The resident rides along
+        run: bash scripts/sidecar.sh
+
+      - name: One half of every mutant the settings backend carries
+        id: run
+        run: |
+          set +e
+          cargo mutants -p linkunbound-settings --shard $(( ${{ matrix.shard }} - 1 ))/2 -j 2
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: What survived
+        if: always()
+        env:
+          CODE: ${{ steps.run.outputs.code }}
+          TITLE: linkunbound-settings, shard ${{ matrix.shard }} of 2
+        run: bash scripts/mutants-report.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-settings-${{ matrix.shard }}
+          path: mutants.out/
+          retention-days: 14
+
+  mac:
+    name: mac / shard ${{ matrix.shard }} of 2
+    runs-on: macos-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@cargo-mutants
+
+      - name: One half of every mutant the Mac crate carries
+        id: run
+        run: |
+          set +e
+          cargo mutants -p linkunbound-mac --shard $(( ${{ matrix.shard }} - 1 ))/2 -j 2
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: What survived
+        if: always()
+        env:
+          CODE: ${{ steps.run.outputs.code }}
+          TITLE: linkunbound-mac, shard ${{ matrix.shard }} of 2
+        run: bash scripts/mutants-report.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-mac-${{ matrix.shard }}
+          path: mutants.out/
+          retention-days: 14
+
+  window:
+    name: window / shard ${{ matrix.shard }} of 4
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - name: One quarter of the window, dealt out so the shards weigh the same
+        run: |
+          list=$(git ls-files src \
+            | grep -E '\.tsx?$' \
+            | grep -vE '\.test\.tsx?$|^src/tests/|^src/i18n\.ts$|^src/main\.tsx$|\.d\.ts$' \
+            | xargs wc -l \
+            | grep -v ' total$' \
+            | sort -rn \
+            | awk -v shard=${{ matrix.shard }} -v many=4 '
+                { name[NR] = $2; wide[NR] = $1; count = NR }
+                END {
+                  for (i = 1; i <= count; i++) {
+                    least = 1
+                    for (s = 2; s <= many; s++) if (load[s] < load[least]) least = s
+                    load[least] += wide[i]
+                    if (least == shard) print name[i]
+                  }
+                }' \
+            | paste -sd, -)
+          echo "$list"
+          npx stryker run --mutate "$list" --concurrency 4 \
+            --reporters progress-append-only,clear-text,json
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-window-${{ matrix.shard }}
+          path: app/reports/
+          retention-days: 14
+
+  score:
+    name: what the whole sweep came to
+    if: always() && !cancelled()
+    needs: [core, shell, settings, mac, window]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mutants-core
+          path: crates
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mutants-shell-*
+          path: crates
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mutants-settings-*
+          path: crates
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mutants-mac-*
+          path: crates
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mutants-window-*
+          path: window
+
+      - name: Every shard told as one report
+        env:
+          WANT_WINDOW: 4
+          WANT_CRATES: 9
+        run: bash scripts/mutants-score.sh
+
+      - name: The report where a survivor can be read one by one
+        env:
+          KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::warning::no dashboard key: the report goes no further than the artifact"
+            exit 0
+          fi
+          curl -sS --fail-with-body -X PUT \
+            "https://dashboard.stryker-mutator.io/api/reports/github.com/${{ github.repository }}/${{ github.ref_name }}" \
+            -H 'Content-Type: application/json' \
+            -H "X-Api-Key: $KEY" \
+            -d @window.json
+
+      - name: The number, on the branch that holds nothing else
+        run: |
+          mv mutants.json "$RUNNER_TEMP/mutants.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git fetch origin score --depth 1 2>/dev/null; then
+            git switch -C score FETCH_HEAD
+          else
+            git switch --orphan score
+          fi
+          git rm -rq --cached . 2>/dev/null || true
+
+          cp "$RUNNER_TEMP/mutants.json" mutants.json
+          git add -- mutants.json
+          if git diff --cached --quiet; then
+            echo "the score has not moved"
+            exit 0
+          fi
+          git commit -m "chore: what the sweep of $(date -u +%Y-%m-%d) came to"
+          git push origin score

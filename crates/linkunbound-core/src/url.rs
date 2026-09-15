@@ -91,6 +91,7 @@ pub fn looks_unresolved(url: &str) -> bool {
     parsed(url).is_some_and(|u| is_microsoft_wrapper(&u))
 }
 
+#[cfg(target_os = "macos")]
 const WEB_FILE_EXTENSIONS: [&str; 4] = ["html", "htm", "xhtml", "svg"];
 
 /// An existing file with a web extension, symlinks resolved, as the link a browser receives.

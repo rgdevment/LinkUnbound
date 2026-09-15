@@ -183,7 +183,7 @@ mod tests {
 
         let me = std::process::id().to_string();
         let listed = Command::new("ps")
-            .args(["-o", "ppid=,stat=", "-ax"])
+            .args(["-e", "-o", "ppid=,stat="])
             .output()
             .expect("ps runs");
         let zombies = String::from_utf8_lossy(&listed.stdout)
