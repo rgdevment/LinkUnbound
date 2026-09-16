@@ -1,3 +1,5 @@
+#![cfg(target_os = "macos")]
+
 use linkunbound_mac::installed_browsers;
 
 /// Run with `cargo test -p linkunbound-mac -- --ignored --nocapture` to see

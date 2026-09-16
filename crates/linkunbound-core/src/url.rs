@@ -1,3 +1,4 @@
+use percent_encoding::percent_decode_str;
 use url::Url;
 
 const EDGE_HTTPS: &str = "microsoft-edge-https://";
@@ -108,18 +109,24 @@ pub fn local_web_file(path: &std::path::Path) -> Option<String> {
     Url::from_file_path(&real).ok().map(Into::into)
 }
 
+/// Read from the URL's own segments rather than a filesystem path: on Windows a
+/// `file:///Users/...` URL has no drive and is not a path at all, and the picker
+/// still has to name the document it was handed.
 #[must_use]
 pub fn local_file_parts(raw: &str) -> Option<(String, String)> {
     let url = Url::parse(raw).ok()?;
-    if url.scheme() != "file" {
+    if url.scheme() != "file" || url.has_host() {
         return None;
     }
-    let path = url.to_file_path().ok()?;
-    let name = path.file_name()?.to_string_lossy().into_owned();
-    let folder = path
-        .parent()
-        .and_then(|p| p.file_name())
-        .map(|f| format!("…/{}", f.to_string_lossy()))
+    let mut segments: Vec<String> = url
+        .path_segments()?
+        .map(|segment| percent_decode_str(segment).decode_utf8_lossy().into_owned())
+        .collect();
+    let name = segments.pop().filter(|name| !name.is_empty())?;
+    let folder = segments
+        .pop()
+        .filter(|folder| !folder.is_empty())
+        .map(|folder| format!("…/{folder}"))
         .unwrap_or_default();
     Some((name, folder))
 }
@@ -335,8 +342,14 @@ mod tests {
             local_file_parts("file:///page.svg"),
             Some(("page.svg".to_owned(), String::new()))
         );
+        assert_eq!(
+            local_file_parts("file:///C:/Users/ana/Desktop/Notas%20%C3%B1.htm"),
+            Some(("Notas ñ.htm".to_owned(), "…/Desktop".to_owned()))
+        );
         assert!(local_file_parts("https://example.com/page.html").is_none());
         assert!(local_file_parts("file://host/share/page.html").is_none());
+        assert!(local_file_parts("file:///").is_none());
+        assert!(local_file_parts("file:///Users/ana/Documents/").is_none());
     }
 
     #[cfg(target_os = "macos")]

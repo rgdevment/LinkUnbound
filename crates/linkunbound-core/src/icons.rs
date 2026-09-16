@@ -115,7 +115,9 @@ mod tests {
         let first =
             cached_icon(&source.to_string_lossy(), "b", &dir, 24, &mut draw).expect("a picture");
         let stale = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
-        std::fs::File::open(&first)
+        std::fs::File::options()
+            .write(true)
+            .open(&first)
             .and_then(|f| f.set_modified(stale))
             .expect("an older picture");
         cached_icon(&source.to_string_lossy(), "b", &dir, 24, &mut draw).expect("redrawn");

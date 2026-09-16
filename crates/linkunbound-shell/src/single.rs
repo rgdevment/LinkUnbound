@@ -114,9 +114,6 @@ fn make_room(socket: &str) -> Option<Holding> {
     Some(held)
 }
 
-#[cfg(windows)]
-fn make_room(_socket: &str) {}
-
 /// Chrome stops at about 32 KB and the 1.x pipe broke at 4 KB with a real
 /// Teams link, so this sits far above anything a browser would follow.
 const LONGEST_LINK: u64 = 256 * 1024;
@@ -151,6 +148,7 @@ fn claim_at(
     arrived: impl Fn(String) + Send + Sync + 'static,
 ) -> Option<std::thread::JoinHandle<()>> {
     let arrived = std::sync::Arc::new(arrived);
+    #[cfg(not(windows))]
     let _room = make_room(socket);
     let name = named(socket)?;
     let listener = ListenerOptions::new().name(name).create_sync().ok()?;
