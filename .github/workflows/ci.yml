@@ -189,7 +189,7 @@ jobs:
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
             -Dsonar.sources=crates,app/src,app/src-tauri/src
             -Dsonar.tests=crates,app/src
-            -Dsonar.test.inclusions=crates/*/tests/**,app/src/**/*.test.tsx
+            -Dsonar.test.inclusions=crates/*/tests/**,app/src/**/*.test.ts,app/src/**/*.test.tsx
             -Dsonar.exclusions=crates/*/tests/**,app/src/tests/**
             -Dsonar.rust.lcov.reportPaths=lcov-rust.info,lcov-mac.info
             -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info

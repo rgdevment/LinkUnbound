@@ -30,7 +30,8 @@ describe("catalogue", () => {
   });
 
   it("says the same things about a Mac in both languages", () => {
-    expect(Object.keys(MAC.en).sort()).toEqual(MAC_KEYS.slice().sort());
+    const alphabetically = (a: string, b: string) => a.localeCompare(b);
+    expect(Object.keys(MAC.en).sort(alphabetically)).toEqual(MAC_KEYS.slice().sort(alphabetically));
     for (const key of MAC_KEYS) {
       expect(KEYS).toContain(key);
       const es = MAC.es[key]?.match(/\{\}/g)?.length ?? 0;

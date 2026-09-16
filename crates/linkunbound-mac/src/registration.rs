@@ -318,6 +318,64 @@ mod tests {
     }
 
     #[test]
+    fn a_binary_that_is_not_a_bundle_cannot_register_or_be_pointed_at() {
+        assert!(super::ours().is_none());
+        assert_eq!(super::register(), Err("notBundled".to_owned()));
+    }
+
+    #[test]
+    fn the_system_is_waited_for_and_its_silence_is_not_taken_for_a_yes() {
+        let (handler, rx) = super::answered();
+        handler.call((std::ptr::null_mut(),));
+        assert_eq!(super::waited(&rx), Ok(()));
+
+        let (handler, rx) = super::answered();
+        let cocoa = unsafe { objc2_foundation::NSCocoaErrorDomain };
+        let declined = unsafe {
+            objc2_foundation::NSError::errorWithDomain_code_userInfo(
+                cocoa,
+                objc2_foundation::NSUserCancelledError,
+                None,
+            )
+        };
+        handler.call((objc2::rc::Retained::as_ptr(&declined).cast_mut(),));
+        assert_eq!(super::waited(&rx), Err("defaultDeclined".to_owned()));
+
+        let (_, gone) = std::sync::mpsc::channel::<super::Answer>();
+        assert_eq!(super::waited(&gone), Err("defaultNoAnswer".to_owned()));
+    }
+
+    #[test]
+    fn a_document_type_the_system_does_not_know_is_not_pointed_anywhere() {
+        use objc2_app_kit::NSWorkspace;
+        use objc2_foundation::NSString;
+        let safari = NSWorkspace::sharedWorkspace()
+            .URLForApplicationWithBundleIdentifier(&NSString::from_str("com.apple.Safari"))
+            .expect("Safari is always there");
+        assert_eq!(
+            super::point_documents(&safari, "com.example.no.such.type"),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn a_remembered_browser_is_found_again_and_a_forgotten_one_is_not() {
+        let key = format!("HandedFromTestApp{}", std::process::id());
+        assert!(super::app_remembered_as(&key).is_none());
+        remember(Some("com.apple.Safari"), &key);
+        let found = super::app_remembered_as(&key).expect("Safari is always there");
+        assert!(
+            found
+                .path()
+                .is_some_and(|p| p.to_string().ends_with("Safari.app")),
+            "{found:?}"
+        );
+        remember(Some("com.example.gone.browser"), &key);
+        assert!(super::app_remembered_as(&key).is_none());
+        NSUserDefaults::standardUserDefaults().removeObjectForKey(&NSString::from_str(&key));
+    }
+
+    #[test]
     fn the_browser_that_held_the_links_is_remembered_and_nothing_is_not() {
         let key = format!("HandedFromTest{}", std::process::id());
         remember(None, &key);

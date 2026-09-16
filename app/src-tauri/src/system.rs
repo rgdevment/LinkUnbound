@@ -38,6 +38,7 @@ pub enum Health {
     /// without it reads as healthy otherwise, while every link runs nothing.
     NoResident,
     /// Running from the disk image it was downloaded as: the registration dies when it is ejected.
+    #[cfg(target_os = "macos")]
     Mounted,
     NotRegistered,
 }
