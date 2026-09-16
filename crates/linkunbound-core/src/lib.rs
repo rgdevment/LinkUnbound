@@ -26,7 +26,7 @@ pub use hostile::{as_file_name, disarm, is_remote};
 pub use i18n::{Language, Strings};
 pub use icons::cached_icon;
 pub use launch::{LaunchError, open as launch, spawn_and_forget};
-pub use prefs::{Locale, Preferences, Theme};
+pub use prefs::{Locale, PickerStyle, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{Rule, RuleSet, Scope, Target, site_of};

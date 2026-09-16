@@ -18,6 +18,16 @@ pub enum Locale {
     English,
 }
 
+/// The picker's look. `Classic` is the one 1.x users know, rows under a divided header; the
+/// default is the sheet of tiles that replaced it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PickerStyle {
+    #[default]
+    Default,
+    Classic,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(default)]
@@ -37,6 +47,8 @@ pub struct Preferences {
     /// Carried from 1.x so somebody who read the Edge notice once is not told again.
     #[serde(default)]
     pub edge_warning_dismissed: bool,
+    #[serde(default)]
+    pub picker_style: PickerStyle,
 }
 
 fn default_shortcut() -> Option<String> {
@@ -57,6 +69,7 @@ impl Default for Preferences {
             hide_tray: false,
             notify_on_rule: true,
             edge_warning_dismissed: false,
+            picker_style: PickerStyle::default(),
         }
     }
 }
@@ -128,7 +141,7 @@ fn shortcut_of(said: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Locale, Preferences, Theme};
+    use super::{Locale, PickerStyle, Preferences, Theme};
 
     #[test]
     fn a_fresh_install_is_dark_and_claims_the_default_shortcut() {
@@ -227,6 +240,21 @@ mod tests {
         let p: Preferences = serde_json::from_str("{}").unwrap();
         assert_eq!(p.shortcut.as_deref(), Some("Alt+Shift+L"));
         assert!(p.notify_on_rule);
+    }
+
+    /// The sheet is what a copy gets until somebody asks for the old look, and a file from before
+    /// the choice existed must read the same way. The words in the file are the ones settings
+    /// shows, so a hand edit reads back.
+    #[test]
+    fn the_picker_is_the_sheet_unless_the_classic_one_was_asked_for() {
+        let fresh: Preferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(fresh.picker_style, PickerStyle::Default);
+
+        let asked: Preferences = serde_json::from_str(r#"{"picker_style": "classic"}"#).unwrap();
+        assert_eq!(asked.picker_style, PickerStyle::Classic);
+
+        let written = serde_json::to_string(&asked).unwrap();
+        assert!(written.contains(r#""picker_style":"classic""#), "{written}");
     }
 
     #[test]

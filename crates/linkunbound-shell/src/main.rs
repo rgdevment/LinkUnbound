@@ -6,9 +6,9 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use linkunbound_core::{Language, Rule, Store, Strings, Target, data_dir, host_of, normalise};
-#[cfg(any(windows, target_os = "macos"))]
-use linkunbound_shell::ICON_SIDE;
 use linkunbound_shell::tray::{Asked, Tray};
+#[cfg(any(windows, target_os = "macos"))]
+use linkunbound_shell::{ICON_SIDE, TILE_ICON_SIDE};
 use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, place, single};
 use slint::{ComponentHandle, Model};
 
@@ -32,9 +32,9 @@ mod host {
         linkunbound_win::installed_browsers()
     }
 
-    pub fn icon(browser: &Browser) -> Option<String> {
+    pub fn icon(browser: &Browser, side: u32) -> Option<String> {
         let dir = super::data_dir().join("icons");
-        linkunbound_win::icon_for(browser.icon_source(), &browser.id, &dir, super::ICON_SIDE)
+        linkunbound_win::icon_for(browser.icon_source(), &browser.id, &dir, side)
             .map(|p| p.to_string_lossy().into_owned())
     }
 
@@ -58,7 +58,7 @@ mod host {
         linkunbound_win::work_area_at(x, y)
     }
 
-    pub fn keep_off_the_taskbar(window: isize) {
+    pub fn keep_off_the_taskbar(window: isize, _corner: f64) {
         linkunbound_win::keep_off_the_taskbar(window);
     }
 
@@ -95,15 +95,10 @@ mod host {
         linkunbound_mac::installed_browsers()
     }
 
-    pub fn icon(browser: &Browser) -> Option<String> {
+    pub fn icon(browser: &Browser, side: u32) -> Option<String> {
         let dir = super::data_dir().join("icons");
-        linkunbound_mac::icon_for(
-            browser.icon_source(),
-            &browser.id,
-            &dir,
-            super::ICON_SIDE * 2,
-        )
-        .map(|p| p.to_string_lossy().into_owned())
+        linkunbound_mac::icon_for(browser.icon_source(), &browser.id, &dir, side * 2)
+            .map(|p| p.to_string_lossy().into_owned())
     }
 
     pub fn clicked_in() -> Option<String> {
@@ -126,8 +121,8 @@ mod host {
         linkunbound_mac::work_area_at(x, y)
     }
 
-    pub fn keep_off_the_taskbar(window: isize) {
-        linkunbound_mac::keep_off_the_taskbar(window, linkunbound_shell::CORNER);
+    pub fn keep_off_the_taskbar(window: isize, corner: f64) {
+        linkunbound_mac::keep_off_the_taskbar(window, corner);
     }
 
     pub fn take_the_keyboard(window: isize) {
@@ -167,7 +162,7 @@ mod host {
         Vec::new()
     }
 
-    pub fn icon(_browser: &Browser) -> Option<String> {
+    pub fn icon(_browser: &Browser, _side: u32) -> Option<String> {
         None
     }
 
@@ -191,7 +186,7 @@ mod host {
         None
     }
 
-    pub fn keep_off_the_taskbar(_window: isize) {}
+    pub fn keep_off_the_taskbar(_window: isize, _corner: f64) {}
 
     pub fn take_the_keyboard(_window: isize) {}
 
@@ -232,12 +227,14 @@ fn with_icons(
     listed
 }
 
-fn rows() -> Vec<Listed> {
+/// The icon is extracted at the side it is drawn at: a tile wants a bigger one than a row, and
+/// scaling either up is what made them blur.
+fn rows(icon_side: u32) -> Vec<Listed> {
     let browsers = catalogue();
     with_icons(
         linkunbound_shell::destinations(&browsers),
         &browsers,
-        host::icon,
+        |browser| host::icon(browser, icon_side),
     )
 }
 
@@ -282,7 +279,7 @@ fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
     notice.set_left(NOTICE_SECONDS);
     let _ = notice.show();
     if let Some(handle) = native_handle(notice.window()) {
-        host::keep_off_the_taskbar(handle);
+        host::keep_off_the_taskbar(handle, linkunbound_shell::CORNER);
     }
 }
 
@@ -354,7 +351,16 @@ fn open_settings() {
     } else {
         "linkunbound-settings"
     });
-    let _ = linkunbound_core::spawn_and_forget(&mut std::process::Command::new(beside));
+    let mut command = std::process::Command::new(beside);
+    // A debug build of settings is a console program, and the console it would open is a
+    // window nobody asked for next to the one they did.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = linkunbound_core::spawn_and_forget(&mut command);
 }
 
 #[derive(Default)]
@@ -388,7 +394,11 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
     let Some(url) = claims_the_window(&mut shown.borrow_mut(), url, occupied) else {
         return;
     };
-    let listed = rows();
+    let listed = rows(if picker.get_classic() {
+        ICON_SIDE
+    } else {
+        TILE_ICON_SIDE
+    });
     if listed.is_empty() {
         // Opening settings and dropping the link loses the click: the address is
         // still on screen here, and settings is one press away.
@@ -399,7 +409,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
         beside_the_pointer(picker);
         let _ = picker.show();
         if let Some(handle) = native_handle(picker.window()) {
-            host::keep_off_the_taskbar(handle);
+            host::keep_off_the_taskbar(handle, corner_of(picker));
             host::take_the_keyboard(handle);
         }
         return;
@@ -415,7 +425,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
     beside_the_pointer(picker);
     let _ = picker.show();
     if let Some(handle) = native_handle(picker.window()) {
-        host::keep_off_the_taskbar(handle);
+        host::keep_off_the_taskbar(handle, corner_of(picker));
         host::take_the_keyboard(handle);
     }
 }
@@ -467,6 +477,7 @@ fn beside_the_pointer(picker: &Picker) {
     };
     let size = |logical: f32| physical(logical, scale);
 
+    let halo = size(picker.get_halo());
     let (at_x, at_y) = place::beside(
         (cx, cy),
         (
@@ -480,6 +491,9 @@ fn beside_the_pointer(picker: &Picker) {
             height,
         },
     );
+    // The margin holds the shadow, not the sheet: the sheet's edge is what sits by the pointer,
+    // and the transparent rim may hang past the screen without anyone seeing it.
+    let (at_x, at_y) = (at_x - halo, at_y - halo);
     #[cfg(target_os = "macos")]
     picker
         .window()
@@ -531,6 +545,7 @@ impl Ui {
     fn obey(&self, prefs: &linkunbound_core::Preferences) {
         self.words.set(Language::chosen(prefs.locale).strings());
         paint(&self.picker, &self.notice, wants_light(prefs.theme));
+        style(&self.picker, prefs.picker_style);
         if let Some(tray) = self.tray.as_ref() {
             tray.show(!prefs.hide_tray || cfg!(target_os = "macos"));
             tray.relabel(&self.words.get());
@@ -656,6 +671,24 @@ fn sent_by_launch_services(event: linkunbound_mac::Event, quiet: bool) {
         Reaction::Open(url) => arrived(url),
         Reaction::Settings => open_settings(),
         Reaction::Nothing => {}
+    }
+}
+
+fn style(picker: &Picker, chosen: linkunbound_core::PickerStyle) {
+    let classic = chosen == linkunbound_core::PickerStyle::Classic;
+    picker.set_classic(classic);
+    picker.set_halo(if classic {
+        0.0
+    } else {
+        linkunbound_shell::HALO
+    });
+}
+
+fn corner_of(picker: &Picker) -> f64 {
+    if picker.get_classic() {
+        linkunbound_shell::CLASSIC_CORNER
+    } else {
+        linkunbound_shell::CORNER
     }
 }
 

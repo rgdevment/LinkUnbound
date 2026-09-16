@@ -27,10 +27,17 @@ pub const FAMILY: &str = if cfg!(windows) {
     ""
 };
 
-pub const CORNER: f64 = 10.0;
+pub const CORNER: f64 = 14.0;
+pub const CLASSIC_CORNER: f64 = 10.0;
+
+/// The sheet draws its own shadow where the system draws none for a frameless window.
+pub const HALO: f32 = if cfg!(target_os = "macos") { 0.0 } else { 18.0 };
 
 /// Extracted and drawn at this same side: any other ratio scales, and blurs.
 pub const ICON_SIDE: u32 = 24;
+/// The tile draws its icon at 40 and is asked for twice that: a display at 200 % gets the exact
+/// pixels, and one at 100 % scales down, which keeps the edges where scaling up loses them.
+pub const TILE_ICON_SIDE: u32 = 80;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reaches {
@@ -116,6 +123,10 @@ pub fn destinations(browsers: &[Browser]) -> Vec<Listed> {
 
 /// A wrapper left unwrapped must not be remembered: the rule would key off
 /// Microsoft's redirector and answer for every link it ever carries.
+///
+/// Each reach comes with the short word the menu lists and the whole sentence the pill says
+/// once it is chosen: «Todo el sitio» in a list reads as an option, «Recordar todo el sitio» on
+/// its own says what the click is about to do.
 #[must_use]
 pub fn reaches(
     words: &Strings,
@@ -123,24 +134,49 @@ pub fn reaches(
     host: &str,
     site: &str,
     source: Option<&str>,
-) -> Vec<(String, bool, bool)> {
+) -> Vec<Said> {
     let wrapped = looks_unresolved(url) || local_file_parts(url).is_some();
     let mut offered = vec![
-        (words.reach_once.to_owned(), false, false),
-        (words.reach_url.to_owned(), true, wrapped),
-        (
-            words.reach_subdomain.to_owned(),
+        Said::new(words.reach_once, words.reach_once, false, false),
+        Said::new(words.reach_url, words.remember_url, true, wrapped),
+        Said::new(
+            words.reach_subdomain,
+            words.remember_subdomain,
             true,
             wrapped || host == site || host.is_empty(),
         ),
-        (words.reach_site.to_owned(), true, wrapped),
+        Said::new(words.reach_site, words.remember_site, true, wrapped),
     ];
     // Left out rather than greyed when there is no origin: a dead label would cost the live
     // ones their space.
     if let Some(source) = source {
-        offered.push((Strings::fill(words.reach_from_app, source), true, false));
+        offered.push(Said {
+            label: Strings::fill(words.reach_from_app, source),
+            full: Strings::fill(words.remember_from_app, source),
+            keeps: true,
+            dead: false,
+        });
     }
     offered
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Said {
+    pub label: String,
+    pub full: String,
+    pub keeps: bool,
+    pub dead: bool,
+}
+
+impl Said {
+    fn new(label: &str, full: &str, keeps: bool, dead: bool) -> Self {
+        Self {
+            label: label.to_owned(),
+            full: full.to_owned(),
+            keeps,
+            dead,
+        }
+    }
 }
 
 /// The two the row shows. Everything else goes behind «More», because five labels never fit a
@@ -215,13 +251,15 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
     let all: Vec<Reach> = said
         .into_iter()
         .enumerate()
-        .map(|(at, (label, keeps, dead))| Reach {
-            label: label.into(),
-            keeps,
-            dead,
+        .map(|(at, one)| Reach {
+            label: one.label.into(),
+            full: one.full.into(),
+            keeps: one.keeps,
+            dead: one.dead,
             index: i32::try_from(at).unwrap_or(0),
         })
         .collect();
+    window.set_all_reaches(Rc::new(slint::VecModel::from(all.clone())).into());
 
     window.set_reach_labels(
         Rc::new(slint::VecModel::from(
@@ -368,6 +406,69 @@ mod tests {
                 "«{from}» moved the window's width"
             );
         }
+    }
+
+    /// The sheet's width comes from how many tiles share a row, never from the words: four across
+    /// need the wider sheet and the origin's name changes nothing. The halo is room for the
+    /// shadow and is counted, since the window is what gets placed beside the pointer.
+    #[test]
+    fn the_sheet_is_sized_by_its_tiles_and_its_halo() {
+        headless();
+        let window = crate::Picker::new().expect("a window");
+        let words = Language::Spanish.strings();
+        let two = dressed();
+
+        dress(
+            &window,
+            &words,
+            "https://docs.google.com/a",
+            Some("ms-teams"),
+            &two,
+        );
+        assert_eq!(window.get_wanted_width(), 348.0);
+
+        let mut four = two.clone();
+        four.extend(two.iter().cloned());
+        dress(&window, &words, "https://docs.google.com/a", None, &four);
+        assert_eq!(
+            window.get_wanted_width(),
+            392.0,
+            "four across need the wider sheet"
+        );
+
+        window.set_halo(18.0);
+        assert_eq!(window.get_wanted_width(), 392.0 + 36.0);
+
+        window.set_classic(true);
+        assert_eq!(
+            window.get_wanted_width(),
+            348.0,
+            "the classic look keeps its own width"
+        );
+    }
+
+    /// The pill says the consequence in full once a reach is chosen: «Todo el sitio» in a menu is
+    /// an option, «Recordar todo el sitio» on its own says what the click is about to do.
+    #[test]
+    fn the_pill_says_what_the_chosen_reach_will_do() {
+        headless();
+        let window = crate::Picker::new().expect("a window");
+        let words = Language::Spanish.strings();
+
+        dress(
+            &window,
+            &words,
+            "https://docs.google.com/a",
+            Some("Slack"),
+            &dressed(),
+        );
+        assert_eq!(window.get_reach_said(), words.reach_once);
+
+        window.set_reach_index(3);
+        assert_eq!(window.get_reach_said(), words.remember_site);
+
+        window.set_reach_index(4);
+        assert_eq!(window.get_reach_said(), "Recordar desde Slack");
     }
 
     /// The arrows step through this list rather than through the row, and the row is now two
@@ -568,9 +669,9 @@ mod tests {
     #[test]
     fn the_subdomain_reach_is_dead_when_the_host_is_already_its_site() {
         let same = reaches(&SPOKEN, PLAIN, "github.com", "github.com", None);
-        assert!(same[2].2);
+        assert!(same[2].dead);
         let sub = reaches(&SPOKEN, PLAIN, "docs.google.com", "google.com", None);
-        assert!(!sub[2].2);
+        assert!(!sub[2].dead);
     }
 
     #[test]
@@ -583,9 +684,9 @@ mod tests {
             "github.com",
             None,
         );
-        assert_eq!(spanish[0].0, "Solo esta vez");
-        assert_eq!(english[0].0, "Just this time");
-        assert_eq!(english[3].0, "The whole site");
+        assert_eq!(spanish[0].label, "Solo esta vez");
+        assert_eq!(english[0].label, "Just this time");
+        assert_eq!(english[3].label, "The whole site");
     }
 
     /// What the user means by ticking it on a link that came from Slack: every
@@ -618,11 +719,14 @@ mod tests {
             Some("teams"),
         );
         assert_eq!(known.len(), 5);
-        assert!(!known[4].2, "a wrapper does not disable the origin reach");
         assert!(
-            known[4].0.contains("teams"),
+            !known[4].dead,
+            "a wrapper does not disable the origin reach"
+        );
+        assert!(
+            known[4].label.contains("teams"),
             "it names the app: {}",
-            known[4].0
+            known[4].label
         );
 
         let unknown = reaches(&SPOKEN, PLAIN, "github.com", "github.com", None);
@@ -658,8 +762,8 @@ mod tests {
             "outlook.com",
             None,
         );
-        assert!(!offered[0].2, "solo esta vez sigue disponible");
-        assert!(offered[1].2 && offered[2].2 && offered[3].2);
+        assert!(!offered[0].dead, "solo esta vez sigue disponible");
+        assert!(offered[1].dead && offered[2].dead && offered[3].dead);
     }
 
     #[test]
@@ -695,8 +799,8 @@ mod tests {
             "my page.html",
             Some("finder"),
         );
-        assert!(!offered[0].2, "once is the one reach a file has");
-        assert!(offered[1].2 && offered[2].2 && offered[3].2);
+        assert!(!offered[0].dead, "once is the one reach a file has");
+        assert!(offered[1].dead && offered[2].dead && offered[3].dead);
     }
 
     #[test]

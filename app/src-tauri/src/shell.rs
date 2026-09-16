@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use linkunbound_core::Theme;
 use tauri::{AppHandle, Manager, Runtime};
 
@@ -49,6 +51,13 @@ fn dress_natively<R: Runtime>(_window: &tauri::WebviewWindow<R>, _theme: Theme) 
 
 /// Built on demand: an idle webview costs tens of megabytes and this window is
 /// opened rarely. The resident owns the tray, the picker and the notice.
+/// Set while the webview is being built. A second instance's knock, or the global shortcut,
+/// arrives inside that build's own message pump — the WebView2 environment is created by
+/// pumping messages until it answers — and building again from in there leaves both sides
+/// waiting on each other. That is what a double click on the tray icon did: a blank window
+/// that never answered, and a second process stuck knocking on it.
+static BUILDING: AtomicBool = AtomicBool::new(false);
+
 pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     if let Some(window) = app.get_webview_window(SETTINGS) {
         let _ = window.show();
@@ -56,7 +65,14 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
         let _ = window.set_focus();
         return;
     }
+    if BUILDING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    build_settings(app, theme);
+    BUILDING.store(false, Ordering::Release);
+}
 
+fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     let mut builder = tauri::WebviewWindowBuilder::new(app, SETTINGS, tauri::WebviewUrl::default())
         .title("LinkUnbound")
         .inner_size(780.0, 560.0)

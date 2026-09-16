@@ -8,6 +8,7 @@ import { Card, Line, Section, Switch } from "./parts";
 
 type Theme = "system" | "light" | "dark";
 type Locale = "system" | "spanish" | "english";
+type PickerStyle = "default" | "classic";
 
 type Preferences = {
   schema_version: number;
@@ -16,6 +17,7 @@ type Preferences = {
   shortcut: string | null;
   hide_tray: boolean;
   notify_on_rule: boolean;
+  picker_style: PickerStyle;
 };
 
 type Settings = { prefs: Preferences; shortcut_held: string | null; language: string };
@@ -30,6 +32,11 @@ const LOCALES: { id: Locale; label: Key }[] = [
   { id: "system", label: "localeAuto" },
   { id: "spanish", label: "localeSpanish" },
   { id: "english", label: "localeEnglish" },
+];
+
+const PICKERS: { id: PickerStyle; label: Key }[] = [
+  { id: "default", label: "pickerDefault" },
+  { id: "classic", label: "pickerClassic" },
 ];
 
 const MODIFIERS = new Set(["Control", "Alt", "Shift", "Meta"]);
@@ -153,6 +160,14 @@ export default function Application({
               value={prefs.locale}
               label={t("appLanguage")}
               onPick={(locale) => apply({ locale })}
+            />
+          </Line>
+          <Line title={t("appPicker")}>
+            <Choice
+              options={PICKERS}
+              value={prefs.picker_style}
+              label={t("appPicker")}
+              onPick={(picker_style) => apply({ picker_style })}
             />
           </Line>
         </Card>

@@ -802,22 +802,54 @@ jobs:
           name: bundle-msix
           path: dist
 
-      - uses: microsoft/microsoft-store-apppublisher@v1.4
+      # v1.4 of the action installs a CLI that reads the Store's empty answer to a commit as broken
+      # JSON and dies in a .NET stack trace after the submission was taken. Pinned to the CLI that
+      # does not, the way Tisty publishes.
+      - uses: microsoft/microsoft-store-apppublisher@v1.3
         if: steps.gate.outputs.go == 'yes'
+        with:
+          version: v0.4.2
 
       - name: Submit
+        id: sent
         if: steps.gate.outputs.go == 'yes'
         shell: bash
         run: |
-          set -euo pipefail
           msix=$(ls dist/*.msix 2>/dev/null | head -1) || true
           if [ -z "$msix" ]; then
             echo "::error::the artifact carried no package to submit"
             exit 1
           fi
-          msstore reconfigure --tenantId "$STORE_TENANT_ID" --sellerId "$STORE_SELLER_ID" --clientId "$STORE_CLIENT_ID" --clientSecret "$STORE_CLIENT_SECRET"
-          msstore publish "$msix" --appId "$STORE_APP_ID"
-          echo "submitted $msix; the listing is reviewed by people and appears when they say so"
+          msstore reconfigure \
+            --tenantId "$STORE_TENANT_ID" \
+            --sellerId "$STORE_SELLER_ID" \
+            --clientId "$STORE_CLIENT_ID" \
+            --clientSecret "$STORE_CLIENT_SECRET"
+          set +e
+          msstore publish "$msix" --appId "$STORE_APP_ID" 2>&1 | tee publish.log
+          code=${PIPESTATUS[0]}
+          set -e
+
+          # The Store had the package and the commit was posted; what the client lost was the poll
+          # it was holding. Sending again would file the same submission twice.
+          if [ "$code" -ne 0 ] && grep -q "CommitStarted" publish.log; then
+            echo "::warning::the Store took the submission and is processing it; the client lost \
+            the poll it was holding. Nothing here has to be sent again."
+            exit 0
+          fi
+          if [ "$code" -eq 0 ]; then
+            echo "submitted $msix; the listing is reviewed by people and appears when they say so"
+          fi
+          exit "$code"
+
+      - name: What the Store made of it
+        if: always() && steps.gate.outputs.go == 'yes' && steps.sent.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning::publishing failed before the Store took the submission; asking what state it is in"
+          msstore submission status "$STORE_APP_ID" || true
+          echo "::error::the package reached the Store but no commit was confirmed. Read the status \
+          above before tagging again: a submission already committed must not be sent twice."
 
   verify:
     name: The update is installable

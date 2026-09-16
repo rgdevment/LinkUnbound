@@ -38,6 +38,7 @@ const PREFS = {
     shortcut: "Alt+Shift+L",
     hide_tray: false,
     notify_on_rule: true,
+    picker_style: "default",
   },
   shortcut_held: "Alt+Shift+L",
 };

@@ -8,6 +8,7 @@ struct Destination {
 
 struct Reach {
     label: string,
+    full: string,
     keeps: bool,
     dead: bool,
     index: int,
@@ -34,6 +35,14 @@ export global Palette {
     out property <brush> neutral: light ? #00000017 : #ffffff1c;
     out property <brush> neutral-ink: light ? #3A3F4B : #D6DAE3;
     out property <brush> edge: light ? #0000001f : #ffffff1a;
+    // The modern surface: one sheet, separated by fill rather than by lines.
+    out property <brush> surface: light ? #FFFFFF : #1E2027;
+    out property <brush> fill: light ? #0000000c : #ffffff0e;
+    out property <brush> fill-hover: light ? #00000014 : #ffffff1a;
+    out property <brush> faint: light ? #9AA0AE : #6E7583;
+    out property <brush> glow: light ? #0000000f : #ffffff12;
+    out property <brush> shade: light ? #14192d : #000000;
+    out property <brush> accent-ink: light ? #FFFFFF : #12141B;
 }
 
 component Row inherits Rectangle {
@@ -194,6 +203,7 @@ export component Picker inherits Window {
     in property <[Destination]> rows;
     in property <[Reach]> reaches;
     in property <[Reach]> reaches-more;
+    in property <[Reach]> all-reaches;
     in property <[string]> reach-labels;
     in property <string> reach-more-label;
     in property <string> reaches-line;
@@ -202,6 +212,11 @@ export component Picker inherits Window {
     in-out property <int> reach-index: 0;
     in-out property <bool> private-on: false;
     in-out property <bool> more-open: false;
+
+    // The look 1.x users know, kept whole behind a preference; the sheet below is the default.
+    in property <bool> classic: false;
+    // Room around the sheet for the shadow it draws itself. Zero where the system draws one.
+    in property <length> halo: 0px;
 
     // True while the chosen reach is one the row does not show, which is when the opener has to
     // say which one rather than «More»: otherwise the choice is made and nothing on screen says
@@ -230,7 +245,7 @@ export component Picker inherits Window {
     // app's name — which no fixed width can be drawn for. The reaches ask for the room they
     // need; the floor is the width the rows were designed at and the ceiling keeps one long
     // name from stretching the window across the screen.
-    out property <length> wanted-width: min(
+    property <length> classic-width: min(
         max(348px, ruler.preferred-width + 30px + (root.reaches.length - 1) * 8px),
         560px);
     // Repeated elements reach the layout only once they are drawn, so the row cannot be asked
@@ -242,11 +257,29 @@ export component Picker inherits Window {
         visible: false;
     }
 
-    out property <length> wanted-height:
+    property <length> classic-height:
         66px + 1px
         + (root.rows.length * 42px) + 16px
         + 1px + 38px + 22px + 12px
         + (root.problem == "" ? 0px : 36px);
+
+    // The sheet: tiles of one size, at most four to a row, the rows shared out evenly so six
+    // destinations make two rows of three rather than four and two. The last row is centred.
+    property <float> count: root.rows.length;
+    property <float> tile-rows: max(1, Math.ceil(root.count / 4));
+    property <float> tile-cols: max(1, Math.ceil(root.count / root.tile-rows));
+    property <length> sheet-width: root.tile-cols >= 4 ? 392px : 348px;
+    property <length> tile-width:
+        Math.floor(((root.sheet-width - 28px - (root.tile-cols - 1) * 4px) / root.tile-cols) / 1px) * 1px;
+    property <bool> second-line: root.problem != "" || root.source-line != "";
+    property <length> head-height: 15px + (root.second-line ? 16px : 0px);
+    property <length> tiles-top: 14px + root.head-height + 10px;
+    property <length> tiles-height: root.tile-rows * 88px + (root.tile-rows - 1) * 4px;
+    property <length> sheet-height: root.tiles-top + root.tiles-height + 10px + 26px + 12px;
+
+    out property <length> wanted-width: root.classic ? root.classic-width : root.sheet-width + 2 * root.halo;
+    out property <length> wanted-height: root.classic ? root.classic-height : root.sheet-height + 2 * root.halo;
+    out property <string> reach-said: root.all-reaches[root.reach-index].full;
 
     keys := FocusScope {
         // Shift is held, not toggled: the icon lights while it is down.
@@ -298,226 +331,484 @@ export component Picker inherits Window {
             clicked => { root.more-open = false; }
         }
 
-        Rectangle {
-            border-radius: 10px;
-            background: Palette.ground;
-            border-width: 1px;
-            border-color: Palette.edge;
-
-            VerticalLayout {
-                Rectangle {
-                    height: 66px;
-                    HorizontalLayout {
-                        padding-left: 15px;
-                        padding-right: 11px;
-                        spacing: 8px;
-                        alignment: stretch;
-
-                        VerticalLayout {
-                            spacing: 4px;
-                            alignment: center;
-                            HorizontalLayout {
-                                alignment: start;
-                                Text {
-                                    text: root.host;
-                                    font-size: 14.5px;
-                                    font-weight: 700;
-                                    color: Palette.ink;
-                                }
-                                Text {
-                                    text: root.trail;
-                                    font-size: 14.5px;
-                                    color: Palette.dimmer;
-                                    overflow: elide;
-                                }
-                            }
-                            if root.source-line != "": Text {
-                                text: root.source-line;
-                                font-size: 12px;
-                                color: Palette.dim;
-                            }
-                        }
-
-                        copy-button := IconButton {
-                            y: (parent.height - self.height) / 2;
-                            lit: root.copied;
-                            pressed => { root.copy(); }
-                            // Drawn: these glyphs are not in every system font.
-                            Path {
-                                x: 8px;
-                                y: 8px;
-                                width: 14px;
-                                height: 14px;
-                                viewbox-width: 24;
-                                viewbox-height: 24;
-                                stroke: root.copied ? Palette.accent : Palette.dim;
-                                stroke-width: 1.9px;
-                                commands: root.copied
-                                    ? "M 5 13 L 10 18 L 19 6"
-                                    : "M 9 9 L 19 9 L 19 21 L 9 21 Z M 5 15 L 5 5 L 15 5";
-                            }
-                        }
-
-                        mask-button := IconButton {
-                            y: (parent.height - self.height) / 2;
-                            lit: root.private-on;
-                            pressed => { root.pinned-private = !root.pinned-private; root.private-on = root.pinned-private; }
-                            // Composed: Slint does not resolve elliptical arcs.
-                            Rectangle {
-                                x: 7px;
-                                y: 13px;
-                                width: 16px;
-                                height: 2px;
-                                border-radius: 1px;
-                                background: root.private-on ? Palette.accent : Palette.dim;
-                            }
-                            Rectangle {
-                                x: 8px;
-                                y: 15px;
-                                width: 7px;
-                                height: 6px;
-                                border-radius: 3px;
-                                background: root.private-on ? Palette.accent : Palette.dim;
-                            }
-                            Rectangle {
-                                x: 15px;
-                                y: 15px;
-                                width: 7px;
-                                height: 6px;
-                                border-radius: 3px;
-                                background: root.private-on ? Palette.accent : Palette.dim;
-                            }
-                        }
-                    }
-                }
-
-                Rectangle { height: 1px; background: Palette.line; }
+        if root.classic: Rectangle {
+            width: 100%;
+            height: 100%;
+            Rectangle {
+                border-radius: 10px;
+                background: Palette.ground;
+                border-width: 1px;
+                border-color: Palette.edge;
 
                 VerticalLayout {
-                    padding-left: 6px;
-                    padding-right: 6px;
-                    padding-top: 7px;
-                    padding-bottom: 7px;
-                    for item[i] in root.rows: Row {
-                        entry: item;
-                        icon-side: root.icon-side;
-                        private-wanted: root.private-on;
-                        chosen(private) => { root.open(i, private); }
+                    Rectangle {
+                        height: 66px;
+                        HorizontalLayout {
+                            padding-left: 15px;
+                            padding-right: 11px;
+                            spacing: 8px;
+                            alignment: stretch;
+
+                            VerticalLayout {
+                                spacing: 4px;
+                                alignment: center;
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Text {
+                                        text: root.host;
+                                        font-size: 14.5px;
+                                        font-weight: 700;
+                                        color: Palette.ink;
+                                    }
+                                    Text {
+                                        text: root.trail;
+                                        font-size: 14.5px;
+                                        color: Palette.dimmer;
+                                        overflow: elide;
+                                    }
+                                }
+                                if root.source-line != "": Text {
+                                    text: root.source-line;
+                                    font-size: 12px;
+                                    color: Palette.dim;
+                                }
+                            }
+
+                            copy-button := IconButton {
+                                y: (parent.height - self.height) / 2;
+                                lit: root.copied;
+                                pressed => { root.copy(); }
+                                // Drawn: these glyphs are not in every system font.
+                                Path {
+                                    x: 8px;
+                                    y: 8px;
+                                    width: 14px;
+                                    height: 14px;
+                                    viewbox-width: 24;
+                                    viewbox-height: 24;
+                                    stroke: root.copied ? Palette.accent : Palette.dim;
+                                    stroke-width: 1.9px;
+                                    commands: root.copied
+                                        ? "M 5 13 L 10 18 L 19 6"
+                                        : "M 9 9 L 19 9 L 19 21 L 9 21 Z M 5 15 L 5 5 L 15 5";
+                                }
+                            }
+
+                            mask-button := IconButton {
+                                y: (parent.height - self.height) / 2;
+                                lit: root.private-on;
+                                pressed => { root.pinned-private = !root.pinned-private; root.private-on = root.pinned-private; }
+                                // Composed: Slint does not resolve elliptical arcs.
+                                Rectangle {
+                                    x: 7px;
+                                    y: 13px;
+                                    width: 16px;
+                                    height: 2px;
+                                    border-radius: 1px;
+                                    background: root.private-on ? Palette.accent : Palette.dim;
+                                }
+                                Rectangle {
+                                    x: 8px;
+                                    y: 15px;
+                                    width: 7px;
+                                    height: 6px;
+                                    border-radius: 3px;
+                                    background: root.private-on ? Palette.accent : Palette.dim;
+                                }
+                                Rectangle {
+                                    x: 15px;
+                                    y: 15px;
+                                    width: 7px;
+                                    height: 6px;
+                                    border-radius: 3px;
+                                    background: root.private-on ? Palette.accent : Palette.dim;
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Palette.line; }
+
+                    VerticalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        padding-top: 7px;
+                        padding-bottom: 7px;
+                        for item[i] in root.rows: Row {
+                            entry: item;
+                            icon-side: root.icon-side;
+                            private-wanted: root.private-on;
+                            chosen(private) => { root.open(i, private); }
+                        }
+                    }
+
+                    if root.problem != "": Rectangle {
+                        height: 36px;
+                        HorizontalLayout {
+                            padding-left: 15px;
+                            padding-right: 15px;
+                            Text {
+                                text: root.problem;
+                                font-size: 11.5px;
+                                color: root.alarming ? Palette.wrong : Palette.caution;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Palette.line; }
+
+                    Rectangle {
+                        height: 38px;
+                        HorizontalLayout {
+                            padding-left: 15px;
+                            padding-right: 15px;
+                            alignment: space-between;
+                            Text {
+                                text: root.remember-label;
+                                font-size: 12.5px;
+                                color: Palette.dimmer;
+                                vertical-alignment: center;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                alignment: end;
+                                Rectangle {
+                                    width: 24px;
+                                    height: 20px;
+                                    y: (parent.height - self.height) / 2;
+                                    border-radius: 4px;
+                                    background: root.private-on ? Palette.accent-soft : Palette.key-bg;
+                                    Text {
+                                        text: "⇧";
+                                        font-size: 13px;
+                                        color: root.private-on ? Palette.accent : Palette.key-ink;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        width: 100%;
+                                        height: 100%;
+                                    }
+                                }
+                                Text {
+                                    text: root.private-label;
+                                    font-size: 12.5px;
+                                    color: root.private-on ? Palette.accent : Palette.dimmer;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+
+                    scopes := HorizontalLayout {
+                        padding-left: 15px;
+                        padding-right: 15px;
+                        padding-bottom: 12px;
+                        spacing: 7px;
+                        alignment: start;
+
+                        for item in root.reaches: Segment {
+                            reach: item;
+                            active: item.index == root.reach-index;
+                            last: false;
+                            picked => {
+                                root.reach-index = item.index;
+                                root.more-open = false;
+                            }
+                        }
+
+                        more := Rectangle {
+                            height: 22px;
+                            preferred-width: opener.preferred-width;
+
+                            opener := HorizontalLayout {
+                                spacing: 4px;
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    alignment: center;
+                                    said := Text {
+                                        text: root.more-holds ? root.reach-labels[root.reach-index]
+                                                              : root.reach-more-label;
+                                        font-size: 11.5px;
+                                        max-width: 150px;
+                                        overflow: elide;
+                                        color: root.more-holds
+                                            ? Palette.accent
+                                            : (more-touch.has-hover ? Palette.neutral-ink : Palette.dim);
+                                        font-weight: root.more-holds ? 700 : 400;
+                                        vertical-alignment: center;
+                                    }
+                                    Rectangle {
+                                        height: 2px;
+                                        border-radius: 1px;
+                                        background: root.more-holds ? Palette.accent : transparent;
+                                    }
+                                }
+                                Text {
+                                    text: root.more-open ? "▴" : "▾";
+                                    font-size: 9px;
+                                    color: Palette.dimmer;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            more-touch := TouchArea {
+                                clicked => { root.more-open = !root.more-open; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !root.classic: Rectangle {
+            width: 100%;
+            height: 100%;
+
+            // The shadow is stacked, not blurred: six sheets fading outwards is what the
+            // software renderer can draw, and it reads as one soft shadow.
+            if root.halo > 0px: Rectangle {
+                for step in [1, 2, 3, 4, 5, 6]: Rectangle {
+                    x: root.halo - step * 3px;
+                    y: root.halo - step * 2px + step * 1.5px;
+                    width: root.sheet-width + step * 6px;
+                    height: root.sheet-height + step * 6px;
+                    border-radius: 14px + step * 3px;
+                    background: Palette.shade;
+                    opacity: 0.05;
+                }
+            }
+
+            sheet := Rectangle {
+                x: root.halo;
+                y: root.halo;
+                width: root.sheet-width;
+                height: root.sheet-height;
+                border-radius: 14px;
+                background: Palette.surface;
+                border-width: 1px;
+                border-color: Palette.glow;
+
+                HorizontalLayout {
+                    x: 16px;
+                    y: 14px;
+                    width: root.sheet-width - 32px - 30px;
+                    height: 15px;
+                    alignment: start;
+                    Text {
+                        text: root.host;
+                        font-size: 12.5px;
+                        font-weight: 600;
+                        color: Palette.ink;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: root.trail;
+                        font-size: 12.5px;
+                        color: Palette.dim;
+                        vertical-alignment: center;
+                        overflow: elide;
                     }
                 }
 
-                if root.problem != "": Rectangle {
-                    height: 36px;
-                    HorizontalLayout {
-                        padding-left: 15px;
-                        padding-right: 15px;
+                if root.second-line: Text {
+                    x: 16px;
+                    y: 32px;
+                    width: root.sheet-width - 32px - 30px;
+                    height: 13px;
+                    text: root.problem != "" ? root.problem : root.source-line;
+                    font-size: 11px;
+                    color: root.problem != "" ? (root.alarming ? Palette.wrong : Palette.caution) : Palette.dim;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                // Copy sits where the eye does not go until it wants it: faint, brighter under the
+                // pointer, and there is Ctrl+C besides.
+                copy-sheet := Rectangle {
+                    x: root.sheet-width - 14px - 24px;
+                    y: 10px;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 6px;
+                    background: copy-touch.has-hover ? Palette.fill-hover : transparent;
+                    copy-touch := TouchArea {
+                        clicked => { root.copy(); }
+                    }
+                    Path {
+                        x: 5px;
+                        y: 5px;
+                        width: 14px;
+                        height: 14px;
+                        viewbox-width: 24;
+                        viewbox-height: 24;
+                        stroke: root.copied ? Palette.accent : (copy-touch.has-hover ? Palette.dim : Palette.faint);
+                        stroke-width: 1.9px;
+                        commands: root.copied
+                            ? "M 5 13 L 10 18 L 19 6"
+                            : "M 9 9 L 19 9 L 19 21 L 9 21 Z M 5 15 L 5 5 L 15 5";
+                    }
+                }
+
+                Rectangle {
+                    x: 14px;
+                    y: root.tiles-top;
+                    width: root.sheet-width - 28px;
+                    height: root.tiles-height;
+
+                    for item[i] in root.rows: Rectangle {
+                        property <float> row-at: Math.floor(i / root.tile-cols);
+                        property <float> col-at: i - self.row-at * root.tile-cols;
+                        property <float> in-row: min(root.tile-cols, root.count - self.row-at * root.tile-cols);
+                        property <bool> greyed: root.private-on && !item.can-private;
+                        x: (parent.width - (self.in-row * root.tile-width + (self.in-row - 1) * 4px)) / 2
+                            + self.col-at * (root.tile-width + 4px);
+                        y: self.row-at * 92px;
+                        width: root.tile-width;
+                        height: 88px;
+                        border-radius: 12px;
+                        background: tile-touch.has-hover && !self.greyed ? Palette.fill-hover : transparent;
+                        opacity: self.greyed ? 0.4 : 1.0;
+
+                        tile-touch := TouchArea {
+                            enabled: !parent.greyed;
+                            clicked => { root.open(i, root.private-on); }
+                        }
+
                         Text {
-                            text: root.problem;
-                            font-size: 11.5px;
-                            color: root.alarming ? Palette.wrong : Palette.caution;
+                            x: parent.width - 9px - self.width;
+                            y: 7px;
+                            text: item.key;
+                            font-size: 10.5px;
+                            color: tile-touch.has-hover ? Palette.dim : Palette.faint;
+                        }
+
+                        Image {
+                            source: item.icon;
+                            x: (parent.width - self.width) / 2;
+                            y: 11px;
+                            width: 40px;
+                            height: 40px;
+                            image-fit: contain;
+                            image-rendering: smooth;
+                        }
+
+                        Text {
+                            x: 4px;
+                            y: 57px;
+                            width: parent.width - 8px;
+                            height: 13px;
+                            text: item.name;
+                            font-size: 11px;
+                            color: Palette.ink;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            x: 4px;
+                            y: 70px;
+                            width: parent.width - 8px;
+                            height: 12px;
+                            text: item.profile;
+                            font-size: 10px;
+                            color: Palette.dim;
+                            horizontal-alignment: center;
                             vertical-alignment: center;
                             overflow: elide;
                         }
                     }
                 }
 
-                Rectangle { height: 1px; background: Palette.line; }
-
-                Rectangle {
-                    height: 38px;
+                // Hasta cuándo: one pill that says the consequence in full, blue when a click
+                // leaves a rule behind, and opens the menu of every reach.
+                reach-pill := Rectangle {
+                    x: 14px;
+                    y: root.sheet-height - 12px - 26px;
+                    height: 26px;
+                    width: reach-words.preferred-width + 20px + 6px + 8px;
+                    // Words, the gap, the chevron, and the padding either side.
+                    border-radius: 13px;
+                    background: root.reach-index > 0 ? Palette.accent-soft : (reach-touch.has-hover ? Palette.fill-hover : Palette.fill);
+                    opacity: root.problem != "" && !root.alarming ? 0.55 : 1.0;
                     HorizontalLayout {
-                        padding-left: 15px;
-                        padding-right: 15px;
-                        alignment: space-between;
-                        Text {
-                            text: root.remember-label;
-                            font-size: 12.5px;
-                            color: Palette.dimmer;
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 6px;
+                        reach-words := Text {
+                            text: root.reach-said;
+                            font-size: 11.5px;
+                            font-weight: root.reach-index > 0 ? 600 : 400;
+                            color: root.reach-index > 0 ? Palette.accent : Palette.dim;
                             vertical-alignment: center;
+                            max-width: 200px;
+                            overflow: elide;
                         }
-                        HorizontalLayout {
-                            spacing: 6px;
-                            alignment: end;
-                            Rectangle {
-                                width: 24px;
-                                height: 20px;
-                                y: (parent.height - self.height) / 2;
-                                border-radius: 4px;
-                                background: root.private-on ? Palette.accent-soft : Palette.key-bg;
-                                Text {
-                                    text: "⇧";
-                                    font-size: 13px;
-                                    color: root.private-on ? Palette.accent : Palette.key-ink;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    width: 100%;
-                                    height: 100%;
-                                }
-                            }
-                            Text {
-                                text: root.private-label;
-                                font-size: 12.5px;
-                                color: root.private-on ? Palette.accent : Palette.dimmer;
-                                vertical-alignment: center;
+                        // Drawn: the triangle glyphs are not in every system font.
+                        Rectangle {
+                            width: 8px;
+                            Path {
+                                x: 0px;
+                                y: (parent.height - 5px) / 2;
+                                width: 8px;
+                                height: 5px;
+                                viewbox-width: 8;
+                                viewbox-height: 5;
+                                stroke: root.reach-index > 0 ? Palette.accent : Palette.faint;
+                                stroke-width: 1.5px;
+                                commands: root.more-open ? "M 1 4 L 4 1 L 7 4" : "M 1 1 L 4 4 L 7 1";
                             }
                         }
+                    }
+                    reach-touch := TouchArea {
+                        clicked => { root.more-open = !root.more-open; }
                     }
                 }
 
-                scopes := HorizontalLayout {
-                    padding-left: 15px;
-                    padding-right: 15px;
-                    padding-bottom: 12px;
-                    spacing: 7px;
-                    alignment: start;
-
-                    for item in root.reaches: Segment {
-                        reach: item;
-                        active: item.index == root.reach-index;
-                        last: false;
-                        picked => {
-                            root.reach-index = item.index;
-                            root.more-open = false;
-                        }
+                // Cómo: the private pill, lit while Shift is down or after Ctrl+P.
+                private-pill := Rectangle {
+                    x: root.sheet-width - 14px - self.width;
+                    y: root.sheet-height - 12px - 26px;
+                    height: 26px;
+                    width: private-words.preferred-width + 13px + 6px + 12px + 6px + 20px;
+                    border-radius: 13px;
+                    background: root.private-on ? Palette.accent-soft : (private-touch.has-hover ? Palette.fill-hover : Palette.fill);
+                    private-touch := TouchArea {
+                        clicked => { root.pinned-private = !root.pinned-private; root.private-on = root.pinned-private; }
                     }
-
-                    more := Rectangle {
-                        height: 22px;
-                        preferred-width: opener.preferred-width;
-
-                        opener := HorizontalLayout {
-                            spacing: 4px;
-                            VerticalLayout {
-                                spacing: 2px;
-                                alignment: center;
-                                said := Text {
-                                    text: root.more-holds ? root.reach-labels[root.reach-index]
-                                                          : root.reach-more-label;
-                                    font-size: 11.5px;
-                                    max-width: 150px;
-                                    overflow: elide;
-                                    color: root.more-holds
-                                        ? Palette.accent
-                                        : (more-touch.has-hover ? Palette.neutral-ink : Palette.dim);
-                                    font-weight: root.more-holds ? 700 : 400;
-                                    vertical-alignment: center;
-                                }
-                                Rectangle {
-                                    height: 2px;
-                                    border-radius: 1px;
-                                    background: root.more-holds ? Palette.accent : transparent;
-                                }
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 6px;
+                        Rectangle {
+                            width: 13px;
+                            height: 13px;
+                            y: (parent.height - self.height) / 2;
+                            Rectangle {
+                                x: 0px; y: 4px; width: 13px; height: 2px; border-radius: 1px;
+                                background: root.private-on ? Palette.accent : Palette.dim;
                             }
-                            Text {
-                                text: root.more-open ? "▴" : "▾";
-                                font-size: 9px;
-                                color: Palette.dimmer;
-                                vertical-alignment: center;
+                            Rectangle {
+                                x: 1px; y: 7px; width: 5px; height: 4px; border-radius: 2px;
+                                background: root.private-on ? Palette.accent : Palette.dim;
+                            }
+                            Rectangle {
+                                x: 7px; y: 7px; width: 5px; height: 4px; border-radius: 2px;
+                                background: root.private-on ? Palette.accent : Palette.dim;
                             }
                         }
-
-                        more-touch := TouchArea {
-                            clicked => { root.more-open = !root.more-open; }
+                        private-words := Text {
+                            text: root.private-label;
+                            font-size: 11.5px;
+                            color: root.private-on ? Palette.accent : Palette.dim;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "⇧";
+                            font-size: 12px;
+                            color: root.private-on ? Palette.accent : Palette.dim;
+                            vertical-alignment: center;
                         }
                     }
                 }
@@ -525,54 +816,105 @@ export component Picker inherits Window {
         }
     }
 
-        // Drawn over the rows rather than below the row that opens it: the reaches sit at the
-        // bottom edge, and a list growing downwards would fall outside the window.
-        if root.more-open: Rectangle {
-            // Hangs from the opener, which sits at the right edge with the row.
-            x: root.width - 15px - self.width;
-            y: root.height - 12px - 22px - self.height - 6px;
-            width: 190px;
-            height: shelf.preferred-height;
-            border-radius: 8px;
-            background: Palette.ground;
-            border-width: 1px;
-            border-color: Palette.edge;
+    if root.classic: Rectangle {
+        width: 100%;
+        height: 100%;
+            // Drawn over the rows rather than below the row that opens it: the reaches sit at the
+            // bottom edge, and a list growing downwards would fall outside the window.
+            if root.more-open: Rectangle {
+                // Hangs from the opener, which sits at the right edge with the row.
+                x: root.width - 15px - self.width;
+                y: root.height - 12px - 22px - self.height - 6px;
+                width: 190px;
+                height: shelf.preferred-height;
+                border-radius: 8px;
+                background: Palette.ground;
+                border-width: 1px;
+                border-color: Palette.edge;
 
-            TouchArea {}
+                TouchArea {}
 
-            shelf := VerticalLayout {
-                padding: 4px;
-                for item in root.reaches-more: Rectangle {
-                    height: 26px;
-                    border-radius: 5px;
-                    opacity: item.dead ? 0.4 : 1.0;
-                    background: item.index == root.reach-index
-                        ? Palette.accent-soft
-                        : (option.has-hover ? Palette.hover : transparent);
+                shelf := VerticalLayout {
+                    padding: 4px;
+                    for item in root.reaches-more: Rectangle {
+                        height: 26px;
+                        border-radius: 5px;
+                        opacity: item.dead ? 0.4 : 1.0;
+                        background: item.index == root.reach-index
+                            ? Palette.accent-soft
+                            : (option.has-hover ? Palette.hover : transparent);
 
-                    HorizontalLayout {
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        Text {
-                            text: item.label;
-                            font-size: 11.5px;
-                            color: item.index == root.reach-index ? Palette.accent : Palette.dim;
-                            font-weight: item.index == root.reach-index ? 700 : 400;
-                            vertical-alignment: center;
-                            overflow: elide;
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            Text {
+                                text: item.label;
+                                font-size: 11.5px;
+                                color: item.index == root.reach-index ? Palette.accent : Palette.dim;
+                                font-weight: item.index == root.reach-index ? 700 : 400;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
                         }
-                    }
 
-                    option := TouchArea {
-                        enabled: !item.dead;
-                        clicked => {
-                            root.reach-index = item.index;
-                            root.more-open = false;
+                        option := TouchArea {
+                            enabled: !item.dead;
+                            clicked => {
+                                root.reach-index = item.index;
+                                root.more-open = false;
+                            }
                         }
                     }
                 }
             }
+    }
+
+    // The sheet's menu hangs upwards from the pill, the way the classic one hangs from its opener.
+    if !root.classic && root.more-open: Rectangle {
+        x: root.halo + 14px;
+        y: root.halo + root.sheet-height - 12px - 26px - 6px - self.height;
+        width: 200px;
+        height: shelf-sheet.preferred-height;
+        border-radius: 10px;
+        background: Palette.surface;
+        border-width: 1px;
+        border-color: Palette.glow;
+
+        TouchArea {}
+
+        shelf-sheet := VerticalLayout {
+            padding: 4px;
+            for item in root.all-reaches: Rectangle {
+                height: 28px;
+                border-radius: 7px;
+                opacity: item.dead ? 0.4 : 1.0;
+                background: item.index == root.reach-index
+                    ? Palette.accent-soft
+                    : (option-sheet.has-hover ? Palette.fill-hover : transparent);
+
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    Text {
+                        text: item.label;
+                        font-size: 11.5px;
+                        color: item.index == root.reach-index ? Palette.accent : Palette.dim;
+                        font-weight: item.index == root.reach-index ? 600 : 400;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                option-sheet := TouchArea {
+                    enabled: !item.dead;
+                    clicked => {
+                        root.reach-index = item.index;
+                        root.more-open = false;
+                    }
+                }
+            }
         }
+    }
 }
 
 export component Notice inherits Window {

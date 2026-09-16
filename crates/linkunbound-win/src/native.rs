@@ -12,6 +12,7 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, GetObjectW, HBITMAP, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
     MonitorFromPoint, ReleaseDC,
 };
+use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
 };
@@ -30,6 +31,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WS_EX_TOOLWINDOW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
+
+/// A windowed program has no console of its own; this borrows the one it was started from, when
+/// there is one, so `cargo tauri dev` still reads what it prints and a double click in Explorer
+/// opens nothing. Fails, harmlessly, when nothing started it from a console.
+pub fn attach_parent_console() -> bool {
+    unsafe { AttachConsole(ATTACH_PARENT_PROCESS) }.is_ok()
+}
 
 /// Tells the shell the association keys changed. Without it Explorer keeps
 /// serving the previous default until something else invalidates its cache.
