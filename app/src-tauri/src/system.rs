@@ -343,7 +343,7 @@ mod platform {
 
     /// Nothing outside a bundle can be registered, from a build tree or anywhere else.
     pub fn register_anyway() -> Result<SystemState, String> {
-        Err("ownPathUnknown".to_owned())
+        Err("notOnThisPlatform".to_owned())
     }
 
     /// The system has no "no default browser", so letting go hands the schemes

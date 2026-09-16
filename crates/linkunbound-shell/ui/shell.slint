@@ -42,7 +42,7 @@ export global Palette {
     out property <brush> sheet-band: light ? #F8F9FB : #212329;
     out property <brush> fill: light ? #0000000c : #ffffff0e;
     out property <brush> fill-hover: light ? #00000014 : #ffffff1a;
-    out property <brush> faint: light ? #7D8494 : #8791A4;
+    out property <brush> faint: light ? #6B7280 : #8791A4;
     out property <brush> glow: light ? #0000000f : #ffffff12;
     out property <brush> shade: light ? #14192d : #000000;
     out property <brush> accent-ink: light ? #FFFFFF : #12141B;
@@ -174,8 +174,12 @@ component Segment inherits Rectangle {
 // where a stroked path came out soft. Lit once the address was really copied.
 component CopyMark inherits Rectangle {
     in property <bool> done;
+    in property <string> label;
     callback pressed();
 
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.pressed(); }
     width: 24px;
     height: 24px;
     border-radius: 6px;
@@ -212,6 +216,10 @@ component PrivateWords inherits Rectangle {
     in property <bool> on;
     callback pressed();
 
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checked: root.on;
+    accessible-action-default => { root.pressed(); }
     height: 22px;
     width: body.preferred-width + 8px;
     border-radius: 5px;
@@ -245,6 +253,7 @@ component UpdateStrip inherits Rectangle {
     in property <string> line;
     in property <string> detail;
     in property <string> button;
+    in property <string> later;
     in property <int> far;
     in property <bool> busy;
     callback asked();
@@ -292,6 +301,9 @@ component UpdateStrip inherits Rectangle {
         }
 
         if root.button != "": Rectangle {
+            accessible-role: AccessibleRole.button;
+            accessible-label: root.button;
+            accessible-action-default => { root.asked(); }
             horizontal-stretch: 0;
             y: (parent.height - self.height) / 2;
             height: 26px;
@@ -315,6 +327,9 @@ component UpdateStrip inherits Rectangle {
         }
 
         if !root.busy: Rectangle {
+            accessible-role: AccessibleRole.button;
+            accessible-label: root.later;
+            accessible-action-default => { root.dismissed(); }
             horizontal-stretch: 0;
             y: (parent.height - self.height) / 2;
             width: 22px;
@@ -377,6 +392,8 @@ export component Picker inherits Window {
     in property <string> update-line;
     in property <string> update-detail;
     in property <string> update-button;
+    in property <string> update-later;
+    in property <string> copy-label;
     in property <int> update-far: 0;
     property <bool> update-shown: root.update-stage != "";
     property <bool> update-busy: root.update-stage == "starting" || root.update-stage == "getting" || root.update-stage == "installing";
@@ -544,6 +561,7 @@ export component Picker inherits Window {
                             line: root.update-line;
                             detail: root.update-detail;
                             button: root.update-button;
+                    later: root.update-later;
                             far: root.update-far;
                             busy: root.update-busy;
                             asked => { root.update-asked(); }
@@ -586,6 +604,7 @@ export component Picker inherits Window {
 
                             CopyMark {
                                 y: (parent.height - self.height) / 2;
+                                label: root.copy-label;
                                 done: root.copied;
                                 pressed => { root.copy(); }
                             }
@@ -778,6 +797,7 @@ export component Picker inherits Window {
                     line: root.update-line;
                     detail: root.update-detail;
                     button: root.update-button;
+                    later: root.update-later;
                     far: root.update-far;
                     busy: root.update-busy;
                     asked => { root.update-asked(); }
@@ -821,6 +841,7 @@ export component Picker inherits Window {
                 CopyMark {
                     x: root.sheet-width - 14px - 24px;
                     y: 10px + root.strip-room;
+                    label: root.copy-label;
                     done: root.copied;
                     pressed => { root.copy(); }
                 }
@@ -845,6 +866,9 @@ export component Picker inherits Window {
                         background: tile-touch.has-hover && !self.greyed ? Palette.fill-hover : transparent;
                         opacity: self.greyed ? 0.4 : 1.0;
 
+                        accessible-role: button;
+                        accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
+                        accessible-action-default => { root.open(i, root.private-on); }
                         tile-touch := TouchArea {
                             enabled: !parent.greyed;
                             clicked => { root.open(i, root.private-on); }

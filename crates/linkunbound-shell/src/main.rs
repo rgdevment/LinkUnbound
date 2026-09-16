@@ -8,8 +8,9 @@ use std::time::Duration;
 use linkunbound_core::{Language, Rule, Store, Strings, Target, data_dir, host_of, normalise};
 use linkunbound_shell::tray::{Asked, Tray};
 #[cfg(any(windows, target_os = "macos"))]
-use linkunbound_shell::{ICON_SIDE, TILE_ICON_SIDE};
-use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, place, single};
+use linkunbound_shell::{
+    ICON_SIDE, Listed, Notice, Picker, Reaches, TILE_ICON_SIDE, dress, paint, place, single,
+};
 use slint::{ComponentHandle, Model};
 
 fn store() -> Store {
@@ -290,17 +291,8 @@ fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
     notice.set_left(NOTICE_SECONDS);
     let _ = notice.show();
     if let Some(handle) = native_handle(notice.window()) {
-        host::keep_off_the_taskbar(handle, linkunbound_shell::CORNER);
+        host::keep_off_the_taskbar(handle, linkunbound_shell::CLASSIC_CORNER);
     }
-}
-
-/// A download reports every chunk; two minutes of silence is a process that is no longer there.
-fn progress_stale(dir: &std::path::Path) -> bool {
-    std::fs::metadata(dir.join("updating.json"))
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|at| at.elapsed().ok())
-        .is_some_and(|since| since > Duration::from_secs(120))
 }
 
 /// Settings runs in another process: the file is the only channel between them.
@@ -363,14 +355,14 @@ fn rule_for(
 }
 
 fn open_settings() {
-    run_settings(&[]);
+    let _ = run_settings(&[]);
 }
 
 /// The settings binary, beside this one, with whatever it is being sent to do: nothing opens
 /// the window, `--look` and `--update` run their errand with no window at all.
-fn run_settings(args: &[&str]) {
+fn run_settings(args: &[&str]) -> bool {
     let Ok(here) = std::env::current_exe() else {
-        return;
+        return false;
     };
     let beside = here.with_file_name(if cfg!(windows) {
         "linkunbound-settings.exe"
@@ -387,7 +379,7 @@ fn run_settings(args: &[&str]) {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    let _ = linkunbound_core::spawn_and_forget(&mut command);
+    linkunbound_core::spawn_and_forget(&mut command).is_ok()
 }
 
 #[derive(Default)]
@@ -449,10 +441,26 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
         ui.refresh_strip();
     }
     beside_the_pointer(picker);
+    let asked_at = physical_icon_side(picker);
     let _ = picker.show();
     if let Some(handle) = native_handle(picker.window()) {
         host::keep_off_the_taskbar(handle, corner_of(picker));
         host::take_the_keyboard(handle);
+    }
+    // The window reports a scale of one until it exists, which is only now: the first picker of
+    // a session on a dense display would draw icons asked for at the wrong side.
+    let drawn_at = physical_icon_side(picker);
+    if drawn_at != asked_at {
+        let redrawn = rows(drawn_at);
+        let held = shown.borrow();
+        if let Some(url) = held.url.as_deref() {
+            dress(picker, words, url, held.source.as_deref(), &redrawn);
+        }
+        drop(held);
+        shown.borrow_mut().rows = redrawn;
+        if let Some(ui) = ui() {
+            ui.refresh_strip();
+        }
     }
 }
 
@@ -576,16 +584,16 @@ impl Ui {
 
     /// What the strip says now, read off the two files settings writes. An install that stopped
     /// reporting is one whose process died: told as failed, so the button comes back.
-    fn refresh_strip(&self) {
+    fn refresh_strip(self: &Rc<Self>) {
+        use linkunbound_core::update::{gone_quiet, progress, progress_age, tell};
         let dir = data_dir();
         let looked = linkunbound_core::update::looked(&dir);
-        let mut under_way = linkunbound_core::update::progress(&dir);
-        if let Some(progress) = under_way.as_mut()
-            && matches!(progress.stage.as_str(), "starting" | "getting")
-            && progress_stale(&dir)
+        let mut under_way = progress(&dir);
+        if let Some(one) = under_way.as_mut()
+            && gone_quiet(&one.stage, progress_age(&dir))
         {
-            progress.stage = "failed".to_owned();
-            linkunbound_core::update::tell(&dir, progress);
+            one.stage = "failed".to_owned();
+            tell(&dir, one);
         }
         let strip = linkunbound_shell::strip_for(
             &self.words.get(),
@@ -598,6 +606,15 @@ impl Ui {
         let busy = strip
             .as_ref()
             .is_some_and(|one| matches!(one.stage, "starting" | "getting" | "installing"));
+        // An install the window started is followed here too: the file is the same.
+        if busy && !self.progress_watch.running() {
+            let ui = Rc::clone(self);
+            self.progress_watch.start(
+                slint::TimerMode::Repeated,
+                Duration::from_millis(300),
+                move || ui.refresh_strip(),
+            );
+        }
         if !busy {
             self.progress_watch.stop();
         }
@@ -606,34 +623,41 @@ impl Ui {
     /// Pressed: a Store copy is taken to settings, where the Store can be asked; any other copy
     /// has settings download and install with no window, and this watches the file it writes.
     fn take_update(self: &Rc<Self>) {
+        use linkunbound_core::update::{Progress, looked, tell, under_way_for};
         let dir = data_dir();
-        let looked = linkunbound_core::update::looked(&dir);
+        let looked = looked(&dir);
         let Some(found) = looked.found_version.clone() else {
             return;
         };
-        if looked.found_route.as_deref() == Some("store") {
+        // A press on top of a live install is one install; a route this copy cannot take by
+        // itself — the Store's, a copy on a disk image, or one an older file never named — is
+        // the window's to explain.
+        if under_way_for(&dir, &found) {
+            return;
+        }
+        if !linkunbound_shell::takes_it_here(&looked) {
             open_settings();
             return;
         }
-        linkunbound_core::update::tell(
-            &dir,
-            &linkunbound_core::update::Progress {
-                version: found,
-                stage: "starting".to_owned(),
-                far: 0,
-            },
-        );
-        run_settings(&["--update"]);
+        let started = Progress {
+            version: found,
+            stage: "starting".to_owned(),
+            far: 0,
+        };
+        tell(&dir, &started);
+        if !run_settings(&["--update"]) {
+            tell(
+                &dir,
+                &Progress {
+                    stage: "failed".to_owned(),
+                    ..started
+                },
+            );
+        }
         self.refresh_strip();
-        let ui = Rc::clone(self);
-        self.progress_watch.start(
-            slint::TimerMode::Repeated,
-            Duration::from_millis(300),
-            move || ui.refresh_strip(),
-        );
     }
 
-    fn put_update_away(&self) {
+    fn put_update_away(self: &Rc<Self>) {
         let dir = data_dir();
         let looked = linkunbound_core::update::looked(&dir);
         *self.put_away.borrow_mut() = looked.found_version;
@@ -646,12 +670,27 @@ impl Ui {
     /// Settings holds the network code; this only has to ask, within its interval, so a copy
     /// whose window is never opened still hears about a release.
     fn keep_looking(&self) {
+        // An install that was over when this copy started — it is the version now, or the file
+        // is older than any offer — would otherwise show its last bar on the first picker.
+        let dir = data_dir();
+        if linkunbound_core::update::progress(&dir).is_some_and(|one| {
+            !linkunbound_core::update::newer_than(&one.version, linkunbound_shell::HERE)
+        }) {
+            linkunbound_core::update::settle(&dir);
+        }
+        // Read at each tick, not once: the switch in settings has to take effect without a
+        // restart, like everything else there.
+        let look = || {
+            if store().prefs().looks_for_updates {
+                let _ = run_settings(&["--look"]);
+            }
+        };
         self.looker.start(
             slint::TimerMode::Repeated,
             Duration::from_secs(6 * 60 * 60),
-            || run_settings(&["--look"]),
+            look,
         );
-        slint::Timer::single_shot(Duration::from_secs(20), || run_settings(&["--look"]));
+        slint::Timer::single_shot(Duration::from_secs(20), look);
     }
 
     fn obey(&self, prefs: &linkunbound_core::Preferences) {

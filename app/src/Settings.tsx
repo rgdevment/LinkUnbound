@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
 import { type Key, type Language, Speaking, spoken, useSpoken, useWords } from "./i18n";
 import { platform } from "./platform";
@@ -38,7 +37,7 @@ type Build = { version: string };
 
 const RELEASES = "https://github.com/rgdevment/LinkUnbound/releases/latest";
 
-type Remedy = { label: Key; note?: Key } & ({ command: string } | { url: string });
+type Remedy = { label: Key; note?: Key } & { command: string; args?: Record<string, unknown> };
 
 /// Every ailment names what a person can do about it; the one that has no remedy at all is a
 /// copy run from the disk image, whose remedy is the drag the text describes.
@@ -56,14 +55,32 @@ const AILMENT: Partial<Record<Health, { what: Key; remedy: Remedy | null }>> = {
     what: "healthWrongBinary",
     remedy: { label: "healthRepair", command: "system_repair" },
   },
-  no_resident: { what: "healthNoResident", remedy: { label: "healthReinstall", url: RELEASES } },
+  // Not opened the ordinary way: the default browser is the very resident that is missing.
+  no_resident: {
+    what: "healthNoResident",
+    remedy: { label: "healthReinstall", command: "system_open_elsewhere", args: { url: RELEASES } },
+  },
   mounted: { what: "healthMounted", remedy: null },
 };
 
-/// A path breaks after each separator, never inside a name: a zero-width space is where the
-/// browser is allowed to wrap it, and the hyphen becomes the one it will not wrap at.
-function wrappable(path: string): string {
-  return path.replace(/([\\/])/g, "$1\u200B").replace(/-/g, "\u2011");
+/// A path breaks after each separator and nowhere inside a name — and what is copied off the
+/// screen is the path itself, with nothing invisible in it.
+function Wrappable({ path }: { path: string }) {
+  const pieces = path.split(/(?<=[\\/])/);
+  let sofar = "";
+  return (
+    <>
+      {pieces.map((piece, at) => {
+        sofar += piece;
+        return (
+          <span key={sofar} className="whitespace-nowrap">
+            {piece}
+            {at < pieces.length - 1 && <wbr />}
+          </span>
+        );
+      })}
+    </>
+  );
 }
 
 type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
@@ -129,13 +146,16 @@ function Links({
 }: {
   state: SystemState | null;
   change: (command: string, enabled: boolean) => void;
-  run: (command: string) => void;
+  run: (command: string, args?: Record<string, unknown>) => void;
 }) {
   const t = useWords();
   const held = state?.associations.filter((a) => a.held).length ?? 0;
   const total = state?.associations.length ?? 0;
   const ok = state?.is_default ?? false;
   const ailment = state ? AILMENT[state.health] : undefined;
+  // Launch Services registers bundles, not binaries: a build tree on a Mac has no way in.
+  const remedy =
+    ailment && !(state?.health === "build_tree" && platform() === "macos") ? ailment.remedy : null;
 
   return (
     <>
@@ -149,25 +169,22 @@ function Links({
           </p>
           {state?.registered_path && (
             <p className="mt-1 font-mono text-[10.5px] break-words text-neutral-500 dark:text-[#8B92A1]">
-              {t("healthPointsAt", wrappable(state.registered_path))}
+              {t("healthPointsAt", "")}
+              <Wrappable path={state.registered_path} />
             </p>
           )}
-          {ailment.remedy && (
+          {remedy && (
             <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
               <button
                 type="button"
-                onClick={() => {
-                  const remedy = ailment.remedy;
-                  if (remedy && "command" in remedy) run(remedy.command);
-                  else if (remedy) void openUrl(remedy.url).catch(noop);
-                }}
+                onClick={() => run(remedy.command, remedy.args)}
                 className="rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
               >
-                {t(ailment.remedy.label)}
+                {t(remedy.label)}
               </button>
-              {ailment.remedy.note && (
+              {remedy.note && (
                 <span className="text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-                  {t(ailment.remedy.note)}
+                  {t(remedy.note)}
                 </span>
               )}
             </div>
@@ -296,9 +313,9 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   );
 
   const run = useCallback(
-    (command: string) => {
+    (command: string, args?: Record<string, unknown>) => {
       setProblem(null);
-      void invoke<SystemState | null>(command)
+      void (args ? invoke<SystemState | null>(command, args) : invoke<SystemState | null>(command))
         .then((next) => {
           if (next) setState(next);
         })

@@ -48,6 +48,10 @@ pub struct Preferences {
     pub edge_warning_dismissed: bool,
     #[serde(default)]
     pub picker_style: PickerStyle,
+    /// Whether the resident asks about releases on its own, every few hours; off, only the
+    /// settings window ever asks, and only while it is open.
+    #[serde(default = "yes")]
+    pub looks_for_updates: bool,
 }
 
 fn default_shortcut() -> Option<String> {
@@ -69,6 +73,7 @@ impl Default for Preferences {
             notify_on_rule: true,
             edge_warning_dismissed: false,
             picker_style: PickerStyle::default(),
+            looks_for_updates: true,
         }
     }
 }
@@ -239,6 +244,12 @@ mod tests {
         let p: Preferences = serde_json::from_str("{}").unwrap();
         assert_eq!(p.shortcut.as_deref(), Some("Alt+Shift+L"));
         assert!(p.notify_on_rule);
+        assert!(
+            p.looks_for_updates,
+            "a copy from before the switch keeps hearing about releases"
+        );
+        let quiet: Preferences = serde_json::from_str(r#"{"looks_for_updates": false}"#).unwrap();
+        assert!(!quiet.looks_for_updates);
     }
 
     /// The rows are what a copy gets until somebody asks for the tiles, and a file from before

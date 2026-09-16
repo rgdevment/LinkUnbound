@@ -3,6 +3,27 @@
 /* The theme is a choice, not just what the system reports. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* The parts the engine draws itself — a select's list, a checkbox — take their colours from
+   this, not from the classes above: without it the list opens white under a dark window. */
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+/* Chromium paints a select's list with the select's own colours, and a transparent one gave
+   it white behind light text. Named here, outside the layers, so the utilities do not win. */
+select,
+option {
+  background-color: #ffffff;
+  color: #16181d;
+}
+.dark select,
+.dark option {
+  background-color: #1e2027;
+  color: #e9ebf2;
+}
+
 html,
 body,
 #root {

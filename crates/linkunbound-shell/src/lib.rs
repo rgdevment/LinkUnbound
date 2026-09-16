@@ -202,9 +202,19 @@ pub struct Strip {
     pub far: i32,
 }
 
+/// Whether the resident may take the found version itself, or has to send the person to the
+/// window: the Store's installer wants a window, a copy on a disk image cannot replace itself,
+/// and a file from before the route was recorded says nothing either way — so nothing.
+#[must_use]
+pub fn takes_it_here(looked: &Looked) -> bool {
+    !matches!(
+        (looked.found_route.as_deref(), looked.found_installs),
+        (None, _) | (Some("store"), _) | (_, Some(false))
+    )
+}
+
 /// An install under way outranks the offer it came from; the offer stands until pressed or put
-/// away; a Store copy is offered the door to settings, since the Store's installer wants a
-/// window this picker is not.
+/// away; a copy that cannot take the update here is offered the door to settings instead.
 #[must_use]
 pub fn strip_for(
     words: &Strings,
@@ -218,10 +228,13 @@ pub fn strip_for(
         return None;
     }
     let store = looked.found_route.as_deref() == Some("store");
+    let here = takes_it_here(looked);
     let how = if store {
         words.update_store
-    } else {
+    } else if here {
         words.update_how
+    } else {
+        words.update_open_settings
     };
 
     if let Some(progress) = under_way.filter(|one| one.version == found) {
@@ -266,10 +279,10 @@ pub fn strip_for(
         stage: "offer",
         line: Strings::fill(words.update_ready, found),
         detail: how.to_owned(),
-        button: if store {
-            words.update_open.to_owned()
-        } else {
+        button: if here {
             words.update_take.to_owned()
+        } else {
+            words.update_open.to_owned()
         },
         far: 0,
     })
@@ -328,6 +341,8 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
     );
     window.set_remember_label(words.picker_remember.into());
     window.set_private_label(words.picker_private.into());
+    window.set_copy_label(words.picker_copy.into());
+    window.set_update_later(words.update_later.into());
     window.set_private_on(false);
     window.set_copied(false);
     window.set_reach_index(0);
@@ -582,8 +597,48 @@ mod tests {
             checked_at: Some(1),
             found_version: Some(version.to_owned()),
             found_route: Some(route.to_owned()),
+            found_installs: Some(route != "store"),
             candidates: None,
         }
+    }
+
+    /// The button says «Actualizar» only where pressing it can install: a copy on a disk image,
+    /// a Store copy, or a file from before the route was written all get the door to settings.
+    #[test]
+    fn only_a_copy_that_can_install_here_is_offered_the_install() {
+        use crate::{strip_for, takes_it_here};
+        let words = Language::Spanish.strings();
+
+        assert!(takes_it_here(&found("2.0.1", "download")));
+        assert!(!takes_it_here(&found("2.0.1", "store")));
+
+        let mounted = linkunbound_core::update::Looked {
+            found_installs: Some(false),
+            ..found("2.0.1", "download")
+        };
+        assert!(!takes_it_here(&mounted));
+        let strip = strip_for(&words, &mounted, None, "2.0.0", None).expect("still offered");
+        assert_eq!(
+            strip.button, words.update_open,
+            "a door, not a button that only fails"
+        );
+        assert_eq!(strip.detail, words.update_open_settings);
+
+        let older = linkunbound_core::update::Looked {
+            found_route: None,
+            found_installs: None,
+            ..found("2.0.1", "download")
+        };
+        assert!(
+            !takes_it_here(&older),
+            "a file that never said how is not a promise"
+        );
+        assert_eq!(
+            strip_for(&words, &older, None, "2.0.0", None)
+                .expect("offered")
+                .button,
+            words.update_open
+        );
     }
 
     fn under_way(version: &str, stage: &str, far: u64) -> linkunbound_core::update::Progress {

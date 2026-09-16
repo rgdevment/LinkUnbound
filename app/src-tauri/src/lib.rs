@@ -6,7 +6,9 @@ mod update;
 
 use std::sync::Mutex;
 
-use linkunbound_core::{Browser, Language, Preferences, Rule, Scope, Store, Target, merge};
+use linkunbound_core::{
+    Browser, Language, Preferences, Rule, Scope, Store, Target, host_of, merge, normalise, site_of,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -122,6 +124,88 @@ fn rules_list() -> Result<Vec<RuleView>, String> {
 fn rules_remove(id: String) -> Result<Vec<RuleView>, String> {
     store()
         .edit_rules(|rules| rules.remove(&id))
+        .map_err(|e| e.to_string())?;
+    rules_list()
+}
+
+/// What the form said, turned into the rule the picker would have written for the same choice:
+/// the same scopes, the same origin binding, the same target. Refused, by name, when the value
+/// is not what the kind needs or the destination is gone.
+fn rule_from(
+    kind: &str,
+    value: &str,
+    target: Target,
+    private: bool,
+    browsers: &[Browser],
+) -> Result<Rule, &'static str> {
+    let Some(browser) = browsers.iter().find(|b| b.id == target.browser_id) else {
+        return Err("browserGone");
+    };
+    if let Some(profile) = target.profile_id.as_deref()
+        && !browser.profiles.iter().any(|p| p.id == profile)
+    {
+        return Err("browserGone");
+    }
+    let said = value.trim();
+    if said.is_empty() {
+        return Err("ruleValueEmpty");
+    }
+    // Read the way an arriving link's host is read, so `user@`, a port, a trailing dot or an
+    // accented name come out as the host a rule would be matched against — or not at all.
+    let host_named = || -> Result<String, &'static str> {
+        let address = if said.contains("://") {
+            said.to_owned()
+        } else {
+            format!("https://{}", said.trim_end_matches('/'))
+        };
+        let host = host_of(&address).ok_or("ruleValueNotHost")?;
+        if !host.contains('.') {
+            return Err("ruleValueNotHost");
+        }
+        Ok(host)
+    };
+    let (scope, source_app) = match kind {
+        "url" => {
+            let url = normalise(said).ok_or("ruleValueNotUrl")?;
+            (Scope::Url(url), None)
+        }
+        "host" => (Scope::Host(host_named()?), None),
+        "site" => (Scope::Site(site_of(&host_named()?)), None),
+        // The picker records an origin lowercased, and on Windows by its process name: «Slack»
+        // and «Slack.exe» both mean the app somebody sees in «Desde …».
+        "app" => (
+            Scope::Any,
+            Some(said.to_lowercase().trim_end_matches(".exe").to_owned()),
+        ),
+        _ => return Err("ruleKindUnknown"),
+    };
+    Ok(Rule {
+        id: String::new(),
+        scope,
+        source_app,
+        target,
+        private,
+    })
+}
+
+#[tauri::command]
+fn rules_add(
+    kind: String,
+    value: String,
+    browser_id: String,
+    profile_id: Option<String>,
+    private: bool,
+) -> Result<Vec<RuleView>, String> {
+    let target = Target {
+        browser_id,
+        profile_id,
+    };
+    let rule = rule_from(&kind, &value, target, private, &catalogue()).map_err(str::to_owned)?;
+    store()
+        .edit_rules(|rules| {
+            rules.upsert(rule);
+            true
+        })
         .map_err(|e| e.to_string())?;
     rules_list()
 }
@@ -325,7 +409,12 @@ fn edited(
     }
     found.name = edit.name;
     found.extra_args = linkunbound_core::split_args(&edit.args);
-    found.private_flag = edit.private_flag.filter(|f| !f.is_empty());
+    // Detection knows how a browser it found opens privately, and keeps that; where it found one
+    // it does not know — a family off its list — the flag is the person's to say, as for a
+    // browser they added themselves.
+    if found.custom || linkunbound_core::private_flag_for(&found.exe).is_none() {
+        found.private_flag = edit.private_flag.filter(|f| !f.is_empty());
+    }
     found.icon_path = edit.icon_path.filter(|p| !p.is_empty());
     Ok(all)
 }
@@ -469,6 +558,21 @@ fn system_register_anyway() -> Result<system::SystemState, String> {
     system::register_anyway()
 }
 
+/// A page opened the ordinary way goes to the default browser — which, on the one screen that
+/// offers this, is a LinkUnbound whose resident is missing. So it goes to the first browser the
+/// catalogue has instead, the way a rule would send it.
+#[tauri::command(async)]
+fn system_open_elsewhere(url: String) -> Result<(), String> {
+    let browsers = catalogue();
+    let first = browsers
+        .iter()
+        .find(|b| !b.hidden)
+        .ok_or_else(|| "browsersNone".to_owned())?;
+    linkunbound_core::launch(&browsers, &first.id, None, false, &url)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn maintenance_report() -> Result<String, String> {
     let state = system::state();
@@ -610,6 +714,7 @@ async fn update_ready(
             looked.checked_at = Some(now);
             looked.found_version = seen.as_ref().map(|one| one.version.clone());
             looked.found_route = seen.as_ref().map(|one| one.route.name().to_owned());
+            looked.found_installs = seen.as_ref().map(|one| one.installs);
             update::keep(&dir, &looked);
             return Ok(seen);
         }
@@ -640,9 +745,13 @@ async fn update_ready(
     };
 
     let seen = update::newer(HERE, &manifest, kept, looked.candidates);
+    // The fetch took a while, and the switch may have been flipped in between: what this look
+    // owns is what it found, not the choice somebody made while it was out.
+    looked.candidates = update::looked(&dir).candidates;
     looked.checked_at = Some(now);
     looked.found_version = seen.as_ref().map(|one| one.version.clone());
     looked.found_route = seen.as_ref().map(|one| one.route.name().to_owned());
+    looked.found_installs = seen.as_ref().map(|one| one.installs);
     update::keep(&dir, &looked);
     Ok(seen)
 }
@@ -657,6 +766,7 @@ fn update_candidates(wants: bool) -> Result<(), String> {
     looked.checked_at = None;
     looked.found_version = None;
     looked.found_route = None;
+    looked.found_installs = None;
     update::keep(&dir, &looked);
     Ok(())
 }
@@ -675,15 +785,17 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
         .0
         .claim()
         .ok_or_else(|| "updateBusy".to_owned())?;
-    install(app).await
+    install(app, true).await
 }
 
 /// The whole of an install, shared by the button in About and the resident's `--update`. What
 /// happens along the way is written down for the resident, which watches the file rather than
-/// the window: the picker may be the only thing on screen.
-async fn install(app: AppHandle) -> Result<(), String> {
+/// the window: the picker may be the only thing on screen. `from_the_window` decides what comes
+/// back afterwards on a platform whose installer leaves this process standing: the window
+/// restarts as itself, an errand brings the resident back and goes away.
+async fn install(app: AppHandle, from_the_window: bool) -> Result<(), String> {
     let dir = store().dir().to_path_buf();
-    let outcome = install_from(app, &dir).await;
+    let outcome = install_from(app, &dir, from_the_window).await;
     if outcome.is_err() {
         let mut said = update::progress(&dir).unwrap_or_default();
         said.stage = "failed".to_owned();
@@ -692,7 +804,11 @@ async fn install(app: AppHandle) -> Result<(), String> {
     outcome
 }
 
-async fn install_from(app: AppHandle, dir: &std::path::Path) -> Result<(), String> {
+async fn install_from(
+    app: AppHandle,
+    dir: &std::path::Path,
+    from_the_window: bool,
+) -> Result<(), String> {
     use tauri_plugin_updater::UpdaterExt;
 
     let kept = update::route();
@@ -713,6 +829,17 @@ async fn install_from(app: AppHandle, dir: &std::path::Path) -> Result<(), Strin
     .map(|one| one.version) else {
         return Err("updateGone".to_owned());
     };
+    // The claim in `update_install` is this process's; the file is every process's, and a second
+    // install over a live one would run two installers. The `starting` the resident wrote is the
+    // errand's own and not somebody else's: the window has to respect it, the errand not.
+    let taken = update::progress(dir).is_some_and(|one| {
+        one.version == want
+            && (from_the_window || one.stage != "starting")
+            && update::under_way_for(dir, &want)
+    });
+    if taken {
+        return Err("updateBusy".to_owned());
+    }
 
     let progress = |stage: &str, far: u64| {
         update::tell(
@@ -766,13 +893,20 @@ async fn install_from(app: AppHandle, dir: &std::path::Path) -> Result<(), Strin
     let installing = progress;
     let mut carried: u64 = 0;
     let mut said = 0;
+    let mut told = std::time::Instant::now();
+    if !from_the_window {
+        // The hook brings the resident back; relaunching this binary would only run the errand
+        // again, on the new version, to be told there is nothing left to take.
+        update = update.restart_after_install(false);
+    }
     update
         .download_and_install(
             move |chunk, whole| {
                 // The callback hands over the length of one chunk, not how much has arrived.
                 carried += chunk as u64;
                 let far = far_along(carried, whole);
-                if far != said {
+                let moved = far != said;
+                if moved {
                     said = far;
                     let _ = telling.emit(
                         "updating",
@@ -781,6 +915,11 @@ async fn install_from(app: AppHandle, dir: &std::path::Path) -> Result<(), Strin
                             far,
                         },
                     );
+                }
+                // Told once a second whether or not the number moved: a download with no declared
+                // size sits at zero for its whole life, and silence is what reads as death.
+                if moved || told.elapsed() >= std::time::Duration::from_secs(1) {
+                    told = std::time::Instant::now();
                     getting("getting", far);
                 }
             },
@@ -805,11 +944,13 @@ async fn install_from(app: AppHandle, dir: &std::path::Path) -> Result<(), Strin
     #[cfg(target_os = "macos")]
     relaunch_resident();
     #[cfg(not(windows))]
-    {
+    if from_the_window {
         let handle = app.clone();
         app.run_on_main_thread(move || handle.restart())
             .map_err(|why| why.to_string())?;
     }
+    #[cfg(windows)]
+    let _ = from_the_window;
     Ok(())
 }
 
@@ -922,17 +1063,39 @@ fn errand_in(args: &[String]) -> Option<Errand> {
 }
 
 fn run_errand(app: AppHandle, errand: Errand) {
+    // A link that arrives while the errand runs is Launch Services' to give to any process of
+    // the bundle; this one passes it on and answers to nothing else.
+    #[cfg(target_os = "macos")]
+    relay_links_only();
     tauri::async_runtime::spawn(async move {
         match errand {
+            // A copy the Store keeps is asked about by the window, which has the Store's ear;
+            // asked here, with no window, the manifest would answer for a package it did not sell.
+            Errand::Look if update::route().route == update::Route::Store => {}
             Errand::Look => {
                 let _ = update_ready(app.clone(), Some(false)).await;
             }
             Errand::Update => {
-                let _ = install(app.clone()).await;
+                let _ = install(app.clone(), false).await;
             }
         }
         app.exit(0);
     });
+}
+
+#[cfg(target_os = "macos")]
+fn relay_links_only() {
+    use linkunbound_mac::Event;
+    let listening = linkunbound_mac::listen(|event| match event {
+        Event::Link(url) => hand_to_the_resident(url),
+        Event::Document(path) => {
+            if let Some(url) = linkunbound_core::local_web_file(&path) {
+                hand_to_the_resident(url);
+            }
+        }
+        Event::Reopened | Event::Launched { .. } => {}
+    });
+    std::mem::forget(listening);
 }
 
 pub fn run() {
@@ -946,6 +1109,7 @@ pub fn run() {
         .manage(Updating::default())
         .invoke_handler(tauri::generate_handler![
             rules_list,
+            rules_add,
             rules_remove,
             rules_retarget,
             browsers_list,
@@ -966,6 +1130,7 @@ pub fn run() {
             system_open_default_apps,
             system_repair,
             system_register_anyway,
+            system_open_elsewhere,
             about,
             update_ready,
             update_install,
@@ -986,7 +1151,7 @@ pub fn run() {
         }))
     };
 
-    builder
+    let built = builder
         .setup(move |app| {
             if let Some(errand) = errand {
                 run_errand(app.handle().clone(), errand);
@@ -1015,8 +1180,16 @@ pub fn run() {
             shell::open_settings(app.handle(), store().prefs().theme);
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("tauri failed to start");
+    // On a Mac a process becomes the active application as it starts, window or no window: an
+    // errand would take the keyboard from whatever was in front and hide the picker that sent
+    // it. Prohibited is decided before that happens, which is why the app is built first.
+    #[cfg(target_os = "macos")]
+    if errand.is_some() {
+        built.set_activation_policy(tauri::ActivationPolicy::Prohibited);
+    }
+    built.run(|_, _| {});
 }
 
 #[cfg(test)]
@@ -1046,6 +1219,132 @@ mod tests {
             errand_in(&args(&["settings.exe", "update"])),
             None,
             "not a flag"
+        );
+    }
+
+    fn with_profiles(id: &str, profiles: &[&str]) -> linkunbound_core::Browser {
+        linkunbound_core::Browser {
+            profiles: profiles
+                .iter()
+                .map(|p| Profile {
+                    id: (*p).to_owned(),
+                    name: (*p).to_owned(),
+                    args: vec![],
+                })
+                .collect(),
+            ..detected(id)
+        }
+    }
+
+    fn aimed(browser: &str, profile: Option<&str>) -> Target {
+        Target {
+            browser_id: browser.to_owned(),
+            profile_id: profile.map(str::to_owned),
+        }
+    }
+
+    /// The form writes the same rule the picker would for the same choice, so the two ways in
+    /// cannot disagree about what a kind means.
+    #[test]
+    fn a_rule_from_the_form_covers_what_its_kind_says() {
+        use super::rule_from;
+        let all = vec![with_profiles("chrome", &["Default"]), detected("firefox")];
+
+        let url = rule_from(
+            "url",
+            " https://docs.google.com/a?b=1 ",
+            aimed("firefox", None),
+            false,
+            &all,
+        )
+        .expect("a url");
+        assert_eq!(
+            url.scope,
+            Scope::Url("https://docs.google.com/a?b=1".to_owned())
+        );
+        assert!(url.source_app.is_none());
+
+        let host = rule_from(
+            "host",
+            "https://docs.google.com/x",
+            aimed("firefox", None),
+            true,
+            &all,
+        )
+        .expect("a host, read off a url");
+        assert_eq!(host.scope, Scope::Host("docs.google.com".to_owned()));
+        assert!(host.private);
+
+        let site = rule_from(
+            "site",
+            "Docs.Google.com",
+            aimed("chrome", Some("Default")),
+            false,
+            &all,
+        )
+        .expect("a site, read off a bare host");
+        assert_eq!(site.scope, Scope::Site("google.com".to_owned()));
+
+        let app =
+            rule_from("app", "Slack.EXE", aimed("firefox", None), false, &all).expect("an app");
+        assert_eq!(app.scope, Scope::Any);
+        assert_eq!(
+            app.source_app.as_deref(),
+            Some("slack"),
+            "as the picker records an origin: lowercased, without the executable's suffix"
+        );
+
+        let odd = rule_from(
+            "host",
+            "User@Docs.Google.com:8443/x.",
+            aimed("firefox", None),
+            false,
+            &all,
+        )
+        .expect("a host, read the way a link's host is read");
+        assert_eq!(odd.scope, Scope::Host("docs.google.com".to_owned()));
+    }
+
+    /// Every refusal names what to fix; none of them writes a rule that would match nothing or
+    /// open nowhere.
+    #[test]
+    fn a_rule_from_the_form_is_refused_by_name() {
+        use super::rule_from;
+        let all = vec![with_profiles("chrome", &["Default"])];
+        let chrome = || aimed("chrome", None);
+
+        assert_eq!(
+            rule_from("url", "   ", chrome(), false, &all),
+            Err("ruleValueEmpty")
+        );
+        assert_eq!(
+            rule_from("url", "not a url", chrome(), false, &all),
+            Err("ruleValueNotUrl")
+        );
+        assert_eq!(
+            rule_from("host", "just words", chrome(), false, &all),
+            Err("ruleValueNotHost")
+        );
+        assert_eq!(
+            rule_from("host", "localhost", chrome(), false, &all),
+            Err("ruleValueNotHost")
+        );
+        assert_eq!(
+            rule_from("site", "a/b.com", chrome(), false, &all),
+            Err("ruleValueNotHost")
+        );
+        assert_eq!(
+            rule_from("when", "x.com", chrome(), false, &all),
+            Err("ruleKindUnknown")
+        );
+        assert_eq!(
+            rule_from("site", "x.com", aimed("edge", None), false, &all),
+            Err("browserGone")
+        );
+        assert_eq!(
+            rule_from("site", "x.com", aimed("chrome", Some("Work")), false, &all),
+            Err("browserGone"),
+            "a profile the browser does not have is a destination that is gone"
         );
     }
 
@@ -1346,13 +1645,31 @@ mod tests {
         assert_eq!(touched[0].name, "Trabajo");
         assert_eq!(touched[0].exe, "chrome.exe", "but not moved");
         assert_eq!(
-            touched[0].private_flag, None,
-            "an empty switch clears it rather than saving a blank"
+            touched[0].private_flag.as_deref(),
+            Some("--incognito"),
+            "nor its private flag: detection knows how it opens privately, and the form does \
+             not offer the field"
+        );
+
+        let odd = vec![linkunbound_core::Browser {
+            exe: "C:/Orion/orion.exe".to_owned(),
+            private_flag: None,
+            ..detected("orion")
+        }];
+        let told = edited(odd, "orion", edit_of("Orion", "moved.exe"), |_| true)
+            .expect("a detected browser of a family detection does not know");
+        assert_eq!(
+            told[0].private_flag, None,
+            "the empty switch is honoured, since the flag was the person's to say"
         );
 
         let mine = edited(all, "custom-1", edit_of("Mío", "other.exe"), |_| true)
             .expect("one the user added may move");
         assert_eq!(mine[1].exe, "other.exe");
+        assert_eq!(
+            mine[1].private_flag, None,
+            "an empty switch on a browser the user added clears it rather than saving a blank"
+        );
     }
 
     #[test]

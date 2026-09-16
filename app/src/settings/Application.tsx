@@ -18,6 +18,7 @@ type Preferences = {
   hide_tray: boolean;
   notify_on_rule: boolean;
   picker_style: PickerStyle;
+  looks_for_updates: boolean;
 };
 
 type Settings = { prefs: Preferences; shortcut_held: string | null; language: string };
@@ -244,6 +245,18 @@ export default function Application({
               />
             </Line>
           )}
+        </Card>
+      </Section>
+
+      <Section title={t("appUpdates")}>
+        <Card>
+          <Line title={t("looksTitle")} note={t("looksNote")}>
+            <Switch
+              on={prefs.looks_for_updates}
+              label={t("looksTitle")}
+              onChange={(looks_for_updates) => apply({ looks_for_updates })}
+            />
+          </Line>
         </Card>
       </Section>
 

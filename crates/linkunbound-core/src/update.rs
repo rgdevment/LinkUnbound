@@ -3,6 +3,8 @@
 //! the last look, and the install under way.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +20,10 @@ pub struct Looked {
     /// itself, since the Store's own installer wants a window to talk to.
     #[serde(default)]
     pub found_route: Option<String>,
+    /// Whether this copy can replace itself at all: a copy run from a disk image cannot, and a
+    /// button that would only ever fail is worse than a door to the window that explains why.
+    #[serde(default)]
+    pub found_installs: Option<bool>,
     /// Unset until somebody chooses, which is not the same as having chosen no.
     #[serde(default)]
     pub candidates: Option<bool>,
@@ -66,11 +72,49 @@ pub fn settle(dir: &Path) {
     let _ = std::fs::remove_file(under_way(dir));
 }
 
+/// How long ago the install under way last said anything. `None` when it never did, or when the
+/// clock makes the answer meaningless — which the caller has to read as "too long".
+#[must_use]
+pub fn progress_age(dir: &Path) -> Option<Duration> {
+    std::fs::metadata(under_way(dir))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|at| at.elapsed().ok())
+}
+
+/// A download reports every second while it lives; an install hands over to the installer and
+/// says nothing more, so it is given the minutes an installer can take. Silence past that is a
+/// process that is no longer there, and a file whose age cannot be read is read the same way:
+/// a clock that went backwards must not keep a dead bar on screen for the session.
+#[must_use]
+pub fn gone_quiet(stage: &str, age: Option<Duration>) -> bool {
+    let allowed = match stage {
+        "starting" | "getting" => Duration::from_secs(120),
+        "installing" => Duration::from_secs(600),
+        _ => return false,
+    };
+    age.is_none_or(|since| since > allowed)
+}
+
+/// Whether the file says an install of `version` is alive: told recently, and not over.
+#[must_use]
+pub fn under_way_for(dir: &Path, version: &str) -> bool {
+    progress(dir).is_some_and(|one| {
+        one.version == version
+            && matches!(one.stage.as_str(), "starting" | "getting" | "installing")
+            && !gone_quiet(&one.stage, progress_age(dir))
+    })
+}
+
 fn read<T: for<'de> Deserialize<'de>>(at: &Path) -> Option<T> {
     std::fs::read_to_string(at)
         .ok()
         .and_then(|raw| serde_json::from_str(crate::unmarked(&raw)).ok())
 }
+
+/// Two writes from one process — the window's look and a switch flipped meanwhile — must not
+/// share a staging file, or the later truncates what the earlier is about to rename.
+static WRITES: AtomicU64 = AtomicU64::new(0);
 
 fn write<T: Serialize>(dir: &Path, at: &Path, value: &T) {
     let Ok(body) = serde_json::to_string_pretty(value) else {
@@ -81,7 +125,8 @@ fn write<T: Serialize>(dir: &Path, at: &Path, value: &T) {
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let aside = dir.join(format!("{name}.{}.tmp", std::process::id()));
+    let nth = WRITES.fetch_add(1, Ordering::Relaxed);
+    let aside = dir.join(format!("{name}.{}.{nth}.tmp", std::process::id()));
     if std::fs::write(&aside, body).is_ok() && std::fs::rename(&aside, at).is_err() {
         let _ = std::fs::remove_file(&aside);
     }
@@ -102,7 +147,11 @@ pub fn newer_than(found: &str, here: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Looked, Progress, keep, looked, newer_than, progress, settle, tell};
+    use super::{
+        Looked, Progress, gone_quiet, keep, looked, newer_than, progress, settle, tell,
+        under_way_for,
+    };
+    use std::time::Duration;
 
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir =
@@ -122,6 +171,7 @@ mod tests {
                 checked_at: Some(1_800_000_000),
                 found_version: Some("2.1.0".to_owned()),
                 found_route: Some("store".to_owned()),
+                found_installs: Some(false),
                 candidates: Some(true),
             },
         );
@@ -130,6 +180,7 @@ mod tests {
         assert_eq!(read.checked_at, Some(1_800_000_000));
         assert_eq!(read.found_version.as_deref(), Some("2.1.0"));
         assert_eq!(read.found_route.as_deref(), Some("store"));
+        assert_eq!(read.found_installs, Some(false));
         assert_eq!(read.candidates, Some(true), "the track is remembered too");
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -170,6 +221,53 @@ mod tests {
 
         settle(&dir);
         assert!(progress(&dir).is_none(), "settled means gone, not zeroed");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A download that stopped talking is dead; an install gets the minutes an installer takes;
+    /// a file whose age cannot be read is treated as dead rather than immortal; and what is over
+    /// is never quiet, since there is nothing left to wait for.
+    #[test]
+    fn silence_is_read_by_stage_and_a_lost_clock_ends_the_wait() {
+        let s = Duration::from_secs;
+        assert!(!gone_quiet("getting", Some(s(119))));
+        assert!(gone_quiet("getting", Some(s(121))));
+        assert!(!gone_quiet("installing", Some(s(121))));
+        assert!(gone_quiet("installing", Some(s(601))));
+        assert!(
+            gone_quiet("starting", None),
+            "no readable age is no proof of life"
+        );
+        assert!(!gone_quiet("failed", None));
+        assert!(!gone_quiet("failed", Some(s(9_999))));
+    }
+
+    #[test]
+    fn an_install_just_told_is_under_way_and_an_old_or_other_one_is_not() {
+        let dir = scratch("alive");
+        assert!(!under_way_for(&dir, "2.0.1"));
+        tell(
+            &dir,
+            &Progress {
+                version: "2.0.1".to_owned(),
+                stage: "getting".to_owned(),
+                far: 3,
+            },
+        );
+        assert!(under_way_for(&dir, "2.0.1"));
+        assert!(
+            !under_way_for(&dir, "2.0.2"),
+            "another version's install is not this one's"
+        );
+        tell(
+            &dir,
+            &Progress {
+                version: "2.0.1".to_owned(),
+                stage: "failed".to_owned(),
+                far: 0,
+            },
+        );
+        assert!(!under_way_for(&dir, "2.0.1"), "failed is over");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -140,6 +140,7 @@ FunctionEnd
   ; gone. Only what the program keeps for itself is swept.
   ${If} $UpdateMode <> 1
     Delete "$LOCALAPPDATA\${PRODUCTNAME}\update.json"
+    Delete "$LOCALAPPDATA\${PRODUCTNAME}\updating.json"
     RMDir /r "$LOCALAPPDATA\${PRODUCTNAME}\icons"
 
     ; The template's own checkbox deletes ${BUNDLEID}, which holds the webview cache and nothing

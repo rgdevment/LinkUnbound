@@ -8,13 +8,6 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...
 // Without this the window's update listener reaches for a Tauri runtime that is not there, and
 // the suite reports every test passing while the run itself fails.
 vi.mock("@tauri-apps/api/event", () => ({ listen: () => Promise.resolve(() => {}) }));
-const opened = vi.fn();
-vi.mock("@tauri-apps/plugin-opener", () => ({
-  openUrl: (url: string) => {
-    opened(url);
-    return Promise.resolve();
-  },
-}));
 
 const BASE = {
   registered: true,
@@ -46,6 +39,7 @@ const PREFS = {
     hide_tray: false,
     notify_on_rule: true,
     picker_style: "classic",
+    looks_for_updates: true,
   },
   shortcut_held: "Alt+Shift+L",
 };
@@ -97,7 +91,6 @@ describe("settings", () => {
 
   beforeEach(() => {
     invoke.mockReset();
-    opened.mockReset();
     answers(BASE);
   });
 
@@ -141,14 +134,9 @@ describe("settings", () => {
     });
     render(<Settings />);
     expect(await screen.findByText(/no sabe abrir un enlace/)).toBeInTheDocument();
-    expect(
-      screen.getByText((text) =>
-        text
-          .replace(/\u200B/g, "")
-          .replace(/\u2011/g, "-")
-          .includes("linkunbound-settings.exe"),
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Windows ejecutaría/).textContent).toContain(
+      "linkunbound-settings.exe",
+    );
   });
 
   it("does not hide a registration left behind by a build tree", async () => {
@@ -158,11 +146,9 @@ describe("settings", () => {
       registered_path: String.raw`"D:\Code\LinkUnbound\target\debug\linkunbound-shell.exe" "%1"`,
     });
     render(<Settings />);
-    expect(
-      await screen.findByText((text) =>
-        text.replace(/\u200B/g, "").includes(String.raw`target\debug`),
-      ),
-    ).toBeInTheDocument();
+    expect((await screen.findByText(/Windows ejecutaría/)).textContent).toContain(
+      String.raw`target\debug`,
+    );
   });
 
   it("says the links arrive here when they really do", async () => {
@@ -219,6 +205,19 @@ describe("settings", () => {
     expect(invoke).toHaveBeenCalledWith("system_register_anyway");
   });
 
+  /// Launch Services registers bundles: on a Mac the build-tree notice has nothing to offer.
+  it("offers a build tree no registration on a Mac", async () => {
+    Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
+    try {
+      answers({ ...BASE, health: "build_tree" });
+      render(<Settings />);
+      expect(await screen.findByText(/fuera de un paquete/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Registrar esta copia igualmente" })).toBeNull();
+    } finally {
+      Object.defineProperty(navigator, "platform", { value: "", configurable: true });
+    }
+  });
+
   /// A path that has to wrap does so after a separator, never in the middle of a file name.
   it("wraps the registered path at its separators, not inside a name", async () => {
     answers({
@@ -228,11 +227,13 @@ describe("settings", () => {
     });
     render(<Settings />);
     const shown = await screen.findByText(/Windows ejecutaría/);
-    expect(shown.textContent).toContain("\\\u200B");
-    expect(shown.textContent?.replace(/\u200B/g, "").replace(/\u2011/g, "-")).toContain(
-      String.raw`\LinkUnbound\linkunbound-shell.exe`,
+    expect(shown.textContent).toBe(
+      String.raw`Windows ejecutaría: C:\Users\Mario\AppData\Local\Programs\LinkUnbound\linkunbound-shell.exe`,
     );
-    expect(shown.textContent).not.toContain("linkunbound-shell");
+    const pieces = Array.from(shown.querySelectorAll("span")).map((span) => span.textContent ?? "");
+    expect(pieces.at(-1)).toBe("linkunbound-shell.exe");
+    expect(pieces.every((piece) => !/[\\/]/.test(piece.slice(0, -1)))).toBe(true);
+    expect(shown.querySelectorAll("wbr")).toHaveLength(pieces.length - 1);
   });
 
   it("says nothing about the handler when it is healthy", async () => {
@@ -393,15 +394,18 @@ describe("settings", () => {
     expect(invoke).toHaveBeenCalledWith("system_repair");
   });
 
-  /// Nothing here can bring back a binary the install left out; the release page can.
+  /// Nothing here can bring back a binary the install left out; the release page can — opened in
+  /// some other browser, since the default one is the resident that is missing.
   it("sends a copy without its resident to the download, not to a repair", async () => {
     answers({ ...BASE, health: "no_resident" });
     render(<Settings />);
     expect(await screen.findByText(/Falta el programa/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Descargar de nuevo" }));
-    expect(opened).toHaveBeenCalledWith("https://github.com/rgdevment/LinkUnbound/releases/latest");
-    expect(invoke).not.toHaveBeenCalledWith("system_repair");
+    expect(invoke).toHaveBeenCalledWith("system_open_elsewhere", {
+      url: "https://github.com/rgdevment/LinkUnbound/releases/latest",
+    });
+    expect(invoke).not.toHaveBeenCalledWith("system_repair", expect.anything());
   });
 
   it("warns a copy running from the disk image, and offers no repair", async () => {

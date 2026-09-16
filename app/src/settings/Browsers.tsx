@@ -69,8 +69,9 @@ function Form({
   onCancel,
 }: {
   initial: Edit;
-  /// Detection owns the path: typing over it would be undone by the next
-  /// rescan, so the field is shown and locked rather than hidden.
+  /// Detection owns the path and the private flag: the path is shown and locked, since it says
+  /// which program this is; the flag is not shown at all where detection knows it, and offered
+  /// only for a family it could not place — the one case the person knows better.
   detected?: boolean;
   onSave: (edit: Edit) => void;
   onCancel: () => void;
@@ -125,16 +126,20 @@ function Form({
         aria-label={t("fieldArgsLabel")}
         className={FIELD}
       />
-      <input
-        value={priv}
-        onChange={(e) => setPriv(e.target.value)}
-        placeholder={t("fieldPrivate")}
-        aria-label={t("fieldPrivateLabel")}
-        className={FIELD}
-      />
-      <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
-        {t("fieldPrivateHint")}
-      </p>
+      {(!detected || initial.private_flag === null) && (
+        <>
+          <input
+            value={priv}
+            onChange={(e) => setPriv(e.target.value)}
+            placeholder={t("fieldPrivate")}
+            aria-label={t("fieldPrivateLabel")}
+            className={FIELD}
+          />
+          <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
+            {t("fieldPrivateHint")}
+          </p>
+        </>
+      )}
       <input
         value={icon}
         onChange={(e) => setIcon(e.target.value)}

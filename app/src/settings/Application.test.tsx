@@ -15,6 +15,7 @@ const PREFS = {
   hide_tray: false,
   notify_on_rule: true,
   picker_style: "classic" as "classic" | "sheet",
+  looks_for_updates: true,
 };
 
 function answers(prefs = PREFS, held: string | null = "Alt+Shift+L", fail?: string) {
@@ -74,6 +75,20 @@ describe("application settings", () => {
     await userEvent.click(picker.getByRole("radio", { name: "Mosaico" }));
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
       prefs: { ...PREFS, picker_style: "sheet" },
+    });
+  });
+
+  /// The resident asks the feed on its own; the switch is the one way to say not to, and it has
+  /// to read back what is in force.
+  it("lets the background look for releases be turned off", async () => {
+    mount();
+    const look = await screen.findByRole("switch", {
+      name: "Buscar versiones nuevas en segundo plano",
+    });
+    expect(look).toBeChecked();
+    await userEvent.click(look);
+    expect(invoke).toHaveBeenCalledWith("prefs_set", {
+      prefs: { ...PREFS, looks_for_updates: false },
     });
   });
 

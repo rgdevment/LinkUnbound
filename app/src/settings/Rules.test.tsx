@@ -83,6 +83,75 @@ describe("rules", () => {
     expect(screen.getByText(/Solo esta vez/)).toBeInTheDocument();
   });
 
+  /// The empty screen used to send people to the picker and nowhere else; a rule for a site one
+  /// has not visited yet is written here, and the same command the picker's choice would write.
+  it("adds a rule from the empty screen, the way the picker would write it", async () => {
+    answers([], { rules_add: () => Promise.resolve([SITE]) });
+    render(<Rules />);
+    await userEvent.click(await screen.findByRole("button", { name: "Añadir regla" }));
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Cuándo" }), "site");
+    await userEvent.type(screen.getByRole("textbox", { name: "google.com" }), "github.com");
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Abrir en" }),
+      "Google Chrome · Trabajo",
+    );
+    await userEvent.click(screen.getByRole("checkbox", { name: "En ventana privada" }));
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(invoke).toHaveBeenCalledWith("rules_add", {
+      kind: "site",
+      value: "github.com",
+      browserId: "chrome",
+      profileId: "Profile 2",
+      private: true,
+    });
+    expect(await screen.findByText("github.com")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Guardar" })).toBeNull();
+  });
+
+  it("offers the form above an existing list too", async () => {
+    render(<Rules />);
+    await userEvent.click(await screen.findByRole("button", { name: "Añadir regla" }));
+    expect(screen.getByRole("combobox", { name: "Cuándo" })).toHaveDisplayValue("Todo el sitio");
+    expect(screen.getByRole("textbox", { name: "google.com" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("combobox", { name: "Cuándo" })).toBeNull();
+  });
+
+  /// The hint under the kind is the one thing that says what to type: it follows the kind.
+  it("changes the hint with the kind, and sends no profile for a browser without one", async () => {
+    answers([], { rules_add: () => Promise.resolve([LINK]) });
+    render(<Rules />);
+    await userEvent.click(await screen.findByRole("button", { name: "Añadir regla" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Cuándo" }), "app");
+    const box = screen.getByRole("textbox", { name: /Slack/ });
+    await userEvent.type(box, "teams");
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Abrir en" }),
+      "Mozilla Firefox",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(invoke).toHaveBeenCalledWith("rules_add", {
+      kind: "app",
+      value: "teams",
+      browserId: "firefox",
+      profileId: null,
+      private: false,
+    });
+  });
+
+  /// A refusal stays with the form, worded, so what was typed can be fixed rather than retyped.
+  it("keeps the form and says why when the value is refused", async () => {
+    answers([], { rules_add: () => Promise.reject("ruleValueNotHost") });
+    render(<Rules />);
+    await userEvent.click(await screen.findByRole("button", { name: "Añadir regla" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "google.com" }), "just words");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByText(/no es un dominio/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "google.com" })).toHaveValue("just words");
+  });
+
   it("names what each rule covers and where it opens", async () => {
     render(<Rules />);
     expect(await screen.findByText("github.com")).toBeInTheDocument();

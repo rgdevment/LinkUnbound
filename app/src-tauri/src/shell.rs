@@ -49,8 +49,6 @@ fn dress_natively<R: Runtime>(window: &tauri::WebviewWindow<R>, theme: Theme) {
 #[cfg(not(target_os = "macos"))]
 fn dress_natively<R: Runtime>(_window: &tauri::WebviewWindow<R>, _theme: Theme) {}
 
-/// Built on demand: an idle webview costs tens of megabytes and this window is
-/// opened rarely. The resident owns the tray, the picker and the notice.
 /// Set while the webview is being built. A second instance's knock, or the global shortcut,
 /// arrives inside that build's own message pump — the WebView2 environment is created by
 /// pumping messages until it answers — and building again from in there leaves both sides
@@ -58,6 +56,18 @@ fn dress_natively<R: Runtime>(_window: &tauri::WebviewWindow<R>, _theme: Theme) 
 /// that never answered, and a second process stuck knocking on it.
 static BUILDING: AtomicBool = AtomicBool::new(false);
 
+/// Lets go however the build ends: a panic that unwinds through it would otherwise leave the
+/// flag up and no click could ever open the window again.
+struct Building;
+
+impl Drop for Building {
+    fn drop(&mut self) {
+        BUILDING.store(false, Ordering::Release);
+    }
+}
+
+/// Built on demand: an idle webview costs tens of megabytes and this window is
+/// opened rarely. The resident owns the tray, the picker and the notice.
 pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     if let Some(window) = app.get_webview_window(SETTINGS) {
         let _ = window.show();
@@ -68,8 +78,8 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     if BUILDING.swap(true, Ordering::AcqRel) {
         return;
     }
+    let _building = Building;
     build_settings(app, theme);
-    BUILDING.store(false, Ordering::Release);
 }
 
 fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {

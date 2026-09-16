@@ -32,7 +32,7 @@ fn main() -> Result<(), slint::PlatformError> {
         linkunbound_mac::installed_browsers()
             .into_iter()
             .find(|b| b.id == id)
-            .and_then(|b| linkunbound_mac::icon_for(b.icon_source(), &b.id, &icons, side * 2))
+            .and_then(|b| linkunbound_mac::icon_for(b.icon_source(), &b.id, &icons, side))
             .map(|p| p.to_string_lossy().into_owned())
     };
     #[cfg(not(any(windows, target_os = "macos")))]
@@ -94,6 +94,7 @@ fn main() -> Result<(), slint::PlatformError> {
             checked_at: Some(1),
             found_version: Some("2.0.1".to_owned()),
             found_route: Some(if flag("--store") { "store" } else { "download" }.to_owned()),
+            found_installs: Some(!flag("--store")),
             candidates: None,
         };
         let progress = flag("--installing").then(|| linkunbound_core::update::Progress {

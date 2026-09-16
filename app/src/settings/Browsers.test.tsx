@@ -92,10 +92,11 @@ describe("browsers", () => {
   });
 
   /// Only the path is off limits: a rescan would undo anything typed over it.
-  it("edits a detected browser, with its path locked", async () => {
+  it("edits a detected browser, with its path locked and its private flag out of reach", async () => {
     render(<Browsers />);
     await userEvent.click(await screen.findByRole("button", { name: "Editar Google Chrome" }));
     expect(await screen.findByLabelText("Ruta del ejecutable")).toHaveAttribute("readonly");
+    expect(screen.queryByLabelText("Argumento de ventana privada")).toBeNull();
 
     const name = screen.getByLabelText("Nombre");
     await userEvent.clear(name);
