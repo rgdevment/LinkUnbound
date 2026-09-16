@@ -13,7 +13,7 @@ use objc2_uniform_type_identifiers::UTType;
 
 pub const SCHEMES: [&str; 2] = ["http", "https"];
 
-const DOCUMENTS: [&str; 3] = ["public.html", "public.xhtml", "public.svg-image"];
+pub const DOCUMENTS: [&str; 3] = ["public.html", "public.xhtml", "public.svg-image"];
 
 const SAFARI: &str = "com.apple.Safari";
 
@@ -63,19 +63,34 @@ fn holds(scheme: &str) -> bool {
 
 #[must_use]
 pub fn is_default_browser() -> bool {
-    holds("https")
+    objc2::rc::autoreleasepool(|_| holds("https"))
 }
 
 #[must_use]
 pub fn association_report() -> Vec<(String, bool)> {
-    SCHEMES
-        .iter()
-        .map(|scheme| ((*scheme).to_owned(), holds(scheme)))
-        .collect()
+    objc2::rc::autoreleasepool(|_| {
+        SCHEMES
+            .iter()
+            .map(|scheme| ((*scheme).to_owned(), holds(scheme)))
+            .collect()
+    })
 }
 
 fn is_ours(bundle_id: &str) -> bool {
-    own_bundle_id().is_some_and(|mine| mine.eq_ignore_ascii_case(bundle_id))
+    is_ours_among(bundle_id, own_bundle_id().as_deref())
+}
+
+/// The tests write somewhere of their own: the binary they run in has no
+/// bundle, and its standard domain would leave a file behind per build.
+fn defaults() -> Retained<NSUserDefaults> {
+    #[cfg(test)]
+    {
+        tests::suite()
+    }
+    #[cfg(not(test))]
+    {
+        NSUserDefaults::standardUserDefaults()
+    }
 }
 
 fn remember(handed_from: Option<&str>, key: &str) {
@@ -83,7 +98,7 @@ fn remember(handed_from: Option<&str>, key: &str) {
         return;
     };
     unsafe {
-        NSUserDefaults::standardUserDefaults().setObject_forKey(
+        defaults().setObject_forKey(
             Some(&NSString::from_str(previous)),
             &NSString::from_str(key),
         );
@@ -91,7 +106,7 @@ fn remember(handed_from: Option<&str>, key: &str) {
 }
 
 fn remembered(key: &str) -> Option<String> {
-    NSUserDefaults::standardUserDefaults()
+    defaults()
         .stringForKey(&NSString::from_str(key))
         .map(|id| id.to_string())
 }
@@ -179,26 +194,54 @@ fn points_at(app: &NSURL, scheme: &str) -> bool {
     }
 }
 
-fn point_everything(app: &NSURL) -> Result<(), String> {
+#[derive(Debug, PartialEq, Eq)]
+enum Step {
+    Scheme(&'static str),
+    Document(&'static str),
+}
+
+/// What is left once `http` has been asked for: pointing it makes the system
+/// set both schemes in one prompt, so `https` is only asked for when it did
+/// not, and asking for it on its own is what the system refuses outright.
+fn remaining(held: impl Fn(&str) -> bool) -> Vec<Step> {
+    SCHEMES
+        .iter()
+        .filter(|scheme| !held(scheme))
+        .map(|scheme| Step::Scheme(scheme))
+        .chain(DOCUMENTS.iter().map(|document| Step::Document(document)))
+        .collect()
+}
+
+fn is_ours_among(bundle_id: &str, mine: Option<&str>) -> bool {
+    mine.is_some_and(|mine| mine.eq_ignore_ascii_case(bundle_id))
+}
+
+fn handed_back<T>(remembered: Option<T>, safari: Option<T>) -> Result<T, String> {
+    remembered
+        .or(safari)
+        .ok_or_else(|| "noPreviousBrowser".to_owned())
+}
+
+fn walk(app: &NSURL, document_target: impl Fn(&str) -> Retained<NSURL>) -> Result<(), String> {
     point(app, "http")?;
-    for scheme in SCHEMES {
-        if !points_at(app, scheme) {
-            point(app, scheme)?;
+    for step in remaining(|scheme| points_at(app, scheme)) {
+        match step {
+            Step::Scheme(scheme) => point(app, scheme)?,
+            Step::Document(document) => point_documents(&document_target(document), document)?,
         }
-    }
-    for document in DOCUMENTS {
-        point_documents(app, document)?;
     }
     Ok(())
 }
 
 pub fn register() -> Result<(), String> {
-    let app = ours().ok_or_else(|| "notBundled".to_owned())?;
-    remember(handler_for("https").as_deref(), HANDED_FROM);
-    for document in DOCUMENTS {
-        remember(document_handler(document).as_deref(), &key_for(document));
-    }
-    point_everything(&app)
+    objc2::rc::autoreleasepool(|_| {
+        let app = ours().ok_or_else(|| "notBundled".to_owned())?;
+        remember(handler_for("https").as_deref(), HANDED_FROM);
+        for document in DOCUMENTS {
+            remember(document_handler(document).as_deref(), &key_for(document));
+        }
+        walk(&app, |_| app.clone())
+    })
 }
 
 fn app_remembered_as(key: &str) -> Option<Retained<NSURL>> {
@@ -209,23 +252,14 @@ fn app_remembered_as(key: &str) -> Option<Retained<NSURL>> {
 /// The system has no "no default browser", so letting go hands the schemes
 /// back to whoever held them before, and to Safari when nobody is remembered.
 pub fn unregister() -> Result<(), String> {
-    let browser = app_remembered_as(HANDED_FROM)
-        .or_else(|| {
-            NSWorkspace::sharedWorkspace()
-                .URLForApplicationWithBundleIdentifier(&NSString::from_str(SAFARI))
+    objc2::rc::autoreleasepool(|_| {
+        let safari = NSWorkspace::sharedWorkspace()
+            .URLForApplicationWithBundleIdentifier(&NSString::from_str(SAFARI));
+        let browser = handed_back(app_remembered_as(HANDED_FROM), safari)?;
+        walk(&browser, |document| {
+            app_remembered_as(&key_for(document)).unwrap_or_else(|| browser.clone())
         })
-        .ok_or_else(|| "noPreviousBrowser".to_owned())?;
-    point(&browser, "http")?;
-    for scheme in SCHEMES {
-        if !points_at(&browser, scheme) {
-            point(&browser, scheme)?;
-        }
-    }
-    for document in DOCUMENTS {
-        let target = app_remembered_as(&key_for(document)).unwrap_or_else(|| browser.clone());
-        point_documents(&target, document)?;
-    }
-    Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -234,7 +268,22 @@ mod tests {
         SCHEMES, association_report, handler_for, is_bundled, is_default_browser, remember,
         remembered,
     };
+    use objc2::rc::Retained;
     use objc2_foundation::{NSString, NSUserDefaults};
+
+    const SUITE: &str = "dev.rgdevment.linkunbound.tests";
+
+    pub(super) fn suite() -> Retained<NSUserDefaults> {
+        use objc2::AllocAnyThread;
+        NSUserDefaults::initWithSuiteName(NSUserDefaults::alloc(), Some(&NSString::from_str(SUITE)))
+            .expect("a suite of our own")
+    }
+
+    fn forget(key: &str) {
+        suite().removeObjectForKey(&NSString::from_str(key));
+        NSUserDefaults::standardUserDefaults()
+            .removePersistentDomainForName(&NSString::from_str(SUITE));
+    }
 
     /// Both are what a browser is asked to carry, and holding one without the other is the
     /// state the screen has to be able to describe.
@@ -294,9 +343,21 @@ mod tests {
             Some("com.apple.Safari")
         );
         assert!(!super::is_ours("com.apple.Safari"));
-        let holds_https =
-            handler_for("https").is_some_and(|id| id.eq_ignore_ascii_case("com.apple.Safari"));
-        assert_eq!(super::points_at(&safari, "https"), holds_https);
+        let holder = NSWorkspace::sharedWorkspace()
+            .URLForApplicationWithBundleIdentifier(&NSString::from_str(
+                &handler_for("https").expect("something opens https"),
+            ))
+            .expect("the handler is installed");
+        assert!(super::points_at(&holder, "https"));
+        assert!(!super::points_at(&holder, "lu-no-such-scheme"));
+        let terminal = objc2_foundation::NSURL::fileURLWithPath(&NSString::from_str(
+            "/System/Applications/Utilities/Terminal.app",
+        ));
+        assert_eq!(
+            super::bundle_id_of(&terminal).as_deref(),
+            Some("com.apple.Terminal")
+        );
+        assert!(!super::points_at(&terminal, "https"));
     }
 
     #[test]
@@ -372,7 +433,95 @@ mod tests {
         );
         remember(Some("com.example.gone.browser"), &key);
         assert!(super::app_remembered_as(&key).is_none());
-        NSUserDefaults::standardUserDefaults().removeObjectForKey(&NSString::from_str(&key));
+        forget(&key);
+    }
+
+    #[test]
+    fn once_http_is_held_nothing_but_the_documents_remain() {
+        use super::Step;
+        assert_eq!(
+            super::remaining(|_| true),
+            [
+                Step::Document("public.html"),
+                Step::Document("public.xhtml"),
+                Step::Document("public.svg-image"),
+            ]
+        );
+        assert_eq!(
+            super::remaining(|scheme| scheme == "http"),
+            [
+                Step::Scheme("https"),
+                Step::Document("public.html"),
+                Step::Document("public.xhtml"),
+                Step::Document("public.svg-image"),
+            ],
+            "https is asked for only when http did not bring it along"
+        );
+        assert_eq!(
+            super::remaining(|_| false).first(),
+            Some(&Step::Scheme("http")),
+            "a refusal the system answered with silence is asked again"
+        );
+    }
+
+    #[test]
+    fn links_go_back_to_whoever_had_them_and_to_safari_only_when_nobody_did() {
+        assert_eq!(
+            super::handed_back(Some("firefox"), Some("safari")),
+            Ok("firefox")
+        );
+        assert_eq!(super::handed_back(None, Some("safari")), Ok("safari"));
+        assert_eq!(
+            super::handed_back::<&str>(None, None),
+            Err("noPreviousBrowser".to_owned())
+        );
+    }
+
+    #[test]
+    fn our_own_identifier_is_never_remembered_as_a_previous_browser() {
+        assert!(super::is_ours_among(
+            "DEV.rgdevment.LinkUnbound",
+            Some("dev.rgdevment.linkunbound")
+        ));
+        assert!(!super::is_ours_among(
+            "com.apple.Safari",
+            Some("dev.rgdevment.linkunbound")
+        ));
+        assert!(!super::is_ours_among("dev.rgdevment.linkunbound", None));
+    }
+
+    /// What the bundle declares, what the resident opens and what registration hands over are
+    /// three lists that have to agree, or a double-clicked file lands on a copy that refuses it.
+    #[test]
+    fn every_document_type_is_declared_by_the_bundle_and_opened_by_the_resident() {
+        use objc2_uniform_type_identifiers::UTType;
+        let plist = include_str!("../../../app/src-tauri/Info.plist");
+        for scheme in SCHEMES {
+            assert!(
+                plist.contains(&format!("<string>{scheme}</string>")),
+                "{scheme}"
+            );
+        }
+        for document in super::DOCUMENTS {
+            assert!(
+                plist.contains(&format!("<string>{document}</string>")),
+                "{document}"
+            );
+            let extension = UTType::typeWithIdentifier(&NSString::from_str(document))
+                .and_then(|kind| kind.preferredFilenameExtension())
+                .map(|e| e.to_string())
+                .expect("a known type");
+            assert!(
+                linkunbound_core::local_web_file_extensions().contains(&extension.as_str()),
+                "{document} is written as .{extension}, which the resident would refuse"
+            );
+        }
+        assert!(
+            plist.contains(&format!("<string>{}</string>", crate::OWN_BUNDLE_IDS[0]))
+                || include_str!("../../../app/src-tauri/tauri.conf.json")
+                    .contains(&format!("\"identifier\": \"{}\"", crate::OWN_BUNDLE_IDS[0])),
+            "the identifier the bundle carries is the one this crate treats as its own"
+        );
     }
 
     #[test]
@@ -382,7 +531,7 @@ mod tests {
         assert!(remembered(&key).is_none());
         remember(Some("com.example.browser"), &key);
         assert_eq!(remembered(&key).as_deref(), Some("com.example.browser"));
-        NSUserDefaults::standardUserDefaults().removeObjectForKey(&NSString::from_str(&key));
+        forget(&key);
         assert!(remembered(&key).is_none());
     }
 }

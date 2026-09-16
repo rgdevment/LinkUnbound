@@ -58,47 +58,51 @@ use mac::spawn;
 #[cfg(target_os = "macos")]
 mod mac {
     use std::io;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
     use std::process::Command;
 
     #[derive(Debug, PartialEq, Eq)]
     pub enum How {
         Itself,
         Bundle,
-        Inside,
+        Instance,
     }
 
-    /// `open` drops everything after `--args` when the app is already running, so
-    /// a link carrying a switch has to reach the executable directly. A link
-    /// carrying none goes through `open`, which is what puts the browser in front
-    /// and what reaches Safari at all.
+    /// `open` drops everything after `--args` when the app is already running,
+    /// but asked for an instance of its own it hands the whole command line to
+    /// the running copy, which Chromium and Firefox both take and then leave.
+    /// Either way the browser is started by Launch Services, so it answers for
+    /// its own permissions rather than for ours, and Safari's launch
+    /// constraints are never tripped by running its executable by hand.
     pub fn how(app: &Path, args: &[String]) -> How {
         if !app.is_dir() {
             return How::Itself;
         }
         if args.len() > 1 {
-            How::Inside
+            How::Instance
         } else {
             How::Bundle
         }
     }
 
-    /// Firefox keeps twenty other files beside it in there and spells itself in
-    /// lower case, so the bundle's own name is not the executable's.
-    pub fn inside(app: &Path) -> Result<PathBuf, io::Error> {
-        let info = plist::Value::from_file(app.join("Contents").join("Info.plist"))
-            .map_err(|why| io::Error::new(io::ErrorKind::InvalidData, why.to_string()))?;
-        let named = info
-            .as_dictionary()
-            .and_then(|d| d.get("CFBundleExecutable"))
-            .and_then(plist::Value::as_string)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("{} names no executable", app.display()),
-                )
-            })?;
-        Ok(app.join("Contents").join("MacOS").join(named))
+    pub fn command_for(app: &Path, args: &[String]) -> Command {
+        match how(app, args) {
+            How::Itself => {
+                let mut run = Command::new(app);
+                run.args(args);
+                run
+            }
+            How::Bundle => {
+                let mut run = Command::new("/usr/bin/open");
+                run.arg("-a").arg(app).args(args);
+                run
+            }
+            How::Instance => {
+                let mut run = Command::new("/usr/bin/open");
+                run.arg("-n").arg("-a").arg(app).arg("--args").args(args);
+                run
+            }
+        }
     }
 
     pub fn spawn(exe: &str, args: &[String]) -> Result<(), io::Error> {
@@ -108,13 +112,7 @@ mod mac {
         if !app.exists() {
             return Err(io::Error::new(io::ErrorKind::NotFound, exe.to_owned()));
         }
-        match how(app, args) {
-            How::Itself => super::spawn_and_forget(Command::new(app).args(args)),
-            How::Bundle => {
-                super::spawn_and_forget(Command::new("/usr/bin/open").arg("-a").arg(app).args(args))
-            }
-            How::Inside => super::spawn_and_forget(Command::new(inside(app)?).args(args)),
-        }
+        super::spawn_and_forget(&mut command_for(app, args))
     }
 }
 
@@ -224,13 +222,18 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     mod macos {
-        use super::super::mac::{How, how, inside};
-        use super::super::open;
-        use crate::{Browser, Profile};
+        use super::super::mac::{How, command_for, how};
         use std::path::Path;
 
         fn args(list: &[&str]) -> Vec<String> {
             list.iter().map(|a| (*a).to_owned()).collect()
+        }
+
+        fn spelled(command: &std::process::Command) -> Vec<String> {
+            std::iter::once(command.get_program())
+                .chain(command.get_args())
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect()
         }
 
         /// The bundle is a directory, so handing it to a process is handing over a directory.
@@ -240,112 +243,48 @@ mod tests {
         fn a_bundle_with_nothing_but_a_link_is_opened_the_way_the_system_opens_one() {
             let app = Path::new("/Applications");
             assert_eq!(how(app, &args(&["https://a.test"])), How::Bundle);
+            assert_eq!(
+                spelled(&command_for(app, &args(&["https://a.test"]))),
+                ["/usr/bin/open", "-a", "/Applications", "https://a.test"]
+            );
         }
 
-        /// `open` drops everything past `--args` when the app is already running, and the
-        /// link would never arrive: a private window or a profile has to reach the executable.
+        /// `open` drops everything past `--args` when the app is already running; an instance
+        /// of its own hands the command line to the running copy, and the browser is still
+        /// started by Launch Services rather than as a child answering for our permissions.
         #[test]
-        fn a_link_carrying_a_switch_reaches_the_executable_instead() {
+        fn a_link_carrying_a_switch_is_opened_as_an_instance_with_the_link_last() {
             let app = Path::new("/Applications");
+            let carried = args(&[
+                "--profile-directory=Work",
+                "--incognito",
+                "https://a.test/--x",
+            ]);
+            assert_eq!(how(app, &carried), How::Instance);
             assert_eq!(
-                how(app, &args(&["--incognito", "https://a.test"])),
-                How::Inside
-            );
-            assert_eq!(
-                how(
-                    app,
-                    &args(&["--profile-directory=Profile 2", "https://a.test"])
-                ),
-                How::Inside
+                spelled(&command_for(app, &carried)),
+                [
+                    "/usr/bin/open",
+                    "-n",
+                    "-a",
+                    "/Applications",
+                    "--args",
+                    "--profile-directory=Work",
+                    "--incognito",
+                    "https://a.test/--x"
+                ]
             );
         }
 
         /// Somebody who added a browser by hand named a program, not a bundle.
         #[test]
         fn a_path_that_is_already_a_program_is_run_as_one() {
+            let echo = Path::new("/bin/echo");
+            assert_eq!(how(echo, &args(&["https://a.test"])), How::Itself);
             assert_eq!(
-                how(Path::new("/bin/echo"), &args(&["https://a.test"])),
-                How::Itself
+                spelled(&command_for(echo, &args(&["--x", "https://a.test"]))),
+                ["/bin/echo", "--x", "https://a.test"]
             );
-        }
-
-        /// The bundle's own name is not the executable's: Firefox spells itself in lower case
-        /// and keeps twenty other files beside it, so a guess from the folder name misses.
-        #[test]
-        fn the_executable_is_read_from_the_bundle_rather_than_guessed_from_its_name() {
-            let firefox = Path::new("/Applications/Firefox.app");
-            if !firefox.exists() {
-                return;
-            }
-            let found = inside(firefox).expect("Firefox names its executable");
-            assert!(found.is_file(), "{found:?}");
-            assert_eq!(found.file_name().and_then(|n| n.to_str()), Some("firefox"));
-        }
-
-        #[test]
-        fn a_bundle_that_is_not_one_is_reported_rather_than_launched() {
-            assert!(inside(Path::new("/Applications")).is_err());
-        }
-
-        #[test]
-        fn a_link_with_a_switch_reaches_the_program_inside_the_bundle_with_the_link_last() {
-            use std::os::unix::fs::PermissionsExt;
-            let dir =
-                std::env::temp_dir().join(format!("linkunbound-bundle-{}", std::process::id()));
-            let app = dir.join("Fake.app");
-            let bin = app.join("Contents").join("MacOS");
-            std::fs::create_dir_all(&bin).expect("a bundle");
-            let record = dir.join("argv.txt");
-            std::fs::write(
-                app.join("Contents").join("Info.plist"),
-                r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>CFBundleExecutable</key><string>fake</string></dict></plist>"#,
-            )
-            .expect("a plist");
-            let script = bin.join("fake");
-            let body = format!(
-                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\n",
-                record.display()
-            );
-            std::fs::write(&script, body).expect("a script");
-            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
-                .expect("executable");
-
-            let browser = Browser {
-                id: "fake".to_owned(),
-                name: "Fake".to_owned(),
-                exe: app.to_string_lossy().into_owned(),
-                profiles: vec![Profile {
-                    id: "Work".to_owned(),
-                    name: "Work".to_owned(),
-                    args: vec!["--profile-directory=Work".to_owned()],
-                }],
-                extra_args: vec!["--extra".to_owned()],
-                private_flag: Some("--incognito".to_owned()),
-                icon_path: None,
-                custom: true,
-                hidden: false,
-            };
-            open(&[browser], "fake", Some("Work"), true, "https://a.test/--x").expect("launched");
-            let mut written = String::new();
-            for _ in 0..50 {
-                std::thread::sleep(std::time::Duration::from_millis(20));
-                written = std::fs::read_to_string(&record).unwrap_or_default();
-                if !written.is_empty() {
-                    break;
-                }
-            }
-            assert_eq!(
-                written.lines().collect::<Vec<_>>(),
-                vec![
-                    "--extra",
-                    "--profile-directory=Work",
-                    "--incognito",
-                    "https://a.test/--x"
-                ]
-            );
-            let _ = std::fs::remove_dir_all(&dir);
         }
     }
 }

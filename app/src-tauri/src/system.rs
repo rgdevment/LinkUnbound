@@ -312,12 +312,18 @@ mod platform {
     /// The system has no "no default browser", so letting go hands the schemes
     /// back to Safari rather than leaving links with nowhere to arrive.
     pub fn set_registered(enabled: bool) -> Result<SystemState, String> {
+        if enabled && crate::update::from_a_mount() {
+            return Err("mounted".to_owned());
+        }
         if enabled { register() } else { unregister() }?;
         Ok(state())
     }
 
     pub fn set_starts_with_system(enabled: bool) -> Result<SystemState, String> {
-        set_startup(enabled).ok_or_else(|| "noStartupTask".to_owned())?;
+        if crate::update::from_a_mount() {
+            return Err("mounted".to_owned());
+        }
+        set_startup(enabled)?;
         Ok(state())
     }
 
@@ -365,6 +371,30 @@ mod platform {
                 .expect("the plist names an executable");
             assert_eq!(executable, "linkunbound-shell");
             assert!(plist.contains("<key>LSUIElement</key>"));
+        }
+
+        /// A test binary is not a bundle: the screen has to be told so, and both switches
+        /// have to refuse with a reason rather than register the directory the binary sits in.
+        /// Letting go is never tried here, since it would hand the links to Safari for real.
+        #[test]
+        fn a_copy_outside_a_bundle_is_reported_and_refused_rather_than_registered() {
+            let state = super::state();
+            assert_eq!(state.health, Health::BuildTree);
+            assert!(!state.registered);
+            assert!(state.registered_path.is_none());
+            assert!(!state.is_default);
+            assert_eq!(state.associations.len(), 2);
+            assert!(state.associations.iter().all(|a| !a.held));
+            assert!(!state.starts_with_system);
+            assert!(state.startup_is_ours);
+            assert_eq!(
+                super::set_registered(true).map(|_| ()),
+                Err("notBundled".to_owned())
+            );
+            assert_eq!(
+                super::set_starts_with_system(true).map(|_| ()),
+                Err("noStartupTask".to_owned())
+            );
         }
     }
 }

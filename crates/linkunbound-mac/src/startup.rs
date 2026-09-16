@@ -2,6 +2,7 @@
 
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Startup {
     pub enabled: bool,
     /// False when the person turned it off in System Settings, which cannot be
@@ -34,8 +35,10 @@ pub fn state() -> Option<Startup> {
     Some(read(unsafe { service.status() }))
 }
 
-pub fn set(enabled: bool) -> Option<Startup> {
-    let service = service()?;
+/// `Err` carries the system's own words: an ad-hoc signed or translocated
+/// copy is refused with a reason, and "no service" would hide it.
+pub fn set(enabled: bool) -> Result<Startup, String> {
+    let service = service().ok_or_else(|| "noStartupTask".to_owned())?;
     // SAFETY: both take nothing and report through a returned error.
     let done = unsafe {
         if enabled {
@@ -44,8 +47,8 @@ pub fn set(enabled: bool) -> Option<Startup> {
             service.unregisterAndReturnError()
         }
     };
-    done.ok()?;
-    state()
+    done.map_err(|error| error.localizedDescription().to_string())?;
+    state().ok_or_else(|| "noStartupTask".to_owned())
 }
 
 #[cfg(test)]
@@ -77,6 +80,7 @@ mod tests {
     #[test]
     fn a_binary_that_is_not_a_bundle_has_no_login_item_to_offer() {
         assert!(state().is_none());
-        assert!(set(true).is_none());
+        assert_eq!(set(true), Err("noStartupTask".to_owned()));
+        assert_eq!(set(false), Err("noStartupTask".to_owned()));
     }
 }

@@ -35,6 +35,16 @@ fn image_from_png(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     Some((info.width, info.height, buffer))
 }
 
+fn asked_of(chosen: &muda::MenuId, settings: &muda::MenuId, quit: &muda::MenuId) -> Option<Asked> {
+    if chosen == settings {
+        Some(Asked::Settings)
+    } else if chosen == quit {
+        Some(Asked::Quit)
+    } else {
+        None
+    }
+}
+
 pub struct Tray {
     _icon: TrayIcon,
     settings: MenuItem,
@@ -77,11 +87,7 @@ impl Tray {
     /// A left click means the same as the menu entry, so both drain together.
     pub fn drain(&self, asks: &Sender<Asked>) {
         while let Ok(event) = MenuEvent::receiver().try_recv() {
-            let asked = if event.id == self.settings.id() {
-                Asked::Settings
-            } else if event.id == self.quit.id() {
-                Asked::Quit
-            } else {
+            let Some(asked) = asked_of(&event.id, self.settings.id(), self.quit.id()) else {
                 continue;
             };
             if asks.send(asked).is_err() {
@@ -136,6 +142,17 @@ mod tests {
             .filter(|p| p[3] > 0)
             .count();
         assert!(ink > 0, "a template with no alpha is an empty menu bar");
+    }
+
+    #[test]
+    fn a_menu_entry_is_told_from_the_other_and_from_a_stranger() {
+        use super::{Asked, asked_of};
+        let settings = muda::MenuId::new("settings");
+        let quit = muda::MenuId::new("quit");
+        let other = muda::MenuId::new("other");
+        assert_eq!(asked_of(&settings, &settings, &quit), Some(Asked::Settings));
+        assert_eq!(asked_of(&quit, &settings, &quit), Some(Asked::Quit));
+        assert_eq!(asked_of(&other, &settings, &quit), None);
     }
 
     #[test]

@@ -151,7 +151,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@nextest
-      - run: cargo llvm-cov nextest -p linkunbound-mac --lcov --output-path lcov-mac.info
+      - name: The Mac crate, and the Mac branches of the core and the picker
+        run: cargo llvm-cov nextest -p linkunbound-mac -p linkunbound-core -p linkunbound-shell --lcov --output-path lcov-mac.info
       - name: Every path is relative to the repository, which is what Sonar reads
         run: sed -i '' "s|^SF:$PWD/|SF:|" lcov-mac.info
       - uses: actions/upload-artifact@v7

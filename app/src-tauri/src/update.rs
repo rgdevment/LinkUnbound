@@ -202,8 +202,15 @@ pub fn mounted(running: Option<&Path>) -> bool {
     cfg!(target_os = "macos") && running.is_some_and(on_a_mount)
 }
 
+/// A quarantined copy run straight from Downloads is translocated to a
+/// read-only path under `/private/var/folders` that changes with every launch,
+/// so a registration made from there dies with the next one.
 fn on_a_mount(at: &Path) -> bool {
-    at.starts_with("/Volumes/") || at.starts_with("/private/tmp/")
+    at.starts_with("/Volumes/")
+        || at.starts_with("/private/tmp/")
+        || at
+            .components()
+            .any(|part| part.as_os_str() == "AppTranslocation")
 }
 
 #[must_use]
@@ -315,7 +322,13 @@ mod tests {
         assert!(on_a_mount(Path::new(
             "/private/tmp/AppTranslocation/X/LinkUnbound.app"
         )));
+        assert!(on_a_mount(Path::new(
+            "/private/var/folders/7r/x/T/AppTranslocation/6F1A-2B/d/LinkUnbound.app"
+        )));
         assert!(!on_a_mount(Path::new("/Applications/LinkUnbound.app")));
+        assert!(!on_a_mount(Path::new(
+            "/Users/ana/Applications/LinkUnbound.app"
+        )));
         assert!(!on_a_mount(Path::new("/Users/x/Downloads/LinkUnbound.app")));
     }
 

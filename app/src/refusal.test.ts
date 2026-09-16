@@ -64,3 +64,33 @@ describe("refusals", () => {
     }
   });
 });
+
+/// Every key the Rust side can answer with has to have a sentence here, or the window shows
+/// "Algo salió mal — notBundled" and nobody notices until a person does.
+describe("what the Mac backend can refuse with", () => {
+  const sources = import.meta.glob(
+    [
+      "../../crates/linkunbound-mac/src/registration.rs",
+      "../../crates/linkunbound-mac/src/startup.rs",
+      "../src-tauri/src/system.rs",
+    ],
+    { query: "?raw", import: "default", eager: true },
+  ) as Record<string, string>;
+
+  it("is spoken in both languages", () => {
+    const keys = new Set<string>();
+    for (const text of Object.values(sources)) {
+      for (const found of text.matchAll(
+        /Err\("([a-zA-Z]+)"\.to_owned\(\)\)|\|\| "([a-zA-Z]+)"\.to_owned\(\)/g,
+      )) {
+        keys.add(found[1] ?? found[2]);
+      }
+    }
+    expect(Object.keys(sources)).toHaveLength(3);
+    expect(keys.size).toBeGreaterThanOrEqual(5);
+    for (const key of keys) {
+      expect(SPEECH.es, key).toHaveProperty(key);
+      expect(SPEECH.en, key).toHaveProperty(key);
+    }
+  });
+});

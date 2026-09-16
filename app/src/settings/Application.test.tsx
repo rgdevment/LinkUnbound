@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { follow } from "../theme";
 import Application from "./Application";
 
@@ -26,6 +26,25 @@ function answers(prefs = PREFS, held: string | null = "Alt+Shift+L", fail?: stri
 function mount() {
   render(<Application startsWithSystem startupIsOurs onSystem={() => {}} onLanguage={() => {}} />);
 }
+
+describe("on a Mac", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    answers();
+    Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
+  });
+  afterEach(() => {
+    Object.defineProperty(navigator, "platform", { value: "", configurable: true });
+  });
+
+  /// The menu bar icon is the only way back to the picker once the Dock icon is gone with it,
+  /// so a Mac never offers to hide it.
+  it("never offers to hide the menu bar icon", async () => {
+    mount();
+    await screen.findByRole("group", { name: "Tema" });
+    expect(screen.queryByRole("switch", { name: "Ocultar el icono de la bandeja" })).toBeNull();
+  });
+});
 
 describe("application settings", () => {
   beforeEach(() => {

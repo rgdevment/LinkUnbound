@@ -54,7 +54,7 @@ fn drawn(path: &Path, side: u32) -> Option<Vec<u8>> {
 
 #[must_use]
 pub fn icon_for(app: &str, id: &str, dir: &Path, side: u32) -> Option<PathBuf> {
-    linkunbound_core::cached_icon(app, id, dir, side, drawn)
+    objc2::rc::autoreleasepool(|_| linkunbound_core::cached_icon(app, id, dir, side, drawn))
 }
 
 #[cfg(test)]
@@ -101,5 +101,6 @@ mod tests {
                 .is_some_and(|n| n.to_string_lossy().starts_with("terminal-"))
         );
         assert_eq!(png_size(&std::fs::read(&made).expect("readable")), (24, 24));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

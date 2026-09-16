@@ -3665,7 +3665,6 @@ name = "linkunbound-core"
 version = "2.0.0"
 dependencies = [
  "percent-encoding",
- "plist",
  "psl",
  "serde",
  "serde_json",
