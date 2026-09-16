@@ -111,6 +111,9 @@ All data is stored locally under your user profile.
 | Log      | `~/Library/Application Support/LinkUnbound/navigate.log`         |
 | Crash log | `~/Library/Application Support/LinkUnbound/startup_crash.log`   |
 | Icons    | `~/Library/Application Support/LinkUnbound/icons/`               |
+| Previous default browser | `~/Library/Preferences/dev.rgdevment.linkunbound.plist` |
+
+On macOS, setting LinkUnbound as the default browser records which application held that role before (its bundle identifier, nothing else), so that "stop being the default" can hand the links back to it.
 
 These folders are protected by your operating system's user account permissions. Other users on the same computer cannot access them under normal conditions.
 
@@ -187,7 +190,7 @@ For Microsoft's own privacy practices, refer to [Microsoft's Privacy Statement](
 Settings → **Maintenance** tab provides:
 
 - **Reset configuration** — clears all browsers, rules, and icons, then re-scans installed browsers.
-- **Unregister** — removes LinkUnbound's browser registration from the system: the registry entries on Windows, the Launch Services association on macOS.
+- **Unregister** — removes LinkUnbound's browser registration from the system: the registry entries on Windows; on macOS, hands `http`, `https` and the web document types back to the application that held them before (Safari when none is remembered).
 
 ### Complete Removal
 
@@ -200,7 +203,7 @@ Settings → **Maintenance** tab provides:
 
 1. Drag `LinkUnbound.app` from `/Applications` to the Trash (or `brew uninstall --cask linkunbound`).
 2. Delete the data folder: `~/Library/Application Support/LinkUnbound/`
-3. Optional: remove preferences (`~/Library/Preferences/com.rgdevment.linkunbound.plist`) and saved app state (`~/Library/Saved Application State/com.rgdevment.linkunbound.savedState/`).
+3. Optional: remove preferences (`~/Library/Preferences/dev.rgdevment.linkunbound.plist`, and `com.rgdevment.linkunbound.plist` left by 1.x), saved app state under `~/Library/Saved Application State/`, and the login item under System Settings → General → Login Items if one was enabled.
 
 After these steps, no LinkUnbound data remains on your system.
 

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Settings from "./Settings";
 
 const invoke = vi.fn();
@@ -243,6 +243,180 @@ describe("settings", () => {
     render(<Settings />);
     await userEvent.click(await screen.findByRole("switch", { name: "Ofrecerse como navegador" }));
     expect(await screen.findByText(/registry refused/)).toBeInTheDocument();
+  });
+
+  describe("on a Mac", () => {
+    beforeEach(() => {
+      Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
+    });
+    afterEach(() => {
+      Object.defineProperty(navigator, "platform", { value: "", configurable: true });
+    });
+
+    it("offers to become the default, which macOS confirms with its own prompt", async () => {
+      answers({ ...BASE, is_default: false });
+      render(<Settings />);
+      expect(await screen.findByText(/macOS todavía no envía/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Establecer" }));
+      expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: true });
+      expect(screen.queryByRole("switch", { name: "Ofrecerse como navegador" })).toBeNull();
+    });
+
+    it("sends to System Settings as the second way, never as the first", async () => {
+      answers({ ...BASE, is_default: false });
+      render(<Settings />);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Abrir Ajustes del Sistema" }),
+      );
+      expect(invoke).toHaveBeenCalledWith("system_open_default_apps");
+    });
+
+    it("offers nothing to press once the links already arrive here", async () => {
+      render(<Settings />);
+      await screen.findByText(/recibe los enlaces/);
+      expect(screen.queryByRole("button", { name: "Establecer" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Abrir Ajustes del Sistema" })).toBeNull();
+    });
+
+    it("says the prompt was declined in the reader's words", async () => {
+      answers(
+        { ...BASE, is_default: false },
+        {
+          system_set_registered: () => Promise.reject("defaultDeclined"),
+        },
+      );
+      render(<Settings />);
+      await userEvent.click(await screen.findByRole("button", { name: "Establecer" }));
+      expect(await screen.findByText(/Rechazaste el cambio/)).toBeInTheDocument();
+    });
+
+    it("names the login items pane rather than a Windows one", async () => {
+      answers({ ...BASE, starts_with_system: false, startup_is_ours: false });
+      render(<Settings />);
+      await go("Aplicación");
+      expect(await screen.findByText(/Ítems de inicio/)).toBeInTheDocument();
+    });
+  });
+
+  it("counts the associations it holds against the ones a browser is asked to carry", async () => {
+    answers({
+      ...BASE,
+      is_default: false,
+      associations: [
+        { scheme: "http", held: true },
+        { scheme: "https", held: false },
+        { scheme: ".htm", held: false },
+      ],
+    });
+    render(<Settings />);
+    expect(await screen.findByText("1 de 3 asociaciones")).toBeInTheDocument();
+    expect(screen.getByText(/todavía no envía/)).toBeInTheDocument();
+  });
+
+  it("says nothing about the links while the backend has not answered", async () => {
+    answers(BASE, { system_state: () => new Promise(() => {}) });
+    render(<Settings />);
+    expect(await screen.findByRole("heading", { name: "Enlaces" })).toBeInTheDocument();
+    expect(screen.getByText("0 de 0 asociaciones")).toBeInTheDocument();
+    expect(screen.getByText(/todavía no envía/)).toBeInTheDocument();
+    expect(screen.queryByText(/no está recibiendo/)).toBeNull();
+  });
+
+  it("keeps what it knew when an action answers with nothing", async () => {
+    answers(
+      { ...BASE, is_default: false },
+      { system_open_default_apps: () => Promise.resolve(null) },
+    );
+    render(<Settings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Abrir Configuración" }));
+    expect(screen.getByText(/todavía no envía/)).toBeInTheDocument();
+    expect(screen.queryByText(/Algo salió mal/)).toBeNull();
+  });
+
+  it("clears the last complaint the moment another action is tried", async () => {
+    let refuse = true;
+    answers(BASE, {
+      system_set_registered: () =>
+        refuse ? Promise.reject("the registry refused the write") : Promise.resolve(BASE),
+    });
+    render(<Settings />);
+    await userEvent.click(await screen.findByRole("switch", { name: "Ofrecerse como navegador" }));
+    expect(await screen.findByText(/registry refused/)).toBeInTheDocument();
+    refuse = false;
+    await userEvent.click(screen.getByRole("switch", { name: "Ofrecerse como navegador" }));
+    await waitFor(() => expect(screen.queryByText(/registry refused/)).toBeNull());
+  });
+
+  it("repairs a registration that points at another copy", async () => {
+    answers({
+      ...BASE,
+      health: "stale",
+      registered_path: String.raw`C:\Other\linkunbound-shell.exe`,
+    });
+    render(<Settings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Reparar" }));
+    expect(invoke).toHaveBeenCalledWith("system_repair");
+  });
+
+  it("offers no repair for a resident that is not there", async () => {
+    answers({ ...BASE, health: "no_resident" });
+    render(<Settings />);
+    expect(await screen.findByText(/Falta el programa/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
+  });
+
+  it("warns a copy running from the disk image, and offers no repair", async () => {
+    answers({ ...BASE, health: "mounted" });
+    render(<Settings />);
+    expect(await screen.findByText(/imagen de disco/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
+  });
+
+  it("walks every section and marks the one it is on", async () => {
+    answers(BASE, { browsers_list: () => Promise.resolve([]) });
+    render(<Settings />);
+    for (const [name, heading] of [
+      ["Reglas", "Reglas"],
+      ["Navegadores", "Navegadores"],
+      ["Aplicación", "Aplicación"],
+      ["Mantenimiento", "Mantenimiento"],
+      ["Acerca de", "Acerca de"],
+      ["Enlaces", "Enlaces"],
+    ]) {
+      await go(name);
+      expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name })).toHaveAttribute("aria-current", "page");
+      expect(screen.getAllByRole("button", { current: "page" })).toHaveLength(1);
+    }
+  });
+
+  it("shows one section at a time", async () => {
+    answers(BASE, { browsers_list: () => Promise.resolve([]) });
+    render(<Settings />);
+    expect(await screen.findByText("Navegador predeterminado")).toBeInTheDocument();
+    expect(screen.queryByText(/Todavía no hay ninguna regla/)).toBeNull();
+    await go("Reglas");
+    expect(await screen.findByText(/Todavía no hay ninguna regla/)).toBeInTheDocument();
+    expect(screen.queryByText("Navegador predeterminado")).toBeNull();
+    await go("Acerca de");
+    expect(await screen.findByText(/Estás en la última versión/)).toBeInTheDocument();
+    expect(screen.queryByText(/Todavía no hay ninguna regla/)).toBeNull();
+  });
+
+  it("names no path when the registration names none", async () => {
+    answers({ ...BASE, health: "stale", registered_path: null });
+    render(<Settings />);
+    expect(await screen.findByText(/apunta a otra copia/)).toBeInTheDocument();
+    expect(screen.queryByText(/ejecutaría/)).toBeNull();
+  });
+
+  it("takes the startup toggle as off and ours while nothing is known", async () => {
+    answers(BASE, { system_state: () => new Promise(() => {}) });
+    render(<Settings />);
+    await go("Aplicación");
+    const toggle = await screen.findByRole("switch", { name: "Iniciar con el sistema" });
+    expect(toggle).toBeEnabled();
+    expect(toggle).toHaveAttribute("aria-checked", "false");
   });
 
   it("opens on the links section, not on a blank pane", async () => {

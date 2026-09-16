@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - "app/src-tauri/nsis/**"
+      - "app/src-tauri/Info.plist"
       - "app/src-tauri/tauri.conf.json"
       - "app/src-tauri/Cargo.toml"
       - "app/src-tauri/build.rs"
@@ -18,6 +19,7 @@ on:
   pull_request:
     paths:
       - "app/src-tauri/nsis/**"
+      - "app/src-tauri/Info.plist"
       - "app/src-tauri/tauri.conf.json"
       - "app/src-tauri/Cargo.toml"
       - "app/src-tauri/build.rs"
@@ -98,3 +100,66 @@ jobs:
       - name: How big it came out
         shell: bash
         run: ls -lh target/release/bundle/nsis/*-setup.exe
+
+  macos:
+    name: the bundle builds
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      TARGET: universal-apple-darwin
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Frontend
+        working-directory: app
+        run: npm ci
+
+      - name: The resident rides along, for both chips
+        run: bash scripts/sidecar.sh release "$TARGET"
+
+      - name: Bundle
+        working-directory: app
+        run: npm run tauri build -- --target "$TARGET" --bundles app --no-sign
+
+      - name: It launches the resident, for a link, from the menu bar
+        run: |
+          app="target/$TARGET/release/bundle/macos/LinkUnbound.app"
+          plist="$app/Contents/Info.plist"
+          test -d "$app" || { echo "::error::the bundler produced no app"; exit 1; }
+          status=0
+          want() {
+            if [ "$(plutil -extract "$1" raw -o - "$plist" 2>/dev/null)" != "$2" ]; then
+              echo "::error::$1 is «$(plutil -extract "$1" raw -o - "$plist" 2>/dev/null)», not «$2»"
+              status=1
+            fi
+          }
+          want CFBundleExecutable linkunbound-shell
+          want LSUIElement true
+          want CFBundleIdentifier dev.rgdevment.linkunbound
+          want LSMinimumSystemVersion 13.0
+          want CFBundleURLTypes.0.CFBundleURLSchemes.0 http
+          want CFBundleURLTypes.0.CFBundleURLSchemes.1 https
+          want CFBundleDocumentTypes.0.LSItemContentTypes.0 public.html
+          for one in linkunbound-shell linkunbound-settings; do
+            bin="$app/Contents/MacOS/$one"
+            test -x "$bin" || { echo "::error::$one is not in the bundle"; status=1; continue; }
+            archs=$(lipo -archs "$bin")
+            case "$archs" in
+              *x86_64*arm64*|*arm64*x86_64*) echo "$one: $archs" ;;
+              *) echo "::error::$one is not universal: $archs"; status=1 ;;
+            esac
+          done
+          exit $status
+
+      - name: How big it came out
+        run: du -sh "target/$TARGET/release/bundle/macos/LinkUnbound.app"

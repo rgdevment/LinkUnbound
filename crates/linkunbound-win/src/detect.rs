@@ -1,4 +1,4 @@
-use linkunbound_core::{Browser, Profile, private_flag_for};
+use linkunbound_core::{Browser, Profile, id_for, private_flag_for, profiles_in};
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 
@@ -30,20 +30,6 @@ fn unquote(command: &str) -> String {
         .to_owned()
 }
 
-/// The 1.x identifier scheme, kept byte for byte: rules migrated from it store
-/// this string, and an id that does not match points a rule at nothing.
-fn normalise_id(key_name: &str) -> String {
-    let mut out = String::with_capacity(key_name.len());
-    for ch in key_name.to_ascii_lowercase().chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch);
-        } else if !out.ends_with('-') {
-            out.push('-');
-        }
-    }
-    out.trim_matches('-').to_owned()
-}
-
 /// The same browser is listed under both hives when it was installed for the machine and then
 /// updated for the user, and the picker would offer it twice.
 fn add_unseen(found: &mut Vec<Browser>, browser: Browser) {
@@ -72,7 +58,7 @@ fn read_entry(root: &RegKey, key_name: &str) -> Option<Browser> {
         .unwrap_or_else(|| key_name.to_owned());
 
     Some(Browser {
-        id: normalise_id(key_name),
+        id: id_for(key_name),
         name,
         private_flag: private_flag_for(&exe).map(str::to_owned),
         profiles: chromium_profiles(&exe),
@@ -121,8 +107,6 @@ fn user_data_dir(exe: &str) -> Option<std::path::PathBuf> {
     Some(std::path::Path::new(&local).join(suffix))
 }
 
-/// Chromium keeps the human names of its profiles in `Local State`; the
-/// directory names it launches with are the keys of that map.
 #[must_use]
 pub fn chromium_profiles(exe: &str) -> Vec<Profile> {
     let Some(dir) = user_data_dir(exe) else {
@@ -131,38 +115,7 @@ pub fn chromium_profiles(exe: &str) -> Vec<Profile> {
     let Ok(raw) = std::fs::read_to_string(dir.join("Local State")) else {
         return Vec::new();
     };
-    profiles_from(&raw)
-}
-
-fn profiles_from(raw: &str) -> Vec<Profile> {
-    let Ok(state) = serde_json::from_str::<serde_json::Value>(raw) else {
-        return Vec::new();
-    };
-    let Some(cache) = state
-        .get("profile")
-        .and_then(|p| p.get("info_cache"))
-        .and_then(serde_json::Value::as_object)
-    else {
-        return Vec::new();
-    };
-
-    let mut profiles: Vec<Profile> = cache
-        .iter()
-        .map(|(dir_name, info)| {
-            let label = info
-                .get("name")
-                .and_then(serde_json::Value::as_str)
-                .filter(|n| !n.is_empty())
-                .unwrap_or(dir_name);
-            Profile {
-                id: dir_name.clone(),
-                name: label.to_owned(),
-                args: vec![format!("--profile-directory={dir_name}")],
-            }
-        })
-        .collect();
-    profiles.sort_by_key(|p| p.name.to_lowercase());
-    profiles
+    profiles_in(&raw)
 }
 
 #[cfg(test)]
@@ -210,46 +163,6 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].name, "Google Chrome", "the first one seen stays");
         assert_eq!(found[1].id, "firefox");
-    }
-
-    /// The directory name is what the browser is launched with; the name in `Local State` is
-    /// only what the person reads. A profile whose name was never set has an empty one there,
-    /// and an empty label leaves a nameless row in the picker.
-    #[test]
-    fn a_profile_with_no_name_of_its_own_is_read_by_its_directory() {
-        let profiles = profiles_from(
-            r#"{"profile":{"info_cache":{
-                "Default":{"name":"Personal"},
-                "Profile 2":{"name":""},
-                "Profile 3":{}
-            }}}"#,
-        );
-
-        assert_eq!(profiles.len(), 3);
-        let named: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(
-            named,
-            vec!["Personal", "Profile 2", "Profile 3"],
-            "sorted by what the person reads"
-        );
-
-        let personal = &profiles[0];
-        assert_eq!(personal.id, "Default");
-        assert_eq!(
-            personal.args,
-            vec!["--profile-directory=Default".to_owned()],
-            "the directory launches it, whatever it is called"
-        );
-    }
-
-    /// Chromium rewrites this file on every run and a half-written one is what a crash leaves
-    /// behind. Nothing there means no profiles, not no browser.
-    #[test]
-    fn a_local_state_that_says_nothing_useful_yields_no_profiles() {
-        assert!(profiles_from("{ not json at all").is_empty());
-        assert!(profiles_from("{}").is_empty());
-        assert!(profiles_from(r#"{"profile":{}}"#).is_empty());
-        assert!(profiles_from(r#"{"profile":{"info_cache":[]}}"#).is_empty());
     }
 
     /// `read_entry` reads what Windows wrote, so it is given keys shaped the way Windows shapes
@@ -331,20 +244,6 @@ mod tests {
     #[test]
     fn an_unquoted_command_survives_too() {
         assert_eq!(unquote(r"C:\ff\firefox.exe"), r"C:\ff\firefox.exe");
-    }
-
-    #[test]
-    fn identifiers_match_the_ones_1_x_wrote_into_its_rules() {
-        assert_eq!(normalise_id("Google Chrome"), "google-chrome");
-        assert_eq!(
-            normalise_id("Vivaldi.XZTTKVPR7OU6S6FGTKA6S5FOHM"),
-            "vivaldi-xzttkvpr7ou6s6fgtka6s5fohm"
-        );
-        assert_eq!(
-            normalise_id("firefox-308046b0af4a39cb"),
-            "firefox-308046b0af4a39cb"
-        );
-        assert_eq!(normalise_id("Brave"), "brave");
     }
 
     #[test]

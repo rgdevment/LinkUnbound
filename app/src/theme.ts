@@ -11,7 +11,7 @@ let reread: (() => void) | null = null;
 
 export function follow() {
   const media = window.matchMedia("(prefers-color-scheme: dark)");
-  let chosen: Theme = "system";
+  let chosen: Theme = "dark";
 
   paint(chosen, media.matches);
   media.addEventListener("change", () => paint(chosen, media.matches));

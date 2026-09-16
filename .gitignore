@@ -10,3 +10,8 @@ app/src-tauri/binaries/
 .DS_Store
 Thumbs.db
 app/src-tauri/binaries/
+
+app/reports/
+app/.stryker-tmp/
+mutants.out/
+mutants.out.old/

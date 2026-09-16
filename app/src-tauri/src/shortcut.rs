@@ -13,7 +13,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, wanted: Option<&str>) -> Option<S
     manager
         .on_shortcut(parsed, |app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
-                crate::shell::open_settings(app);
+                crate::shell::open_settings(app, crate::store().prefs().theme);
             }
         })
         .ok()?;

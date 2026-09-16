@@ -21,6 +21,9 @@ raw-window-handle = "0.6"
 [target."cfg(windows)".dependencies]
 linkunbound-win.workspace = true
 
+[target."cfg(target_os = \"macos\")".dependencies]
+linkunbound-mac.workspace = true
+
 [dev-dependencies]
 i-slint-backend-testing = "1.17"
 

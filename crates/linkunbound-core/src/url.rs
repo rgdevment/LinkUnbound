@@ -1,3 +1,4 @@
+use percent_encoding::percent_decode_str;
 use url::Url;
 
 const EDGE_HTTPS: &str = "microsoft-edge-https://";
@@ -91,6 +92,59 @@ pub fn looks_unresolved(url: &str) -> bool {
     parsed(url).is_some_and(|u| is_microsoft_wrapper(&u))
 }
 
+#[cfg(target_os = "macos")]
+const WEB_FILE_EXTENSIONS: [&str; 4] = ["html", "htm", "xhtml", "svg"];
+
+#[cfg(target_os = "macos")]
+#[must_use]
+pub fn local_web_file(path: &std::path::Path) -> Option<String> {
+    let real = std::fs::canonicalize(path).ok()?;
+    if !real.is_file() {
+        return None;
+    }
+    let extension = real.extension()?.to_str()?.to_ascii_lowercase();
+    if !WEB_FILE_EXTENSIONS.contains(&extension.as_str()) {
+        return None;
+    }
+    Url::from_file_path(&real).ok().map(Into::into)
+}
+
+/// Read from the URL's own segments rather than a filesystem path: on Windows a
+/// `file:///Users/...` URL has no drive and is not a path at all, and the picker
+/// still has to name the document it was handed.
+#[must_use]
+pub fn local_file_parts(raw: &str) -> Option<(String, String)> {
+    let url = Url::parse(raw).ok()?;
+    if url.scheme() != "file" || url.has_host() {
+        return None;
+    }
+    let mut segments: Vec<String> = url
+        .path_segments()?
+        .map(|segment| percent_decode_str(segment).decode_utf8_lossy().into_owned())
+        .collect();
+    let name = segments.pop().filter(|name| !name.is_empty())?;
+    let folder = segments
+        .pop()
+        .filter(|folder| !folder.is_empty())
+        .map(|folder| format!("…/{folder}"))
+        .unwrap_or_default();
+    Some((name, folder))
+}
+
+#[cfg(target_os = "macos")]
+fn launchable_file(raw: &str) -> Option<String> {
+    let url = Url::parse(raw).ok()?;
+    if url.scheme() != "file" || url.has_host() {
+        return None;
+    }
+    local_web_file(&url.to_file_path().ok()?)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn launchable_file(_raw: &str) -> Option<String> {
+    None
+}
+
 /// Guards the boundary between an untrusted inbound URL and spawning a process.
 /// Browsers read any argument starting with `-` (or `/` on Windows) as a switch,
 /// so a crafted `--gpu-launcher=calc.exe` would make one execute a binary.
@@ -100,12 +154,16 @@ pub fn is_launchable(raw: &str) -> bool {
         return false;
     }
     parsed(raw).is_some_and(|url| LAUNCHABLE_SCHEMES.contains(&url.scheme()))
+        || launchable_file(raw).is_some()
 }
 
 /// Everything an inbound link goes through before it may be shown or launched.
 #[must_use]
 pub fn normalise(raw: &str) -> Option<String> {
     let unwrapped = unwrap_safe_link(&unwrap_edge_protocol(raw));
+    if let Some(document) = launchable_file(&unwrapped) {
+        return Some(document);
+    }
     is_launchable(&unwrapped).then_some(unwrapped)
 }
 
@@ -272,5 +330,88 @@ mod tests {
         assert!(normalise("--gpu-launcher=calc.exe").is_none());
         assert!(normalise("microsoft-edge:--gpu-launcher=calc.exe").is_none());
         assert!(normalise("microsoft-edge:file://evil.test/share").is_none());
+    }
+
+    #[test]
+    fn a_local_file_is_named_by_itself_and_its_folder() {
+        assert_eq!(
+            local_file_parts("file:///Users/ana/Documents/My%20Page.html"),
+            Some(("My Page.html".to_owned(), "…/Documents".to_owned()))
+        );
+        assert_eq!(
+            local_file_parts("file:///page.svg"),
+            Some(("page.svg".to_owned(), String::new()))
+        );
+        assert_eq!(
+            local_file_parts("file:///C:/Users/ana/Desktop/Notas%20%C3%B1.htm"),
+            Some(("Notas ñ.htm".to_owned(), "…/Desktop".to_owned()))
+        );
+        assert!(local_file_parts("https://example.com/page.html").is_none());
+        assert!(local_file_parts("file://host/share/page.html").is_none());
+        assert!(local_file_parts("file:///").is_none());
+        assert!(local_file_parts("file:///Users/ana/Documents/").is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    mod local_files {
+        use super::super::{is_launchable, local_web_file, normalise};
+        use std::path::{Path, PathBuf};
+
+        fn scratch(name: &str) -> PathBuf {
+            let dir = std::env::temp_dir().join(format!("linkunbound-url-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).expect("a scratch directory");
+            dir.join(name)
+        }
+
+        #[test]
+        fn a_web_document_on_disk_becomes_a_link_a_browser_opens() {
+            for name in ["page.html", "page.HTM", "page.xhtml", "drawing.svg"] {
+                let file = scratch(name);
+                std::fs::write(&file, "<p>hi</p>").expect("a file");
+                let link = local_web_file(&file).expect(name);
+                assert!(link.starts_with("file:///"), "{link}");
+                assert!(link.ends_with(name), "{link}");
+                assert!(is_launchable(&link), "{link}");
+                assert_eq!(normalise(&link).as_deref(), Some(link.as_str()));
+            }
+        }
+
+        #[test]
+        fn anything_that_is_not_a_web_document_is_refused() {
+            let text = scratch("notes.txt");
+            std::fs::write(&text, "x").expect("a file");
+            assert!(local_web_file(&text).is_none());
+
+            let folder = scratch("folder.html");
+            std::fs::create_dir_all(&folder).expect("a directory");
+            assert!(local_web_file(&folder).is_none());
+
+            assert!(local_web_file(Path::new("/nowhere/at/all.html")).is_none());
+            assert!(!is_launchable("file:///nowhere/at/all.html"));
+            assert!(normalise("file:///nowhere/at/all.html").is_none());
+        }
+
+        #[test]
+        fn a_symbolic_link_is_read_through_to_what_it_names() {
+            let real = scratch("real.html");
+            std::fs::write(&real, "x").expect("a file");
+            let alias = scratch("alias.htm");
+            let _ = std::fs::remove_file(&alias);
+            std::os::unix::fs::symlink(&real, &alias).expect("a symlink");
+            let link = local_web_file(&alias).expect("resolved");
+            assert!(link.ends_with("real.html"), "{link}");
+
+            let elsewhere = scratch("elsewhere.html");
+            let _ = std::fs::remove_file(&elsewhere);
+            std::os::unix::fs::symlink(scratch("notes.txt"), &elsewhere).expect("a symlink");
+            std::fs::write(scratch("notes.txt"), "x").expect("a file");
+            assert!(local_web_file(&elsewhere).is_none(), "the target decides");
+        }
+
+        #[test]
+        fn a_path_on_another_machine_is_still_refused() {
+            assert!(!is_launchable("file://host/share/page.html"));
+            assert!(normalise("file://host/share/page.html").is_none());
+        }
     }
 }

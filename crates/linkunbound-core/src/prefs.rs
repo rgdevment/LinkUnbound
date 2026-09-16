@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Theme {
-    #[default]
     System,
     Light,
+    #[default]
     Dark,
 }
 
@@ -131,9 +131,9 @@ mod tests {
     use super::{Locale, Preferences, Theme};
 
     #[test]
-    fn a_fresh_install_follows_the_system_and_claims_the_default_shortcut() {
+    fn a_fresh_install_is_dark_and_claims_the_default_shortcut() {
         let p = Preferences::default();
-        assert_eq!(p.theme, Theme::System);
+        assert_eq!(p.theme, Theme::Dark);
         assert_eq!(p.locale, Locale::System);
         assert_eq!(p.shortcut.as_deref(), Some("Alt+Shift+L"));
         assert!(p.notify_on_rule);

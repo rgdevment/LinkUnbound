@@ -8,14 +8,26 @@ pub mod tray;
 
 use std::rc::Rc;
 
-use linkunbound_core::{Browser, Scope, Strings, looks_unresolved, site_of};
+use linkunbound_core::{Browser, Scope, Strings, local_file_parts, looks_unresolved, site_of};
 
 /// Both windows read the same palette, so the choice is applied once per window
 /// rather than threaded through every component that draws.
 pub fn paint(picker: &Picker, notice: &Notice, light: bool) {
     picker.global::<Palette>().set_light(light);
     notice.global::<Palette>().set_light(light);
+    picker.set_family(FAMILY.into());
+    notice.set_family(FAMILY.into());
 }
+
+pub const FAMILY: &str = if cfg!(windows) {
+    "Segoe UI"
+} else if cfg!(target_os = "macos") {
+    ".SF NS"
+} else {
+    ""
+};
+
+pub const CORNER: f64 = 10.0;
 
 /// Extracted and drawn at this same side: any other ratio scales, and blurs.
 pub const ICON_SIDE: u32 = 24;
@@ -112,7 +124,7 @@ pub fn reaches(
     site: &str,
     source: Option<&str>,
 ) -> Vec<(String, bool, bool)> {
-    let wrapped = looks_unresolved(url);
+    let wrapped = looks_unresolved(url) || local_file_parts(url).is_some();
     let mut offered = vec![
         (words.reach_once.to_owned(), false, false),
         (words.reach_url.to_owned(), true, wrapped),
@@ -143,6 +155,9 @@ pub fn in_the_row(index: i32) -> bool {
 
 #[must_use]
 pub fn split(url: &str) -> (String, String) {
+    if let Some(parts) = local_file_parts(url) {
+        return parts;
+    }
     let Some(rest) = url.split_once("://").map(|(_, r)| r) else {
         return (url.to_owned(), String::new());
     };
@@ -667,6 +682,24 @@ mod tests {
     }
 
     #[test]
+    fn a_local_file_is_headed_by_its_name_and_remembered_by_nothing() {
+        let document = "file:///Users/ana/Documents/My%20Page.html";
+        assert_eq!(
+            split(document),
+            ("My Page.html".to_owned(), "…/Documents".to_owned())
+        );
+        let offered = reaches(
+            &SPOKEN,
+            document,
+            "My Page.html",
+            "my page.html",
+            Some("finder"),
+        );
+        assert!(!offered[0].2, "once is the one reach a file has");
+        assert!(offered[1].2 && offered[2].2 && offered[3].2);
+    }
+
+    #[test]
     fn a_query_belongs_to_the_trail_not_the_host() {
         let (host, trail) = split("https://intranet.corp/x?f=a|b");
         assert_eq!(host, "intranet.corp");
@@ -723,6 +756,12 @@ mod tests {
         paint(&picker, &notice, false);
         assert!(!picker.global::<Palette>().get_light());
         assert!(!notice.global::<Palette>().get_light());
+        assert_eq!(picker.get_family(), crate::FAMILY);
+        assert_eq!(notice.get_family(), crate::FAMILY);
+        assert_eq!(
+            crate::FAMILY.is_empty(),
+            !cfg!(any(windows, target_os = "macos"))
+        );
     }
 
     /// An icon that fails to load leaves a blank square rather than stopping the picker, so
