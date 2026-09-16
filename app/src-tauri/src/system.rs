@@ -81,13 +81,16 @@ mod platform {
     /// Whether the resident is there is handed in rather than read here, so the verdict stays a
     /// function of its arguments and every branch can be put in front of it.
     fn verdict(command: Option<&str>, handler: &std::path::Path, present: bool) -> Health {
-        if is_build_tree(&handler.to_string_lossy()) {
+        let registered = what_is_registered(command, handler);
+        // A build tree that holds the registration was registered on purpose, by the button
+        // that says so; one that does not is the mistake the check exists to name.
+        if is_build_tree(&handler.to_string_lossy()) && registered != Registered::Correct {
             return Health::BuildTree;
         }
         if !present {
             return Health::NoResident;
         }
-        match what_is_registered(command, handler) {
+        match registered {
             Registered::Correct => Health::Fine,
             Registered::WrongBinary(_) => Health::WrongBinary,
             Registered::Elsewhere(_) => Health::Stale,
@@ -155,6 +158,20 @@ mod platform {
             .spawn()
             .map(|_| ())
             .map_err(|e| e.to_string())
+    }
+
+    /// From a build tree, with eyes open: the registration points into `target/` until the
+    /// next reconcile refuses to touch it, and the links stop when the folder goes.
+    pub fn register_anyway() -> Result<SystemState, String> {
+        let handler = handler().ok_or_else(|| "ownPathUnknown".to_owned())?;
+        if !handler.exists() {
+            return Err("noResident".to_owned());
+        }
+        Registration::default()
+            .register_wherever(&handler.to_string_lossy())
+            .map_err(|e| e.to_string())?;
+        notify_associations_changed();
+        Ok(state())
     }
 
     pub fn set_registered(enabled: bool) -> Result<SystemState, String> {
@@ -233,16 +250,31 @@ mod platform {
             );
         }
 
-        /// A build tree cannot own the registration: its path disappears when
-        /// the project is cleaned, and the dead key hijacks the installed copy.
+        /// A build tree cannot own the registration by accident: its path disappears when the
+        /// project is cleaned, and the dead key hijacks the installed copy. Holding it on purpose,
+        /// through the button, reads as fine — that is what the button is for.
         #[test]
         fn a_build_tree_is_named_before_anything_else_is_judged() {
             let built = r"D:\Code\LinkUnbound\target\release\linkunbound-shell.exe";
             let command = format!("\"{built}\" \"%1\"");
             assert_eq!(
                 verdict(Some(&command), Path::new(built), true),
+                Health::Fine,
+                "registered on purpose, from the build tree, and pointing here"
+            );
+            assert_eq!(
+                verdict(
+                    Some(r#""C:\Elsewhere\linkunbound-shell.exe" "%1""#),
+                    Path::new(built),
+                    true
+                ),
                 Health::BuildTree,
-                "even when the command points at itself"
+                "a build tree holding nothing of its own is the mistake the check names"
+            );
+            assert_eq!(
+                verdict(None, Path::new(built), true),
+                Health::BuildTree,
+                "and so is one not registered at all"
             );
         }
     }
@@ -307,6 +339,11 @@ mod platform {
             std::process::Command::new("/usr/bin/open").arg(DEFAULT_BROWSER_PANE),
         )
         .map_err(|e| e.to_string())
+    }
+
+    /// Nothing outside a bundle can be registered, from a build tree or anywhere else.
+    pub fn register_anyway() -> Result<SystemState, String> {
+        Err("ownPathUnknown".to_owned())
     }
 
     /// The system has no "no default browser", so letting go hands the schemes
@@ -418,6 +455,10 @@ mod platform {
         }
     }
 
+    pub fn register_anyway() -> Result<SystemState, String> {
+        Err("notOnThisPlatform".to_owned())
+    }
+
     pub fn set_registered(_enabled: bool) -> Result<SystemState, String> {
         Err("notOnThisPlatform".to_owned())
     }
@@ -436,5 +477,6 @@ mod platform {
 }
 
 pub use platform::{
-    browsers, open_default_apps, reconcile, set_registered, set_starts_with_system, state,
+    browsers, open_default_apps, reconcile, register_anyway, set_registered,
+    set_starts_with_system, state,
 };

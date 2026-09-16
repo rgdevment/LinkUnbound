@@ -18,14 +18,13 @@ pub enum Locale {
     English,
 }
 
-/// The picker's look. `Classic` is the one 1.x users know, rows under a divided header; the
-/// default is the sheet of tiles that replaced it.
+/// The picker's look: rows under the link, the way 1.x users know it, or a sheet of tiles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PickerStyle {
     #[default]
-    Default,
     Classic,
+    Sheet,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -242,19 +241,19 @@ mod tests {
         assert!(p.notify_on_rule);
     }
 
-    /// The sheet is what a copy gets until somebody asks for the old look, and a file from before
+    /// The rows are what a copy gets until somebody asks for the tiles, and a file from before
     /// the choice existed must read the same way. The words in the file are the ones settings
     /// shows, so a hand edit reads back.
     #[test]
-    fn the_picker_is_the_sheet_unless_the_classic_one_was_asked_for() {
+    fn the_picker_is_the_classic_one_unless_the_sheet_was_asked_for() {
         let fresh: Preferences = serde_json::from_str("{}").unwrap();
-        assert_eq!(fresh.picker_style, PickerStyle::Default);
+        assert_eq!(fresh.picker_style, PickerStyle::Classic);
 
-        let asked: Preferences = serde_json::from_str(r#"{"picker_style": "classic"}"#).unwrap();
-        assert_eq!(asked.picker_style, PickerStyle::Classic);
+        let asked: Preferences = serde_json::from_str(r#"{"picker_style": "sheet"}"#).unwrap();
+        assert_eq!(asked.picker_style, PickerStyle::Sheet);
 
         let written = serde_json::to_string(&asked).unwrap();
-        assert!(written.contains(r#""picker_style":"classic""#), "{written}");
+        assert!(written.contains(r#""picker_style":"sheet""#), "{written}");
     }
 
     #[test]

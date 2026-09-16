@@ -464,6 +464,11 @@ fn system_repair() -> Result<system::SystemState, String> {
     system::set_registered(true)
 }
 
+#[tauri::command(async)]
+fn system_register_anyway() -> Result<system::SystemState, String> {
+    system::register_anyway()
+}
+
 #[tauri::command]
 fn maintenance_report() -> Result<String, String> {
     let state = system::state();
@@ -960,6 +965,7 @@ pub fn run() {
             system_set_startup,
             system_open_default_apps,
             system_repair,
+            system_register_anyway,
             about,
             update_ready,
             update_install,

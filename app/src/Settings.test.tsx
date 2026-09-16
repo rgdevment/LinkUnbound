@@ -8,6 +8,13 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...
 // Without this the window's update listener reaches for a Tauri runtime that is not there, and
 // the suite reports every test passing while the run itself fails.
 vi.mock("@tauri-apps/api/event", () => ({ listen: () => Promise.resolve(() => {}) }));
+const opened = vi.fn();
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: (url: string) => {
+    opened(url);
+    return Promise.resolve();
+  },
+}));
 
 const BASE = {
   registered: true,
@@ -38,7 +45,7 @@ const PREFS = {
     shortcut: "Alt+Shift+L",
     hide_tray: false,
     notify_on_rule: true,
-    picker_style: "default",
+    picker_style: "classic",
   },
   shortcut_held: "Alt+Shift+L",
 };
@@ -90,6 +97,7 @@ describe("settings", () => {
 
   beforeEach(() => {
     invoke.mockReset();
+    opened.mockReset();
     answers(BASE);
   });
 
@@ -134,7 +142,12 @@ describe("settings", () => {
     render(<Settings />);
     expect(await screen.findByText(/no sabe abrir un enlace/)).toBeInTheDocument();
     expect(
-      screen.getByText((text) => text.includes("linkunbound-settings.exe")),
+      screen.getByText((text) =>
+        text
+          .replace(/\u200B/g, "")
+          .replace(/\u2011/g, "-")
+          .includes("linkunbound-settings.exe"),
+      ),
     ).toBeInTheDocument();
   });
 
@@ -146,7 +159,9 @@ describe("settings", () => {
     });
     render(<Settings />);
     expect(
-      await screen.findByText((text) => text.includes(String.raw`target\debug`)),
+      await screen.findByText((text) =>
+        text.replace(/\u200B/g, "").includes(String.raw`target\debug`),
+      ),
     ).toBeInTheDocument();
   });
 
@@ -192,13 +207,32 @@ describe("settings", () => {
     expect(invoke).toHaveBeenCalledWith("system_repair");
   });
 
-  /// A build tree cannot own the registration at all, so there is nothing to
-  /// repair and offering the button would lie.
-  it("explains a build tree without offering a repair that cannot work", async () => {
+  /// A build tree is refused by the reconcile on purpose, so the only way in is a button that
+  /// says what it costs; «Reparar» would lie, since the next reconcile would not keep it.
+  it("lets a build tree register itself on purpose, and says what that costs", async () => {
     answers({ ...BASE, health: "build_tree" });
     render(<Settings />);
     expect(await screen.findByText(/recién compilada/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
+    expect(screen.getByText(/si mueves o limpias la carpeta/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Registrar esta copia igualmente" }));
+    expect(invoke).toHaveBeenCalledWith("system_register_anyway");
+  });
+
+  /// A path that has to wrap does so after a separator, never in the middle of a file name.
+  it("wraps the registered path at its separators, not inside a name", async () => {
+    answers({
+      ...BASE,
+      health: "stale",
+      registered_path: String.raw`C:\Users\Mario\AppData\Local\Programs\LinkUnbound\linkunbound-shell.exe`,
+    });
+    render(<Settings />);
+    const shown = await screen.findByText(/Windows ejecutaría/);
+    expect(shown.textContent).toContain("\\\u200B");
+    expect(shown.textContent?.replace(/\u200B/g, "").replace(/\u2011/g, "-")).toContain(
+      String.raw`\LinkUnbound\linkunbound-shell.exe`,
+    );
+    expect(shown.textContent).not.toContain("linkunbound-shell");
   });
 
   it("says nothing about the handler when it is healthy", async () => {
@@ -359,11 +393,15 @@ describe("settings", () => {
     expect(invoke).toHaveBeenCalledWith("system_repair");
   });
 
-  it("offers no repair for a resident that is not there", async () => {
+  /// Nothing here can bring back a binary the install left out; the release page can.
+  it("sends a copy without its resident to the download, not to a repair", async () => {
     answers({ ...BASE, health: "no_resident" });
     render(<Settings />);
     expect(await screen.findByText(/Falta el programa/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Descargar de nuevo" }));
+    expect(opened).toHaveBeenCalledWith("https://github.com/rgdevment/LinkUnbound/releases/latest");
+    expect(invoke).not.toHaveBeenCalledWith("system_repair");
   });
 
   it("warns a copy running from the disk image, and offers no repair", async () => {

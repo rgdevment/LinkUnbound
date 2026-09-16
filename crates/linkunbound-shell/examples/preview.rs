@@ -1,6 +1,6 @@
 #![windows_subsystem = "windows"]
 
-//! `cargo run -p linkunbound-shell --example preview -- [--classic] [--light] [--six] [--update | --installing | --store]`
+//! `cargo run -p linkunbound-shell --example preview -- [--sheet] [--light] [--six] [--scale=N] [--update | --installing | --store]`
 
 use linkunbound_core::Language;
 use linkunbound_shell::{HALO, ICON_SIDE, Listed, Picker, TILE_ICON_SIDE, dress, paint};
@@ -9,8 +9,13 @@ use slint::ComponentHandle;
 fn main() -> Result<(), slint::PlatformError> {
     let args: Vec<String> = std::env::args().collect();
     let flag = |name: &str| args.iter().any(|a| a == name);
-    let classic = flag("--classic");
-    let side = if classic { ICON_SIDE } else { TILE_ICON_SIDE };
+    let classic = !flag("--sheet");
+    let scale: u32 = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--scale="))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
+    let side = if classic { ICON_SIDE } else { TILE_ICON_SIDE } * scale;
     let icons = linkunbound_core::data_dir().join("icons");
     // Real icons at the side the chosen style draws them, so what the preview shows is what
     // the resident will: a 24 px icon stretched to a tile is exactly the blur being checked for.

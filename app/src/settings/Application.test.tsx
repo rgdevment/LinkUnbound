@@ -14,7 +14,7 @@ const PREFS = {
   shortcut: "Alt+Shift+L" as string | null,
   hide_tray: false,
   notify_on_rule: true,
-  picker_style: "default" as "default" | "classic",
+  picker_style: "classic" as "classic" | "sheet",
 };
 
 function answers(prefs = PREFS, held: string | null = "Alt+Shift+L", fail?: string) {
@@ -67,13 +67,13 @@ describe("application settings", () => {
     expect(language.getByRole("radio", { name: "Español" })).not.toBeChecked();
   });
 
-  it("offers the classic picker, and keeps the default marked until it is chosen", async () => {
+  it("offers the tiles, and keeps the classic picker marked until they are chosen", async () => {
     mount();
     const picker = within(await screen.findByRole("group", { name: "Selector" }));
-    expect(picker.getByRole("radio", { name: "Predeterminado" })).toBeChecked();
-    await userEvent.click(picker.getByRole("radio", { name: "Clásico" }));
+    expect(picker.getByRole("radio", { name: "Clásico" })).toBeChecked();
+    await userEvent.click(picker.getByRole("radio", { name: "Mosaico" }));
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
-      prefs: { ...PREFS, picker_style: "classic" },
+      prefs: { ...PREFS, picker_style: "sheet" },
     });
   });
 

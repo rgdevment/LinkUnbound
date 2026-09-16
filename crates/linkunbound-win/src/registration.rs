@@ -155,6 +155,12 @@ impl Registration {
         if is_build_tree(exe) {
             return Err(RegistrationError::BuildTree);
         }
+        self.register_wherever(exe)
+    }
+
+    /// The build-tree check, skipped on purpose: somebody testing capture from `target/` knows the
+    /// path goes away and asked anyway. Nothing calls this on its own.
+    pub fn register_wherever(&self, exe: &str) -> Result<(), RegistrationError> {
         self.write_prog_id(exe)?;
         self.write_start_menu(exe)?;
         self.write_capabilities(exe)?;

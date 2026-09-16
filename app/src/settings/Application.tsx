@@ -8,7 +8,7 @@ import { Card, Line, Section, Switch } from "./parts";
 
 type Theme = "system" | "light" | "dark";
 type Locale = "system" | "spanish" | "english";
-type PickerStyle = "default" | "classic";
+type PickerStyle = "classic" | "sheet";
 
 type Preferences = {
   schema_version: number;
@@ -35,8 +35,8 @@ const LOCALES: { id: Locale; label: Key }[] = [
 ];
 
 const PICKERS: { id: PickerStyle; label: Key }[] = [
-  { id: "default", label: "pickerDefault" },
   { id: "classic", label: "pickerClassic" },
+  { id: "sheet", label: "pickerSheet" },
 ];
 
 const MODIFIERS = new Set(["Control", "Alt", "Shift", "Meta"]);

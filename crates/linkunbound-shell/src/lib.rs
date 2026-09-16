@@ -37,11 +37,9 @@ pub const CLASSIC_CORNER: f64 = 10.0;
 /// The sheet draws its own shadow where the system draws none for a frameless window.
 pub const HALO: f32 = if cfg!(target_os = "macos") { 0.0 } else { 18.0 };
 
-/// Extracted and drawn at this same side: any other ratio scales, and blurs.
+/// Logical sides the two looks draw the icon at; the resident asks for them in screen pixels.
 pub const ICON_SIDE: u32 = 24;
-/// The tile draws its icon at 40 and is asked for twice that: a display at 200 % gets the exact
-/// pixels, and one at 100 % scales down, which keeps the edges where scaling up loses them.
-pub const TILE_ICON_SIDE: u32 = 80;
+pub const TILE_ICON_SIDE: u32 = 40;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reaches {
@@ -522,6 +520,7 @@ mod tests {
     fn the_sheet_is_sized_by_its_tiles_and_its_halo() {
         headless();
         let window = crate::Picker::new().expect("a window");
+        window.set_classic(false);
         let words = Language::Spanish.strings();
         let two = dressed();
 
@@ -741,7 +740,7 @@ mod tests {
             );
             assert_eq!(
                 window.get_wanted_height(),
-                plain + 44.0,
+                plain + 46.0,
                 "classic: {classic}"
             );
             show_strip(&window, None);

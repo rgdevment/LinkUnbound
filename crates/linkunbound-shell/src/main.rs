@@ -97,7 +97,7 @@ mod host {
 
     pub fn icon(browser: &Browser, side: u32) -> Option<String> {
         let dir = super::data_dir().join("icons");
-        linkunbound_mac::icon_for(browser.icon_source(), &browser.id, &dir, side * 2)
+        linkunbound_mac::icon_for(browser.icon_source(), &browser.id, &dir, side)
             .map(|p| p.to_string_lossy().into_owned())
     }
 
@@ -227,8 +227,19 @@ fn with_icons(
     listed
 }
 
-/// The icon is extracted at the side it is drawn at: a tile wants a bigger one than a row, and
-/// scaling either up is what made them blur.
+/// The side the icon is drawn at, in the pixels of the screen it is drawn on: a row's 24 or a
+/// tile's 40, times the scale. Extracted at that and drawn one to one, it has edges; extracted
+/// at anything else and scaled, it has none.
+fn physical_icon_side(picker: &Picker) -> u32 {
+    let logical = if picker.get_classic() {
+        ICON_SIDE
+    } else {
+        TILE_ICON_SIDE
+    };
+    let scale = f64::from(picker.window().scale_factor()).max(1.0);
+    (f64::from(logical) * scale).round() as u32
+}
+
 fn rows(icon_side: u32) -> Vec<Listed> {
     let browsers = catalogue();
     with_icons(
@@ -410,11 +421,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
     let Some(url) = claims_the_window(&mut shown.borrow_mut(), url, occupied) else {
         return;
     };
-    let listed = rows(if picker.get_classic() {
-        ICON_SIDE
-    } else {
-        TILE_ICON_SIDE
-    });
+    let listed = rows(physical_icon_side(picker));
     if listed.is_empty() {
         // Opening settings and dropping the link loses the click: the address is
         // still on screen here, and settings is one press away.
@@ -780,7 +787,7 @@ fn sent_by_launch_services(event: linkunbound_mac::Event, quiet: bool) {
 }
 
 fn style(picker: &Picker, chosen: linkunbound_core::PickerStyle) {
-    let classic = chosen == linkunbound_core::PickerStyle::Classic;
+    let classic = chosen != linkunbound_core::PickerStyle::Sheet;
     picker.set_classic(classic);
     picker.set_halo(if classic {
         0.0

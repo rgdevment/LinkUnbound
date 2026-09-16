@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
 import { type Key, type Language, Speaking, spoken, useSpoken, useWords } from "./i18n";
 import { platform } from "./platform";
@@ -35,13 +36,35 @@ type Spoken = { language: string };
 
 type Build = { version: string };
 
-const AILMENT: Partial<Record<Health, { what: Key; fix: Key | null }>> = {
-  stale: { what: "healthStale", fix: "healthRepair" },
-  build_tree: { what: "healthBuildTree", fix: null },
-  wrong_binary: { what: "healthWrongBinary", fix: "healthRepair" },
-  no_resident: { what: "healthNoResident", fix: null },
-  mounted: { what: "healthMounted", fix: null },
+const RELEASES = "https://github.com/rgdevment/LinkUnbound/releases/latest";
+
+type Remedy = { label: Key; note?: Key } & ({ command: string } | { url: string });
+
+/// Every ailment names what a person can do about it; the one that has no remedy at all is a
+/// copy run from the disk image, whose remedy is the drag the text describes.
+const AILMENT: Partial<Record<Health, { what: Key; remedy: Remedy | null }>> = {
+  stale: { what: "healthStale", remedy: { label: "healthRepair", command: "system_repair" } },
+  build_tree: {
+    what: "healthBuildTree",
+    remedy: {
+      label: "healthRegisterAnyway",
+      note: "healthRegisterAnywayNote",
+      command: "system_register_anyway",
+    },
+  },
+  wrong_binary: {
+    what: "healthWrongBinary",
+    remedy: { label: "healthRepair", command: "system_repair" },
+  },
+  no_resident: { what: "healthNoResident", remedy: { label: "healthReinstall", url: RELEASES } },
+  mounted: { what: "healthMounted", remedy: null },
 };
+
+/// A path breaks after each separator, never inside a name: a zero-width space is where the
+/// browser is allowed to wrap it, and the hyphen becomes the one it will not wrap at.
+function wrappable(path: string): string {
+  return path.replace(/([\\/])/g, "$1\u200B").replace(/-/g, "\u2011");
+}
 
 type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
 
@@ -125,18 +148,29 @@ function Links({
             {t(ailment.what)}
           </p>
           {state?.registered_path && (
-            <p className="mt-1 font-mono text-[10.5px] break-all text-neutral-500 dark:text-[#8B92A1]">
-              {t("healthPointsAt", state.registered_path)}
+            <p className="mt-1 font-mono text-[10.5px] break-words text-neutral-500 dark:text-[#8B92A1]">
+              {t("healthPointsAt", wrappable(state.registered_path))}
             </p>
           )}
-          {ailment.fix && (
-            <button
-              type="button"
-              onClick={() => run("system_repair")}
-              className="mt-2.5 rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
-            >
-              {t(ailment.fix)}
-            </button>
+          {ailment.remedy && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const remedy = ailment.remedy;
+                  if (remedy && "command" in remedy) run(remedy.command);
+                  else if (remedy) void openUrl(remedy.url).catch(noop);
+                }}
+                className="rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
+              >
+                {t(ailment.remedy.label)}
+              </button>
+              {ailment.remedy.note && (
+                <span className="text-[11px] text-neutral-500 dark:text-[#8B92A1]">
+                  {t(ailment.remedy.note)}
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}
