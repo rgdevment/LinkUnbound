@@ -109,6 +109,14 @@ fn user_data_dir(app: &Path) -> Option<PathBuf> {
         "Google/Chrome Dev"
     } else if needle.contains("chrome") {
         "Google/Chrome"
+    } else if needle.contains("chromium") {
+        "Chromium"
+    } else if needle.contains("/arc.app") {
+        "Arc/User Data"
+    } else if needle.contains("opera gx") {
+        "com.operasoftware.OperaGX"
+    } else if needle.contains("opera") {
+        "com.operasoftware.Opera"
     } else {
         return None;
     };
@@ -181,8 +189,31 @@ pub fn installed_browsers() -> Vec<Browser> {
 
 #[cfg(test)]
 mod tests {
-    use super::{chromium_profiles, installed_browsers, is_destination, user_data_dir};
+    use super::{
+        add_unseen, chromium_profiles, info_string, installed_browsers, is_destination,
+        read_bundle, user_data_dir, web_ranks,
+    };
+    use linkunbound_core::Browser;
+    use objc2_foundation::NSBundle;
     use std::path::Path;
+
+    fn safari() -> objc2::rc::Retained<objc2_foundation::NSURL> {
+        super::preferred("com.apple.Safari").expect("Safari is always there")
+    }
+
+    fn one(id: &str) -> Browser {
+        Browser {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            exe: format!("/Applications/{id}.app"),
+            profiles: Vec::new(),
+            extra_args: Vec::new(),
+            private_flag: None,
+            icon_path: None,
+            custom: false,
+            hidden: false,
+        }
+    }
 
     fn ranked(ranks: &[&str]) -> Vec<String> {
         ranks.iter().map(|r| (*r).to_owned()).collect()
@@ -270,6 +301,23 @@ mod tests {
         assert!(of("/Applications/Google Chrome.app").ends_with("Google/Chrome"));
     }
 
+    #[test]
+    fn the_other_chromium_families_keep_their_profiles_where_they_do() {
+        let of = |app: &str| {
+            user_data_dir(Path::new(app))
+                .map(|d| d.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        assert!(of("/Applications/Chromium.app").ends_with("Application Support/Chromium"));
+        assert!(of("/Applications/Arc.app").ends_with("Application Support/Arc/User Data"));
+        assert!(of("/Applications/Opera.app").ends_with("com.operasoftware.Opera"));
+        assert!(of("/Applications/Opera GX.app").ends_with("com.operasoftware.OperaGX"));
+        assert!(
+            of("/Users/marc/Applications/Firefox.app").is_empty(),
+            "a name is not a path"
+        );
+    }
+
     /// Edge is Chromium but keeps its profiles somewhere of its own, and the generic marker
     /// would send it to Chrome's directory: the profiles shown would be another browser's.
     #[test]
@@ -319,8 +367,44 @@ mod tests {
     }
 
     #[test]
+    fn safari_declares_itself_a_browser_and_only_for_the_web() {
+        let bundle = NSBundle::bundleWithURL(&safari()).expect("a bundle");
+        assert_eq!(
+            info_string(&bundle, "CFBundleIdentifier").as_deref(),
+            Some("com.apple.Safari")
+        );
+        assert_eq!(info_string(&bundle, "LinkUnboundNeverWroteThis"), None);
+        assert_eq!(web_ranks(&bundle), ["Default"]);
+    }
+
+    #[test]
+    fn safari_is_read_as_the_browser_it_is() {
+        let read = read_bundle(&safari()).expect("a browser");
+        assert_eq!(read.id, "com-apple-safari");
+        assert_eq!(read.name, "Safari");
+        assert!(read.exe.ends_with("Safari.app"), "{}", read.exe);
+        assert!(read.profiles.is_empty());
+        assert!(read.private_flag.is_none());
+    }
+
+    #[test]
+    fn a_browser_listed_twice_by_launch_services_is_offered_once() {
+        let mut found = Vec::new();
+        add_unseen(&mut found, one("com-apple-safari"));
+        add_unseen(&mut found, one("com-apple-safari"));
+        add_unseen(&mut found, one("org-mozilla-firefox"));
+        let ids: Vec<&str> = found.iter().map(|b| b.id.as_str()).collect();
+        assert_eq!(ids, ["com-apple-safari", "org-mozilla-firefox"]);
+    }
+
+    #[test]
     fn whatever_is_installed_carries_a_launchable_path() {
-        for browser in installed_browsers() {
+        let installed = installed_browsers();
+        assert!(
+            installed.iter().any(|b| b.id == "com-apple-safari"),
+            "Safari is always there"
+        );
+        for browser in installed {
             assert!(!browser.exe.is_empty());
             assert!(!browser.id.is_empty());
             assert!(!browser.name.is_empty());

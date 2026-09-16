@@ -38,8 +38,15 @@ pub fn cached_icon(
 
 #[cfg(test)]
 mod tests {
-    use super::cached_icon;
+    use super::{cached_icon, fingerprint};
     use std::path::PathBuf;
+
+    #[test]
+    fn two_sources_are_told_apart_even_when_their_bytes_overlap() {
+        assert_ne!(fingerprint("a"), fingerprint("e"));
+        assert_ne!(fingerprint("ab"), fingerprint("ba"));
+        assert_eq!(fingerprint("Chrome.app"), fingerprint("chrome.APP"));
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("linkunbound-icons-{}", std::process::id()));

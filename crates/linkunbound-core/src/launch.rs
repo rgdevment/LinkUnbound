@@ -175,30 +175,51 @@ mod tests {
     #[test]
     fn a_child_that_has_exited_is_not_left_as_a_zombie() {
         use std::process::Command;
+        use std::time::{Duration, Instant};
+
+        fn zombies_of(me: &str) -> usize {
+            let listed = Command::new("ps")
+                .args(["-e", "-o", "ppid=,stat="])
+                .output()
+                .expect("ps runs");
+            String::from_utf8_lossy(&listed.stdout)
+                .lines()
+                .filter(|line| {
+                    let mut parts = line.split_whitespace();
+                    parts.next() == Some(me) && parts.next().is_some_and(|s| s.contains('Z'))
+                })
+                .count()
+        }
+
+        fn settles(patience: Duration, done: impl Fn() -> bool) -> bool {
+            let started = Instant::now();
+            while started.elapsed() < patience {
+                if done() {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            done()
+        }
+
         let mark = std::env::temp_dir().join(format!("linkunbound-ran-{}", std::process::id()));
         let _ = std::fs::remove_file(&mark);
         spawn_and_forget(Command::new("/usr/bin/touch").arg(&mark)).expect("touch runs");
         for _ in 0..3 {
             spawn_and_forget(&mut Command::new("/usr/bin/true")).expect("true runs");
         }
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        assert!(mark.is_file(), "the child never ran");
+        assert!(
+            settles(Duration::from_secs(10), || mark.is_file()),
+            "the child never ran"
+        );
         let _ = std::fs::remove_file(&mark);
-        std::thread::sleep(std::time::Duration::from_millis(300));
 
         let me = std::process::id().to_string();
-        let listed = Command::new("ps")
-            .args(["-e", "-o", "ppid=,stat="])
-            .output()
-            .expect("ps runs");
-        let zombies = String::from_utf8_lossy(&listed.stdout)
-            .lines()
-            .filter(|line| {
-                let mut parts = line.split_whitespace();
-                parts.next() == Some(me.as_str()) && parts.next().is_some_and(|s| s.contains('Z'))
-            })
-            .count();
-        assert_eq!(zombies, 0);
+        assert!(
+            settles(Duration::from_secs(10), || zombies_of(&me) == 0),
+            "{} children left as zombies",
+            zombies_of(&me)
+        );
     }
 
     #[cfg(target_os = "macos")]

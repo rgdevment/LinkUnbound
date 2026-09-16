@@ -12,7 +12,14 @@ import Rules from "./settings/Rules";
 import { useUpdate } from "./settings/update";
 
 type Association = { scheme: string; held: boolean };
-type Health = "fine" | "stale" | "build_tree" | "wrong_binary" | "no_resident" | "not_registered";
+type Health =
+  | "fine"
+  | "stale"
+  | "build_tree"
+  | "wrong_binary"
+  | "no_resident"
+  | "mounted"
+  | "not_registered";
 type SystemState = {
   registered: boolean;
   is_default: boolean;
@@ -33,6 +40,7 @@ const AILMENT: Partial<Record<Health, { what: Key; fix: Key | null }>> = {
   build_tree: { what: "healthBuildTree", fix: null },
   wrong_binary: { what: "healthWrongBinary", fix: "healthRepair" },
   no_resident: { what: "healthNoResident", fix: null },
+  mounted: { what: "healthMounted", fix: null },
 };
 
 type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";

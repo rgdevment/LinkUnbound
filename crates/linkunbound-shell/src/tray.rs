@@ -13,13 +13,16 @@ pub enum Asked {
 /// The taskbar never recolours what it is handed, so both variants ship. The
 /// menu bar does, from the alpha alone, and the dark drawing is the one that
 /// carries it: handed the light one it would recolour a picture of nothing.
-fn artwork(light_taskbar: bool) -> Option<Icon> {
-    let bytes: &[u8] = if light_taskbar || cfg!(target_os = "macos") {
+fn drawing(light_taskbar: bool) -> &'static [u8] {
+    if light_taskbar || cfg!(target_os = "macos") {
         include_bytes!("../../../app/src-tauri/icons/tray-light-32.png")
     } else {
         include_bytes!("../../../app/src-tauri/icons/tray-dark-32.png")
-    };
-    let decoded = image_from_png(bytes)?;
+    }
+}
+
+fn artwork(light_taskbar: bool) -> Option<Icon> {
+    let decoded = image_from_png(drawing(light_taskbar))?;
     Icon::from_rgba(decoded.2, decoded.0, decoded.1).ok()
 }
 
@@ -140,5 +143,17 @@ mod tests {
         let dark = include_bytes!("../../../app/src-tauri/icons/tray-dark-32.png").as_slice();
         let light = include_bytes!("../../../app/src-tauri/icons/tray-light-32.png").as_slice();
         assert_ne!(dark, light);
+    }
+
+    #[test]
+    fn the_taskbar_is_handed_the_variant_that_shows_on_it() {
+        let dark = include_bytes!("../../../app/src-tauri/icons/tray-dark-32.png").as_slice();
+        let light = include_bytes!("../../../app/src-tauri/icons/tray-light-32.png").as_slice();
+        assert_eq!(super::drawing(true), light);
+        if cfg!(target_os = "macos") {
+            assert_eq!(super::drawing(false), light);
+        } else {
+            assert_eq!(super::drawing(false), dark);
+        }
     }
 }

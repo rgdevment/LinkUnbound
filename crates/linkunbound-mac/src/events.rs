@@ -10,7 +10,7 @@ use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::NSApplicationDidFinishLaunchingNotification;
 use objc2_core_services::{
     AEEventClass, AEEventID, kAEOpenApplication, kAEOpenDocuments, kAEReopenApplication,
-    kCoreEventClass, keyAELaunchedAsLogInItem, keyAEPropData, keyDirectObject,
+    kCoreEventClass, keyAELaunchedAsLogInItem, keyAEPropData, keyDirectObject, typeFileURL,
 };
 use objc2_foundation::{
     MainThreadMarker, NSAppleEventDescriptor, NSAppleEventManager, NSNotification,
@@ -60,7 +60,12 @@ fn documents_in(event: &NSAppleEventDescriptor) -> Vec<PathBuf> {
     };
     items
         .iter()
-        .filter_map(|item| item.fileURLValue())
+        .filter_map(|item| {
+            item.fileURLValue().or_else(|| {
+                item.coerceToDescriptorType(typeFileURL)
+                    .and_then(|coerced| coerced.fileURLValue())
+            })
+        })
         .filter_map(|url| url.path())
         .map(|path| PathBuf::from(path.to_string()))
         .collect()
@@ -203,6 +208,16 @@ mod tests {
         assert_eq!(
             read(&alone),
             vec![Event::Document(PathBuf::from("/tmp/one.html"))]
+        );
+
+        let as_text = event(kCoreEventClass, kAEOpenDocuments);
+        as_text.setParamDescriptor_forKeyword(
+            &NSAppleEventDescriptor::descriptorWithString(&NSString::from_str("not a file")),
+            keyDirectObject,
+        );
+        assert!(
+            read(&as_text).is_empty(),
+            "text that is no file is not a document"
         );
     }
 

@@ -230,6 +230,11 @@ mod tests {
     }
 
     #[test]
+    fn a_socket_of_this_user_can_be_named() {
+        assert!(super::named(&scratch("named")).is_some());
+    }
+
+    #[test]
     fn the_second_process_cannot_claim_what_the_first_holds() {
         let socket = scratch("twice");
         let Some(_server) = claim_at(&socket, |_| {}) else {

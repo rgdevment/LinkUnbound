@@ -22,6 +22,8 @@ const ES = {
     "El registro apunta a la ventana de ajustes, que no sabe abrir un enlace. Repáralo para que apunte al proceso que sí.",
   healthNoResident:
     "Falta el programa que abre los enlaces. La instalación quedó incompleta: vuelve a instalar LinkUnbound.",
+  healthMounted:
+    "Estás ejecutando LinkUnbound desde la imagen de disco. Arrástralo a Aplicaciones y ábrelo desde ahí antes de establecerlo como predeterminado: al expulsar la imagen, el registro dejaría de apuntar a nada.",
   healthPointsAt: "Windows ejecutaría: {}",
   healthRepair: "Reparar",
   sectionDefault: "Navegador predeterminado",
@@ -235,6 +237,8 @@ const EN: Record<Key, string> = {
     "The registration points at the settings window, which cannot open a link. Repair it so it points at the process that can.",
   healthNoResident:
     "The program that opens links is missing. The install is incomplete: install LinkUnbound again.",
+  healthMounted:
+    "You are running LinkUnbound from the disk image. Drag it to Applications and open it from there before setting it as the default: once the image is ejected, the registration would point at nothing.",
   healthPointsAt: "Windows would run: {}",
   healthRepair: "Repair",
   sectionDefault: "Default browser",

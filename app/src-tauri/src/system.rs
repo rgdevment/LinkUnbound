@@ -37,6 +37,8 @@ pub enum Health {
     /// The command names the resident, and the resident is not there. A package that shipped
     /// without it reads as healthy otherwise, while every link runs nothing.
     NoResident,
+    /// Running from the disk image it was downloaded as: the registration dies when it is ejected.
+    Mounted,
     NotRegistered,
 }
 
@@ -266,9 +268,12 @@ mod platform {
     /// Only two states can be true here. A copy outside a bundle declares no
     /// schemes at all, and the registration it would claim is the directory it
     /// happens to sit in.
-    fn health(bundled: bool, default: bool) -> Health {
+    fn health(bundled: bool, default: bool, mounted: bool) -> Health {
         if !bundled {
             return Health::BuildTree;
+        }
+        if mounted {
+            return Health::Mounted;
         }
         if default {
             Health::Fine
@@ -282,7 +287,7 @@ mod platform {
         let bundled = is_bundled();
         let default = is_default_browser();
         SystemState {
-            health: health(bundled, default),
+            health: health(bundled, default, crate::update::from_a_mount()),
             registered_path: own_bundle_id(),
             edge_installed: false,
             registered: bundled,
@@ -328,18 +333,24 @@ mod platform {
         /// has to be told so rather than shown a button that cannot work.
         #[test]
         fn each_state_gets_the_verdict_the_screen_draws() {
-            assert_eq!(health(true, true), Health::Fine);
-            assert_eq!(health(true, false), Health::NotRegistered);
+            assert_eq!(health(true, true, false), Health::Fine);
+            assert_eq!(health(true, false, false), Health::NotRegistered);
             assert_eq!(
-                health(false, false),
+                health(false, false, false),
                 Health::BuildTree,
                 "a bare executable declares no schemes and owns no registration"
             );
             assert_eq!(
-                health(false, true),
+                health(false, true, false),
                 Health::BuildTree,
                 "whatever the system says, an unbundled copy is not what it named"
             );
+            assert_eq!(
+                health(true, true, true),
+                Health::Mounted,
+                "a registration pointing into a disk image dies with the eject"
+            );
+            assert_eq!(health(false, false, true), Health::BuildTree);
         }
 
         #[test]

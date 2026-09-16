@@ -155,6 +155,10 @@ pub fn dress_window(window: isize, dark: Option<bool>) {
     unsafe { &*window }.setAppearance(appearance.as_deref());
 }
 
+fn is_another_copy_of(pid: i32, me: u32, executable: Option<&str>, wanted: &str) -> bool {
+    u32::try_from(pid).ok() != Some(me) && executable == Some(wanted)
+}
+
 pub fn retire(executable: &str) -> usize {
     let Some(mine) = crate::registration::own_bundle_id() else {
         return 0;
@@ -162,11 +166,12 @@ pub fn retire(executable: &str) -> usize {
     let me = std::process::id();
     NSRunningApplication::runningApplicationsWithBundleIdentifier(&NSString::from_str(&mine))
         .iter()
-        .filter(|app| u32::try_from(app.processIdentifier()).ok() != Some(me))
         .filter(|app| {
-            app.executableURL()
+            let name = app
+                .executableURL()
                 .and_then(|url| url.lastPathComponent())
-                .is_some_and(|name| name.to_string() == executable)
+                .map(|name| name.to_string());
+            is_another_copy_of(app.processIdentifier(), me, name.as_deref(), executable)
         })
         .filter(|app| app.terminate())
         .count()
@@ -229,20 +234,28 @@ impl Drop for Watching {
     }
 }
 
+fn origin(
+    front: Option<String>,
+    last_seen: Option<String>,
+    menu_bar: Option<String>,
+) -> Option<String> {
+    front.or(last_seen).or(menu_bar)
+}
+
 #[must_use]
 pub fn source_app() -> Option<String> {
     let workspace = NSWorkspace::sharedWorkspace();
-    workspace
-        .frontmostApplication()
-        .as_deref()
-        .and_then(named_unless_ours)
-        .or_else(|| LAST_SEEN.lock().ok().and_then(|seen| seen.clone()))
-        .or_else(|| {
-            workspace
-                .menuBarOwningApplication()
-                .as_deref()
-                .and_then(named_unless_ours)
-        })
+    origin(
+        workspace
+            .frontmostApplication()
+            .as_deref()
+            .and_then(named_unless_ours),
+        LAST_SEEN.lock().ok().and_then(|seen| seen.clone()),
+        workspace
+            .menuBarOwningApplication()
+            .as_deref()
+            .and_then(named_unless_ours),
+    )
 }
 
 #[allow(unsafe_code)]
@@ -272,7 +285,47 @@ pub fn windows_are_light() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{contains, down, physical};
+    use super::{contains, down, is_another_copy_of, origin, physical, retire};
+
+    #[test]
+    fn the_origin_is_whoever_was_in_front_then_whoever_was_activated_last_then_the_menu_bar() {
+        let some = |s: &str| Some(s.to_owned());
+        assert_eq!(
+            origin(some("slack"), some("finder"), some("orca")),
+            some("slack")
+        );
+        assert_eq!(origin(None, some("finder"), some("orca")), some("finder"));
+        assert_eq!(origin(None, None, some("orca")), some("orca"));
+        assert_eq!(origin(None, None, None), None);
+    }
+
+    #[test]
+    fn only_another_process_running_the_named_program_is_retired() {
+        assert!(is_another_copy_of(
+            41,
+            7,
+            Some("linkunbound-shell"),
+            "linkunbound-shell"
+        ));
+        assert!(!is_another_copy_of(
+            7,
+            7,
+            Some("linkunbound-shell"),
+            "linkunbound-shell"
+        ));
+        assert!(!is_another_copy_of(
+            41,
+            7,
+            Some("linkunbound-settings"),
+            "linkunbound-shell"
+        ));
+        assert!(!is_another_copy_of(41, 7, None, "linkunbound-shell"));
+        assert_eq!(
+            retire("linkunbound-shell"),
+            0,
+            "a test binary has no bundle to look through"
+        );
+    }
     use objc2_foundation::{NSPoint, NSRect, NSSize};
 
     /// The two systems disagree about which way is up, and taking one for the other opened
