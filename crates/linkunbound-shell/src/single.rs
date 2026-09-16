@@ -28,14 +28,17 @@ fn fits(path: &std::path::Path) -> bool {
 /// keeps the fallback private, and one that cannot be made so is not used.
 #[cfg(not(windows))]
 fn private_fallback() -> Option<std::path::PathBuf> {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use std::os::unix::fs::PermissionsExt;
     let dir = std::env::temp_dir().join("linkunbound-shell");
+    if std::fs::symlink_metadata(&dir).is_ok_and(|m| m.file_type().is_symlink()) {
+        return None;
+    }
     std::fs::create_dir_all(&dir).ok()?;
+    // Only the owner may change the mode, so this succeeding is what says
+    // the directory is ours and not one somebody else left at this name.
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).ok()?;
     let made = std::fs::metadata(&dir).ok()?;
-    let mine = std::fs::metadata(std::env::temp_dir()).ok()?.uid();
-    (made.is_dir() && made.mode() & 0o777 == 0o700 && made.uid() == mine)
-        .then(|| dir.join("shell.sock"))
+    (made.is_dir() && made.permissions().mode() & 0o777 == 0o700).then(|| dir.join("shell.sock"))
 }
 
 #[cfg(not(windows))]
@@ -82,10 +85,17 @@ fn abandoned(held: std::time::Duration) -> bool {
     held > HELD_FOR_LONG_ENOUGH
 }
 
+/// Bounded by the clock rather than by a number of turns: on a loaded machine
+/// two hundred turns stretched past the five seconds after which a lock reads
+/// as abandoned, and the second copy took the room from underneath the first.
+#[cfg(not(windows))]
+const WAITED_FOR_THE_ROOM: std::time::Duration = std::time::Duration::from_secs(1);
+
 #[cfg(not(windows))]
 fn hold(socket: &str) -> Option<Holding> {
     let lock = std::path::Path::new(socket).with_extension("lock");
-    for _ in 0..200 {
+    let deadline = std::time::Instant::now() + WAITED_FOR_THE_ROOM;
+    loop {
         if std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -100,9 +110,11 @@ fn hold(socket: &str) -> Option<Holding> {
         {
             let _ = std::fs::remove_file(&lock);
         }
+        if std::time::Instant::now() >= deadline {
+            return None;
+        }
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    None
 }
 
 #[cfg(not(windows))]
@@ -442,6 +454,10 @@ mod tests {
     #[test]
     fn a_lock_is_taken_over_only_once_it_is_plainly_abandoned() {
         use std::time::Duration;
+        assert!(
+            super::WAITED_FOR_THE_ROOM * 4 < super::HELD_FOR_LONG_ENOUGH,
+            "a lock held by a copy still waiting for the room must never read as abandoned"
+        );
         assert!(!super::abandoned(Duration::ZERO));
         assert!(!super::abandoned(super::HELD_FOR_LONG_ENOUGH));
         assert!(super::abandoned(
