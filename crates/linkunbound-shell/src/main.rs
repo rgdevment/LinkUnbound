@@ -283,6 +283,15 @@ fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
     }
 }
 
+/// A download reports every chunk; two minutes of silence is a process that is no longer there.
+fn progress_stale(dir: &std::path::Path) -> bool {
+    std::fs::metadata(dir.join("updating.json"))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|at| at.elapsed().ok())
+        .is_some_and(|since| since > Duration::from_secs(120))
+}
+
 /// Settings runs in another process: the file is the only channel between them.
 fn prefs_touched_at() -> Option<std::time::SystemTime> {
     std::fs::metadata(store().dir().join("preferences.json"))
@@ -343,6 +352,12 @@ fn rule_for(
 }
 
 fn open_settings() {
+    run_settings(&[]);
+}
+
+/// The settings binary, beside this one, with whatever it is being sent to do: nothing opens
+/// the window, `--look` and `--update` run their errand with no window at all.
+fn run_settings(args: &[&str]) {
     let Ok(here) = std::env::current_exe() else {
         return;
     };
@@ -352,6 +367,7 @@ fn open_settings() {
         "linkunbound-settings"
     });
     let mut command = std::process::Command::new(beside);
+    command.args(args);
     // A debug build of settings is a console program, and the console it would open is a
     // window nobody asked for next to the one they did.
     #[cfg(windows)]
@@ -421,6 +437,9 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
         held.url = Some(url);
         held.rows = listed;
         held.source = source;
+    }
+    if let Some(ui) = ui() {
+        ui.refresh_strip();
     }
     beside_the_pointer(picker);
     let _ = picker.show();
@@ -516,6 +535,12 @@ struct Ui {
     tray: Option<Tray>,
     watch: slint::Timer,
     countdown: slint::Timer,
+    /// Follows `updating.json` while an install is under way, and the clock for asking settings
+    /// to look at the feed.
+    progress_watch: slint::Timer,
+    looker: slint::Timer,
+    /// The version whose offer was put away with ✕, for this session.
+    put_away: RefCell<Option<String>>,
     prefs_seen: Cell<Option<std::time::SystemTime>>,
     held_focus: Cell<bool>,
     #[cfg(target_os = "macos")]
@@ -540,6 +565,86 @@ impl Ui {
         }
         self.prefs_seen.set(now);
         self.obey(&store().prefs());
+    }
+
+    /// What the strip says now, read off the two files settings writes. An install that stopped
+    /// reporting is one whose process died: told as failed, so the button comes back.
+    fn refresh_strip(&self) {
+        let dir = data_dir();
+        let looked = linkunbound_core::update::looked(&dir);
+        let mut under_way = linkunbound_core::update::progress(&dir);
+        if let Some(progress) = under_way.as_mut()
+            && matches!(progress.stage.as_str(), "starting" | "getting")
+            && progress_stale(&dir)
+        {
+            progress.stage = "failed".to_owned();
+            linkunbound_core::update::tell(&dir, progress);
+        }
+        let strip = linkunbound_shell::strip_for(
+            &self.words.get(),
+            &looked,
+            under_way.as_ref(),
+            linkunbound_shell::HERE,
+            self.put_away.borrow().as_deref(),
+        );
+        linkunbound_shell::show_strip(&self.picker, strip.as_ref());
+        let busy = strip
+            .as_ref()
+            .is_some_and(|one| matches!(one.stage, "starting" | "getting" | "installing"));
+        if !busy {
+            self.progress_watch.stop();
+        }
+    }
+
+    /// Pressed: a Store copy is taken to settings, where the Store can be asked; any other copy
+    /// has settings download and install with no window, and this watches the file it writes.
+    fn take_update(self: &Rc<Self>) {
+        let dir = data_dir();
+        let looked = linkunbound_core::update::looked(&dir);
+        let Some(found) = looked.found_version.clone() else {
+            return;
+        };
+        if looked.found_route.as_deref() == Some("store") {
+            open_settings();
+            return;
+        }
+        linkunbound_core::update::tell(
+            &dir,
+            &linkunbound_core::update::Progress {
+                version: found,
+                stage: "starting".to_owned(),
+                far: 0,
+            },
+        );
+        run_settings(&["--update"]);
+        self.refresh_strip();
+        let ui = Rc::clone(self);
+        self.progress_watch.start(
+            slint::TimerMode::Repeated,
+            Duration::from_millis(300),
+            move || ui.refresh_strip(),
+        );
+    }
+
+    fn put_update_away(&self) {
+        let dir = data_dir();
+        let looked = linkunbound_core::update::looked(&dir);
+        *self.put_away.borrow_mut() = looked.found_version;
+        if linkunbound_core::update::progress(&dir).is_some_and(|one| one.stage == "failed") {
+            linkunbound_core::update::settle(&dir);
+        }
+        self.refresh_strip();
+    }
+
+    /// Settings holds the network code; this only has to ask, within its interval, so a copy
+    /// whose window is never opened still hears about a release.
+    fn keep_looking(&self) {
+        self.looker.start(
+            slint::TimerMode::Repeated,
+            Duration::from_secs(6 * 60 * 60),
+            || run_settings(&["--look"]),
+        );
+        slint::Timer::single_shot(Duration::from_secs(20), || run_settings(&["--look"]));
     }
 
     fn obey(&self, prefs: &linkunbound_core::Preferences) {
@@ -849,6 +954,16 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         });
     }
+    picker.on_update_asked(|| {
+        if let Some(ui) = ui() {
+            ui.take_update();
+        }
+    });
+    picker.on_update_dismissed(|| {
+        if let Some(ui) = ui() {
+            ui.put_update_away();
+        }
+    });
 
     let notice = Notice::new()?;
     {
@@ -884,6 +999,9 @@ fn main() -> Result<(), slint::PlatformError> {
         tray,
         watch: slint::Timer::default(),
         countdown: slint::Timer::default(),
+        progress_watch: slint::Timer::default(),
+        looker: slint::Timer::default(),
+        put_away: RefCell::new(None),
         prefs_seen: Cell::new(prefs_touched_at()),
         held_focus: Cell::new(false),
         #[cfg(target_os = "macos")]
@@ -892,6 +1010,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Applied here rather than only on a later change: the tray was built
     // visible and the theme never left settings at all.
     state.obey(&store().prefs());
+    state.keep_looking();
     UI.with_borrow_mut(|slot| *slot = Some(Rc::clone(&state)));
 
     // Deferred into the loop rather than presented here: before it runs there is no window

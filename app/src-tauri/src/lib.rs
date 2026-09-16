@@ -604,6 +604,7 @@ async fn update_ready(
             };
             looked.checked_at = Some(now);
             looked.found_version = seen.as_ref().map(|one| one.version.clone());
+            looked.found_route = seen.as_ref().map(|one| one.route.name().to_owned());
             update::keep(&dir, &looked);
             return Ok(seen);
         }
@@ -636,6 +637,7 @@ async fn update_ready(
     let seen = update::newer(HERE, &manifest, kept, looked.candidates);
     looked.checked_at = Some(now);
     looked.found_version = seen.as_ref().map(|one| one.version.clone());
+    looked.found_route = seen.as_ref().map(|one| one.route.name().to_owned());
     update::keep(&dir, &looked);
     Ok(seen)
 }
@@ -649,6 +651,7 @@ fn update_candidates(wants: bool) -> Result<(), String> {
     // What the old track found is not an offer on the new one.
     looked.checked_at = None;
     looked.found_version = None;
+    looked.found_route = None;
     update::keep(&dir, &looked);
     Ok(())
 }
@@ -662,13 +665,30 @@ struct Underway {
 
 #[tauri::command]
 async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Result<(), String> {
-    use tauri_plugin_updater::UpdaterExt;
-
     let _held = busy
         .inner()
         .0
         .claim()
         .ok_or_else(|| "updateBusy".to_owned())?;
+    install(app).await
+}
+
+/// The whole of an install, shared by the button in About and the resident's `--update`. What
+/// happens along the way is written down for the resident, which watches the file rather than
+/// the window: the picker may be the only thing on screen.
+async fn install(app: AppHandle) -> Result<(), String> {
+    let dir = store().dir().to_path_buf();
+    let outcome = install_from(app, &dir).await;
+    if outcome.is_err() {
+        let mut said = update::progress(&dir).unwrap_or_default();
+        said.stage = "failed".to_owned();
+        update::tell(&dir, &said);
+    }
+    outcome
+}
+
+async fn install_from(app: AppHandle, dir: &std::path::Path) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
 
     let kept = update::route();
     if kept.route == update::Route::Store {
@@ -678,8 +698,7 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
         return Err("updateNotHere".to_owned());
     }
 
-    let dir = store().dir().to_path_buf();
-    let looked = update::looked(&dir);
+    let looked = update::looked(dir);
     let Some(want) = update::remembered(
         HERE,
         looked.found_version.as_deref(),
@@ -689,6 +708,18 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
     .map(|one| one.version) else {
         return Err("updateGone".to_owned());
     };
+
+    let progress = |stage: &str, far: u64| {
+        update::tell(
+            dir,
+            &update::Progress {
+                version: want.clone(),
+                stage: stage.to_owned(),
+                far,
+            },
+        );
+    };
+    progress("starting", 0);
 
     let asked = want.clone();
     let update = app
@@ -726,6 +757,8 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
 
     let telling = app.clone();
     let done = app.clone();
+    let getting = progress;
+    let installing = progress;
     let mut carried: u64 = 0;
     let mut said = 0;
     update
@@ -743,6 +776,7 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
                             far,
                         },
                     );
+                    getting("getting", far);
                 }
             },
             // The last thing anyone sees on Windows: the installer takes the process with it and
@@ -755,6 +789,7 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
                         far: 100,
                     },
                 );
+                installing("installing", 100);
             },
         )
         .await
@@ -863,8 +898,45 @@ impl Drop for Releasing<'_> {
     }
 }
 
+/// Work the resident sends this binary to do with no window: it has the updater and the network
+/// code, and the resident has neither.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Errand {
+    /// Ask the feed, within the usual interval, and write down what it said.
+    Look,
+    /// Take the update already written down.
+    Update,
+}
+
+fn errand_in(args: &[String]) -> Option<Errand> {
+    args.iter().find_map(|one| match one.as_str() {
+        "--look" => Some(Errand::Look),
+        "--update" => Some(Errand::Update),
+        _ => None,
+    })
+}
+
+fn run_errand(app: AppHandle, errand: Errand) {
+    tauri::async_runtime::spawn(async move {
+        match errand {
+            Errand::Look => {
+                let _ = update_ready(app.clone(), Some(false)).await;
+            }
+            Errand::Update => {
+                let _ = install(app.clone()).await;
+            }
+        }
+        app.exit(0);
+    });
+}
+
 pub fn run() {
-    tauri::Builder::default()
+    let args: Vec<String> = std::env::args_os()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    let errand = errand_in(&args);
+
+    let builder = tauri::Builder::default()
         .manage(Mutex::new(Held::default()))
         .manage(Updating::default())
         .invoke_handler(tauri::generate_handler![
@@ -895,16 +967,25 @@ pub fn run() {
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        // Two tray clicks used to mean two processes, each writing the registry
-        // and each claiming the shortcut. The second now raises the first.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+    // Two tray clicks used to mean two processes, each writing the registry and each claiming
+    // the shortcut. The second now raises the first. An errand is not a second copy of the
+    // window, though: it must neither knock on the one that is open nor answer knocks itself.
+    let builder = if errand.is_some() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             shell::open_settings(app, store().prefs().theme);
         }))
-        .setup(|app| {
-            let args: Vec<String> = std::env::args_os()
-                .map(|a| a.to_string_lossy().into_owned())
-                .collect();
+    };
+
+    builder
+        .setup(move |app| {
+            if let Some(errand) = errand {
+                run_errand(app.handle().clone(), errand);
+                return Ok(());
+            }
 
             // The uninstaller hands the registration back before taking the binary away, so this
             // runs instead of the reconcile, never after it.
@@ -935,10 +1016,32 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        Edit, Store, added, describe, duplicated_in, edited, far_along, free_id, hidden_in,
-        keep_in, only_mine, ordered, readable, seen, spoken, without,
+        Edit, Errand, Store, added, describe, duplicated_in, edited, errand_in, far_along, free_id,
+        hidden_in, keep_in, only_mine, ordered, readable, seen, spoken, without,
     };
     use linkunbound_core::{Locale, Preferences, Profile, Rule, Scope, Target};
+
+    /// The resident's errands are told apart from a launch that wants the window, and from each
+    /// other; a stray word in the arguments is not one.
+    #[test]
+    fn an_errand_is_read_off_the_arguments_and_nothing_else_is() {
+        let args = |list: &[&str]| list.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert_eq!(
+            errand_in(&args(&["settings.exe", "--look"])),
+            Some(Errand::Look)
+        );
+        assert_eq!(
+            errand_in(&args(&["settings.exe", "--update"])),
+            Some(Errand::Update)
+        );
+        assert_eq!(errand_in(&args(&["settings.exe"])), None);
+        assert_eq!(errand_in(&args(&["settings.exe", "--register"])), None);
+        assert_eq!(
+            errand_in(&args(&["settings.exe", "update"])),
+            None,
+            "not a flag"
+        );
+    }
 
     /// A copy that lands at the end of a long list reads as a browser somebody else added, and
     /// the person who just pressed «duplicate» goes looking for it.

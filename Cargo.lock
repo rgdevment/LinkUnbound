@@ -3666,6 +3666,7 @@ version = "2.0.0"
 dependencies = [
  "percent-encoding",
  "psl",
+ "semver",
  "serde",
  "serde_json",
  "sys-locale",

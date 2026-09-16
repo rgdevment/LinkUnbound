@@ -51,6 +51,18 @@ pub struct Ready {
     pub installs: bool,
 }
 
+impl Route {
+    /// The word the resident reads back: it cannot take a Store update itself and has to know.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Store => "store",
+            Self::Brew => "brew",
+            Self::Download => "download",
+        }
+    }
+}
+
 /// A copy the store keeps cannot replace itself: `WindowsApps` is read only and the package
 /// identity is the store's. It gets taken to the store instead.
 pub const fn self_installs(route: Route) -> bool {
@@ -259,43 +271,7 @@ pub fn fetch() -> Option<String> {
     asked.status().is_success().then(|| asked.text().ok())?
 }
 
-/// Kept beside the settings, not in them: when the last look happened is not something the user
-/// chose, and resetting the configuration has no business deciding an update is owed.
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Looked {
-    #[serde(default)]
-    pub checked_at: Option<u64>,
-    #[serde(default)]
-    pub found_version: Option<String>,
-    /// Unset until somebody chooses, which is not the same as having chosen no.
-    #[serde(default)]
-    pub candidates: Option<bool>,
-}
-
-fn beside(dir: &Path) -> std::path::PathBuf {
-    dir.join("update.json")
-}
-
-#[must_use]
-pub fn looked(dir: &Path) -> Looked {
-    std::fs::read_to_string(beside(dir))
-        .ok()
-        .and_then(|raw| serde_json::from_str(linkunbound_core::unmarked(&raw)).ok())
-        .unwrap_or_default()
-}
-
-/// Written the way the rest of the store is: through a sibling file and a rename, so a crash
-/// leaves either the old content or the new one, never half of either.
-pub fn keep(dir: &Path, looked: &Looked) {
-    let Ok(body) = serde_json::to_string_pretty(looked) else {
-        return;
-    };
-    let _ = std::fs::create_dir_all(dir);
-    let aside = dir.join(format!("update.{}.tmp", std::process::id()));
-    if std::fs::write(&aside, body).is_ok() && std::fs::rename(&aside, beside(dir)).is_err() {
-        let _ = std::fs::remove_file(&aside);
-    }
-}
+pub use linkunbound_core::update::{Progress, keep, looked, progress, tell};
 
 #[cfg(test)]
 mod tests {
@@ -807,29 +783,5 @@ mod tests {
     #[test]
     fn a_look_left_in_the_future_is_owed_now_rather_than_waited_out() {
         assert!(due(Some(2_000_000_000), 1_800_000_000));
-    }
-
-    #[test]
-    fn what_the_last_look_found_survives_a_restart() {
-        let dir = std::env::temp_dir().join("lu-update-test");
-        let _ = std::fs::remove_dir_all(&dir);
-
-        assert!(looked(&dir).checked_at.is_none());
-
-        keep(
-            &dir,
-            &Looked {
-                checked_at: Some(1_800_000_000),
-                found_version: Some("2.1.0".to_owned()),
-                candidates: Some(true),
-            },
-        );
-
-        let read = looked(&dir);
-        assert_eq!(read.checked_at, Some(1_800_000_000));
-        assert_eq!(read.found_version.as_deref(), Some("2.1.0"));
-        assert_eq!(read.candidates, Some(true), "the track is remembered too");
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

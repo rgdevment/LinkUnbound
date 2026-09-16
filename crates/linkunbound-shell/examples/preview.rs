@@ -1,6 +1,6 @@
 #![windows_subsystem = "windows"]
 
-//! `cargo run -p linkunbound-shell --example preview -- [--classic] [--light] [--six]`
+//! `cargo run -p linkunbound-shell --example preview -- [--classic] [--light] [--six] [--update | --installing | --store]`
 
 use linkunbound_core::Language;
 use linkunbound_shell::{HALO, ICON_SIDE, Listed, Picker, TILE_ICON_SIDE, dress, paint};
@@ -83,6 +83,28 @@ fn main() -> Result<(), slint::PlatformError> {
         Some("tisty-gui"),
         &rows,
     );
+
+    if flag("--update") || flag("--installing") || flag("--store") {
+        let looked = linkunbound_core::update::Looked {
+            checked_at: Some(1),
+            found_version: Some("2.0.1".to_owned()),
+            found_route: Some(if flag("--store") { "store" } else { "download" }.to_owned()),
+            candidates: None,
+        };
+        let progress = flag("--installing").then(|| linkunbound_core::update::Progress {
+            version: "2.0.1".to_owned(),
+            stage: "getting".to_owned(),
+            far: 42,
+        });
+        let strip = linkunbound_shell::strip_for(
+            &Language::Spanish.strings(),
+            &looked,
+            progress.as_ref(),
+            "2.0.0",
+            None,
+        );
+        linkunbound_shell::show_strip(&window, strip.as_ref());
+    }
 
     let handle = window.as_weak();
     window.on_dismissed(move || {

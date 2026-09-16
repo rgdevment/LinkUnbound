@@ -8,6 +8,7 @@ pub mod tray;
 
 use std::rc::Rc;
 
+use linkunbound_core::update::{Looked, Progress, newer_than};
 use linkunbound_core::{Browser, Scope, Strings, local_file_parts, looks_unresolved, site_of};
 
 /// Both windows read the same palette, so the choice is applied once per window
@@ -26,6 +27,9 @@ pub const FAMILY: &str = if cfg!(windows) {
 } else {
     ""
 };
+
+/// What this copy is, for the update strip to compare against what settings found.
+pub const HERE: &str = env!("CARGO_PKG_VERSION");
 
 pub const CORNER: f64 = 14.0;
 pub const CLASSIC_CORNER: f64 = 10.0;
@@ -187,6 +191,109 @@ pub const IN_THE_ROW: [i32; 2] = [0, 3];
 #[must_use]
 pub fn in_the_row(index: i32) -> bool {
     IN_THE_ROW.contains(&index)
+}
+
+/// The strip atop the picker, worded. `None` is no strip: the copy is current, the offer was
+/// put away for this session, or nothing is under way.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Strip {
+    pub stage: &'static str,
+    pub line: String,
+    pub detail: String,
+    pub button: String,
+    pub far: i32,
+}
+
+/// An install under way outranks the offer it came from; the offer stands until pressed or put
+/// away; a Store copy is offered the door to settings, since the Store's installer wants a
+/// window this picker is not.
+#[must_use]
+pub fn strip_for(
+    words: &Strings,
+    looked: &Looked,
+    under_way: Option<&Progress>,
+    here: &str,
+    put_away: Option<&str>,
+) -> Option<Strip> {
+    let found = looked.found_version.as_deref()?;
+    if !newer_than(found, here) {
+        return None;
+    }
+    let store = looked.found_route.as_deref() == Some("store");
+    let how = if store {
+        words.update_store
+    } else {
+        words.update_how
+    };
+
+    if let Some(progress) = under_way.filter(|one| one.version == found) {
+        let far = i32::try_from(progress.far.min(100)).unwrap_or(0);
+        return match progress.stage.as_str() {
+            "starting" => Some(Strip {
+                stage: "starting",
+                line: words.update_starting.to_owned(),
+                detail: String::new(),
+                button: String::new(),
+                far: 0,
+            }),
+            "getting" => Some(Strip {
+                stage: "getting",
+                line: format!("{} {far} %", Strings::fill(words.update_getting, found)),
+                detail: String::new(),
+                button: String::new(),
+                far,
+            }),
+            "installing" => Some(Strip {
+                stage: "installing",
+                line: Strings::fill(words.update_installing, found),
+                detail: words.update_restart.to_owned(),
+                button: String::new(),
+                far: 0,
+            }),
+            "failed" => Some(Strip {
+                stage: "failed",
+                line: words.update_failed.to_owned(),
+                detail: how.to_owned(),
+                button: words.update_again.to_owned(),
+                far: 0,
+            }),
+            _ => None,
+        };
+    }
+
+    if put_away == Some(found) {
+        return None;
+    }
+    Some(Strip {
+        stage: "offer",
+        line: Strings::fill(words.update_ready, found),
+        detail: how.to_owned(),
+        button: if store {
+            words.update_open.to_owned()
+        } else {
+            words.update_take.to_owned()
+        },
+        far: 0,
+    })
+}
+
+pub fn show_strip(window: &Picker, strip: Option<&Strip>) {
+    match strip {
+        Some(strip) => {
+            window.set_update_stage(strip.stage.into());
+            window.set_update_line(strip.line.clone().into());
+            window.set_update_detail(strip.detail.clone().into());
+            window.set_update_button(strip.button.clone().into());
+            window.set_update_far(strip.far);
+        }
+        None => {
+            window.set_update_stage(slint::SharedString::new());
+            window.set_update_line(slint::SharedString::new());
+            window.set_update_detail(slint::SharedString::new());
+            window.set_update_button(slint::SharedString::new());
+            window.set_update_far(0);
+        }
+    }
 }
 
 #[must_use]
@@ -469,6 +576,177 @@ mod tests {
 
         window.set_reach_index(4);
         assert_eq!(window.get_reach_said(), "Recordar desde Slack");
+    }
+
+    fn found(version: &str, route: &str) -> linkunbound_core::update::Looked {
+        linkunbound_core::update::Looked {
+            checked_at: Some(1),
+            found_version: Some(version.to_owned()),
+            found_route: Some(route.to_owned()),
+            candidates: None,
+        }
+    }
+
+    fn under_way(version: &str, stage: &str, far: u64) -> linkunbound_core::update::Progress {
+        linkunbound_core::update::Progress {
+            version: version.to_owned(),
+            stage: stage.to_owned(),
+            far,
+        }
+    }
+
+    /// The strip only appears for a version newer than this copy, says what pressing does, and
+    /// goes away for the session once put aside — until a newer version than that one turns up.
+    #[test]
+    fn the_strip_offers_what_is_newer_and_stays_put_away() {
+        use crate::strip_for;
+        let words = Language::Spanish.strings();
+
+        assert!(strip_for(&words, &found("2.0.0", "download"), None, "2.0.0", None).is_none());
+        assert!(strip_for(&words, &found("1.9.0", "download"), None, "2.0.0", None).is_none());
+
+        let offer = strip_for(&words, &found("2.0.1", "download"), None, "2.0.0", None)
+            .expect("newer is offered");
+        assert_eq!(offer.stage, "offer");
+        assert_eq!(offer.line, "Versión 2.0.1 lista");
+        assert_eq!(offer.detail, words.update_how);
+        assert_eq!(offer.button, words.update_take);
+
+        assert!(
+            strip_for(
+                &words,
+                &found("2.0.1", "download"),
+                None,
+                "2.0.0",
+                Some("2.0.1")
+            )
+            .is_none(),
+            "put away for the session"
+        );
+        assert!(
+            strip_for(
+                &words,
+                &found("2.0.2", "download"),
+                None,
+                "2.0.0",
+                Some("2.0.1")
+            )
+            .is_some(),
+            "a newer one than the one put away is news again"
+        );
+    }
+
+    /// A Store copy cannot be updated from here: the button opens settings, and the line says so.
+    #[test]
+    fn a_store_copy_is_offered_the_door_to_settings() {
+        use crate::strip_for;
+        let words = Language::English.strings();
+        let offer =
+            strip_for(&words, &found("2.0.1", "store"), None, "2.0.0", None).expect("offered");
+        assert_eq!(offer.button, words.update_open);
+        assert_eq!(offer.detail, words.update_store);
+    }
+
+    /// While settings downloads, the strip follows its file: the bar while getting, the restart
+    /// notice while installing, and the button back when it failed.
+    #[test]
+    fn the_strip_follows_the_install_under_way() {
+        use crate::strip_for;
+        let words = Language::Spanish.strings();
+        let looked = found("2.0.1", "download");
+
+        let starting = strip_for(
+            &words,
+            &looked,
+            Some(&under_way("2.0.1", "starting", 0)),
+            "2.0.0",
+            None,
+        )
+        .expect("starting");
+        assert_eq!(starting.stage, "starting");
+        assert!(
+            starting.button.is_empty(),
+            "nothing to press while it prepares"
+        );
+
+        let getting = strip_for(
+            &words,
+            &looked,
+            Some(&under_way("2.0.1", "getting", 42)),
+            "2.0.0",
+            None,
+        )
+        .expect("getting");
+        assert_eq!(getting.line, "Descargando la 2.0.1… 42 %");
+        assert_eq!(getting.far, 42);
+
+        let installing = strip_for(
+            &words,
+            &looked,
+            Some(&under_way("2.0.1", "installing", 100)),
+            "2.0.0",
+            None,
+        )
+        .expect("installing");
+        assert_eq!(installing.detail, words.update_restart);
+
+        let failed = strip_for(
+            &words,
+            &looked,
+            Some(&under_way("2.0.1", "failed", 0)),
+            "2.0.0",
+            None,
+        )
+        .expect("failed");
+        assert_eq!(failed.line, words.update_failed);
+        assert_eq!(failed.button, words.update_again);
+
+        let other = strip_for(
+            &words,
+            &looked,
+            Some(&under_way("2.0.0", "getting", 10)),
+            "2.0.0",
+            None,
+        )
+        .expect("an install of some other version does not hide the offer");
+        assert_eq!(other.stage, "offer");
+    }
+
+    /// Both looks make room for the strip, and only while it is there.
+    #[test]
+    fn the_window_grows_by_the_strip_in_both_looks() {
+        use crate::{Strip, show_strip};
+        headless();
+        let window = crate::Picker::new().expect("a window");
+        dress(
+            &window,
+            &Language::Spanish.strings(),
+            "https://docs.google.com/a",
+            None,
+            &dressed(),
+        );
+
+        for classic in [false, true] {
+            window.set_classic(classic);
+            let plain = window.get_wanted_height();
+            show_strip(
+                &window,
+                Some(&Strip {
+                    stage: "offer",
+                    line: "Versión 2.0.1 lista".to_owned(),
+                    detail: String::new(),
+                    button: "Actualizar".to_owned(),
+                    far: 0,
+                }),
+            );
+            assert_eq!(
+                window.get_wanted_height(),
+                plain + 44.0,
+                "classic: {classic}"
+            );
+            show_strip(&window, None);
+            assert_eq!(window.get_wanted_height(), plain);
+        }
     }
 
     /// The arrows step through this list rather than through the row, and the row is now two

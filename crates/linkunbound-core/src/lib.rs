@@ -12,6 +12,7 @@ mod private;
 mod report;
 mod rule;
 mod store;
+pub mod update;
 mod url;
 
 pub use args::{join as join_args, split as split_args};

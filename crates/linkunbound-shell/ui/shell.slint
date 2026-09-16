@@ -193,6 +193,106 @@ component IconButton inherits Rectangle {
     }
 }
 
+// The update, when one is owed: what it is, what pressing does, and how far along it is. The
+// same strip sits atop both looks of the picker.
+component UpdateStrip inherits Rectangle {
+    in property <string> line;
+    in property <string> detail;
+    in property <string> button;
+    in property <int> far;
+    in property <bool> busy;
+    callback asked();
+    callback dismissed();
+
+    height: 34px;
+    border-radius: 10px;
+    background: Palette.accent-soft;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 6px;
+        spacing: 10px;
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 3px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.line;
+                font-size: 11.5px;
+                color: Palette.ink;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if root.detail != "": Text {
+                text: root.detail;
+                font-size: 11px;
+                color: Palette.dim;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if root.far > 0: Rectangle {
+                height: 3px;
+                border-radius: 2px;
+                background: Palette.neutral;
+                Rectangle {
+                    x: 0;
+                    width: parent.width * root.far / 100;
+                    height: 100%;
+                    border-radius: 2px;
+                    background: Palette.accent;
+                }
+            }
+        }
+
+        if root.button != "": Rectangle {
+            horizontal-stretch: 0;
+            y: (parent.height - self.height) / 2;
+            height: 24px;
+            width: take-words.preferred-width + 22px;
+            border-radius: 12px;
+            background: take-touch.has-hover ? Palette.accent : Palette.accent;
+            opacity: take-touch.has-hover ? 0.9 : 1.0;
+            take-words := Text {
+                text: root.button;
+                font-size: 11.5px;
+                font-weight: 600;
+                color: Palette.accent-ink;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: 100%;
+                height: 100%;
+            }
+            take-touch := TouchArea {
+                clicked => { root.asked(); }
+            }
+        }
+
+        if !root.busy: Rectangle {
+            horizontal-stretch: 0;
+            y: (parent.height - self.height) / 2;
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            background: later-touch.has-hover ? Palette.fill-hover : transparent;
+            Path {
+                x: 7px;
+                y: 7px;
+                width: 8px;
+                height: 8px;
+                viewbox-width: 8;
+                viewbox-height: 8;
+                stroke: Palette.faint;
+                stroke-width: 1.5px;
+                commands: "M 1 1 L 7 7 M 7 1 L 1 7";
+            }
+            later-touch := TouchArea {
+                clicked => { root.dismissed(); }
+            }
+        }
+    }
+}
+
 export component Picker inherits Window {
     in property <float> icon-side: 24;
     in property <string> host;
@@ -226,6 +326,18 @@ export component Picker inherits Window {
     in-out property <bool> pinned-private: false;
     in-out property <bool> copied: false;
 
+    // An update owed, in the words the resident composed: empty stage, no strip.
+    in property <string> update-stage;
+    in property <string> update-line;
+    in property <string> update-detail;
+    in property <string> update-button;
+    in property <int> update-far: 0;
+    property <bool> update-shown: root.update-stage != "";
+    property <bool> update-busy: root.update-stage == "starting" || root.update-stage == "getting" || root.update-stage == "installing";
+    property <length> strip-room: root.update-shown ? 44px : 0px;
+    callback update-asked();
+    callback update-dismissed();
+
     callback open(int, bool);
     /// Returns whether the key was a destination. See `key-pressed`.
     callback typed(string, bool) -> bool;
@@ -258,7 +370,8 @@ export component Picker inherits Window {
     }
 
     property <length> classic-height:
-        66px + 1px
+        root.strip-room
+        + 66px + 1px
         + (root.rows.length * 42px) + 16px
         + 1px + 38px + 22px + 12px
         + (root.problem == "" ? 0px : 36px);
@@ -273,7 +386,7 @@ export component Picker inherits Window {
         Math.floor(((root.sheet-width - 28px - (root.tile-cols - 1) * 4px) / root.tile-cols) / 1px) * 1px;
     property <bool> second-line: root.problem != "" || root.source-line != "";
     property <length> head-height: 15px + (root.second-line ? 16px : 0px);
-    property <length> tiles-top: 14px + root.head-height + 10px;
+    property <length> tiles-top: 14px + root.strip-room + root.head-height + 10px;
     property <length> tiles-height: root.tile-rows * 88px + (root.tile-rows - 1) * 4px;
     property <length> sheet-height: root.tiles-top + root.tiles-height + 10px + 26px + 12px;
 
@@ -341,6 +454,22 @@ export component Picker inherits Window {
                 border-color: Palette.edge;
 
                 VerticalLayout {
+                    if root.update-shown: Rectangle {
+                        height: 44px;
+                        UpdateStrip {
+                            x: 10px;
+                            y: 10px;
+                            width: parent.width - 20px;
+                            line: root.update-line;
+                            detail: root.update-detail;
+                            button: root.update-button;
+                            far: root.update-far;
+                            busy: root.update-busy;
+                            asked => { root.update-asked(); }
+                            dismissed => { root.update-dismissed(); }
+                        }
+                    }
+
                     Rectangle {
                         height: 66px;
                         HorizontalLayout {
@@ -589,9 +718,22 @@ export component Picker inherits Window {
                 border-width: 1px;
                 border-color: Palette.glow;
 
+                if root.update-shown: UpdateStrip {
+                    x: 14px;
+                    y: 14px;
+                    width: root.sheet-width - 28px;
+                    line: root.update-line;
+                    detail: root.update-detail;
+                    button: root.update-button;
+                    far: root.update-far;
+                    busy: root.update-busy;
+                    asked => { root.update-asked(); }
+                    dismissed => { root.update-dismissed(); }
+                }
+
                 HorizontalLayout {
                     x: 16px;
-                    y: 14px;
+                    y: 14px + root.strip-room;
                     width: root.sheet-width - 32px - 30px;
                     height: 15px;
                     alignment: start;
@@ -613,7 +755,7 @@ export component Picker inherits Window {
 
                 if root.second-line: Text {
                     x: 16px;
-                    y: 32px;
+                    y: 32px + root.strip-room;
                     width: root.sheet-width - 32px - 30px;
                     height: 13px;
                     text: root.problem != "" ? root.problem : root.source-line;
@@ -627,7 +769,7 @@ export component Picker inherits Window {
                 // pointer, and there is Ctrl+C besides.
                 copy-sheet := Rectangle {
                     x: root.sheet-width - 14px - 24px;
-                    y: 10px;
+                    y: 10px + root.strip-room;
                     width: 24px;
                     height: 24px;
                     border-radius: 6px;
