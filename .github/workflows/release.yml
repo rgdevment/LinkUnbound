@@ -939,6 +939,8 @@ jobs:
 
           	  app "LinkUnbound.app"
 
+          	  uninstall quit: "dev.rgdevment.linkunbound"
+
           	  zap trash: [
           	    "~/Library/Application Support/LinkUnbound",
           	    "~/Library/Preferences/dev.rgdevment.linkunbound.plist",

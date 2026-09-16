@@ -7,7 +7,9 @@ use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
-use objc2_app_kit::NSApplicationDidFinishLaunchingNotification;
+use objc2_app_kit::{
+    NSApplicationDidFinishLaunchingNotification, NSApplicationWillFinishLaunchingNotification,
+};
 use objc2_core_services::{
     AEEventClass, AEEventID, kAEOpenApplication, kAEOpenDocuments, kAEReopenApplication,
     kCoreEventClass, keyAELaunchedAsLogInItem, keyAEPropData, keyDirectObject, typeFileURL,
@@ -92,8 +94,15 @@ fn read(event: &NSAppleEventDescriptor) -> Vec<Event> {
     }
 }
 
+type Identity = (AEEventClass, AEEventID, i16);
+
+fn identity(event: &NSAppleEventDescriptor) -> Identity {
+    (event.eventClass(), event.eventID(), event.returnID())
+}
+
 struct Ivars {
     on: Box<dyn Fn(Event)>,
+    handled: std::cell::Cell<Option<Identity>>,
 }
 
 define_class!(
@@ -106,9 +115,7 @@ define_class!(
     impl Listener {
         #[unsafe(method(handleEvent:withReplyEvent:))]
         fn handle(&self, event: &NSAppleEventDescriptor, _reply: &NSAppleEventDescriptor) {
-            for found in read(event) {
-                (self.ivars().on)(found);
-            }
+            self.deliver(event);
         }
     }
 
@@ -117,8 +124,34 @@ define_class!(
 
 impl Listener {
     fn new(mtm: MainThreadMarker, on: Box<dyn Fn(Event)>) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(Ivars { on });
+        let this = Self::alloc(mtm).set_ivars(Ivars {
+            on,
+            handled: std::cell::Cell::new(None),
+        });
         unsafe { msg_send![super(this), init] }
+    }
+
+    fn deliver(&self, event: &NSAppleEventDescriptor) {
+        self.ivars().handled.set(Some(identity(event)));
+        for found in read(event) {
+            (self.ivars().on)(found);
+        }
+    }
+
+    /// The event that launched the process is handled inside `finishLaunching`
+    /// by AppKit's own `oapp` and `odoc` handlers, which replace these until
+    /// they are put back once launching is done: a login item would look like
+    /// a launch by hand, and a double-clicked page would open nothing. It is
+    /// still the current event then, so it is read from there, unless it was
+    /// a link, which AppKit leaves to whoever claimed it and so arrived already.
+    fn catch_up(&self) {
+        let Some(current) = NSAppleEventManager::sharedAppleEventManager().currentAppleEvent()
+        else {
+            return;
+        };
+        if self.ivars().handled.get() != Some(identity(&current)) {
+            self.deliver(&current);
+        }
     }
 
     fn install(&self) {
@@ -138,7 +171,7 @@ impl Listener {
 
 pub struct Listening {
     _listener: Retained<Listener>,
-    _observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+    _observers: Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>>,
 }
 
 impl Drop for Listening {
@@ -147,27 +180,56 @@ impl Drop for Listening {
         for (class, id) in HANDLED {
             manager.removeEventHandlerForEventClass_andEventID(class, id);
         }
+        for observer in &self._observers {
+            unsafe {
+                NSNotificationCenter::defaultCenter().removeObserver(observer.as_ref());
+            }
+        }
     }
 }
 
 #[must_use]
-pub fn listen(on: impl Fn(Event) + 'static) -> Option<Listening> {
-    let mtm = MainThreadMarker::new()?;
-    let listener = Listener::new(mtm, Box::new(on));
+fn on_launching(
+    name: &'static objc2_foundation::NSNotificationName,
+    listener: &Retained<Listener>,
+    catch_up: bool,
+) -> Retained<ProtocolObject<dyn NSObjectProtocol>> {
     let again = listener.clone();
-    let block = RcBlock::new(move |_: NonNull<NSNotification>| again.install());
-    let observer = unsafe {
+    let block = RcBlock::new(move |_: NonNull<NSNotification>| {
+        again.install();
+        if catch_up {
+            again.catch_up();
+        }
+    });
+    unsafe {
         NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(
-            Some(NSApplicationDidFinishLaunchingNotification),
+            Some(name),
             None,
             None,
             &block,
         )
-    };
+    }
+}
+
+pub fn listen(on: impl Fn(Event) + 'static) -> Option<Listening> {
+    let mtm = MainThreadMarker::new()?;
+    let listener = Listener::new(mtm, Box::new(on));
+    let observers = vec![
+        on_launching(
+            unsafe { NSApplicationWillFinishLaunchingNotification },
+            &listener,
+            false,
+        ),
+        on_launching(
+            unsafe { NSApplicationDidFinishLaunchingNotification },
+            &listener,
+            true,
+        ),
+    ];
     listener.install();
     Some(Listening {
         _listener: listener,
-        _observer: observer,
+        _observers: observers,
     })
 }
 

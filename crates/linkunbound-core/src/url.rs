@@ -97,6 +97,12 @@ const WEB_FILE_EXTENSIONS: [&str; 4] = ["html", "htm", "xhtml", "svg"];
 
 #[cfg(target_os = "macos")]
 #[must_use]
+pub fn local_web_file_extensions() -> &'static [&'static str] {
+    &WEB_FILE_EXTENSIONS
+}
+
+#[cfg(target_os = "macos")]
+#[must_use]
 pub fn local_web_file(path: &std::path::Path) -> Option<String> {
     let real = std::fs::canonicalize(path).ok()?;
     if !real.is_file() {

@@ -93,50 +93,69 @@ fn web_ranks(bundle: &NSBundle) -> Vec<String> {
 
 /// Chromium keeps its profiles beside the browser's own support directory, with
 /// no `User Data` level in between as on Windows.
-fn user_data_dir(app: &Path) -> Option<PathBuf> {
-    let needle = app.to_string_lossy().to_ascii_lowercase();
-    let suffix = if needle.contains("microsoft edge") {
+/// Matched on the bundle's own name, never on the path it sits in: a browser
+/// under `/Users/marc/Applications` is not Arc, and one under a folder called
+/// `operations` is not Opera.
+fn family_of(app: &Path) -> Option<&'static str> {
+    let name = app.file_name()?.to_string_lossy().to_ascii_lowercase();
+    let suffix = if name.contains("microsoft edge") {
         "Microsoft Edge"
-    } else if needle.contains("brave") {
+    } else if name.contains("brave") {
         "BraveSoftware/Brave-Browser"
-    } else if needle.contains("vivaldi") {
+    } else if name.contains("vivaldi") {
         "Vivaldi"
-    } else if needle.contains("chrome canary") {
+    } else if name.contains("chrome canary") {
         "Google/Chrome Canary"
-    } else if needle.contains("chrome beta") {
+    } else if name.contains("chrome beta") {
         "Google/Chrome Beta"
-    } else if needle.contains("chrome dev") {
+    } else if name.contains("chrome dev") {
         "Google/Chrome Dev"
-    } else if needle.contains("chrome") {
+    } else if name.contains("chrome") {
         "Google/Chrome"
-    } else if needle.contains("chromium") {
+    } else if name.contains("chromium") {
         "Chromium"
-    } else if needle.contains("/arc.app") {
+    } else if name == "arc.app" {
         "Arc/User Data"
-    } else if needle.contains("opera gx") {
+    } else if name.contains("opera gx") {
         "com.operasoftware.OperaGX"
-    } else if needle.contains("opera") {
+    } else if name.contains("opera") {
         "com.operasoftware.Opera"
     } else {
         return None;
     };
+    Some(suffix)
+}
+
+fn user_data_dir_under(app: &Path, home: &Path) -> Option<PathBuf> {
     Some(
-        PathBuf::from(std::env::var_os("HOME")?)
-            .join("Library")
+        home.join("Library")
             .join("Application Support")
-            .join(suffix),
+            .join(family_of(app)?),
     )
 }
 
-#[must_use]
-pub fn chromium_profiles(app: &str) -> Vec<Profile> {
-    let Some(dir) = user_data_dir(Path::new(app)) else {
+fn chromium_profiles_under(app: &Path, home: &Path) -> Vec<Profile> {
+    let Some(dir) = user_data_dir_under(app, home) else {
         return Vec::new();
     };
     let Ok(raw) = std::fs::read_to_string(dir.join("Local State")) else {
         return Vec::new();
     };
     profiles_in(&raw)
+}
+
+#[must_use]
+pub fn chromium_profiles(app: &str) -> Vec<Profile> {
+    let Some(home) = std::env::var_os("HOME") else {
+        return Vec::new();
+    };
+    chromium_profiles_under(Path::new(app), &PathBuf::from(home))
+}
+
+fn bundle_name(app: &Path) -> String {
+    app.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 fn preferred(bundle_id: &str) -> Option<objc2::rc::Retained<NSURL>> {
@@ -156,7 +175,7 @@ fn read_bundle(found: &NSURL) -> Option<Browser> {
     Some(Browser {
         id: id_for(&bundle_id),
         name: name_of(&bundle, app)?,
-        private_flag: private_flag_for(&path).map(str::to_owned),
+        private_flag: private_flag_for(&bundle_name(app)).map(str::to_owned),
         profiles: chromium_profiles(&path),
         exe: path,
         extra_args: Vec::new(),
@@ -174,24 +193,26 @@ fn add_unseen(found: &mut Vec<Browser>, browser: Browser) {
 
 #[must_use]
 pub fn installed_browsers() -> Vec<Browser> {
-    let Some(probe) = NSURL::URLWithString(&NSString::from_str(PROBE)) else {
-        return Vec::new();
-    };
-    let mut found: Vec<Browser> = Vec::new();
-    for url in NSWorkspace::sharedWorkspace().URLsForApplicationsToOpenURL(&probe) {
-        if let Some(browser) = read_bundle(&url) {
-            add_unseen(&mut found, browser);
+    objc2::rc::autoreleasepool(|_| {
+        let Some(probe) = NSURL::URLWithString(&NSString::from_str(PROBE)) else {
+            return Vec::new();
+        };
+        let mut found: Vec<Browser> = Vec::new();
+        for url in NSWorkspace::sharedWorkspace().URLsForApplicationsToOpenURL(&probe) {
+            if let Some(browser) = read_bundle(&url) {
+                add_unseen(&mut found, browser);
+            }
         }
-    }
-    found.sort_by_key(|b| b.name.to_lowercase());
-    found
+        found.sort_by_key(|b| b.name.to_lowercase());
+        found
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         add_unseen, chromium_profiles, info_string, installed_browsers, is_destination,
-        read_bundle, user_data_dir, web_ranks,
+        read_bundle, user_data_dir_under, web_ranks,
     };
     use linkunbound_core::Browser;
     use objc2_foundation::NSBundle;
@@ -271,7 +292,7 @@ mod tests {
     #[test]
     fn each_chromium_family_is_looked_for_where_it_actually_keeps_its_profiles() {
         let of = |app: &str| {
-            user_data_dir(Path::new(app))
+            user_data_dir_under(Path::new(app), Path::new("/Users/test"))
                 .map(|d| d.to_string_lossy().into_owned())
                 .unwrap_or_default()
         };
@@ -291,7 +312,7 @@ mod tests {
     #[test]
     fn each_chrome_channel_keeps_its_own_profiles() {
         let of = |app: &str| {
-            user_data_dir(Path::new(app))
+            user_data_dir_under(Path::new(app), Path::new("/Users/test"))
                 .map(|d| d.to_string_lossy().into_owned())
                 .unwrap_or_default()
         };
@@ -304,7 +325,7 @@ mod tests {
     #[test]
     fn the_other_chromium_families_keep_their_profiles_where_they_do() {
         let of = |app: &str| {
-            user_data_dir(Path::new(app))
+            user_data_dir_under(Path::new(app), Path::new("/Users/test"))
                 .map(|d| d.to_string_lossy().into_owned())
                 .unwrap_or_default()
         };
@@ -316,13 +337,20 @@ mod tests {
             of("/Users/marc/Applications/Firefox.app").is_empty(),
             "a name is not a path"
         );
+        assert!(of("/Users/operations/Applications/Firefox.app").is_empty());
+        assert!(of("/Users/ana/chrome-downloads/Safari.app").is_empty());
+        assert!(of("/Applications").is_empty());
     }
 
     /// Edge is Chromium but keeps its profiles somewhere of its own, and the generic marker
     /// would send it to Chrome's directory: the profiles shown would be another browser's.
     #[test]
     fn edge_is_not_sent_to_the_directory_chrome_keeps() {
-        let edge = user_data_dir(Path::new("/Applications/Microsoft Edge.app")).expect("a place");
+        let edge = user_data_dir_under(
+            Path::new("/Applications/Microsoft Edge.app"),
+            Path::new("/Users/test"),
+        )
+        .expect("a place");
         assert!(!edge.to_string_lossy().contains("Google"));
     }
 
@@ -330,6 +358,153 @@ mod tests {
     fn a_browser_outside_the_chromium_families_reports_no_profiles() {
         assert!(chromium_profiles("/Applications/Firefox.app").is_empty());
         assert!(chromium_profiles("/Applications/Safari.app").is_empty());
+        let home = std::path::PathBuf::from(std::env::var_os("HOME").expect("a home"));
+        for app in [
+            "/Applications/Google Chrome.app",
+            "/Applications/Vivaldi.app",
+        ] {
+            assert_eq!(
+                chromium_profiles(app),
+                super::chromium_profiles_under(Path::new(app), &home),
+                "{app}: the profiles are whatever this home holds"
+            );
+        }
+    }
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("linkunbound-detect-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        dir
+    }
+
+    #[test]
+    fn the_profiles_are_read_from_local_state_beside_the_support_directory() {
+        let home = scratch("home");
+        let chrome = home
+            .join("Library")
+            .join("Application Support")
+            .join("Google")
+            .join("Chrome");
+        std::fs::create_dir_all(&chrome).expect("a support directory");
+        std::fs::write(
+            chrome.join("Local State"),
+            r#"{"profile":{"info_cache":{"Default":{"name":"Personal"},"Profile 1":{"name":"Work"}}}}"#,
+        )
+        .expect("a local state");
+
+        let mut found =
+            super::chromium_profiles_under(Path::new("/Applications/Google Chrome.app"), &home);
+        found.sort_by(|a, b| a.id.cmp(&b.id));
+        let named: Vec<(&str, &str)> = found
+            .iter()
+            .map(|p| (p.id.as_str(), p.name.as_str()))
+            .collect();
+        assert_eq!(named, [("Default", "Personal"), ("Profile 1", "Work")]);
+        assert!(
+            found
+                .iter()
+                .all(|p| p.args == [format!("--profile-directory={}", p.id)])
+        );
+        assert!(
+            super::chromium_profiles_under(Path::new("/Applications/Firefox.app"), &home)
+                .is_empty()
+        );
+        assert!(
+            super::chromium_profiles_under(Path::new("/Applications/Brave Browser.app"), &home)
+                .is_empty(),
+            "a family with no local state yet has no profiles"
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    fn fake_bundle(
+        dir: &Path,
+        name: &str,
+        plist: &str,
+    ) -> objc2::rc::Retained<objc2_foundation::NSURL> {
+        let app = dir.join(name);
+        std::fs::create_dir_all(app.join("Contents").join("MacOS")).expect("a bundle");
+        std::fs::write(
+            app.join("Contents").join("Info.plist"),
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>{plist}</dict></plist>"#
+            ),
+        )
+        .expect("a plist");
+        objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(
+            &app.to_string_lossy(),
+        ))
+    }
+
+    const WEB: &str = r#"<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>HTTP</string><string>https</string></array>{rank}</dict></array>"#;
+
+    fn web(rank: &str) -> String {
+        WEB.replace("{rank}", rank)
+    }
+
+    /// The same table Windows pins against synthetic registry entries: a bundle that says it
+    /// opens links only as a fallback is left out, one that declares nothing readable is left
+    /// to Launch Services, and the family is read from the bundle's name.
+    #[test]
+    fn a_bundle_becomes_a_browser_and_a_fallback_opener_is_left_out() {
+        let dir = scratch("bundles");
+        let plain = fake_bundle(
+            &dir,
+            "Plain.app",
+            &format!(
+                r#"<key>CFBundleIdentifier</key><string>com.example.plain</string>{}"#,
+                web("")
+            ),
+        );
+        let read = read_bundle(&plain).expect("a browser");
+        assert_eq!(read.id, "com-example-plain");
+        assert_eq!(read.name, "Plain", "no display name, so the file's own");
+        assert!(read.private_flag.is_none());
+        assert!(read.profiles.is_empty());
+        assert!(read.exe.ends_with("Plain.app"));
+
+        let alternate = fake_bundle(
+            &dir,
+            "Alt.app",
+            &format!(
+                r#"<key>CFBundleIdentifier</key><string>com.example.alt</string><key>CFBundleDisplayName</key><string>Alt Editor</string>{}"#,
+                web("<key>LSHandlerRank</key><string>Alternate</string>")
+            ),
+        );
+        assert!(
+            read_bundle(&alternate).is_none(),
+            "an editor that merely accepts links"
+        );
+
+        let odd = fake_bundle(
+            &dir,
+            "Odd.app",
+            r#"<key>CFBundleIdentifier</key><string>com.example.odd</string><key>CFBundleName</key><string>Odd Browser</string><key>CFBundleURLTypes</key><string>nonsense</string>"#,
+        );
+        let read = read_bundle(&odd).expect("left to Launch Services");
+        assert_eq!(read.name, "Odd Browser");
+
+        let chrome = fake_bundle(
+            &dir,
+            "Fake Chrome.app",
+            &format!(
+                r#"<key>CFBundleIdentifier</key><string>com.example.fakechrome</string>{}"#,
+                web("")
+            ),
+        );
+        let read = read_bundle(&chrome).expect("a browser");
+        assert_eq!(read.private_flag.as_deref(), Some("--incognito"));
+
+        let nameless = fake_bundle(&dir, "Nameless.app", &web(""));
+        assert!(
+            read_bundle(&nameless).is_none(),
+            "no identifier, nothing to launch by"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -349,13 +524,21 @@ mod tests {
             Some("x")
         );
         assert_eq!(super::text(None), None);
-        let ours = super::preferred("dev.rgdevment.linkunbound");
-        if let Some(ours) = ours {
-            assert!(
-                super::read_bundle(&ours).is_none(),
-                "this app is never a destination"
-            );
-        }
+        let dir = scratch("ours");
+        let ours = fake_bundle(
+            &dir,
+            "LinkUnbound.app",
+            &format!(
+                r#"<key>CFBundleIdentifier</key><string>{}</string>{}"#,
+                crate::OWN_BUNDLE_IDS[0],
+                web("<key>LSHandlerRank</key><string>Owner</string>")
+            ),
+        );
+        assert!(
+            super::read_bundle(&ours).is_none(),
+            "this app is never a destination"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -374,7 +557,15 @@ mod tests {
             Some("com.apple.Safari")
         );
         assert_eq!(info_string(&bundle, "LinkUnboundNeverWroteThis"), None);
-        assert_eq!(web_ranks(&bundle), ["Default"]);
+        let ranks = web_ranks(&bundle);
+        assert!(
+            !ranks.is_empty() && ranks.iter().all(|r| r == "Default"),
+            "{ranks:?}"
+        );
+        assert!(
+            ranks.len() <= 2,
+            "one entry per web scheme at most: {ranks:?}"
+        );
         assert!(
             web_ranks(&NSBundle::mainBundle()).is_empty(),
             "a test binary declares nothing"

@@ -23,7 +23,7 @@ const ES = {
   healthNoResident:
     "Falta el programa que abre los enlaces. La instalación quedó incompleta: vuelve a instalar LinkUnbound.",
   healthMounted:
-    "Estás ejecutando LinkUnbound desde la imagen de disco. Arrástralo a Aplicaciones y ábrelo desde ahí antes de establecerlo como predeterminado: al expulsar la imagen, el registro dejaría de apuntar a nada.",
+    "Estás ejecutando LinkUnbound desde la imagen de disco o desde una copia en cuarentena. Arrástralo a Aplicaciones y ábrelo desde ahí antes de establecerlo como predeterminado: el registro apuntaría a una ruta que desaparece.",
   healthPointsAt: "Windows ejecutaría: {}",
   healthRepair: "Reparar",
   sectionDefault: "Navegador predeterminado",
@@ -167,6 +167,7 @@ const ES = {
   defaultNoAnswer: "macOS no respondió a tiempo; vuelve a intentarlo",
   defaultDeclined: "Rechazaste el cambio en el aviso de macOS",
   noPreviousBrowser: "No se encuentra ningún navegador al que devolver los enlaces",
+  mounted: "Mueve LinkUnbound a Aplicaciones y ábrelo desde ahí antes de esto",
   ruleGone: "Esa regla ya no está",
   updateBusy: "Ya hay una actualización en marcha",
   updateGone: "Ya no hay ninguna versión nueva que instalar",
@@ -238,7 +239,7 @@ const EN: Record<Key, string> = {
   healthNoResident:
     "The program that opens links is missing. The install is incomplete: install LinkUnbound again.",
   healthMounted:
-    "You are running LinkUnbound from the disk image. Drag it to Applications and open it from there before setting it as the default: once the image is ejected, the registration would point at nothing.",
+    "You are running LinkUnbound from the disk image or from a quarantined copy. Drag it to Applications and open it from there before setting it as the default: the registration would point at a path that goes away.",
   healthPointsAt: "Windows would run: {}",
   healthRepair: "Repair",
   sectionDefault: "Default browser",
@@ -383,6 +384,7 @@ const EN: Record<Key, string> = {
   defaultNoAnswer: "macOS did not answer in time; try again",
   defaultDeclined: "You declined the change in the macOS prompt",
   noPreviousBrowser: "No browser can be found to hand the links back to",
+  mounted: "Move LinkUnbound to Applications and open it from there before this",
   ruleGone: "That rule is no longer there",
   updateBusy: "An update is already underway",
   updateGone: "There is no newer version left to install",

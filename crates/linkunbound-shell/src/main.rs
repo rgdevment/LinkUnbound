@@ -151,7 +151,7 @@ mod host {
     }
 
     pub fn digit_behind(typed: char) -> Option<u32> {
-        typed.to_digit(10).filter(|d| (1..=9).contains(d))
+        linkunbound_mac::digit_behind(typed)
     }
 
     pub fn is_bundled() -> bool {
@@ -446,7 +446,8 @@ fn next_in_line(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>) {
 }
 
 /// The window is asked for in physical pixels because the screen is measured in them: at 150%
-/// the logical width is two thirds of the room it actually takes.
+/// the logical width is two thirds of the room it actually takes. A Mac measures its screens
+/// in points, one space across every scale, so there the window is asked for in those.
 fn physical(logical: f32, scale: f64) -> i32 {
     (f64::from(logical) * scale).round() as i32
 }
@@ -459,7 +460,11 @@ fn beside_the_pointer(picker: &Picker) {
     let Some((x, y, width, height)) = host::work_area_at(cx, cy) else {
         return;
     };
-    let scale = f64::from(picker.window().scale_factor());
+    let scale = if cfg!(target_os = "macos") {
+        1.0
+    } else {
+        f64::from(picker.window().scale_factor())
+    };
     let size = |logical: f32| physical(logical, scale);
 
     let (at_x, at_y) = place::beside(
@@ -475,6 +480,11 @@ fn beside_the_pointer(picker: &Picker) {
             height,
         },
     );
+    #[cfg(target_os = "macos")]
+    picker
+        .window()
+        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
+    #[cfg(not(target_os = "macos"))]
     picker
         .window()
         .set_position(slint::PhysicalPosition::new(at_x, at_y));
@@ -609,24 +619,43 @@ fn handed_to_the_loop(url: String) {
 }
 
 #[cfg(target_os = "macos")]
-fn sent_by_launch_services(event: linkunbound_mac::Event, quiet: bool) {
+#[derive(Debug, PartialEq, Eq)]
+enum Reaction {
+    Open(String),
+    Settings,
+    Nothing,
+}
+
+/// A login item says nothing on screen; a plain launch by hand shows the
+/// settings unless told to keep quiet; reopening from the Dock always does.
+#[cfg(target_os = "macos")]
+fn reaction_to(event: linkunbound_mac::Event, quiet: bool) -> Reaction {
     use linkunbound_mac::Event;
+    match event {
+        Event::Link(url) => Reaction::Open(url),
+        Event::Document(path) => {
+            linkunbound_core::local_web_file(&path).map_or(Reaction::Nothing, Reaction::Open)
+        }
+        Event::Launched { as_login_item } => {
+            if as_login_item || quiet {
+                Reaction::Nothing
+            } else {
+                Reaction::Settings
+            }
+        }
+        Event::Reopened => Reaction::Settings,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn sent_by_launch_services(event: linkunbound_mac::Event, quiet: bool) {
     if let Some(ui) = ui() {
         ui.launch_decided.set(true);
     }
-    match event {
-        Event::Link(url) => arrived(url),
-        Event::Document(path) => {
-            if let Some(url) = linkunbound_core::local_web_file(&path) {
-                arrived(url);
-            }
-        }
-        Event::Launched { as_login_item } => {
-            if !as_login_item && !quiet {
-                open_settings();
-            }
-        }
-        Event::Reopened => open_settings(),
+    match reaction_to(event, quiet) {
+        Reaction::Open(url) => arrived(url),
+        Reaction::Settings => open_settings(),
+        Reaction::Nothing => {}
     }
 }
 
@@ -879,6 +908,78 @@ mod tests {
     use linkunbound_core::Scope;
     use linkunbound_core::normalise;
     use linkunbound_shell::Reaches;
+
+    #[cfg(target_os = "macos")]
+    mod launch_services {
+        use super::super::{Reaction, host, reaction_to};
+        use linkunbound_mac::Event;
+
+        #[test]
+        fn a_link_and_a_web_document_are_opened_and_anything_else_is_not() {
+            assert_eq!(
+                reaction_to(Event::Link("https://a.test/x".to_owned()), false),
+                Reaction::Open("https://a.test/x".to_owned())
+            );
+            let dir =
+                std::env::temp_dir().join(format!("linkunbound-react-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).expect("a scratch directory");
+            let page = dir.join("page.html");
+            std::fs::write(&page, "<p>x</p>").expect("a page");
+            let notes = dir.join("notes.txt");
+            std::fs::write(&notes, "x").expect("a note");
+            assert!(matches!(
+                reaction_to(Event::Document(page.clone()), true),
+                Reaction::Open(url) if url.starts_with("file://") && url.ends_with("/page.html")
+            ));
+            assert_eq!(
+                reaction_to(Event::Document(notes), false),
+                Reaction::Nothing
+            );
+            assert_eq!(
+                reaction_to(Event::Document(dir.join("missing.html")), false),
+                Reaction::Nothing
+            );
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[test]
+        fn a_login_item_says_nothing_and_a_launch_by_hand_shows_the_settings() {
+            let by_hand = Event::Launched {
+                as_login_item: false,
+            };
+            let at_login = Event::Launched {
+                as_login_item: true,
+            };
+            assert_eq!(reaction_to(by_hand, false), Reaction::Settings);
+            assert_eq!(
+                reaction_to(
+                    Event::Launched {
+                        as_login_item: false
+                    },
+                    true
+                ),
+                Reaction::Nothing,
+                "told to keep quiet"
+            );
+            assert_eq!(reaction_to(at_login, false), Reaction::Nothing);
+            assert_eq!(reaction_to(Event::Reopened, true), Reaction::Settings);
+        }
+
+        /// The Mac reads the key rather than the glyph, so with no key event in flight only a
+        /// plain digit maps; a shifted one is left to the key code.
+        #[test]
+        fn a_digit_typed_without_a_key_event_is_still_a_digit() {
+            for (typed, digit) in [
+                ('1', Some(1)),
+                ('9', Some(9)),
+                ('0', None),
+                ('a', None),
+                ('!', None),
+            ] {
+                assert_eq!(host::digit_behind(typed), digit, "{typed}");
+            }
+        }
+    }
 
     /// The screen is measured in physical pixels and the window is described in logical ones, so
     /// on a 150% display the untouched number asks for two thirds of the room it needs and the

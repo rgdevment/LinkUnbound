@@ -22,14 +22,29 @@ fn fits(path: &std::path::Path) -> bool {
 }
 
 /// `$TMPDIR` is this user's own and kept at `drwx------`, so the fallback gives
-/// up durability across a purge rather than privacy.
+/// up durability across a purge rather than privacy. Without it the fallback
+/// would be the shared `/tmp`, where another user could have bound the socket
+/// first and be handed every link: a directory of our own, made `0700`, is what
+/// keeps the fallback private, and one that cannot be made so is not used.
+#[cfg(not(windows))]
+fn private_fallback() -> Option<std::path::PathBuf> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let dir = std::env::temp_dir().join("linkunbound-shell");
+    std::fs::create_dir_all(&dir).ok()?;
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).ok()?;
+    let made = std::fs::metadata(&dir).ok()?;
+    let mine = std::fs::metadata(std::env::temp_dir()).ok()?.uid();
+    (made.is_dir() && made.mode() & 0o777 == 0o700 && made.uid() == mine)
+        .then(|| dir.join("shell.sock"))
+}
+
 #[cfg(not(windows))]
 fn address() -> String {
     let kept = linkunbound_core::data_dir().join("shell.sock");
     let chosen = if fits(&kept) {
         kept
     } else {
-        std::env::temp_dir().join("linkunbound-shell.sock")
+        private_fallback().unwrap_or(kept)
     };
     chosen.to_string_lossy().into_owned()
 }
@@ -143,6 +158,12 @@ pub fn claim(
     claim_at(&address(), arrived)
 }
 
+/// A listener failing for good would otherwise spin a core for the lifetime of
+/// a process meant to sit in memory for days.
+fn gave_up(refused: u32) -> bool {
+    refused > 100
+}
+
 fn claim_at(
     socket: &str,
     arrived: impl Fn(String) + Send + Sync + 'static,
@@ -157,10 +178,8 @@ fn claim_at(
         let mut refused = 0u32;
         loop {
             let Ok(stream) = listener.accept() else {
-                // A listener failing for good would otherwise spin a core for
-                // the lifetime of a process meant to sit in memory for days.
                 refused += 1;
-                if refused > 100 {
+                if gave_up(refused) {
                     return;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
@@ -214,11 +233,10 @@ mod tests {
     fn a_link_with_a_pipe_in_it_arrives_whole() {
         let socket = scratch("pipe");
         let (tx, rx) = channel();
-        let Some(_server) = claim_at(&socket, move |url| {
+        let _server = claim_at(&socket, move |url| {
             let _ = tx.send(url);
-        }) else {
-            return;
-        };
+        })
+        .expect("the socket can be claimed");
         let sent = "https://intranet.corp/informes?filtro=activo|urgente&b=1|2";
         assert!(hand_over_at(&socket, sent));
         let got = rx
@@ -235,9 +253,7 @@ mod tests {
     #[test]
     fn the_second_process_cannot_claim_what_the_first_holds() {
         let socket = scratch("twice");
-        let Some(_server) = claim_at(&socket, |_| {}) else {
-            return;
-        };
+        let _server = claim_at(&socket, |_| {}).expect("the socket can be claimed");
         assert!(claim_at(&socket, |_| {}).is_none());
     }
 
@@ -251,11 +267,10 @@ mod tests {
 
         let socket = scratch("mute");
         let (tx, rx) = channel();
-        let Some(_server) = claim_at(&socket, move |url| {
+        let _server = claim_at(&socket, move |url| {
             let _ = tx.send(url);
-        }) else {
-            return;
-        };
+        })
+        .expect("the socket can be claimed");
 
         let name = super::named(&socket).expect("should name");
         let _mute = Stream::connect(name).expect("should connect");
@@ -280,11 +295,10 @@ mod tests {
 
         let socket = scratch("flood");
         let (tx, rx) = channel();
-        let Some(_server) = claim_at(&socket, move |url| {
+        let _server = claim_at(&socket, move |url| {
             let _ = tx.send(url);
-        }) else {
-            return;
-        };
+        })
+        .expect("the socket can be claimed");
 
         let name = super::named(&socket).expect("should name");
         let mut flood = Stream::connect(name).expect("should connect");
@@ -300,13 +314,52 @@ mod tests {
         );
         drop(flood);
 
-        if let Ok(got) = rx.recv_timeout(Duration::from_secs(5)) {
-            assert!(
-                got.len() as u64 <= super::LONGEST_LINK,
-                "read {} bytes, past the cap",
-                got.len()
-            );
-        }
+        let got = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the capped line still arrives");
+        assert!(
+            got.len() as u64 <= super::LONGEST_LINK,
+            "read {} bytes, past the cap",
+            got.len()
+        );
+    }
+
+    /// Chrome follows links of about 32 KB, and the 1.x pipe broke at 4 KB with a real Teams
+    /// link: the cap has to sit far above both, and one of that size has to arrive whole.
+    #[test]
+    fn a_link_as_long_as_a_browser_follows_arrives_whole() {
+        let socket = scratch("long");
+        let (tx, rx) = channel();
+        let _server = claim_at(&socket, move |url| {
+            let _ = tx.send(url);
+        })
+        .expect("the socket can be claimed");
+        let sent = format!("https://teams.test/l/?p={}", "x".repeat(32 * 1024));
+        assert!(hand_over_at(&socket, &sent));
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)).as_deref(),
+            Ok(sent.as_str())
+        );
+        assert!(super::LONGEST_LINK >= 4 * (sent.len() as u64));
+    }
+
+    #[test]
+    fn a_listener_that_keeps_failing_is_given_up_on_only_after_a_while() {
+        assert!(!super::gave_up(0));
+        assert!(!super::gave_up(100));
+        assert!(super::gave_up(101));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn the_fallback_socket_lives_in_a_directory_nobody_else_can_open() {
+        use std::os::unix::fs::PermissionsExt;
+        let fallback = super::private_fallback().expect("a private place");
+        let dir = fallback.parent().expect("a directory");
+        let mode = std::fs::metadata(dir).expect("made").permissions().mode();
+        assert_eq!(mode & 0o777, 0o700, "{mode:o}");
+        assert!(fallback.ends_with("shell.sock"));
+        assert!(super::fits(&fallback));
     }
 
     #[test]
@@ -420,6 +473,25 @@ mod tests {
         let _ = std::fs::remove_file(path.with_extension("lock"));
     }
 
+    /// A lock left by a copy that died mid-claim would otherwise keep every resident out for
+    /// good; one old enough to be nobody's is taken over, one fresh enough is not.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_lock_nobody_has_held_for_a_while_is_taken_over() {
+        let socket = scratch("stale");
+        let lock = std::path::Path::new(&socket).with_extension("lock");
+        std::fs::write(&lock, b"").expect("a lock left behind");
+        let long_ago = std::time::SystemTime::now() - Duration::from_secs(60);
+        std::fs::File::options()
+            .write(true)
+            .open(&lock)
+            .and_then(|f| f.set_modified(long_ago))
+            .expect("an old lock");
+        let taken = super::hold(&socket).expect("an abandoned lock is nobody's");
+        drop(taken);
+        assert!(!lock.exists(), "let go, the lock is gone");
+    }
+
     /// The other half of the same decision: one that does answer belongs to a resident that is
     /// still running, and taking it away would strand every link it was about to be handed.
     #[cfg(not(windows))]
@@ -427,11 +499,10 @@ mod tests {
     fn a_socket_a_living_resident_still_answers_on_is_left_alone() {
         let socket = scratch("held");
         let (tx, rx) = channel();
-        let Some(_server) = claim_at(&socket, move |url| {
+        let _server = claim_at(&socket, move |url| {
             let _ = tx.send(url);
-        }) else {
-            return;
-        };
+        })
+        .expect("the socket can be claimed");
 
         assert!(
             claim_at(&socket, |_| {}).is_none(),

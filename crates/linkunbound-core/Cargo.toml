@@ -18,5 +18,3 @@ thiserror.workspace = true
 url.workspace = true
 percent-encoding.workspace = true
 
-[target."cfg(target_os = \"macos\")".dependencies]
-plist = { version = "1.10", default-features = false }

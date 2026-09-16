@@ -28,14 +28,19 @@ pub fn repaint<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     }
 }
 
+/// The window is looked up again on the main thread rather than carried over
+/// as a pointer: closed in between, the pointer would name freed memory.
 #[cfg(target_os = "macos")]
 fn dress_natively<R: Runtime>(window: &tauri::WebviewWindow<R>, theme: Theme) {
-    let Ok(handle) = window.ns_window().map(|p| p as isize) else {
-        return;
-    };
     let dark = dressed_as(theme).map(|t| t == tauri::Theme::Dark);
+    let app = window.app_handle().clone();
     let _ = window.run_on_main_thread(move || {
-        linkunbound_mac::dress_window(handle, dark);
+        if let Some(handle) = app
+            .get_webview_window(SETTINGS)
+            .and_then(|window| window.ns_window().ok())
+        {
+            linkunbound_mac::dress_window(handle as isize, dark);
+        }
     });
 }
 

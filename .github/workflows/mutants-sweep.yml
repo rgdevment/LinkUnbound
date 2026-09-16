@@ -28,7 +28,7 @@ jobs:
         id: run
         run: |
           set +e
-          cargo mutants -p linkunbound-core -j 2
+          cargo mutants -p linkunbound-core -j 2 --exclude-re 'mac::|local_web_file|launchable_file|host::|reaction_to|sent_by_launch_services|platform::|dress_natively|replace is_bundle|relaunch_resident|relay_links|hand_to_the_resident|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room|replace forget with'
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived
@@ -69,7 +69,8 @@ jobs:
         id: run
         run: |
           set +e
-          cargo mutants -p linkunbound-shell --shard $(( ${{ matrix.shard }} - 1 ))/4 -j 2
+          cargo mutants -p linkunbound-shell --shard $(( ${{ matrix.shard }} - 1 ))/4 -j 2 \
+            --exclude-re 'mac::|local_web_file|launchable_file|host::|reaction_to|sent_by_launch_services|platform::|dress_natively|replace is_bundle|relaunch_resident|relay_links|hand_to_the_resident|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room|replace forget with'
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived
@@ -113,7 +114,8 @@ jobs:
         id: run
         run: |
           set +e
-          cargo mutants -p linkunbound-settings --shard $(( ${{ matrix.shard }} - 1 ))/2 --in-place
+          cargo mutants -p linkunbound-settings --shard $(( ${{ matrix.shard }} - 1 ))/2 --in-place \
+            --exclude-re 'mac::|local_web_file|launchable_file|host::|reaction_to|sent_by_launch_services|platform::|dress_natively|replace is_bundle|relaunch_resident|relay_links|hand_to_the_resident|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room|replace forget with'
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived
@@ -145,12 +147,17 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - uses: taiki-e/install-action@cargo-mutants
 
-      - name: One half of every mutant the Mac crate carries
+      - name: One half of every mutant the Mac crate carries, and what only a Mac compiles elsewhere
         id: run
         run: |
           set +e
           cargo mutants -p linkunbound-mac --shard $(( ${{ matrix.shard }} - 1 ))/2 -j 2
-          echo "code=$?" >> "$GITHUB_OUTPUT"
+          code=$?
+          cargo mutants -p linkunbound-core -p linkunbound-shell --shard $(( ${{ matrix.shard }} - 1 ))/2 -j 2 \
+            -F 'mac::|local_web_file|launchable_file|reaction_to|sent_by_launch_services|replace drawing|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room' -o mutants-elsewhere
+          elsewhere=$?
+          [ "$elsewhere" -eq 0 ] || code=$elsewhere
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
       - name: What survived
         if: always()
@@ -159,11 +166,26 @@ jobs:
           TITLE: linkunbound-mac, shard ${{ matrix.shard }} of 2
         run: bash scripts/mutants-report.sh
 
+      - name: What survived of the Mac branches elsewhere
+        if: always()
+        env:
+          CODE: ${{ steps.run.outputs.code }}
+          TITLE: the Mac branches of core and shell, shard ${{ matrix.shard }} of 2
+          OUT: mutants-elsewhere/mutants.out
+        run: bash scripts/mutants-report.sh
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mutants-mac-${{ matrix.shard }}
           path: mutants.out/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-mac-elsewhere-${{ matrix.shard }}
+          path: mutants-elsewhere/mutants.out/
           retention-days: 14
 
   window:
@@ -257,7 +279,7 @@ jobs:
       - name: Every shard told as one report
         env:
           WANT_WINDOW: 4
-          WANT_CRATES: 9
+          WANT_CRATES: 11
         run: bash scripts/mutants-score.sh
 
       - name: The report where a survivor can be read one by one
