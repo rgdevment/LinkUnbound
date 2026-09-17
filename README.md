@@ -41,9 +41,12 @@
 </p>
 
 <p>
-  <img src="resources/assets/linkUnbound_1_picker_en.png" alt="LinkUnbound browser picker popup near the cursor" width="45%"/>
+  <img src="resources/assets/linkUnbound_2_0_picker_en.png" alt="The picker, classic look: a list of browsers with keys 1 to 3, the link's site and the app it came from" width="32%"/>
   &nbsp;
-  <img src="resources/assets/linkUnbound_2_settings_en.png" alt="LinkUnbound settings window with browsers and domain rules" width="45%"/>
+  <img src="resources/assets/linkUnbound_2_0_picker_mosaic_en.png" alt="The picker, mosaic look: tiles of browsers and profiles" width="35%"/>
+</p>
+<p>
+  <img src="resources/assets/linkUnbound_2_0_settings_en.png" alt="The settings window on the Rules page: a site rule and a rule for everything Slack sends" width="72%"/>
 </p>
 
 <h4>Download LinkUnbound</h4>
@@ -179,7 +182,7 @@ Or download the `.dmg` directly from [GitHub Releases](https://github.com/rgdevm
 <details>
 <summary><strong>Windows standalone: security warnings</strong></summary>
 
-The installer is signed, but a certificate that few people have run yet earns little reputation with SmartScreen: Windows and your browser may still show a warning on a new release — this is normal and expected.
+Since LinkUnbound is an independent open source project, the installer is signed with a self-signed certificate. Windows and your browser may show security warnings — this is normal and expected.
 
 - **Browser:** Chrome/Edge may block the download — click Keep or Keep anyway.
 - **SmartScreen:** Click More info → Run anyway (only happens once).

@@ -1,6 +1,6 @@
 #![windows_subsystem = "windows"]
 
-//! `cargo run -p linkunbound-shell --example preview -- [--sheet] [--light] [--six | --twelve]
+//! `cargo run -p linkunbound-shell --example preview -- [--sheet] [--light] [--en] [--six | --twelve]
 //! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]`
 
 use linkunbound_core::Language;
@@ -42,12 +42,14 @@ fn main() -> Result<(), slint::PlatformError> {
         None
     };
 
+    let english = flag("--en");
+    let named = |es: &str, en: &str| if english { en } else { es }.to_owned();
     let rows = vec![
         Listed {
             browser_id: "google-chrome".to_owned(),
             profile_id: Some("Default".to_owned()),
             name: "Google Chrome".to_owned(),
-            profile: "Tu Chrome".to_owned(),
+            profile: named("Tu Chrome", "Personal"),
             icon: icon("google-chrome"),
             can_private: true,
         },
@@ -63,7 +65,7 @@ fn main() -> Result<(), slint::PlatformError> {
             browser_id: "vivaldi".to_owned(),
             profile_id: None,
             name: "Vivaldi".to_owned(),
-            profile: "Trabajo".to_owned(),
+            profile: named("Trabajo", "Work"),
             icon: icon("vivaldi-xzttkvpr7ou6s6fgtka6s5fohm"),
             can_private: false,
         },
@@ -72,8 +74,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let mut rows = rows;
     if flag("--six") || flag("--twelve") {
         let mut more = rows.clone();
-        more[0].profile = "Cliente".to_owned();
-        more[2].profile = "Personal".to_owned();
+        more[0].profile = named("Cliente", "Client");
+        more[2].profile = named("Personal", "Home");
         rows.extend(more);
     }
     if flag("--twelve") {
@@ -81,6 +83,7 @@ fn main() -> Result<(), slint::PlatformError> {
         rows.extend(more);
     }
 
+    let words = if english { Language::English } else { Language::Spanish }.strings();
     let window = Picker::new()?;
     let notice = linkunbound_shell::Notice::new()?;
     paint(&window, &notice, flag("--light"));
@@ -88,9 +91,9 @@ fn main() -> Result<(), slint::PlatformError> {
     window.set_halo(if classic { 0.0 } else { HALO });
     dress(
         &window,
-        &Language::Spanish.strings(),
+        &words,
         "https://docs.google.com/document/d/1a9F/edit",
-        Some("tisty-gui"),
+        Some("slack"),
         &rows,
     );
 
@@ -113,7 +116,7 @@ fn main() -> Result<(), slint::PlatformError> {
             stage,
         });
         let strip = linkunbound_shell::strip_for(
-            &Language::Spanish.strings(),
+            &words,
             &looked,
             progress.as_ref(),
             "2.0.0",
@@ -163,9 +166,10 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     if flag("--notice") {
-        notice.set_headline("Abierto en Mozilla Firefox".into());
-        notice.set_reason("Una regla decidió por docs.google.com".into());
-        notice.set_undo_label("Deshacer".into());
+        use linkunbound_core::Strings;
+        notice.set_headline(Strings::fill(words.notice_opened, "Mozilla Firefox").into());
+        notice.set_reason(Strings::fill(words.notice_by_rule, "docs.google.com").into());
+        notice.set_undo_label(words.notice_undo.into());
         notice.set_left(6);
         notice.show()?;
     }

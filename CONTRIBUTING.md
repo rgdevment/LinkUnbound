@@ -69,31 +69,41 @@ Found something confusing? Missing information? PRs welcome.
 
 ## Project Structure
 
-LinkUnbound is a Cargo workspace with a Tauri front end:
+LinkUnbound is a Cargo workspace. Two binaries ship in one package: the
+resident, which owns the tray, the picker and the notice, and the settings
+window, which opens on demand.
 
 ```text
 LinkUnbound/
   crates/
-    linkunbound-core/     # Pure Rust — models, rules, URL handling
-      src/
-        browser.rs        # Browser and Profile
-        rule.rs           # HostPattern, Rule, RuleSet
-        lib.rs            # URL helpers
+    linkunbound-core/     # Pure Rust: URLs, rules, browsers, preferences, the update feed
+    linkunbound-win/      # Windows: registration, detection, icons, start-up, the Win32 calls
+    linkunbound-mac/      # macOS: Launch Services, Apple Events, icons, login item (objc2)
+    linkunbound-shell/    # The resident: Slint picker and notice, tray, single instance
+      ui/shell.slint      # The picker in its two looks, and the notice
+      examples/preview.rs # The picker on its own, for design work
   app/
-    src/                  # The picker and settings, in React
-    src-tauri/            # The desktop shell: windows, tray, single instance
-      src/
+    src/                  # The settings window, in React
+    src-tauri/            # Its Tauri side: commands, health, updates, the Store
       capabilities/       # What the front end is allowed to call
+      nsis/hooks.nsh      # The Windows installer's hooks (1.x removal, registration)
+      msix/               # The Store package manifest
+  scripts/                # sidecar.sh builds the resident for the bundler; third-party.mjs the notices
+  .github/workflows/      # ci, rules, bundle, release, feed, mutants
 ```
 
 **Key conventions:**
 
 - Business logic lives in `crates/linkunbound-core`. It depends on neither
-  Tauri nor any platform API, and CI enforces that.
+  Tauri nor any platform API, and CI enforces that each crate builds alone.
 - The core never prints. The picker would inherit the output as garbage.
-- `unsafe` is forbidden workspace-wide. A platform crate that genuinely needs
-  it declares `allow(unsafe_code)` in one audited place, and CI fails when it
+- `unsafe` is forbidden workspace-wide. The platform crates declare
+  `allow(unsafe_code)` in a short list of audited files, and CI fails when it
   appears anywhere else.
+- The resident never writes the registry or Launch Services. Registration is
+  the installer's and the settings window's.
+- Every refusal the settings backend returns is a catalogue key, and a test
+  fails when a key has no sentence in both languages.
 - Four consecutive comment lines are prose and fail the build.
 
 ---
@@ -113,31 +123,44 @@ LinkUnbound/
 ```sh
 git clone https://github.com/rgdevment/LinkUnbound.git
 cd LinkUnbound
-npm install --prefix app
+npm ci
+npm ci --prefix app
 ```
 
 ### Running
 
+The settings window bundles the resident as a sidecar, so the resident is
+built first; without it the Tauri build stops at once.
+
 ```sh
-cd app
-npm run tauri dev
+bash scripts/sidecar.sh          # builds the resident into app/src-tauri/binaries/
+cd app && npm run tauri dev      # the settings window, with hot reload
 ```
 
-Build with `cargo tauri build`, never with `cargo build` alone: the latter does
-not rebuild the front end and produces a binary whose window opens empty.
+The resident on its own: `cargo run -p linkunbound-shell -- https://example.org`
+opens the picker for that link; `cargo run -p linkunbound-shell --example preview`
+opens it with sample rows and no resident (`--sheet`, `--light`, `--twelve`,
+`--update`, `--stage=getting`, `--notice` show the other states).
+
+Build a release with `npm run tauri build` from `app/`, never with
+`cargo build` alone: the latter does not rebuild the front end and produces a
+binary whose window opens empty. A debug settings binary is a console
+application and dies with the console it was started from.
 
 ### Common Commands
 
-| Command                        | What it does                        |
-| :----------------------------- | :---------------------------------- |
-| `cargo fmt --all`              | Format the Rust sources             |
-| `cargo clippy --workspace`     | Lint the Rust sources               |
-| `cargo test --workspace`       | Run the Rust tests                  |
-| `cargo deny check`             | Audit licences and advisories       |
-| `npm run lint --prefix app`    | Lint and format the front end       |
-| `npm test --prefix app`        | Run the front-end tests             |
-| `cargo mutants -p <crate>`     | Hunt for mutants the tests miss     |
-| `npm run mutants --prefix app` | The same, for the front end         |
+| Command                                      | What it does                                   |
+| :------------------------------------------- | :--------------------------------------------- |
+| `cargo fmt --all`                            | Format the Rust sources                        |
+| `cargo clippy --workspace --all-targets`     | Lint the Rust sources                          |
+| `cargo test --workspace`                     | Run the Rust tests                             |
+| `cargo deny check`                           | Audit licences and advisories                  |
+| `npm run lint --prefix app`                  | Lint and format the front end                  |
+| `npm test --prefix app`                      | Run the front-end tests                        |
+| `npm run lint:md`                            | Lint the Markdown                              |
+| `npm run notices`                            | Rewrite THIRD-PARTY-BUNDLED.md from the lockfiles |
+| `cargo mutants -p <crate>`                   | Hunt for mutants the tests miss                |
+| `npm run mutants --prefix app`               | The same, for the front end                    |
 
 ---
 
@@ -155,9 +178,20 @@ not rebuild the front end and produces a binary whose window opens empty.
 
 ## Adding a Translation
 
-The 2.0 series is being rebuilt and its localisation is not in place yet, so
-the interface currently ships in English only. Translations are welcome once
-that lands; until then, open an issue if you want to be told when it does.
+The interface ships in English and Spanish, with automatic detection and an
+override under **Application** in Settings. The words live in two catalogues,
+one per side of the app:
+
+- `crates/linkunbound-core/src/i18n.rs` — what the resident shows: the
+  picker, the notice, the tray, the update strip. Each key carries its Spanish
+  and English text side by side.
+- `app/src/i18n.ts` — the settings window. One object per language with the
+  same keys; a test fails when a key is missing from either.
+
+To add a language, add its column to both catalogues, teach
+`Language::of_tag` (Rust) and `spoken` (TypeScript) the locale tag, and open a
+pull request. Neutral register, no regional variants: the Spanish is written
+for every Spanish speaker at once.
 
 ---
 
