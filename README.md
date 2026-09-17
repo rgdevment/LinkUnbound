@@ -102,16 +102,18 @@ This isn't a company product or a startup. I'm a solo developer who got tired of
 ## What It Does
 
 - **Registers as default browser** — intercepts every link click system-wide on Windows and macOS
-- **Shows a floating picker** near your cursor to choose a browser
-- **Saves per-domain rules** — "always open this domain in X"
-- **Resolves redirects** and Microsoft SafeLinks before matching rules
-- **Runs silently** in the system tray (or menu bar on macOS) — launches on startup, stays out of the way
-- **Detects installed browsers** automatically — or add custom ones manually
-- **Opens in a private window** — hold Shift while picking, using the switch each browser family expects
-- **Routes by originating app** — "everything from Slack in Brave", not only by domain
-- **Captures links from Microsoft apps** (Windows, opt-in) — Teams, Outlook and Start menu search wrap links in an Edge-only scheme that ignores the default browser
-- **Tells you when capture is broken** — Settings explains why and offers a one-click repair
-- **Supports multiple languages** — English and Spanish, with automatic detection
+- **Shows a floating picker** near your cursor, in two looks: a classic list or a mosaic of tiles. Pick with the mouse or the keys `1`–`9`; hold **Shift** for a private window; `Ctrl+C` copies the address; `Esc` puts it away
+- **Remembers the choice at the reach you pick** — this URL, this subdomain, the whole site, or everything a given app sends
+- **Rules from Settings too** — a rule for a site you have not visited yet, or for an app, without waiting for the picker
+- **Unwraps Microsoft SafeLinks** and the Edge-only scheme Teams and Outlook wrap links in, so rules see the real destination
+- **Tells you when a rule decided** — a small notice with an Undo, six seconds, no focus taken
+- **Opens local documents** when you choose it for them — `.html`, `.pdf` and the rest on Windows, `.html` and `.xhtml` on macOS
+- **Runs silently** in the system tray (or menu bar on macOS) — starts at sign-in, stays out of the way
+- **Detects installed browsers** and their Chromium profiles — or add custom ones manually
+- **Opens in a private window** using the switch each browser family expects
+- **Updates itself** — looks at the release feed in the background, says so in the picker and in Settings, and one press installs it; a Microsoft Store copy updates through the Store
+- **Tells you when links are not arriving** — Settings explains why and offers the repair
+- **Two languages, three themes** — English and Spanish with automatic detection; light, dark or the system's
 
 ---
 
@@ -186,45 +188,45 @@ The installer is signed, but a certificate that few people have run yet earns li
 
 **Windows:**
 
-1. Run the installer; it registers LinkUnbound as a browser and starts the resident
-2. LinkUnbound scans your installed browsers
-3. In the settings window, click **Set as default** — Windows Settings opens, select LinkUnbound
-4. Done — every link now goes through LinkUnbound
+1. Run the installer; it registers LinkUnbound as a browser, starts it, and offers to remove a 1.x install if it finds one
+2. In the settings window, under **Links**, click **Open Settings** beside *Choose LinkUnbound in Windows* — Windows Settings opens on LinkUnbound; make it the default
+3. Done — every link now goes through LinkUnbound. The same page lets you pick it for `.html`, `.pdf` and other documents
 
 **macOS:**
 
 1. Launch **LinkUnbound** from Applications (or Spotlight); the settings window opens
 2. In **Links**, click **Set** under *Set as the default browser*
 3. macOS asks you to confirm the change → **Use "LinkUnbound"**
-4. Done — every link now goes through LinkUnbound. Local `.html`, `.xhtml` and `.svg` files go through it too
+4. Done — every link now goes through LinkUnbound. Local `.html` and `.xhtml` files go through it too; `.svg` only if you choose it for them
 
 ---
 
 ## How It Works
 
-**Link click with a rule:** browser opens instantly, no UI shown.
+**Link click with a rule:** the browser opens at once, and a small notice in the corner says which rule decided, with an **Undo** for six seconds. The notice never takes the keyboard.
 
-**Link click without a rule:** a picker appears near your cursor. Pick a browser. Optionally check "Always open here" to save a rule for that subdomain.
+**Link click without a rule:** a picker appears near your cursor, showing where the link comes from and the app it was clicked in. Pick a browser with the mouse or `1`–`9`. Hold **Shift** (or pin it with the *Private* pill) to open a private window. To remember the choice, pick a reach first — *this URL*, *this subdomain*, *the whole site* or *from this app* — with the arrows or the pills, then pick the browser. `Ctrl+C` copies the address; `Esc` puts the picker away. Links clicked while it is open wait their turn.
 
-**Settings (tray):** double-click the tray icon or right-click → Settings. Four tabs:
+**Two looks.** *Classic* is a list; *Mosaic* is a sheet of tiles. Choose under **Application** in Settings.
 
-- **General** — browsers, default browser status, startup toggle, language, internal-link capture, self-diagnostics
-- **Rules** — every rule, change browser per rule, delete rules
-- **Maintenance** — export diagnostics, reset configuration, unregister
-- **About** — version, license, update notifications, support links
+**Settings (tray):** double-click the tray icon or right-click → Settings. Six pages:
+
+- **Links** — whether the system sends links here, what is wrong when it does not and the button that fixes it; on Windows, the associations held
+- **Rules** — every rule, in the order that decides; change where each opens, add one, remove one
+- **Browsers** — what was detected, with profiles; hide, duplicate, or add a custom one with its arguments
+- **Application** — theme, language, picker look, start at sign-in, the global shortcut, background update checks
+- **Maintenance** — export a diagnostic report, rescan browsers, reset the configuration, remove LinkUnbound from the system's list
+- **About** — version, licence, the update button, the candidate-versions switch, support links
+
+**Updates.** Every six hours the resident asks the release feed, without a window. A newer version shows up as a strip atop the picker and in About; **Update** downloads the signed installer and runs it, and the resident comes back on its own. A copy from the Microsoft Store updates through the Store; a Homebrew copy updates itself the same way as a downloaded one (the cask says `auto_updates`), and `brew upgrade` works as well. Turn the background check off under Application if you prefer to ask by hand.
 
 ---
 
 ## Domain Rules
 
-Rules match hierarchically. A rule for `google.com` covers `mail.google.com`, `drive.google.com`, etc., unless a more specific subdomain rule exists.
+A rule covers one of four reaches: an exact address, a host (`mail.google.com`), a whole site (`google.com`, which covers `mail.google.com`, `drive.google.com` and the rest), or everything a given application sends. The narrowest reach that matches wins, and a rule scoped to an app wins over any domain rule — naming the origin is a deliberate statement, and a generic domain rule should not override it silently. Between two rules of the same reach, the one higher in the Rules page answers.
 
-A rule can also be scoped to the application a link came from, covering every
-domain: "links from Slack open in Brave". An app-scoped rule wins over a domain
-rule, even a more specific one — naming the origin is a deliberate statement,
-and a generic domain rule should not override it silently.
-
-Rules are created from the picker ("Always open here") and managed in the Rules tab.
+Rules are written from the picker — pick the reach, then the browser — or from the **Rules** page, where the same rule is typed in. A rule can also ask for a private window, if the browser has one.
 
 ---
 
@@ -255,13 +257,19 @@ No. LinkUnbound does not track or transmit anything. URLs are processed in memor
 No. LinkUnbound works fully offline. The only network request is a lightweight update check against the release feed the project publishes on GitHub — no user data sent. The app works perfectly without a connection.
 
 **Where is my data stored?**
-Everything stays on your machine — `%LOCALAPPDATA%\LinkUnbound\` on Windows, `~/Library/Application Support/LinkUnbound/` on macOS. Browser list (`browsers.json`), domain rules (`rules.json`), navigation log (`navigate.log`), and extracted icons.
+Everything stays on your machine — `%LOCALAPPDATA%\LinkUnbound\` on Windows, `~/Library/Application Support/LinkUnbound/` on macOS. Browser list (`browsers.json`), rules (`rules.json`), preferences (`preferences.json`), what the last update check found (`update.json`), the navigation log (`navigate.log`), and extracted icons. Removing the program keeps the rules and browsers unless you ask otherwise.
 
 **Does it work with any browser?**
 Yes. LinkUnbound detects all browsers registered with the operating system. You can also add custom browsers manually with any executable path and arguments.
 
 **Can I use it with Microsoft SafeLinks?**
-Yes. LinkUnbound resolves SafeLinks and other redirect wrappers before matching domain rules, so your rules work on the actual destination URL.
+Yes. LinkUnbound unwraps SafeLinks before matching rules, so your rules work on the actual destination — and the picker names it, not the wrapper.
+
+**Why do Teams and Outlook still open Edge?**
+Some Microsoft applications hand links straight to Edge down a channel of their own, skipping the default browser, and Windows 11 no longer lets another application stand in the middle of it. When one of those links arrives wrapped in a SafeLink it is unwrapped; the rest is Microsoft's to change.
+
+**Does the picker have a keyboard?**
+Yes: `1`–`9` open a row, `Shift` holds a private window, `Ctrl+P` pins it, the arrows or `Tab` walk the reaches, `Ctrl+C` copies the address and `Esc` closes. A global shortcut (default `Alt+Shift+L`) opens Settings.
 
 ---
 

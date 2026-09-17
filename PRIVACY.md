@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** August 4, 2026
+**Last updated:** September 17, 2026
 
 ---
 
@@ -143,18 +143,21 @@ LinkUnbound makes **one type of network request**:
 | **URL**       | `https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/release-manifest.json` |
 | **Method**    | GET (read-only)                                                          |
 | **Data sent** | Standard HTTP headers only — no user data                                |
-| **Frequency** | At most once every 24 hours, and only while the settings window is open  |
+| **Frequency** | At most once every 24 hours; asked for 20 seconds after the resident starts and every six hours after, and whenever the settings window opens |
 | **Timeout**   | 5 seconds                                                                |
 | **On failure**| Silent — the app continues working normally                              |
 
-The check is made by the settings window, not by the resident that sits in the
-tray: a copy whose owner never opens the settings never makes it.
+The resident that sits in the tray does not make the request itself: every six
+hours it starts the settings binary with no window to ask on its behalf, and
+that copy exits when it has written down the answer. The background check has a
+switch under **Application** in Settings; off, the feed is only read when the
+settings window is open.
 
 **Important:**
 
 - This request is **read-only** — it only downloads a small JSON response containing the latest version number. No data is ever uploaded.
 - **No URLs, no rules, no browser information, no personal data** is ever sent.
-- If an update is found, a non-invasive indicator appears in the app. When you press Update, the installer is downloaded and run. Nothing is downloaded or installed without that press.
+- If an update is found, a strip appears atop the picker and a line under **About** in Settings. When you press Update, the installer is downloaded and run. Nothing is downloaded or installed without that press.
 - The app works fully offline if the request fails or is blocked.
 
 ### Taking an update
@@ -166,7 +169,8 @@ the copy you are running before a single byte of it is executed, and the address
 it comes from has to be the release of the version you were offered.
 
 A copy installed from the Microsoft Store takes its update from the Store
-instead, and never reads the feed above.
+instead, and never reads the feed above. A copy installed with Homebrew updates
+itself the same way as a downloaded one; `brew upgrade` works as well.
 
 ---
 

@@ -286,18 +286,22 @@ mod tests {
             shortcut: None,
             ..Preferences::default()
         };
-        assert!(!hidden.reachable());
+        assert!(!hidden.reachable_where(false));
 
         let with_key = Preferences {
             hide_tray: true,
             ..Preferences::default()
         };
-        assert!(with_key.reachable());
+        assert!(with_key.reachable_where(false));
 
         assert!(
             hidden.reachable_where(true),
             "where the icon is always shown, the shortcut may go"
         );
-        assert!(!hidden.reachable_where(false));
+        assert_eq!(
+            hidden.reachable(),
+            cfg!(target_os = "macos"),
+            "a Mac never hides the icon"
+        );
     }
 }

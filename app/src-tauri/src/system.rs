@@ -133,7 +133,7 @@ mod platform {
     }
 
     /// What the installer asks for once it has put the files in place.
-    pub fn register() -> bool {
+    pub fn register_for_the_installer() -> bool {
         if linkunbound_win::packaged() {
             return true;
         }
@@ -336,7 +336,7 @@ mod platform {
     /// the final choice the way `UserChoice` does on Windows.
     pub fn reconcile() {}
 
-    pub fn register() -> bool {
+    pub fn register_for_the_installer() -> bool {
         true
     }
 
@@ -484,7 +484,7 @@ mod platform {
 
     pub fn reconcile() {}
 
-    pub fn register() -> bool {
+    pub fn register_for_the_installer() -> bool {
         true
     }
 
@@ -523,6 +523,6 @@ mod platform {
 }
 
 pub use platform::{
-    browsers, open_default_apps, reconcile, register, register_anyway, set_registered,
-    set_starts_with_system, state,
+    browsers, open_default_apps, reconcile, register_anyway, register_for_the_installer,
+    set_registered, set_starts_with_system, state,
 };

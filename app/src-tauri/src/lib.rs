@@ -1235,7 +1235,8 @@ pub fn run() {
             }
 
             if args.iter().any(|a| a == "--register") {
-                app.handle().exit(i32::from(!system::register()));
+                app.handle()
+                    .exit(i32::from(!system::register_for_the_installer()));
                 return Ok(());
             }
 

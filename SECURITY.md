@@ -19,7 +19,7 @@ This is a personal open source project, not a company product. Security here is 
 ### Security Practices
 
 - **Local JSON Storage** — Configuration is stored as plain JSON files in your user profile. No database, no network storage.
-- **Minimal Permissions** — LinkUnbound only reads the Windows registry to detect installed browsers. It does not modify system settings beyond its own browser registration.
+- **Minimal Permissions** — LinkUnbound reads the Windows registry to detect installed browsers and writes only its own browser registration, under the current user. It never writes the default-browser choice itself; Windows and macOS keep that for the person.
 - **Open Source** — Every line of code is public under GPLv3. You can inspect, audit, and verify everything.
 - **Dependency Updates** — Dependencies are regularly updated to patch known vulnerabilities.
 - **Code Reviews** — All contributions go through review before merging.
@@ -27,18 +27,19 @@ This is a personal open source project, not a company product. Security here is 
 
 ### Network Requests
 
-LinkUnbound makes exactly **one type of network request**: a read-only GET to the GitHub Releases API (`https://api.github.com/repos/rgdevment/LinkUnbound/releases/latest`) to check for updates. No user data is sent. The app works fully offline.
+LinkUnbound makes exactly **one type of network request** on its own: a read-only GET to the release feed the project publishes (`https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/release-manifest.json`, and the channel file it names) to check for updates. No user data is sent, and the app works fully offline. Pressing **Update** then downloads the installer from this repository's releases page and verifies its signature against the key built into the app before running it; a Microsoft Store copy asks the Store instead.
 
 ---
 
 ## Supported Versions
 
-| Version          | Supported            |
-| :--------------- | :------------------: |
-| 1.4.x            | Yes                  |
-| Older than 1.4.x | No                   |
+| Version          | Supported                              |
+| :--------------- | :------------------------------------: |
+| 2.0.x            | Yes                                    |
+| 1.4.x            | Security and crash fixes only          |
+| Older than 1.4.x | No                                     |
 
-The 1.4.x line lives on the `v1-stable` branch and receives security and crash fixes only — no new features. Always use the [latest version](https://github.com/rgdevment/LinkUnbound/releases/latest).
+The 2.0 line is `main`. The 1.4.x line lives on the `v1-stable` branch and receives security and crash fixes only — no new features. Always use the [latest version](https://github.com/rgdevment/LinkUnbound/releases/latest).
 
 ---
 
