@@ -1151,7 +1151,8 @@ pub fn run() {
         }))
     };
 
-    let built = builder
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+    let mut built = builder
         .setup(move |app| {
             if let Some(errand) = errand {
                 run_errand(app.handle().clone(), errand);

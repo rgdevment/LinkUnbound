@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use linkunbound_core::{Language, Rule, Store, Strings, Target, data_dir, host_of, normalise};
 use linkunbound_shell::tray::{Asked, Tray};
-#[cfg(any(windows, target_os = "macos"))]
 use linkunbound_shell::{
     ICON_SIDE, Listed, Notice, Picker, Reaches, TILE_ICON_SIDE, dress, paint, place, single,
 };

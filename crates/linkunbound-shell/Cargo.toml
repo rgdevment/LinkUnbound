@@ -32,3 +32,4 @@ slint-build.workspace = true
 
 [target."cfg(windows)".build-dependencies]
 embed-manifest = "1.4"
+tauri-winres = "0.3"

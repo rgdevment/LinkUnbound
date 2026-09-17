@@ -3730,6 +3730,7 @@ dependencies = [
  "raw-window-handle",
  "slint",
  "slint-build",
+ "tauri-winres",
  "tray-icon",
 ]
 
