@@ -26,18 +26,17 @@ pub fn is_remote(path: &str) -> bool {
 
 #[must_use]
 pub fn arms_a_launcher(arg: &str) -> bool {
-    let named = arg
-        .split('=')
-        .next()
-        .unwrap_or(arg)
-        .trim()
-        .to_ascii_lowercase();
+    let (named, value) = arg.split_once('=').unwrap_or((arg, ""));
+    let named = named.trim().to_ascii_lowercase();
     // Longest prefix first: `--x` also starts with `-`, and stripping the short one would leave
     // a name with a dash on it that matches nothing.
     PREFIXES
         .iter()
         .find_map(|prefix| named.strip_prefix(prefix))
         .is_some_and(|name| RUNS_SOMETHING_ELSE.contains(&name))
+        // `--user-data-dir=\\host\share` makes the browser reach the same host the executable
+        // check keeps it away from.
+        || is_remote(value.trim().trim_matches('"'))
 }
 
 /// Strips rather than rejects: an odd switch costs the switch, not the browser.
@@ -243,6 +242,21 @@ mod tests {
         assert!(arms_a_launcher("--GPU-Launcher=calc.exe"));
         assert!(!arms_a_launcher("--incognito"));
         assert!(!arms_a_launcher("--profile-directory=Default"));
+    }
+
+    /// The executable is kept off the network, and so is anything the browser is told to read or
+    /// write there: a profile or a cache on `\\host\share` reaches that host all the same.
+    #[test]
+    fn a_switch_pointing_the_browser_at_another_machine_is_taken_away() {
+        for said in [
+            r"--user-data-dir=\\evil\share\profile",
+            r#"--disk-cache-dir="\\evil\share\cache""#,
+            "--user-data-dir=//evil/share/profile",
+        ] {
+            assert!(arms_a_launcher(said), "{said}");
+        }
+        assert!(!arms_a_launcher(r"--user-data-dir=C:\Users\ana\profile"));
+        assert!(!arms_a_launcher("--profile-directory=Profile 1"));
     }
 
     /// Chromium takes a switch with any of the three prefixes on Windows, so a list that only

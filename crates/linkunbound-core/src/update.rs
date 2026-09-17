@@ -127,9 +127,24 @@ fn write<T: Serialize>(dir: &Path, at: &Path, value: &T) {
         .unwrap_or_default();
     let nth = WRITES.fetch_add(1, Ordering::Relaxed);
     let aside = dir.join(format!("{name}.{}.{nth}.tmp", std::process::id()));
-    if std::fs::write(&aside, body).is_ok() && std::fs::rename(&aside, at).is_err() {
+    if std::fs::write(&aside, body).is_err() {
+        return;
+    }
+    // A virus scanner or the indexer holds the target for a moment after every write; the
+    // rename fails, and a stage the resident never learns of reads as an install gone quiet.
+    if !renamed_with_patience(&aside, at) {
         let _ = std::fs::remove_file(&aside);
     }
+}
+
+fn renamed_with_patience(from: &Path, to: &Path) -> bool {
+    for attempt in 0..5 {
+        if std::fs::rename(from, to).is_ok() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20 * (attempt + 1)));
+    }
+    false
 }
 
 /// Whether what was found is newer than the copy asking. A version that does not read as semver

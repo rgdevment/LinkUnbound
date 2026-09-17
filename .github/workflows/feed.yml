@@ -65,21 +65,26 @@ jobs:
           # write the feed leaves it saying 0.0.0 too — which is the one moment this has to
           # speak. The 1.x releases are not on this feed at all: that series asks GitHub
           # directly and never reads this branch.
+          # The seed says nothing to the stable channel, and while every release out is a
+          # candidate the candidates' channel below is the only one anybody is reading.
+          seeded=0
           if [ "$said" = "0.0.0" ]; then
-            if [ -z "$newest" ]; then
-              echo "::notice::the feed is still at its seed; nothing is announced to anybody yet"
-              exit 0
+            if [ -n "$newest" ]; then
+              echo "::error::the feed is still at its seed while $newest is published. The release \
+                    went out and the feed was never written, so nobody will be told about it."
+              exit 1
             fi
-            echo "::error::the feed is still at its seed while $newest is published. The release \
-                  went out and the feed was never written, so nobody will be told about it."
-            exit 1
+            echo "::notice::the feed is still at its seed; the stable channel announces nothing yet"
+            seeded=1
           fi
 
-          echo "the feed says $said; the highest release is $newest"
-          if [ "$said" != "$newest" ]; then
-            echo "::error::the feed says «$said» and the highest release is «$newest». Every copy \
-                  out there is being told about a version that is not the one being published."
-            exit 1
+          if [ "$seeded" = 0 ]; then
+            echo "the feed says $said; the highest release is $newest"
+            if [ "$said" != "$newest" ]; then
+              echo "::error::the feed says «$said» and the highest release is «$newest». Every copy \
+                    out there is being told about a version that is not the one being published."
+              exit 1
+            fi
           fi
 
           # A channel is more than a version: it carries the address and the signature, and those
@@ -124,8 +129,10 @@ jobs:
             done
           }
 
-          echo "the stable channel:"
-          takes latest.json "$said"
+          if [ "$seeded" = 0 ]; then
+            echo "the stable channel:"
+            takes latest.json "$said"
+          fi
 
           # The candidates' channel exists only between a candidate and the stable release that
           # retires it, and that release deletes the evidence along with the file. Unwatched,

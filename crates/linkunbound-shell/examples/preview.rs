@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
-//! `cargo run -p linkunbound-shell --example preview -- [--sheet] [--light] [--six] [--scale=N] [--update | --installing | --store]`
+//! `cargo run -p linkunbound-shell --example preview -- [--sheet] [--light] [--six | --twelve]
+//! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]`
 
 use linkunbound_core::Language;
 use linkunbound_shell::{HALO, ICON_SIDE, Listed, Picker, TILE_ICON_SIDE, dress, paint};
@@ -69,10 +70,14 @@ fn main() -> Result<(), slint::PlatformError> {
     ];
 
     let mut rows = rows;
-    if flag("--six") {
+    if flag("--six") || flag("--twelve") {
         let mut more = rows.clone();
         more[0].profile = "Cliente".to_owned();
         more[2].profile = "Personal".to_owned();
+        rows.extend(more);
+    }
+    if flag("--twelve") {
+        let more = rows.clone();
         rows.extend(more);
     }
 
@@ -89,7 +94,12 @@ fn main() -> Result<(), slint::PlatformError> {
         &rows,
     );
 
-    if flag("--update") || flag("--installing") || flag("--store") {
+    let stage = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--stage="))
+        .map(str::to_owned)
+        .or_else(|| flag("--installing").then(|| "getting".to_owned()));
+    if flag("--update") || flag("--store") || stage.is_some() {
         let looked = linkunbound_core::update::Looked {
             checked_at: Some(1),
             found_version: Some("2.0.1".to_owned()),
@@ -97,10 +107,10 @@ fn main() -> Result<(), slint::PlatformError> {
             found_installs: Some(!flag("--store")),
             candidates: None,
         };
-        let progress = flag("--installing").then(|| linkunbound_core::update::Progress {
+        let progress = stage.map(|stage| linkunbound_core::update::Progress {
             version: "2.0.1".to_owned(),
-            stage: "getting".to_owned(),
-            far: 42,
+            far: if stage == "getting" { 42 } else { 0 },
+            stage,
         });
         let strip = linkunbound_shell::strip_for(
             &Language::Spanish.strings(),
@@ -122,6 +132,43 @@ fn main() -> Result<(), slint::PlatformError> {
         println!("abrir fila {index}, privada: {private}");
     });
     window.on_copy(|| println!("copiar"));
+    window.on_update_asked(|| println!("actualizar"));
+    window.on_update_dismissed(|| println!("ahora no"));
+    // The keys as the resident reads them: a digit opens its row, the arrows walk the reaches.
+    {
+        let handle = window.as_weak();
+        window.on_typed(move |typed, private| {
+            let Some(w) = handle.upgrade() else {
+                return false;
+            };
+            let Some(digit) = typed.chars().next().and_then(|c| c.to_digit(10)) else {
+                return false;
+            };
+            let index = i32::try_from(digit).unwrap_or(0) - 1;
+            if index < 0 {
+                return false;
+            }
+            w.invoke_open(index, private);
+            true
+        });
+    }
+    {
+        let handle = window.as_weak();
+        window.on_step_reach(move |delta| {
+            use slint::Model;
+            let Some(w) = handle.upgrade() else { return 0 };
+            let dead: Vec<bool> = w.get_all_reaches().iter().map(|r| r.dead).collect();
+            linkunbound_shell::next_live(&dead, w.get_reach_index(), delta)
+        });
+    }
+
+    if flag("--notice") {
+        notice.set_headline("Abierto en Mozilla Firefox".into());
+        notice.set_reason("Una regla decidió por docs.google.com".into());
+        notice.set_undo_label("Deshacer".into());
+        notice.set_left(6);
+        notice.show()?;
+    }
 
     window.run()
 }

@@ -7,7 +7,8 @@ mod update;
 use std::sync::Mutex;
 
 use linkunbound_core::{
-    Browser, Language, Preferences, Rule, Scope, Store, Target, host_of, merge, normalise, site_of,
+    Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of, merge, normalise,
+    site_of,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -93,6 +94,8 @@ fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
         Scope::Host(h) => ("host", h.clone()),
         Scope::Site(d) => ("site", d.clone()),
     };
+    // A profile that is gone is a rule that never fires, however present its browser.
+    let resolved = found.is_some() && (rule.target.profile_id.is_none() || profile.is_some());
     RuleView {
         id: rule.id.clone(),
         browser_id: rule.target.browser_id.clone(),
@@ -104,7 +107,7 @@ fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
         icon: found.and_then(|b| icon_data(&b.exe, &b.id)),
         private: rule.private,
         source_app: rule.source_app.clone(),
-        resolved: found.is_some(),
+        resolved,
     }
 }
 
@@ -145,6 +148,11 @@ fn rule_from(
         && !browser.profiles.iter().any(|p| p.id == profile)
     {
         return Err("browserGone");
+    }
+    // Saved, such a rule would wear the badge and never fire: the launch refuses it and the link
+    // falls through to the picker, which does not offer that browser privately either.
+    if private && !browser.supports_private() {
+        return Err("rulePrivateImpossible");
     }
     let said = value.trim();
     if said.is_empty() {
@@ -201,12 +209,22 @@ fn rules_add(
         profile_id,
     };
     let rule = rule_from(&kind, &value, target, private, &catalogue()).map_err(str::to_owned)?;
+    // The picker replaces on purpose — «always here» again is a change of mind — but a form
+    // that overwrote a rule the person forgot they had would do it without a word.
+    let mut standing = false;
     store()
         .edit_rules(|rules| {
+            if rules.standing_in_for(&rule).is_some() {
+                standing = true;
+                return false;
+            }
             rules.upsert(rule);
             true
         })
         .map_err(|e| e.to_string())?;
+    if standing {
+        return Err("ruleExists".to_owned());
+    }
     rules_list()
 }
 
@@ -221,9 +239,28 @@ fn rules_retarget(
         browser_id,
         profile_id,
     };
+    let browsers = catalogue();
+    let opens_privately = browsers
+        .iter()
+        .find(|b| b.id == target.browser_id)
+        .is_some_and(Browser::supports_private);
+    let mut refused = false;
     let changed = store()
-        .edit_rules(|rules| rules.retarget(&id, target.clone()))
+        .edit_rules(|rules| {
+            if rules
+                .rules
+                .iter()
+                .any(|r| r.id == id && r.private && !opens_privately)
+            {
+                refused = true;
+                return false;
+            }
+            rules.retarget(&id, target.clone())
+        })
         .map_err(|e| e.to_string())?;
+    if refused {
+        return Err("rulePrivateImpossible".to_owned());
+    }
     if !changed {
         return Err("ruleGone".to_owned());
     }
@@ -428,16 +465,17 @@ fn far_along(carried: u64, whole: Option<u64>) -> u64 {
 
 #[tauri::command]
 fn browsers_duplicate(id: String) -> Result<Vec<BrowserView>, String> {
-    keep(duplicated_in(catalogue(), &id)?)
+    let words = Language::chosen(store().prefs().locale).strings();
+    keep(duplicated_in(catalogue(), &id, words.browser_copy_suffix)?)
 }
 
 /// The copy goes next to what it was copied from: at the end of a long list it reads as a new
 /// browser somebody else added rather than as the copy just asked for.
-fn duplicated_in(mut all: Vec<Browser>, id: &str) -> Result<Vec<Browser>, String> {
+fn duplicated_in(mut all: Vec<Browser>, id: &str, suffix: &str) -> Result<Vec<Browser>, String> {
     let Some(source) = all.iter().find(|b| b.id == id) else {
         return Err("browserGone".to_owned());
     };
-    let copy = source.duplicated(free_id(&all));
+    let copy = source.duplicated(free_id(&all), &Strings::fill(suffix, &source.name));
     let at = all
         .iter()
         .position(|b| b.id == id)
@@ -466,10 +504,26 @@ fn ordered(mut all: Vec<Browser>, ids: &[String]) -> Vec<Browser> {
     moved
 }
 
-/// Everything the app decided on its own goes; what the user chose stays.
+#[derive(Serialize)]
+struct Rescanned {
+    browsers: Vec<BrowserView>,
+    added: usize,
+    removed: usize,
+}
+
+/// Everything the app decided on its own goes; what the user chose stays. Counted, as 1.x did:
+/// «done» alone reads the same whether a browser appeared or nothing changed.
 #[tauri::command]
-fn maintenance_rescan() -> Result<Vec<BrowserView>, String> {
-    keep(only_mine(catalogue()))
+fn maintenance_rescan() -> Result<Rescanned, String> {
+    let before = catalogue();
+    let after = keep(only_mine(before.clone()))?;
+    let was = |id: &str| before.iter().any(|b| b.id == id);
+    let is = |id: &str| after.iter().any(|b| b.id == id);
+    Ok(Rescanned {
+        added: after.iter().filter(|b| !was(&b.id)).count(),
+        removed: before.iter().filter(|b| !is(&b.id)).count(),
+        browsers: after,
+    })
 }
 
 /// Forgets what detection found so the next read picks it up again. What the
@@ -563,6 +617,10 @@ fn system_register_anyway() -> Result<system::SystemState, String> {
 /// catalogue has instead, the way a rule would send it.
 #[tauri::command(async)]
 fn system_open_elsewhere(url: String) -> Result<(), String> {
+    // A page of ours, and nothing a browser would read as a switch or a file.
+    if !url.starts_with("https://") {
+        return Err("ruleValueNotUrl".to_owned());
+    }
     let browsers = catalogue();
     let first = browsers
         .iter()
@@ -795,8 +853,11 @@ async fn update_install(app: AppHandle, busy: tauri::State<'_, Updating>) -> Res
 /// restarts as itself, an errand brings the resident back and goes away.
 async fn install(app: AppHandle, from_the_window: bool) -> Result<(), String> {
     let dir = store().dir().to_path_buf();
-    let outcome = install_from(app, &dir, from_the_window).await;
-    if outcome.is_err() {
+    let started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let outcome = install_from(app, &dir, from_the_window, &started).await;
+    // Only an install this process began is this process's to declare dead: a refusal before
+    // that — busy, gone, not here — is about somebody else's, still under way.
+    if outcome.is_err() && started.load(std::sync::atomic::Ordering::Acquire) {
         let mut said = update::progress(&dir).unwrap_or_default();
         said.stage = "failed".to_owned();
         update::tell(&dir, &said);
@@ -808,6 +869,7 @@ async fn install_from(
     app: AppHandle,
     dir: &std::path::Path,
     from_the_window: bool,
+    started: &std::sync::atomic::AtomicBool,
 ) -> Result<(), String> {
     use tauri_plugin_updater::UpdaterExt;
 
@@ -852,6 +914,7 @@ async fn install_from(
         );
     };
     progress("starting", 0);
+    started.store(true, std::sync::atomic::Ordering::Release);
 
     let asked = want.clone();
     let update = app
@@ -1027,6 +1090,10 @@ struct Updating(OneAtATime);
 struct OneAtATime(std::sync::atomic::AtomicBool);
 
 impl OneAtATime {
+    fn is_held(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Acquire)
+    }
+
     fn claim(&self) -> Option<Releasing<'_>> {
         use std::sync::atomic::Ordering;
         self.0
@@ -1167,12 +1234,12 @@ pub fn run() {
                 return Ok(());
             }
 
-            system::reconcile();
-
             if args.iter().any(|a| a == "--register") {
-                app.handle().exit(0);
+                app.handle().exit(i32::from(!system::register()));
                 return Ok(());
             }
+
+            system::reconcile();
             // The resident owns the tray and the shortcut; this binary is only
             // the settings window, opened and closed on demand.
             claim(app.handle(), &store().prefs());
@@ -1190,7 +1257,34 @@ pub fn run() {
     if errand.is_some() {
         built.set_activation_policy(tauri::ActivationPolicy::Prohibited);
     }
-    built.run(|_, _| {});
+    built.run(|app, event| match event {
+        // Closing the window mid-download took the download with it and left the resident
+        // reading a progress that stopped arriving.
+        tauri::RunEvent::ExitRequested {
+            api, code: None, ..
+        } if app.state::<Updating>().0.is_held() => {
+            api.prevent_exit();
+        }
+        // A link Launch Services handed this process before its own handler was in place
+        // arrives through tao instead; it goes where every other link goes.
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Opened { urls } => {
+            for url in urls {
+                let said = url.to_string();
+                match url.scheme() {
+                    "file" => {
+                        if let Ok(path) = url.to_file_path()
+                            && let Some(url) = linkunbound_core::local_web_file(&path)
+                        {
+                            hand_to_the_resident(url);
+                        }
+                    }
+                    _ => hand_to_the_resident(said),
+                }
+            }
+        }
+        _ => {}
+    });
 }
 
 #[cfg(test)]
@@ -1355,18 +1449,18 @@ mod tests {
     fn a_copy_lands_next_to_what_it_was_copied_from() {
         let all = vec![detected("a"), detected("b"), detected("c")];
 
-        let done = duplicated_in(all.clone(), "b").expect("b is there");
+        let done = duplicated_in(all.clone(), "b", "{} (copy)").expect("b is there");
         assert_eq!(
             done.iter().map(|b| b.id.as_str()).collect::<Vec<_>>(),
             vec!["a", "b", "custom-1", "c"]
         );
 
-        let done = duplicated_in(all.clone(), "c").expect("c is there");
+        let done = duplicated_in(all.clone(), "c", "{} (copy)").expect("c is there");
         assert_eq!(done.last().expect("a copy").id, "custom-1");
         assert_eq!(done.len(), 4);
 
         assert_eq!(
-            duplicated_in(all, "nothing-like-it").unwrap_err(),
+            duplicated_in(all, "nothing-like-it", "{} (copy)").unwrap_err(),
             "browserGone"
         );
     }

@@ -131,6 +131,21 @@ pub fn is_in_front(view: isize) -> bool {
     window_of(view).is_some_and(|window| window.isKeyWindow())
 }
 
+/// Whether this application is the active one: what is in front is then a window of its own.
+#[must_use]
+pub fn front_is_ours() -> bool {
+    MainThreadMarker::new().is_some_and(|mtm| NSApplication::sharedApplication(mtm).isActive())
+}
+
+/// The application in front, by process: the one the picker was shown over, so that the person
+/// leaving it can be told from the picker simply not being key.
+#[must_use]
+pub fn front_application() -> isize {
+    NSWorkspace::sharedWorkspace()
+        .frontmostApplication()
+        .map_or(0, |app| app.processIdentifier() as isize)
+}
+
 pub fn let_whoever_opens_next_come_forward() {
     if let Some(mtm) = MainThreadMarker::new() {
         let app = NSApplication::sharedApplication(mtm);
@@ -181,22 +196,30 @@ fn other_copies_of(executable: &str) -> Vec<Retained<NSRunningApplication>> {
 
 /// `terminate` only asks. The copy that replaces these needs the socket they
 /// hold, so this waits for them to be gone, and stops asking after a while.
+#[allow(unsafe_code)]
 pub fn retire(executable: &str) -> usize {
     objc2::rc::autoreleasepool(|_| {
-        let asked: Vec<_> = other_copies_of(executable)
-            .into_iter()
-            .filter(|app| app.terminate())
-            .collect();
+        let copies = other_copies_of(executable);
+        let asked = copies.len();
+        for app in &copies {
+            let _ = app.terminate();
+        }
         let patience = std::time::Instant::now() + LONG_ENOUGH_TO_QUIT;
         while !other_copies_of(executable).is_empty() && std::time::Instant::now() < patience {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        for app in &asked {
-            if !app.isTerminated() {
-                app.forceTerminate();
+        // Whoever is still standing, asked or not: a copy that refused the request kept the
+        // socket, and the one taking over then opened a settings window instead of the picker.
+        for app in other_copies_of(executable) {
+            if !app.forceTerminate() {
+                // SAFETY: `kill` takes a pid and a signal and touches no memory of ours; the pid
+                // was read a moment ago from the running application it names.
+                unsafe {
+                    libc::kill(app.processIdentifier(), libc::SIGKILL);
+                }
             }
         }
-        asked.len()
+        asked
     })
 }
 

@@ -93,11 +93,36 @@ pub fn set(enabled: bool) -> Option<Startup> {
     state()
 }
 
+/// Listed is not enough: 1.x wrote this same value, and a value that names its executable starts
+/// nothing of ours at sign-in — or starts 1.x, which then registers itself over this.
 fn listed() -> bool {
+    let Ok(running) = std::env::current_exe() else {
+        return false;
+    };
     RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(RUN, KEY_READ)
         .and_then(|run| run.get_value::<String, _>(RUN_NAME))
-        .is_ok()
+        .is_ok_and(|said| said.eq_ignore_ascii_case(&command(&running)))
+}
+
+/// The value 1.x left under this name is the person's choice to start at sign-in, made for a
+/// program that is gone or that this one replaces; the choice is kept and pointed here.
+pub fn reclaim(running: &std::path::Path) {
+    if packaged() {
+        return;
+    }
+    let Ok(run) =
+        RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(RUN, KEY_READ | KEY_WRITE)
+    else {
+        return;
+    };
+    let Ok(said) = run.get_value::<String, _>(RUN_NAME) else {
+        return;
+    };
+    let wanted = command(running);
+    if !said.eq_ignore_ascii_case(&wanted) {
+        let _ = run.set_value(RUN_NAME, &wanted);
+    }
 }
 
 /// Quoted, because a path with a space in it is read as a command and its arguments otherwise —

@@ -117,6 +117,34 @@ pub fn unmarked(raw: &str) -> &str {
     raw.strip_prefix('\u{feff}').unwrap_or(raw)
 }
 
+/// The 1.x line cannot read what this writes: it finds no rules and resets the browsers. A copy
+/// in the shape the file had is kept once, before the first write in the new one, so that going
+/// back is a rename and not a loss.
+fn keep_the_old_shape(path: &Path) {
+    let aside = path.with_extension("1x.json");
+    if aside.exists() {
+        return;
+    }
+    let Ok(raw) = fs::read_to_string(path) else {
+        return;
+    };
+    if crate::config::is_the_old_shape(unmarked(&raw)) {
+        let _ = fs::copy(path, aside);
+    }
+}
+
+/// A preferences file this build cannot read — edited by hand, or written by a later build — is
+/// read as the defaults so the window opens, and the next save puts those over it. The file is
+/// kept as it was beside the one that replaces it.
+fn keep_the_unread(path: &Path) {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return;
+    };
+    if serde_json::from_str::<crate::Preferences>(unmarked(&raw)).is_err() {
+        let _ = fs::copy(path, path.with_extension("unread.json"));
+    }
+}
+
 fn load<T>(path: &Path, parse: impl Fn(&str) -> Result<T, ConfigError>) -> Result<T, StoreError>
 where
     T: Default,
@@ -211,6 +239,7 @@ impl Store {
             source,
         })?;
         guarded(&self.rules_path(), || {
+            keep_the_old_shape(&self.rules_path());
             save_atomically(&self.rules_path(), &body)
         })
     }
@@ -228,6 +257,7 @@ impl Store {
                 path: self.rules_path(),
                 source,
             })?;
+            keep_the_old_shape(&self.rules_path());
             save_atomically(&self.rules_path(), &body).map(|()| true)
         })
     }
@@ -262,6 +292,7 @@ impl Store {
             path: self.prefs_path(),
             source: crate::ConfigError::Malformed(source),
         })?;
+        keep_the_unread(&self.prefs_path());
         save_atomically(&self.prefs_path(), &body)
     }
 
@@ -271,6 +302,7 @@ impl Store {
             source,
         })?;
         guarded(&self.browsers_path(), || {
+            keep_the_old_shape(&self.browsers_path());
             save_atomically(&self.browsers_path(), &body)
         })
     }
@@ -402,6 +434,79 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A tester who goes back to 1.x finds its reader choking on what 2.x wrote. The copy is
+    /// taken once, from the first shape, and never again — a second save must not overwrite it
+    /// with the new one.
+    #[test]
+    fn the_1_x_file_is_kept_aside_once_before_it_is_rewritten() {
+        let dir = std::env::temp_dir().join(format!("lu-old-shape-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a place to put them");
+        let store = Store::at(&dir);
+        let old_rules = r#"[{"domain": "a.test", "browserId": "ff", "private": false}]"#;
+        std::fs::write(dir.join("rules.json"), old_rules).expect("written");
+        let old_browsers = r#"{"schema_version": "1.0", "browsers": []}"#;
+        std::fs::write(dir.join("browsers.json"), old_browsers).expect("written");
+
+        let mut rules = store.rules().expect("read");
+        rules.rules.clear();
+        store.save_rules(&rules).expect("saved");
+        store
+            .save_browsers(&store.browsers().expect("read"))
+            .expect("saved");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("rules.1x.json")).expect("kept"),
+            old_rules
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("browsers.1x.json")).expect("kept"),
+            old_browsers
+        );
+
+        store.save_rules(&rules).expect("saved again");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("rules.1x.json")).expect("still there"),
+            old_rules,
+            "the copy is of the first shape, not of the last save"
+        );
+
+        let fresh = std::env::temp_dir().join(format!("lu-new-shape-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&fresh);
+        Store::at(&fresh).save_rules(&rules).expect("saved");
+        assert!(
+            !fresh.join("rules.1x.json").exists(),
+            "nothing to keep when there was no 1.x file"
+        );
+    }
+
+    #[test]
+    fn a_preferences_file_that_cannot_be_read_is_kept_beside_what_replaces_it() {
+        let dir = std::env::temp_dir().join(format!("lu-unread-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a place to put them");
+        let store = Store::at(&dir);
+        std::fs::write(
+            dir.join("preferences.json"),
+            r#"{"theme": "amoled", "language": "es"}"#,
+        )
+        .expect("written");
+        let read = store.prefs();
+        assert_eq!(
+            read.theme,
+            crate::Theme::default(),
+            "unreadable reads as the defaults"
+        );
+
+        store.save_prefs(&read).expect("saved");
+        assert!(
+            std::fs::read_to_string(dir.join("preferences.unread.json"))
+                .expect("kept")
+                .contains("amoled")
+        );
+        store.save_prefs(&read).expect("saved again");
+        assert!(dir.join("preferences.unread.json").exists());
     }
 
     /// What somebody upgrading from 1.x actually has on disk: no preferences.json, and one small

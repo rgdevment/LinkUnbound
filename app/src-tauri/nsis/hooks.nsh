@@ -65,14 +65,25 @@ FunctionEnd
     ${If} $0 != ""
       ; Named labels, not relative jumps: the LogicLib blocks around this compile to jumps of
       ; their own, so counting instructions from here is counting something that moves.
-      MessageBox MB_YESNO|MB_ICONQUESTION "LinkUnbound 1.4 is installed. Both versions register as the same browser, so they cannot both work: the one installed last takes the links, and uninstalling either leaves the other without them.$\r$\n$\r$\nRemove 1.4 now? Your rules and browsers are kept." /SD IDNO IDYES lu_drop_legacy
+      MessageBox MB_YESNO|MB_ICONQUESTION "LinkUnbound 1.4 is installed. Both versions register as the same browser, so they cannot both work: the one installed last takes the links, and uninstalling either leaves the other without them.$\r$\n$\r$\nRemove 1.4 now? Its files stay on disk; 2.0 starts from what it can read of them and keeps the originals aside." /SD IDNO IDYES lu_drop_legacy
       Goto lu_legacy_done
       lu_drop_legacy:
         DetailPrint "Removing LinkUnbound 1.x"
+        ; Its resident is the person's process and its uninstaller does not stop it: the file in
+        ; use would wait for a reboot to go, its tray icon would sit beside this one, and its Run
+        ; value would point at what was deleted.
+        nsis_tauri_utils::KillProcessCurrentUser "linkunbound.exe"
+        Pop $1
+        Sleep 500
         ; ExecShellWait, not ExecWait: that uninstaller was installed for all users and asks for
         ; elevation, which CreateProcess cannot raise — it would fail with no prompt and no word.
         ; And it has to finish before anything below writes a key, because what it deletes on its
         ; way out is what this install is about to put there.
+        ; Inno writes the path quoted; ShellExecute wants the file itself.
+        StrCpy $1 $0 1
+        ${If} $1 == '"'
+          StrCpy $0 $0 -1 1
+        ${EndIf}
         ClearErrors
         ExecShellWait "open" "$0" "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
         ${If} ${Errors}
@@ -85,8 +96,8 @@ FunctionEnd
 
 !macro NSIS_HOOK_POSTINSTALL
   ; Nothing registers the handler on its own: the resident never writes the registry, and the
-  ; settings window only reconciles when someone opens it. Without this, a fresh install receives
-  ; no links until the user happens to visit the settings.
+  ; settings window only follows keys that are already there — one the person took away stays
+  ; away. Without this, a fresh install receives no links at all.
   ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --register' $0
   ${If} $0 <> 0
     DetailPrint "The browser registration did not complete (code $0)"
@@ -132,6 +143,10 @@ FunctionEnd
       DeleteRegKey HKCU "Software\LinkUnbound"
       DeleteRegValue HKCU "Software\RegisteredApplications" "LinkUnbound"
     ${EndIf}
+
+    ; The sign-in entry names the resident being removed; left behind, it runs nothing every
+    ; morning, and a later install reads it as a choice already made.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LinkUnbound"
   ${EndIf}
 !macroend
 

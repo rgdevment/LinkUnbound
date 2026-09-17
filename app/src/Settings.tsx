@@ -33,6 +33,9 @@ type SystemState = {
 
 type Spoken = { language: string };
 
+/// Only the one field this screen touches; the rest travels back untouched.
+type Noticed = { prefs: { edge_warning_dismissed: boolean } & Record<string, unknown> };
+
 type Build = { version: string };
 
 const RELEASES = "https://github.com/rgdevment/LinkUnbound/releases/latest";
@@ -153,6 +156,18 @@ function Links({
   const total = state?.associations.length ?? 0;
   const ok = state?.is_default ?? false;
   const ailment = state ? AILMENT[state.health] : undefined;
+  // Read once and remembered, the way 1.x did: somebody who read why Edge gets the links is not
+  // told again every time they open this page.
+  const [noticed, setNoticed] = useState<Noticed | null>(null);
+  useEffect(() => {
+    void invoke<Noticed>("prefs_get").then(setNoticed).catch(noop);
+  }, []);
+  const understood = () => {
+    if (!noticed) return;
+    const prefs = { ...noticed.prefs, edge_warning_dismissed: true };
+    setNoticed({ prefs });
+    void invoke("prefs_set", { prefs }).catch(noop);
+  };
   // Launch Services registers bundles, not binaries: a build tree on a Mac has no way in.
   const remedy =
     ailment && !(state?.health === "build_tree" && platform() === "macos") ? ailment.remedy : null;
@@ -241,11 +256,18 @@ function Links({
         )}
       </Section>
 
-      {state?.edge_installed && (
+      {state?.edge_installed && noticed && !noticed.prefs.edge_warning_dismissed && (
         <Section title={t("edgeTitle")}>
           <div className="rounded-lg border border-black/[0.08] bg-black/[0.015] p-3.5 text-[11.5px] leading-relaxed text-neutral-600 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-[#98A0B4]">
             <p>{t("edgeBody")}</p>
             <p className="mt-2">{t("edgeRelief")}</p>
+            <button
+              type="button"
+              onClick={understood}
+              className="mt-3 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] font-medium hover:bg-black/[0.04] dark:border-white/[0.12] dark:hover:bg-white/[0.06]"
+            >
+              {t("edgeUnderstood")}
+            </button>
           </div>
         </Section>
       )}

@@ -70,6 +70,18 @@ mod host {
         linkunbound_win::is_in_front(window)
     }
 
+    pub fn front_is_ours() -> bool {
+        linkunbound_win::front_is_ours()
+    }
+
+    pub fn front_window() -> isize {
+        linkunbound_win::front_window()
+    }
+
+    pub fn never_activates(window: isize) {
+        linkunbound_win::never_activates(window);
+    }
+
     pub fn shift_is_down() -> bool {
         linkunbound_win::shift_is_down()
     }
@@ -133,6 +145,16 @@ mod host {
         linkunbound_mac::is_in_front(window)
     }
 
+    pub fn front_is_ours() -> bool {
+        linkunbound_mac::front_is_ours()
+    }
+
+    pub fn front_window() -> isize {
+        linkunbound_mac::front_application()
+    }
+
+    pub fn never_activates(_window: isize) {}
+
     pub fn shift_is_down() -> bool {
         linkunbound_mac::shift_is_down()
     }
@@ -193,6 +215,16 @@ mod host {
     pub fn is_in_front(_window: isize) -> bool {
         true
     }
+
+    pub fn front_is_ours() -> bool {
+        true
+    }
+
+    pub fn front_window() -> isize {
+        0
+    }
+
+    pub fn never_activates(_window: isize) {}
 
     pub fn shift_is_down() -> bool {
         false
@@ -291,7 +323,39 @@ fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
     let _ = notice.show();
     if let Some(handle) = native_handle(notice.window()) {
         host::keep_off_the_taskbar(handle, linkunbound_shell::CLASSIC_CORNER);
+        host::never_activates(handle);
     }
+    in_the_corner(notice);
+}
+
+const NOTICE_MARGIN: f32 = 16.0;
+
+/// The corner of the screen the click happened on, where a notice is looked for; left to the
+/// window manager it opened wherever the last one did, usually another screen, and the six
+/// seconds passed unseen.
+fn in_the_corner(notice: &Notice) {
+    let Some((cx, cy)) = host::cursor() else {
+        return;
+    };
+    let Some((x, y, width, height)) = host::work_area_at(cx, cy) else {
+        return;
+    };
+    let scale = if cfg!(target_os = "macos") {
+        1.0
+    } else {
+        f64::from(notice.window().scale_factor())
+    };
+    let size = |logical: f32| physical(logical, scale);
+    let at_x = x + width - size(notice.get_wanted_width()) - size(NOTICE_MARGIN);
+    let at_y = y + height - size(notice.get_wanted_height()) - size(NOTICE_MARGIN);
+    #[cfg(target_os = "macos")]
+    notice
+        .window()
+        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
+    #[cfg(not(target_os = "macos"))]
+    notice
+        .window()
+        .set_position(slint::PhysicalPosition::new(at_x, at_y));
 }
 
 /// Settings runs in another process: the file is the only channel between them.
@@ -401,11 +465,23 @@ struct Shown {
 /// Kept apart from the window so the decision can be checked without one.
 fn claims_the_window(shown: &mut Shown, url: String, occupied: bool) -> Option<String> {
     if occupied {
-        shown.waiting.push_back(url);
+        // A program that retries the same link every second fills the queue with one click; a
+        // link already waiting, or the one on screen, is that click.
+        let already = shown.url.as_deref() == Some(url.as_str())
+            || shown.waiting.iter().any(|waiting| *waiting == url);
+        if !already {
+            shown.waiting.push_back(url);
+            if shown.waiting.len() > WAITING_ROOM {
+                shown.waiting.pop_front();
+            }
+        }
         return None;
     }
     Some(url)
 }
+
+/// Past this many, the oldest goes: nobody clicks that many links while a picker is up.
+const WAITING_ROOM: usize = 12;
 
 fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: String) {
     let occupied = picker.window().is_visible();
@@ -447,9 +523,11 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
         host::take_the_keyboard(handle);
     }
     // The window reports a scale of one until it exists, which is only now: the first picker of
-    // a session on a dense display would draw icons asked for at the wrong side.
+    // a session on a dense display was placed for a window two thirds its size, and drew icons
+    // asked for at the wrong side.
     let drawn_at = physical_icon_side(picker);
     if drawn_at != asked_at {
+        beside_the_pointer(picker);
         let redrawn = rows(drawn_at);
         let held = shown.borrow();
         if let Some(url) = held.url.as_deref() {
@@ -557,9 +635,19 @@ struct Ui {
     put_away: RefCell<Option<String>>,
     prefs_seen: Cell<Option<std::time::SystemTime>>,
     held_focus: Cell<bool>,
+    /// When a browser was last sent a link: the one coming to the front just after is that
+    /// browser arriving, not the person walking away from the next picker.
+    launched_at: Cell<Option<std::time::Instant>>,
+    light_seen: Cell<bool>,
+    taskbar_seen: Cell<bool>,
+    /// The window the picker was shown over when it could not take the front.
+    shown_over: Cell<Option<isize>>,
     #[cfg(target_os = "macos")]
     launch_decided: Cell<bool>,
 }
+
+/// How long a browser gets to bring its window up after being launched.
+const BROWSER_ARRIVES_WITHIN: Duration = Duration::from_millis(1500);
 
 thread_local! {
     static UI: RefCell<Option<Rc<Ui>>> = const { RefCell::new(None) };
@@ -575,10 +663,28 @@ impl Ui {
     fn catch_up(&self) {
         let now = prefs_touched_at();
         if now == self.prefs_seen.get() {
+            self.follow_the_system();
             return;
         }
         self.prefs_seen.set(now);
         self.obey(&store().prefs());
+    }
+
+    /// «System» is read when the picker is about to show, not once at start: Windows turns dark
+    /// at dusk on its own, and the taskbar with it, and neither touches the preferences file.
+    fn follow_the_system(&self) {
+        let light = wants_light(store().prefs().theme);
+        if light != self.light_seen.get() {
+            self.light_seen.set(light);
+            paint(&self.picker, &self.notice, light);
+        }
+        let taskbar = host::light_taskbar();
+        if taskbar != self.taskbar_seen.get() {
+            self.taskbar_seen.set(taskbar);
+            if let Some(tray) = self.tray.as_ref() {
+                tray.follow(taskbar);
+            }
+        }
     }
 
     /// What the strip says now, read off the two files settings writes. An install that stopped
@@ -690,11 +796,22 @@ impl Ui {
             look,
         );
         slint::Timer::single_shot(Duration::from_secs(20), look);
+        // Once a session, off the start-up path: the icons of browsers long uninstalled are
+        // what the cache otherwise fills with.
+        slint::Timer::single_shot(Duration::from_secs(90), || {
+            let browsers = catalogue();
+            linkunbound_core::prune_icons(
+                &data_dir().join("icons"),
+                browsers.iter().map(|b| b.id.as_str()),
+            );
+        });
     }
 
     fn obey(&self, prefs: &linkunbound_core::Preferences) {
         self.words.set(Language::chosen(prefs.locale).strings());
-        paint(&self.picker, &self.notice, wants_light(prefs.theme));
+        let light = wants_light(prefs.theme);
+        self.light_seen.set(light);
+        paint(&self.picker, &self.notice, light);
         style(&self.picker, prefs.picker_style);
         if let Some(tray) = self.tray.as_ref() {
             tray.show(!prefs.hide_tray || cfg!(target_os = "macos"));
@@ -706,6 +823,7 @@ impl Ui {
     /// picker is on screen, and it stops itself the moment it is not.
     fn watch_focus(self: &Rc<Self>) {
         self.held_focus.set(false);
+        self.shown_over.set(None);
         let weak = Rc::downgrade(self);
         self.watch.start(
             slint::TimerMode::Repeated,
@@ -728,7 +846,38 @@ impl Ui {
                     .set_private_on(ui.picker.get_pinned_private() || host::shift_is_down());
                 if host::is_in_front(ours) {
                     ui.held_focus.set(true);
-                } else if ui.held_focus.get() {
+                } else if !ui.held_focus.get() {
+                    // The keyboard could not be taken — the window in front runs elevated, and
+                    // Windows keeps a plain process out of its input — so the picker sits there
+                    // unfocused. It cannot know the person is done with it until they go
+                    // somewhere else: the window they were in is remembered, and leaving it is
+                    // what dismisses.
+                    let front = host::front_window();
+                    match ui.shown_over.get() {
+                        None => ui.shown_over.set(Some(front)),
+                        Some(over) if over != front && !host::front_is_ours() => {
+                            let _ = ui.picker.hide();
+                            host::let_whoever_opens_next_come_forward();
+                            ui.watch.stop();
+                            next_in_line(&ui.picker, &ui.words.get(), &ui.shown);
+                        }
+                        Some(_) => {}
+                    }
+                } else {
+                    // The notice is ours and took nothing the person meant to give away.
+                    if host::front_is_ours() {
+                        return;
+                    }
+                    // The browser the last link went to is arriving: the picker queued behind it
+                    // is asked for again, once, rather than read as walked away from.
+                    if ui
+                        .launched_at
+                        .take()
+                        .is_some_and(|at| at.elapsed() < BROWSER_ARRIVES_WITHIN)
+                    {
+                        host::take_the_keyboard(ours);
+                        return;
+                    }
                     let _ = ui.picker.hide();
                     host::let_whoever_opens_next_come_forward();
                     ui.watch.stop();
@@ -761,7 +910,10 @@ impl Ui {
 /// One link, start to finish, on the UI thread. Called the instant the socket
 /// reads it: waiting for a poll turned four milliseconds of work into sixty.
 fn arrived(raw: String) {
-    let Some(ui) = ui() else { return };
+    let Some(ui) = ui() else {
+        hold_for_the_loop(raw);
+        return;
+    };
     // The socket takes a line from any process of this user; the command line is
     // normalised and this has to be too, or the scheme guard is walked around.
     let Some(url) = normalise(&raw) else { return };
@@ -772,6 +924,12 @@ fn arrived(raw: String) {
             ui.firing.replace(Some(fired.rule_id.clone()));
             flash(&ui.notice, &ui.words.get(), &fired);
             ui.count_down();
+            // Shown over an open picker, the notice must not take the digits being typed.
+            if ui.picker.window().is_visible()
+                && let Some(handle) = native_handle(ui.picker.window())
+            {
+                host::take_the_keyboard(handle);
+            }
         }
         return;
     }
@@ -779,8 +937,31 @@ fn arrived(raw: String) {
     ui.watch_focus();
 }
 
+/// Links the socket took before the loop could: the copy that handed them over believes they
+/// were delivered, so they are kept here until there is a window to deliver them to.
+static HELD_FOR_THE_LOOP: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+fn hold_for_the_loop(url: String) {
+    if let Ok(mut held) = HELD_FOR_THE_LOOP.lock() {
+        held.push(url);
+    }
+}
+
+fn release_to_the_loop() {
+    let held: Vec<String> = HELD_FOR_THE_LOOP
+        .lock()
+        .map(|mut held| held.drain(..).collect())
+        .unwrap_or_default();
+    for url in held {
+        let _ = slint::invoke_from_event_loop(move || arrived(url));
+    }
+}
+
 fn handed_to_the_loop(url: String) {
-    let _ = slint::invoke_from_event_loop(move || arrived(url));
+    let raw = url.clone();
+    if slint::invoke_from_event_loop(move || arrived(url)).is_err() {
+        hold_for_the_loop(raw);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -822,6 +1003,20 @@ fn sent_by_launch_services(event: linkunbound_mac::Event, quiet: bool) {
         Reaction::Settings => open_settings(),
         Reaction::Nothing => {}
     }
+}
+
+/// winit activates the application as its loop starts, whether or not it has a window: a
+/// resident relaunched after an update, or started at sign-in, took the keyboard from whatever
+/// the person was typing into. The backend is chosen here, before the first window, without that.
+#[cfg(target_os = "macos")]
+fn without_taking_the_front() -> Result<(), slint::PlatformError> {
+    use slint::winit_030::winit::event_loop::EventLoop;
+    use slint::winit_030::winit::platform::macos::EventLoopBuilderExtMacOS;
+    let mut builder = EventLoop::<slint::winit_030::SlintEvent>::with_user_event();
+    builder.with_activate_ignoring_other_apps(false);
+    slint::BackendSelector::new()
+        .with_winit_event_loop_builder(builder)
+        .select()
 }
 
 fn style(picker: &Picker, chosen: linkunbound_core::PickerStyle) {
@@ -870,7 +1065,11 @@ fn main() -> Result<(), slint::PlatformError> {
         Some(server) => server,
         None => {
             let Some(url) = incoming.as_deref() else {
-                open_settings();
+                // A second copy at sign-in, or the one the installer relaunched before the old
+                // resident had let go: nobody asked for a window.
+                if !hushed {
+                    open_settings();
+                }
                 return Ok(());
             };
             if single::hand_over(url) {
@@ -902,9 +1101,22 @@ fn main() -> Result<(), slint::PlatformError> {
         open_settings();
     }
 
+    #[cfg(target_os = "macos")]
+    without_taking_the_front()?;
     let picker = Picker::new()?;
     let shown = Rc::new(RefCell::new(Shown::default()));
 
+    // Alt+F4 reaches the window as a close request, which Slint answers by hiding it: the queue
+    // behind the link then waited for nothing.
+    {
+        let handle = picker.as_weak();
+        picker.window().on_close_requested(move || {
+            if let Some(window) = handle.upgrade() {
+                window.invoke_dismissed();
+            }
+            slint::CloseRequestResponse::KeepWindowShown
+        });
+    }
     {
         let handle = picker.as_weak();
         let shown = Rc::clone(&shown);
@@ -940,12 +1152,28 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     {
         let handle = picker.as_weak();
+        picker.on_step_reach(move |delta| {
+            let Some(window) = handle.upgrade() else {
+                return 0;
+            };
+            let dead: Vec<bool> = window.get_all_reaches().iter().map(|r| r.dead).collect();
+            linkunbound_shell::next_live(&dead, window.get_reach_index(), delta)
+        });
+    }
+    {
+        let handle = picker.as_weak();
         let shown = Rc::clone(&shown);
         picker.on_open(move |index, private| {
             let Some(window) = handle.upgrade() else {
                 return;
             };
-            let reach = Reaches::at(window.get_reach_index());
+            // A reach the keys landed on while it was dead is no reach at all.
+            let at = window.get_reach_index();
+            let dead = usize::try_from(at)
+                .ok()
+                .and_then(|i| window.get_all_reaches().row_data(i))
+                .is_some_and(|reach| reach.dead);
+            let reach = if dead { Reaches::Once } else { Reaches::at(at) };
             let held = shown.borrow();
             let Some(url) = held.url.clone() else { return };
             let source = held.source.clone();
@@ -964,6 +1192,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 &url,
             ) {
                 Ok(()) => {
+                    if let Some(ui) = ui() {
+                        ui.launched_at.set(Some(std::time::Instant::now()));
+                    }
                     let words = ui().map(|ui| ui.words.get());
                     if remember(&url, chosen, private, reach, source) {
                         let _ = window.hide();
@@ -1032,7 +1263,8 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     let spoken = Language::chosen(store().prefs().locale).strings();
-    let tray = Tray::install(host::light_taskbar(), &spoken);
+    let light_taskbar = host::light_taskbar();
+    let tray = Tray::install(light_taskbar, &spoken);
     let (asks, tray_inbox) = channel::<Asked>();
 
     let state = Rc::new(Ui {
@@ -1049,6 +1281,10 @@ fn main() -> Result<(), slint::PlatformError> {
         put_away: RefCell::new(None),
         prefs_seen: Cell::new(prefs_touched_at()),
         held_focus: Cell::new(false),
+        launched_at: Cell::new(None),
+        light_seen: Cell::new(false),
+        taskbar_seen: Cell::new(light_taskbar),
+        shown_over: Cell::new(None),
         #[cfg(target_os = "macos")]
         launch_decided: Cell::new(false),
     });
@@ -1063,6 +1299,7 @@ fn main() -> Result<(), slint::PlatformError> {
     if let Some(url) = incoming {
         let _ = slint::invoke_from_event_loop(move || arrived(url));
     }
+    release_to_the_loop();
 
     #[cfg(target_os = "macos")]
     if plain_launch {
@@ -1101,7 +1338,9 @@ fn main() -> Result<(), slint::PlatformError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Listed, Shown, claims_the_window, link_from, physical, rule_for, with_icons};
+    use super::{
+        Listed, Shown, WAITING_ROOM, claims_the_window, link_from, physical, rule_for, with_icons,
+    };
     use linkunbound_core::Scope;
     use linkunbound_core::normalise;
     use linkunbound_shell::Reaches;
@@ -1304,6 +1543,37 @@ mod tests {
             "queued links are answered in the order they were clicked"
         );
         assert_eq!(shown.waiting.len(), 1, "and none of them is dropped");
+    }
+
+    /// One click retried is one click: a program that re-sends the link every second while the
+    /// picker is up would otherwise queue it a hundred times, and Esc would show each one.
+    #[test]
+    fn the_same_link_waits_once_and_the_queue_has_a_ceiling() {
+        let mut shown = Shown {
+            url: Some("https://shown.test/".to_owned()),
+            ..Shown::default()
+        };
+        for _ in 0..5 {
+            assert!(
+                claims_the_window(&mut shown, "https://again.test/".to_owned(), true).is_none()
+            );
+        }
+        assert_eq!(shown.waiting.len(), 1);
+        assert!(claims_the_window(&mut shown, "https://shown.test/".to_owned(), true).is_none());
+        assert_eq!(
+            shown.waiting.len(),
+            1,
+            "the link on screen is not queued behind itself"
+        );
+
+        for n in 0..(WAITING_ROOM * 2) {
+            let _ = claims_the_window(&mut shown, format!("https://many.test/{n}"), true);
+        }
+        assert_eq!(shown.waiting.len(), WAITING_ROOM);
+        assert!(
+            !shown.waiting.contains(&"https://again.test/".to_owned()),
+            "the oldest is what goes"
+        );
     }
 
     fn chosen() -> Listed {

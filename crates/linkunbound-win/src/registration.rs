@@ -46,9 +46,12 @@ impl Default for Registration {
 #[must_use]
 pub fn is_build_tree(exe: &str) -> bool {
     let path = exe.replace('/', "\\").to_ascii_lowercase();
+    // Cargo puts a binary at most three folders under `target` (`target/<triple>/<profile>/`),
+    // so `target` further up is somebody's folder — a user by that name, say — not a build.
     path.split('\\')
         .rev()
         .skip(1)
+        .take(3)
         .any(|component| component == "target")
 }
 
@@ -248,7 +251,43 @@ pub fn windows_are_light() -> bool {
 /// would otherwise read as ours.
 #[must_use]
 pub fn prog_id_is_ours(prog_id: &str) -> bool {
-    prog_id.eq_ignore_ascii_case(PROG_ID)
+    prog_id.eq_ignore_ascii_case(PROG_ID) || names_this_package(prog_id)
+}
+
+/// Inside a package Windows writes a ProgId of its own, `AppX<hash>`, that carries nothing of
+/// the name; the class it registers names the package through its AppUserModelID, which starts
+/// with the package family. Only a packaged copy can answer for one.
+fn names_this_package(prog_id: &str) -> bool {
+    let Ok(family) = windows::ApplicationModel::Package::Current()
+        .and_then(|package| package.Id())
+        .and_then(|id| id.FamilyName())
+    else {
+        return false;
+    };
+    let mine = format!("{}!", family.to_string().to_ascii_lowercase());
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(format!(r"Software\Classes\{prog_id}\Application"))
+        .and_then(|key| key.get_value::<String, _>("AppUserModelID"))
+        .is_ok_and(|aumid| aumid.to_ascii_lowercase().starts_with(&mine))
+}
+
+/// 1.x, when asked, took the `microsoft-edge:` scheme so Teams and Outlook reached it, and its
+/// uninstaller left the keys: every such link then ran a program that was gone. Swept while they
+/// still name it; a key that names anything else is somebody else's.
+pub fn sweep_legacy_edge_capture() {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    for key in [
+        r"Software\Classes\microsoft-edge",
+        r"Software\Classes\LinkUnboundEdgeProto",
+    ] {
+        let names_1x = hkcu
+            .open_subkey(format!(r"{key}\shell\open\command"))
+            .and_then(|k| k.get_value::<String, _>(""))
+            .is_ok_and(|command| command.to_ascii_lowercase().contains("linkunbound.exe"));
+        if names_1x {
+            let _ = hkcu.delete_subkey_all(key);
+        }
+    }
 }
 
 /// What the user actually chose. Windows owns these keys and no application may
@@ -284,6 +323,17 @@ pub fn association_report() -> Vec<(String, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A type Windows is told this opens, and the shell then refuses, is a double click that ends
+    /// in the settings window.
+    #[test]
+    fn what_is_registered_is_what_the_shell_opens() {
+        let opened: Vec<String> = linkunbound_core::local_web_file_extensions()
+            .iter()
+            .map(|ext| format!(".{ext}"))
+            .collect();
+        assert_eq!(FILE_EXTENSIONS.to_vec(), opened);
+    }
 
     /// One root per test: they run in parallel and a shared root means each
     /// one's cleanup deletes the others' keys mid-assertion.
@@ -496,6 +546,10 @@ mod tests {
         assert!(!is_build_tree(
             r"C:\Program Files\LinkUnbound Target\linkunbound.exe"
         ));
+        assert!(
+            !is_build_tree(r"C:\Users\target\AppData\Local\Programs\LinkUnbound\linkunbound.exe"),
+            "a person called target is not a build tree"
+        );
     }
 
     #[test]

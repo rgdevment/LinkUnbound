@@ -41,6 +41,17 @@ fn parsed(raw: &str) -> Option<Url> {
     url.has_host().then_some(url)
 }
 
+/// Two spellings of one address, as a browser would read them: the scheme and host case-folded,
+/// the default port dropped, an empty path and `/` the same. A rule typed with a capital in the
+/// host never matched the link that arrived otherwise.
+#[must_use]
+pub fn same_address(a: &str, b: &str) -> bool {
+    match (Url::parse(a), Url::parse(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
 /// The canonical host as the browser will resolve it: punycode, lowercased, and
 /// agreeing with WHATWG on backslashes, credentials and IPv6 literals. Anything
 /// else routes a link by one host while the browser opens another.
@@ -92,27 +103,67 @@ pub fn looks_unresolved(url: &str) -> bool {
     parsed(url).is_some_and(|u| is_microsoft_wrapper(&u))
 }
 
+/// What Windows is registered for, and no more: a type the shell offers to open and then refuses
+/// is a double click that ends in the settings window.
+#[cfg(windows)]
+const WEB_FILE_EXTENSIONS: &[&str] = &[
+    "htm", "html", "xhtml", "xht", "pdf", "svg", "mhtml", "mht", "shtml", "webp",
+];
 #[cfg(target_os = "macos")]
-const WEB_FILE_EXTENSIONS: [&str; 4] = ["html", "htm", "xhtml", "svg"];
+const WEB_FILE_EXTENSIONS: &[&str] = &["html", "htm", "xhtml", "svg"];
+#[cfg(not(any(windows, target_os = "macos")))]
+const WEB_FILE_EXTENSIONS: &[&str] = &[];
 
-#[cfg(target_os = "macos")]
 #[must_use]
 pub fn local_web_file_extensions() -> &'static [&'static str] {
-    &WEB_FILE_EXTENSIONS
+    WEB_FILE_EXTENSIONS
 }
 
-#[cfg(target_os = "macos")]
+fn has_web_extension(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| WEB_FILE_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+}
+
+/// A document on this machine, as the URL a browser opens it by. Anything on another machine is
+/// refused before it is touched: merely probing `\\host\share` makes Windows authenticate against
+/// `host`, and the user's NTLM hash goes to whoever named it.
 #[must_use]
 pub fn local_web_file(path: &std::path::Path) -> Option<String> {
-    let real = std::fs::canonicalize(path).ok()?;
-    if !real.is_file() {
+    if !on_this_machine(path) {
         return None;
     }
-    let extension = real.extension()?.to_str()?.to_ascii_lowercase();
-    if !WEB_FILE_EXTENSIONS.contains(&extension.as_str()) {
+    let real = settled(path)?;
+    if !real.is_file() || !has_web_extension(&real) {
         return None;
     }
     Url::from_file_path(&real).ok().map(Into::into)
+}
+
+#[cfg(windows)]
+fn on_this_machine(path: &std::path::Path) -> bool {
+    matches!(
+        path.components().next(),
+        Some(std::path::Component::Prefix(prefix))
+            if matches!(prefix.kind(), std::path::Prefix::Disk(_))
+    )
+}
+
+#[cfg(not(windows))]
+fn on_this_machine(path: &std::path::Path) -> bool {
+    path.is_absolute() && !path.starts_with("//")
+}
+
+/// Windows resolves a mapped drive to its `\\?\UNC\` origin when canonicalising, which would
+/// turn the user's own `Z:` into a host in the URL; the path is taken as given there.
+#[cfg(windows)]
+fn settled(path: &std::path::Path) -> Option<std::path::PathBuf> {
+    Some(path.to_path_buf())
+}
+
+#[cfg(not(windows))]
+fn settled(path: &std::path::Path) -> Option<std::path::PathBuf> {
+    std::fs::canonicalize(path).ok()
 }
 
 /// Read from the URL's own segments rather than a filesystem path: on Windows a
@@ -137,18 +188,30 @@ pub fn local_file_parts(raw: &str) -> Option<(String, String)> {
     Some((name, folder))
 }
 
-#[cfg(target_os = "macos")]
 fn launchable_file(raw: &str) -> Option<String> {
-    let url = Url::parse(raw).ok()?;
-    if url.scheme() != "file" || url.has_host() {
+    if WEB_FILE_EXTENSIONS.is_empty() {
         return None;
     }
-    local_web_file(&url.to_file_path().ok()?)
+    let path = match Url::parse(raw) {
+        Ok(url) if url.scheme() == "file" => {
+            if url.has_host() {
+                return None;
+            }
+            url.to_file_path().ok()?
+        }
+        // Explorer hands the shell a bare path, not a URL.
+        _ if cfg!(windows) && looks_like_a_drive_path(raw) => std::path::PathBuf::from(raw),
+        _ => return None,
+    };
+    local_web_file(&path)
 }
 
-#[cfg(not(target_os = "macos"))]
-fn launchable_file(_raw: &str) -> Option<String> {
-    None
+fn looks_like_a_drive_path(raw: &str) -> bool {
+    let bytes = raw.as_bytes();
+    bytes.len() > 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
 }
 
 /// Guards the boundary between an untrusted inbound URL and spawning a process.
@@ -310,6 +373,23 @@ mod tests {
     }
 
     #[test]
+    fn one_address_spelled_two_ways_is_one_address() {
+        use super::same_address;
+        assert!(same_address(
+            "https://Docs.Google.com/x",
+            "https://docs.google.com/x"
+        ));
+        assert!(same_address("HTTPS://a.test", "https://a.test/"));
+        assert!(same_address("https://a.test:443/x", "https://a.test/x"));
+        assert!(
+            !same_address("https://a.test/x", "https://a.test/X"),
+            "the path is the site's"
+        );
+        assert!(!same_address("https://a.test/x", "https://a.test/x?y=1"));
+        assert!(same_address("not a url", "not a url"));
+    }
+
+    #[test]
     fn a_file_url_from_outside_never_reaches_a_browser() {
         assert!(!is_launchable("file://evil.test/share/payload"));
         assert!(!is_launchable("file:///C:/Windows/System32/calc.exe"));
@@ -418,6 +498,71 @@ mod tests {
         fn a_path_on_another_machine_is_still_refused() {
             assert!(!is_launchable("file://host/share/page.html"));
             assert!(normalise("file://host/share/page.html").is_none());
+        }
+    }
+
+    /// Explorer hands the shell a bare path; the registered types are the ones this opens, or a
+    /// double click on a document ends in the settings window.
+    #[cfg(windows)]
+    mod local_files_on_windows {
+        use super::super::{is_launchable, local_web_file, local_web_file_extensions, normalise};
+        use std::path::{Path, PathBuf};
+
+        fn scratch(name: &str) -> PathBuf {
+            let dir = std::env::temp_dir().join(format!("linkunbound-url-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).expect("a scratch directory");
+            dir.join(name)
+        }
+
+        #[test]
+        fn a_bare_path_to_a_registered_document_becomes_a_file_link() {
+            for ext in local_web_file_extensions() {
+                let file = scratch(&format!("report.{}", ext.to_ascii_uppercase()));
+                std::fs::write(&file, "x").expect("a file");
+                let raw = file.to_string_lossy().into_owned();
+                let link = normalise(&raw).expect(&raw);
+                assert!(link.starts_with("file:///"), "{link}");
+                assert!(
+                    link.ends_with(&format!("report.{}", ext.to_ascii_uppercase())),
+                    "{link}"
+                );
+                assert!(is_launchable(&link), "{link}");
+                assert_eq!(normalise(&link).as_deref(), Some(link.as_str()));
+                assert_eq!(
+                    normalise(&raw.replace('\\', "/")).as_deref(),
+                    Some(link.as_str())
+                );
+            }
+        }
+
+        #[test]
+        fn anything_else_on_disk_is_refused() {
+            let text = scratch("notes.txt");
+            std::fs::write(&text, "x").expect("a file");
+            assert!(normalise(&text.to_string_lossy()).is_none());
+
+            let folder = scratch("folder.html");
+            std::fs::create_dir_all(&folder).expect("a directory");
+            assert!(local_web_file(&folder).is_none());
+
+            assert!(normalise(r"C:\nowhere\at\all.pdf").is_none());
+            assert!(normalise("file:///C:/nowhere/at/all.pdf").is_none());
+            assert!(normalise("report.pdf").is_none());
+            assert!(normalise(r"C:report.pdf").is_none());
+        }
+
+        #[test]
+        fn a_path_on_another_machine_is_refused_before_it_is_touched() {
+            for raw in [
+                r"\\host\share\page.html",
+                "//host/share/page.html",
+                r"\\?\UNC\host\share\page.html",
+                "file://host/share/page.html",
+                "file:////host/share/page.html",
+            ] {
+                assert!(normalise(raw).is_none(), "{raw}");
+                assert!(local_web_file(Path::new(raw)).is_none(), "{raw}");
+            }
         }
     }
 }

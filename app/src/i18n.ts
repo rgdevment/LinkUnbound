@@ -46,6 +46,7 @@ const ES = {
     "Algunas aplicaciones de Microsoft no abren los enlaces como lo haría cualquier otra: se los pasan directamente a Edge por un canal propio, saltándose el navegador predeterminado del sistema. Windows 11 ya no permite que otra aplicación se ponga en medio de ese canal, así que no hay nada que LinkUnbound pueda hacer para interceptarlo.",
   edgeRelief:
     "Lo que sí hace: cuando uno de esos enlaces llega envuelto en un enlace protegido, LinkUnbound lo desenvuelve y te ofrece el destino real en lugar del intermediario.",
+  edgeUnderstood: "Entendido, no volver a mostrarlo",
 
   kindAny: "Cualquiera",
   kindUrl: "Esta URL",
@@ -151,6 +152,7 @@ const ES = {
   careBrowsers: "Navegadores",
   rescanTitle: "Volver a buscar navegadores",
   rescanNote: "Útil si instalaste uno y no aparece en el selector",
+  rescanCounts: "{} nuevos, {} que ya no están",
   rescanGo: "Buscar",
   rescanBody:
     "Se olvida lo detectado y se vuelve a leer del registro. Los navegadores que añadiste a mano se conservan; lo que hayas ocultado se mostrará de nuevo.",
@@ -196,6 +198,10 @@ const ES = {
   ruleValueNotUrl: "Eso no es una dirección completa; empieza por https://",
   ruleValueNotHost: "Eso no es un dominio; prueba con algo como docs.google.com",
   ruleKindUnknown: "Ese tipo de regla no existe",
+  rulePrivateImpossible: "Ese navegador no abre ventanas privadas; quita «En ventana privada»",
+  ruleExists: "Ya hay una regla para eso; cámbiala en la lista en lugar de añadir otra",
+  packagedRegistration:
+    "Una copia de Microsoft Store la registra su paquete; se elige en Aplicaciones predeterminadas",
   updateBusy: "Ya hay una actualización en marcha",
   updateGone: "Ya no hay ninguna versión nueva que instalar",
   updateNotHere: "Esta copia no puede reemplazarse a sí misma",
@@ -204,6 +210,9 @@ const ES = {
   candidatesNote:
     "Llegan antes y están menos probadas. Puedes volver a las estables cuando quieras.",
   updateStore: "La instala Microsoft Store, sin salir de aquí",
+  updateStoreByHand: "Instálala desde Microsoft Store: esta copia no puede hacerlo por sí sola",
+  updateFromMount:
+    "Mueve LinkUnbound a Aplicaciones y ábrelo desde ahí; desde la imagen de disco no puede actualizarse",
   updateWaiting: "hay una versión nueva",
   updateGoTo: "Ver la {} disponible",
   updateFailed: "No se pudo actualizar",
@@ -289,6 +298,7 @@ const EN: Record<Key, string> = {
     "Some Microsoft applications do not open links the way any other one would: they hand them straight to Edge down a channel of their own, skipping the system default browser. Windows 11 no longer lets another application stand in the middle of that channel, so there is nothing LinkUnbound can do to intercept it.",
   edgeRelief:
     "What it does do: when one of those links arrives wrapped in a protected link, LinkUnbound unwraps it and offers you the real destination instead of the middleman.",
+  edgeUnderstood: "Got it, do not show this again",
 
   kindAny: "Anything",
   kindUrl: "This URL",
@@ -395,6 +405,7 @@ const EN: Record<Key, string> = {
   careBrowsers: "Browsers",
   rescanTitle: "Look for browsers again",
   rescanNote: "Useful if you installed one and it does not show up in the picker",
+  rescanCounts: "{} new, {} no longer there",
   rescanGo: "Look",
   rescanBody:
     "What was detected is forgotten and read from the registry again. The browsers you added by hand are kept; whatever you hid will show up again.",
@@ -440,6 +451,10 @@ const EN: Record<Key, string> = {
   ruleValueNotUrl: "That is not a full address; start with https://",
   ruleValueNotHost: "That is not a domain; try something like docs.google.com",
   ruleKindUnknown: "That kind of rule does not exist",
+  rulePrivateImpossible: "That browser has no private window; untick «In a private window»",
+  ruleExists: "There is a rule for that already; change it in the list rather than adding another",
+  packagedRegistration:
+    "A Microsoft Store copy is registered by its package; it is chosen under Default apps",
   updateBusy: "An update is already underway",
   updateGone: "There is no newer version left to install",
   updateNotHere: "This copy cannot replace itself",
@@ -448,6 +463,9 @@ const EN: Record<Key, string> = {
   candidatesNote:
     "They arrive sooner and are less tested. You can go back to the stable ones whenever you like.",
   updateStore: "Microsoft Store installs it, without leaving this window",
+  updateStoreByHand: "Install it from Microsoft Store: this copy cannot do it on its own",
+  updateFromMount:
+    "Move LinkUnbound to Applications and open it from there; it cannot update from the disk image",
   updateWaiting: "a new version is waiting",
   updateGoTo: "See {}, available now",
   updateFailed: "The update did not go through",

@@ -56,10 +56,18 @@ const BROWSERS = [
       ["Default", "Tu Chrome"],
       ["Profile 2", "Trabajo"],
     ],
+    private: true,
     hidden: false,
   },
-  { id: "firefox", name: "Mozilla Firefox", profile_names: [], hidden: false },
-  { id: "edge", name: "Microsoft Edge", profile_names: [["Default", "Personal"]], hidden: true },
+  { id: "firefox", name: "Mozilla Firefox", profile_names: [], private: true, hidden: false },
+  { id: "plain", name: "Plain Viewer", profile_names: [], private: false, hidden: false },
+  {
+    id: "edge",
+    name: "Microsoft Edge",
+    profile_names: [["Default", "Personal"]],
+    private: true,
+    hidden: true,
+  },
 ];
 
 function answers(list: unknown[], overrides: Record<string, () => Promise<unknown>> = {}) {
@@ -136,6 +144,32 @@ describe("rules", () => {
       kind: "app",
       value: "teams",
       browserId: "firefox",
+      profileId: null,
+      private: false,
+    });
+  });
+
+  /// Saved, such a rule would wear the badge and never fire: the box is greyed for a browser
+  /// with no private window, and a tick made earlier is not sent along.
+  it("cannot ask for a private window from a browser that has none", async () => {
+    answers([], { rules_add: () => Promise.resolve([SITE]) });
+    render(<Rules />);
+    await userEvent.click(await screen.findByRole("button", { name: "Añadir regla" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "google.com" }), "github.com");
+    const box = screen.getByRole("checkbox", { name: "En ventana privada" });
+    await userEvent.click(box);
+    expect(box).toBeChecked();
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Abrir en" }),
+      "Plain Viewer",
+    );
+    expect(box).toBeDisabled();
+    expect(box).not.toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(invoke).toHaveBeenCalledWith("rules_add", {
+      kind: "site",
+      value: "github.com",
+      browserId: "plain",
       profileId: null,
       private: false,
     });

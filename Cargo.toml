@@ -20,6 +20,7 @@ slint = { version = "1.17", default-features = false, features = [
   "raw-window-handle-06",
   "renderer-software",
   "std",
+  "unstable-winit-030",
 ] }
 slint-build = "1.17"
 tray-icon = "0.24"

@@ -6,11 +6,19 @@
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
-use windows::Win32::Foundation::{CloseHandle, GlobalFree, HANDLE, HWND, MAX_PATH, POINT};
+use windows::Win32::Foundation::{
+    CloseHandle, ERROR_PIPE_BUSY, GENERIC_WRITE, GlobalFree, HANDLE, HLOCAL, HWND, LocalFree, POINT,
+};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits,
     GetMonitorInfoW, GetObjectW, HBITMAP, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
     MonitorFromPoint, ReleaseDC,
+};
+use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
+use windows::Win32::Security::{GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser};
+use windows::Win32::Storage::FileSystem::{
+    CreateFileW, FILE_SHARE_NONE, FlushFileBuffers, OPEN_EXISTING, SECURITY_IDENTIFICATION,
+    SECURITY_SQOS_PRESENT, WriteFile,
 };
 use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows::Win32::System::DataExchange::{
@@ -18,9 +26,10 @@ use windows::Win32::System::DataExchange::{
 };
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
+use windows::Win32::System::Pipes::WaitNamedPipeW;
 use windows::Win32::System::Threading::{
-    AttachThreadInput, GetCurrentThreadId, OpenProcess, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    AttachThreadInput, GetCurrentProcess, GetCurrentThreadId, OpenProcess, OpenProcessToken,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, SetFocus, VK_SHIFT, VkKeyScanW};
 use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
@@ -28,7 +37,7 @@ use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetF
 use windows::Win32::UI::WindowsAndMessaging::{
     ASFW_ANY, AllowSetForegroundWindow, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow,
     GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE,
-    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WS_EX_TOOLWINDOW,
+    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
@@ -118,6 +127,118 @@ pub fn is_in_front(window: isize) -> bool {
     unsafe { GetForegroundWindow() }.0 as isize == window
 }
 
+/// Whether the window in front is one of this process's own — the notice, say — or the settings
+/// window the picker itself opened, rather than somebody else's taking the picker's place.
+#[must_use]
+pub fn front_is_ours() -> bool {
+    let front = unsafe { GetForegroundWindow() };
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(front, Some(&raw mut pid)) };
+    if pid == std::process::id() {
+        return true;
+    }
+    foreground_process_path().is_some_and(|path| {
+        Path::new(&path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name.eq_ignore_ascii_case(&format!("{}.exe", linkunbound_core::SETTINGS))
+            })
+    })
+}
+
+/// The window in front, whoever's it is: what the picker was shown over, so that its going
+/// somewhere else can be told from its staying put.
+#[must_use]
+pub fn front_window() -> isize {
+    unsafe { GetForegroundWindow() }.0 as isize
+}
+
+/// The account this process runs as, spelled the way a security descriptor string reads it.
+#[must_use]
+pub fn current_user_sid() -> Option<String> {
+    let mut token = HANDLE::default();
+    unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token) }.ok()?;
+    let mut needed = 0u32;
+    let _ = unsafe { GetTokenInformation(token, TokenUser, None, 0, &raw mut needed) };
+    let mut buffer = vec![0u8; needed as usize];
+    let read = unsafe {
+        GetTokenInformation(
+            token,
+            TokenUser,
+            Some(buffer.as_mut_ptr().cast()),
+            needed,
+            &raw mut needed,
+        )
+    };
+    unsafe {
+        let _ = CloseHandle(token);
+    }
+    read.ok()?;
+    // SAFETY: Windows filled the buffer with a TOKEN_USER of the size it asked for.
+    let user = unsafe { &*buffer.as_ptr().cast::<TOKEN_USER>() };
+    let mut spelled = windows::core::PWSTR::null();
+    unsafe { ConvertSidToStringSidW(user.User.Sid, &raw mut spelled) }.ok()?;
+    let sid = unsafe { spelled.to_string() }.ok();
+    unsafe {
+        let _ = LocalFree(Some(HLOCAL(spelled.0.cast())));
+    }
+    sid
+}
+
+/// One line down a named pipe, opened for identification only: a server squatting the name
+/// before the resident took it would otherwise be handed this process's token to impersonate.
+/// True when the line was written; false when nobody answers at that name.
+#[must_use]
+pub fn write_line_to_pipe(path: &str, line: &str) -> bool {
+    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let open = || unsafe {
+        CreateFileW(
+            windows::core::PCWSTR(wide.as_ptr()),
+            GENERIC_WRITE.0,
+            FILE_SHARE_NONE,
+            None,
+            OPEN_EXISTING,
+            SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+            None,
+        )
+    };
+    let handle = match open() {
+        Ok(handle) => handle,
+        Err(busy) if busy.code() == ERROR_PIPE_BUSY.to_hresult() => {
+            if !unsafe { WaitNamedPipeW(windows::core::PCWSTR(wide.as_ptr()), 2_000) }.as_bool() {
+                return false;
+            }
+            match open() {
+                Ok(handle) => handle,
+                Err(_) => return false,
+            }
+        }
+        Err(_) => return false,
+    };
+    let body = format!("{line}\n");
+    let mut written = 0u32;
+    let wrote = unsafe { WriteFile(handle, Some(body.as_bytes()), Some(&raw mut written), None) };
+    // Closing right after the write is a race the resident loses: a client gone before the
+    // server accepted reads as a dead connection, and the line goes with it. The flush waits
+    // until the other end has read.
+    unsafe {
+        let _ = FlushFileBuffers(handle);
+        let _ = CloseHandle(handle);
+    }
+    wrote.is_ok() && written as usize == body.len()
+}
+
+/// A window that is shown but never takes the activation: what is being typed keeps going where
+/// it went.
+pub fn never_activates(window: isize) {
+    let hwnd = HWND(window as *mut std::ffi::c_void);
+    let style = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+    unsafe {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE.0 as isize);
+    }
+}
+
 /// Windows refuses `SetForegroundWindow` to a process that is not already in
 /// front. Attaching to the input queue of the window that is lifts the refusal;
 /// this is the handshake every launcher performs.
@@ -190,8 +311,12 @@ pub fn copy_text(text: &str) -> bool {
     }
 }
 
+/// Room for a long path: a program installed past `MAX_PATH` answered with nothing, and the
+/// picker then knew no origin for a click made in it.
+const LONG_PATH: usize = 32_768;
+
 fn image_path(process: HANDLE) -> Option<String> {
-    let mut buffer = [0u16; MAX_PATH as usize];
+    let mut buffer = vec![0u16; LONG_PATH];
     let mut size = buffer.len() as u32;
     let ok = unsafe {
         QueryFullProcessImageNameW(
@@ -425,6 +550,22 @@ mod tests {
             assert!(!app.ends_with(".exe"));
             assert_eq!(app, app.to_ascii_lowercase());
         }
+    }
+
+    /// The pipe's descriptor names this account by SID; an account that cannot be named leaves
+    /// the pipe with the default descriptor, readable by every account on the machine.
+    #[test]
+    fn the_account_this_runs_as_can_be_named() {
+        let sid = super::current_user_sid().expect("a token to read");
+        assert!(sid.starts_with("S-1-5-"), "{sid}");
+    }
+
+    #[test]
+    fn a_line_to_a_pipe_nobody_holds_is_refused_rather_than_waited_for() {
+        assert!(!super::write_line_to_pipe(
+            r"\\.\pipe\linkunbound-nobody-holds-this",
+            "https://example.test/"
+        ));
     }
 
     #[test]

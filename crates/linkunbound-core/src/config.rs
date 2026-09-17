@@ -86,15 +86,27 @@ pub fn read_rules(raw: &str) -> Result<RuleSet, ConfigError> {
         }
         return Ok(serde_json::from_value(value)?);
     }
-    let legacy: Vec<LegacyRule> = serde_json::from_value(value)?;
+    // Entry by entry, as 1.x read it: one line somebody edited by hand cost every other rule
+    // until settings reset the file.
+    let legacy: Vec<serde_json::Value> = serde_json::from_value(value)?;
     Ok(RuleSet {
         schema_version: SCHEMA_VERSION,
         rules: legacy
             .into_iter()
             .enumerate()
-            .map(|(i, r)| migrate_rule(i, r))
+            .filter_map(|(i, entry)| {
+                serde_json::from_value::<LegacyRule>(entry)
+                    .ok()
+                    .map(|r| migrate_rule(i, r))
+            })
             .collect(),
     })
+}
+
+/// A bare array, or an object that never learned to say its version: what the 1.x line wrote.
+pub fn is_the_old_shape(raw: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(raw)
+        .is_ok_and(|value| value.is_array() || (value.is_object() && version_of(&value) == 0))
 }
 
 fn version_of(value: &serde_json::Value) -> u32 {
@@ -123,7 +135,7 @@ pub fn read_browsers(raw: &str) -> Result<BrowserConfig, ConfigError> {
     }
 
     let legacy: LegacyBrowserConfig = serde_json::from_value(value)?;
-    Ok(BrowserConfig {
+    let mut config = BrowserConfig {
         schema_version: SCHEMA_VERSION,
         browsers: legacy
             .browsers
@@ -145,7 +157,11 @@ pub fn read_browsers(raw: &str) -> Result<BrowserConfig, ConfigError> {
                 extra_args: b.extra_args,
             })
             .collect(),
-    })
+    };
+    for browser in &mut config.browsers {
+        crate::hostile::disarm(browser);
+    }
+    Ok(config)
 }
 
 /// The writer stamps the version; trusting the caller means a set built with
@@ -221,6 +237,22 @@ mod tests {
     }
 
     #[test]
+    fn one_broken_1_x_entry_does_not_discard_the_rest() {
+        let raw = r#"[
+            {"domain": "a.test", "browserId": "ff", "private": false},
+            {"domain": 12, "browserId": null},
+            "not even an object",
+            {"domain": "b.test", "browserId": "ch", "private": true}
+        ]"#;
+        let rules = read_rules(raw).unwrap();
+        assert_eq!(rules.rules.len(), 2);
+        assert_eq!(
+            rules.rules[1].id, "migrated-3",
+            "the index is the file's, not the count's"
+        );
+    }
+
+    #[test]
     fn a_migrated_rule_still_covers_the_subdomains_1_x_covered() {
         let set = read_rules(LEGACY_RULES).unwrap();
         let any = "https://example.test/";
@@ -262,6 +294,37 @@ mod tests {
         ]}"#;
         let config = read_browsers(raw).unwrap();
         assert!(!config.browsers[0].supports_private());
+    }
+
+    /// The 1.x file is the one a person actually brings, and it was never disarmed: a browser
+    /// somebody planted in it launched whatever it named until settings happened to save.
+    #[test]
+    fn a_1_x_browser_list_is_disarmed_on_the_way_in_like_any_other() {
+        let raw = r#"{"schema_version": "1.0", "browsers": [
+            {"id": "x", "name": "X", "executablePath": "\\\\evil\\share\\x.exe",
+             "iconPath": "", "extraArgs": ["--gpu-launcher=calc.exe", "--new-window"],
+             "privateArgs": null, "isCustom": true}
+        ]}"#;
+        let config = read_browsers(raw).unwrap();
+        assert_eq!(config.browsers[0].exe, "", "a remote executable is dropped");
+        assert_eq!(
+            config.browsers[0].extra_args,
+            vec!["--new-window".to_owned()]
+        );
+    }
+
+    #[test]
+    fn the_old_shape_is_told_apart_from_what_this_writes() {
+        assert!(is_the_old_shape("[]"));
+        assert!(is_the_old_shape(
+            r#"[{"domain": "a.test", "browserId": "ff"}]"#
+        ));
+        assert!(is_the_old_shape(
+            r#"{"schema_version": "1.0", "browsers": []}"#
+        ));
+        assert!(is_the_old_shape(r#"{"browsers": []}"#));
+        assert!(!is_the_old_shape(r#"{"schema_version": 2, "rules": []}"#));
+        assert!(!is_the_old_shape("{ not json"));
     }
 
     #[test]

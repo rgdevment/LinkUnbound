@@ -1,7 +1,13 @@
-use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(not(windows))]
+use std::io::Write;
+use std::io::{BufRead, BufReader, Read};
 
-use interprocess::local_socket::traits::{Listener, Stream as StreamTrait};
-use interprocess::local_socket::{ListenerOptions, Name, Stream};
+#[cfg(not(windows))]
+use interprocess::local_socket::Stream;
+use interprocess::local_socket::traits::Listener;
+#[cfg(not(windows))]
+use interprocess::local_socket::traits::Stream as StreamTrait;
+use interprocess::local_socket::{ListenerOptions, Name};
 
 /// One socket per user session, so two people on one machine never cross links.
 #[cfg(windows)]
@@ -150,6 +156,15 @@ pub fn hand_over(url: &str) -> bool {
     hand_over_at(&address(), url)
 }
 
+/// Opened for identification only: a process that took the pipe's name before the resident did
+/// would otherwise be handed this one's token to act as. The crate opens with the default, which
+/// allows impersonation, so the Windows client is written by hand.
+#[cfg(windows)]
+fn hand_over_at(socket: &str, url: &str) -> bool {
+    linkunbound_win::write_line_to_pipe(&format!(r"\\.\pipe\{socket}"), &url.replace('\n', ""))
+}
+
+#[cfg(not(windows))]
 fn hand_over_at(socket: &str, url: &str) -> bool {
     let Some(name) = named(socket) else {
         return false;
@@ -158,6 +173,30 @@ fn hand_over_at(socket: &str, url: &str) -> bool {
         return false;
     };
     writeln!(stream, "{}", url.replace('\n', "")).is_ok()
+}
+
+/// This user and the system, nobody else: the pipe's default descriptor lets every account on
+/// the machine read it. Labelled low so a sandboxed browser can still hand a link across.
+#[cfg(windows)]
+fn only_this_user(options: ListenerOptions<'_>) -> ListenerOptions<'_> {
+    use interprocess::os::windows::local_socket::ListenerOptionsExt;
+    use interprocess::os::windows::security_descriptor::SecurityDescriptor;
+    let Some(sid) = linkunbound_win::current_user_sid() else {
+        return options;
+    };
+    let sddl = format!("D:(A;;GA;;;SY)(A;;GA;;;{sid})S:(ML;;NW;;;LW)");
+    let Ok(wide) = widestring::U16CString::from_str(&sddl) else {
+        return options;
+    };
+    match SecurityDescriptor::deserialize(&wide) {
+        Ok(descriptor) => options.security_descriptor(descriptor),
+        Err(_) => options,
+    }
+}
+
+#[cfg(not(windows))]
+fn only_this_user(options: ListenerOptions<'_>) -> ListenerOptions<'_> {
+    options
 }
 
 /// Hands each link to `arrived` on the listener thread. A callback rather than a
@@ -176,6 +215,13 @@ fn gave_up(refused: u32) -> bool {
     refused > 100
 }
 
+/// A resident nobody can reach is worse than none: it keeps the tray icon and answers nothing,
+/// while the next click, finding the name free, starts a second one beside it. This one leaves,
+/// and the next click starts the one that works.
+fn leave_deaf() {
+    std::process::exit(0);
+}
+
 fn claim_at(
     socket: &str,
     arrived: impl Fn(String) + Send + Sync + 'static,
@@ -184,7 +230,9 @@ fn claim_at(
     #[cfg(not(windows))]
     let _room = make_room(socket);
     let name = named(socket)?;
-    let listener = ListenerOptions::new().name(name).create_sync().ok()?;
+    let listener = only_this_user(ListenerOptions::new().name(name))
+        .create_sync()
+        .ok()?;
 
     Some(std::thread::spawn(move || {
         let mut refused = 0u32;
@@ -192,7 +240,7 @@ fn claim_at(
             let Ok(stream) = listener.accept() else {
                 refused += 1;
                 if gave_up(refused) {
-                    return;
+                    leave_deaf();
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
                 continue;

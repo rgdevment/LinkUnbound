@@ -38,9 +38,13 @@ export default function Maintenance() {
           ? "maintenance_rescan"
           : "system_set_registered";
     const params = asking === "unregister" ? { enabled: false } : {};
-    void invoke(command, params)
-      .then(() => {
-        setDone(t(ASKS[asking].title));
+    void invoke<{ added?: number; removed?: number } | null>(command, params)
+      .then((said) => {
+        const counted =
+          asking === "rescan" && said && typeof said.added === "number"
+            ? ` ${t("rescanCounts", String(said.added), String(said.removed ?? 0))}`
+            : "";
+        setDone(t(ASKS[asking].title) + counted);
         setProblem(null);
       })
       .catch((e: unknown) => setProblem(saidPlainly(language, e)))

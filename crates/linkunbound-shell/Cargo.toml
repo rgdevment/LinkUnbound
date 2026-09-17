@@ -20,6 +20,7 @@ raw-window-handle = "0.6"
 
 [target."cfg(windows)".dependencies]
 linkunbound-win.workspace = true
+widestring = "1"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 linkunbound-mac.workspace = true

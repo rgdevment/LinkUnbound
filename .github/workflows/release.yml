@@ -68,6 +68,12 @@ jobs:
           is one Gatekeeper refuses, and the README promises otherwise."
             fi
           fi
+          # Missing, the Windows signing was skipped in silence and an unsigned installer went
+          # out under a tag: SmartScreen then warns every person who runs it.
+          if [ "${{ github.event_name }}" = "push" ] && [ -z "$PFX_BASE64" ]; then
+            fail "no Windows signing certificate. Set PFX_BASE64 and PFX_PASSWORD, or the \
+          installer goes out unsigned."
+          fi
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] && [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
             echo "::notice::the updater key carries no password; that is fine if it was made without one"
           fi
@@ -546,6 +552,7 @@ jobs:
     if: >-
       !cancelled() && needs.bundle-windows.result == 'success'
       && (needs.bundle-macos.result == 'success' || needs.bundle-macos.result == 'skipped')
+      && (needs.bundle-msix.result == 'success' || needs.bundle-msix.result == 'skipped')
       && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -727,11 +734,19 @@ jobs:
               '{schema: 1, latest: $l, latestPrerelease: $c}' > release-manifest.json
             cp "$RUNNER_TEMP/channel.json" candidate.json
           else
-            jq -n --arg l "$v" '{schema: 1, latest: $l}' > release-manifest.json
-            cp "$RUNNER_TEMP/channel.json" latest.json
             # A stable release takes the candidate channel away, or a candidate would go on being
-            # offered a version nobody publishes any more.
-            rm -f candidate.json
+            # offered a version nobody publishes any more — unless the candidate is of a later
+            # series than this release, in which case it is still the newest thing there is.
+            ahead=$(jq -r '.latestPrerelease // ""' release-manifest.json 2>/dev/null || echo "")
+            if [ -n "$ahead" ] \
+               && [ "$(printf '%s\n%s\n' "$ahead" "$v" | sort -V | tail -1)" = "$ahead" ]; then
+              jq -n --arg l "$v" --arg c "$ahead" \
+                '{schema: 1, latest: $l, latestPrerelease: $c}' > release-manifest.json
+            else
+              jq -n --arg l "$v" '{schema: 1, latest: $l}' > release-manifest.json
+              rm -f candidate.json
+            fi
+            cp "$RUNNER_TEMP/channel.json" latest.json
           fi
           cat release-manifest.json
 
@@ -971,7 +986,14 @@ jobs:
 
           	  app "LinkUnbound.app"
 
-          	  uninstall quit: "dev.rgdevment.linkunbound"
+          	  # The links go back to the browser that had them before the bundle goes, or Launch
+          	  # Services keeps naming an application that is not there; macOS asks to confirm.
+          	  uninstall script: {
+          	              executable:   "#{appdir}/LinkUnbound.app/Contents/MacOS/linkunbound-settings",
+          	              args:         ["--unregister"],
+          	              must_succeed: false,
+          	            },
+          	            quit:   "dev.rgdevment.linkunbound"
 
           	  zap trash: [
           	    "~/Library/Application Support/LinkUnbound",

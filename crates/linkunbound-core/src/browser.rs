@@ -78,10 +78,10 @@ impl Browser {
     /// A copy the user can change without touching the original, which is how
     /// one browser becomes two profiles of the same binary.
     #[must_use]
-    pub fn duplicated(&self, id: String) -> Self {
+    pub fn duplicated(&self, id: String, named: &str) -> Self {
         Self {
             id,
-            name: format!("{} (copia)", self.name),
+            name: named.to_owned(),
             custom: true,
             hidden: false,
             profiles: Vec::new(),
@@ -150,12 +150,12 @@ mod tests {
         };
 
         assert!(
-            !original.duplicated("custom-1".to_owned()).hidden,
+            !original.duplicated("custom-1".to_owned(), "x").hidden,
             "a copy of a hidden one is still there to be used"
         );
 
         original.hidden = false;
-        assert!(!original.duplicated("custom-2".to_owned()).hidden);
+        assert!(!original.duplicated("custom-2".to_owned(), "x").hidden);
     }
 
     /// The picker lights the private icon on the strength of this, and the keyboard acts on it.
@@ -347,13 +347,16 @@ mod merging {
             }],
             ..browser("chrome", "C:/c.exe")
         };
-        let copy = original.duplicated("custom-1".to_owned());
+        let copy = original.duplicated("custom-1".to_owned(), "Original (copy)");
         assert_eq!(copy.id, "custom-1");
         assert_eq!(copy.exe, "C:/c.exe");
         assert_eq!(copy.private_flag.as_deref(), Some("--incognito"));
         assert!(copy.custom);
         assert!(copy.profiles.is_empty());
-        assert!(copy.name.contains("copia"));
+        assert_eq!(
+            copy.name, "Original (copy)",
+            "the name is the caller's, worded in its language"
+        );
     }
 
     /// Settings lets a detected browser be renamed and given a private switch.

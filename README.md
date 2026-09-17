@@ -140,7 +140,7 @@ This isn't a company product or a startup. I'm a solo developer who got tired of
 - **URL redaction** — URLs are automatically redacted in logs at write time; the log file never contains actual URLs
 - **No tracking** — no telemetry, no analytics, no hidden collection
 - **No accounts** — no sign-up, no login, no profiles
-- **One network request** — a read-only check against GitHub Releases API for updates (no user data sent, works offline)
+- **One network request** — a read-only check of the release feed the project publishes on GitHub for updates (no user data sent, works offline)
 
 **By design, LinkUnbound will never have:** accounts, subscriptions, ads, cloud sync, or data collection of any kind.
 
@@ -174,7 +174,7 @@ Or download the `.dmg` directly from [GitHub Releases](https://github.com/rgdevm
 <details>
 <summary><strong>Windows standalone: security warnings</strong></summary>
 
-Since LinkUnbound is an independent open source project, the installer uses a self-signed certificate. Windows and your browser may show security warnings — this is normal and expected.
+The installer is signed, but a certificate that few people have run yet earns little reputation with SmartScreen: Windows and your browser may still show a warning on a new release — this is normal and expected.
 
 - **Browser:** Chrome/Edge may block the download — click Keep or Keep anyway.
 - **SmartScreen:** Click More info → Run anyway (only happens once).
@@ -186,8 +186,8 @@ Since LinkUnbound is an independent open source project, the installer uses a se
 
 **Windows:**
 
-1. Run `linkunbound.exe`
-2. On first launch, LinkUnbound scans your installed browsers and registers itself
+1. Run the installer; it registers LinkUnbound as a browser and starts the resident
+2. LinkUnbound scans your installed browsers
 3. In the settings window, click **Set as default** — Windows Settings opens, select LinkUnbound
 4. Done — every link now goes through LinkUnbound
 
@@ -230,16 +230,16 @@ Rules are created from the picker ("Always open here") and managed in the Rules 
 
 ## Architecture
 
-One binary, two modes:
+Two binaries, one package:
 
-- `linkunbound` (no args) → settings + tray/menu bar (resident process)
-- `linkunbound "https://..."` (link click) → routes the URL to the resident process and exits, or operates standalone
+- `linkunbound-shell` → the resident: tray or menu bar, the picker, the notice; Windows and macOS run it for every link, and a second copy hands its link to the one already running and exits
+- `linkunbound-settings` → the settings window, opened on demand, and the errands the resident sends it on with no window (`--look` asks the feed, `--update` installs)
 
-**Windows.** A named pipe (`\\.\pipe\LinkUnbound`) links second instances to the resident process. A Windows mutex prevents duplicate residents. Registration writes the app's own ProgId, `RegisteredApplications` and `StartMenuInternet` keys, and is reconciled on every launch; Windows itself owns the final choice through `UserChoice`, which no application may write.
+**Windows.** A named pipe of the user's own (`linkunbound-<user>.sock`) links second instances to the resident, and holding its name is what keeps a second resident from starting. The installer writes the app's own ProgId, `RegisteredApplications` and `StartMenuInternet` keys; the settings window re-points them when the install moves and never recreates what the person took away; Windows itself owns the final choice through `UserChoice`, which no application may write.
 
 **macOS.** The bundle's `CFBundleExecutable` is the resident, so Launch Services starts it — or talks to the running copy — for every link. Nothing arrives on the command line: links, documents, launches and reopens come in as Apple Events (`GURL`, `odoc`, `oapp`, `rapp`), and the launch event says whether the session started the app as a login item, which is what keeps the settings window closed at sign-in. A Unix socket under `~/Library/Application Support/LinkUnbound/` carries links handed over from a terminal. Default-browser registration goes through `NSWorkspace.setDefaultApplication` for `http`, `https` and the web document types, which the system confirms with its own prompt; the browser that held the links before is remembered and gets them back on unregistering. Login items use `SMAppService`. A browser is started through `open` either way — plainly for a bare link, as an instance of its own when a private window or a profile rides along — so Launch Services starts it and it answers for its own permissions rather than for LinkUnbound's. The web document types are declared as an alternate opener: double-clicking an `.html` keeps opening wherever it did until the person chooses. The app runs as `LSUIElement`, so it lives in the menu bar instead of the Dock, and the picker floats above every Space, full-screen apps included.
 
-**Coming from 1.x on macOS.** 2.0 ships under the bundle identifier `dev.rgdevment.linkunbound`; 1.x was `com.rgdevment.linkunbound`. macOS treats them as two applications: after upgrading, open Settings and set LinkUnbound as the default once more, and remove the old entry under System Settings → General → Login Items if one is left behind. Rules and browsers carry over unchanged.
+**Coming from 1.x.** 2.0 is not compatible with the settings of the 1.x line, and does not promise to carry them over: it starts from what it can read and keeps the rest out of the way. On Windows it reads the rules and browsers of a standalone 1.x install where they are, and keeps a copy of the originals as `rules.1x.json` and `browsers.1x.json` before writing its own format; a copy installed from the Microsoft Store kept its files inside its package and they are not read. Going back to 1.x means restoring those copies over `rules.json` and `browsers.json`. Remove 1.x before installing 2.0 — the installer offers to — or the two fight over the same registration; a Store copy of 1.x has to be uninstalled by hand. On macOS 2.0 ships under the bundle identifier `dev.rgdevment.linkunbound`; 1.x was `com.rgdevment.linkunbound`, kept its files under that name, and nothing of it is read. macOS treats them as two applications: quit 1.x, remove it, then open Settings and set LinkUnbound as the default once more, and remove the old entry under System Settings → General → Login Items if one is left behind.
 
 ---
 
@@ -252,7 +252,7 @@ Yes. Completely free and open source. No premium tiers, no subscriptions, no pay
 No. LinkUnbound does not track or transmit anything. URLs are processed in memory and automatically redacted before being written to the navigation log — the log file never contains actual URLs, only privacy-safe placeholders.
 
 **Does it need internet?**
-No. LinkUnbound works fully offline. The only network request is a lightweight update check against the GitHub Releases API — no user data sent. The app works perfectly without a connection.
+No. LinkUnbound works fully offline. The only network request is a lightweight update check against the release feed the project publishes on GitHub — no user data sent. The app works perfectly without a connection.
 
 **Where is my data stored?**
 Everything stays on your machine — `%LOCALAPPDATA%\LinkUnbound\` on Windows, `~/Library/Application Support/LinkUnbound/` on macOS. Browser list (`browsers.json`), domain rules (`rules.json`), navigation log (`navigate.log`), and extracted icons.

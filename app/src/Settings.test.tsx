@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Settings from "./Settings";
@@ -248,6 +248,30 @@ describe("settings", () => {
     answers({ ...BASE, edge_installed: true });
     render(<Settings />);
     expect(await screen.findByText(/saltándose el navegador/)).toBeInTheDocument();
+  });
+
+  /// Read once, as in 1.x: the button writes the flag back with the rest of the preferences
+  /// untouched, and the section does not come back on the next visit.
+  it("stops explaining Edge once the person says they understood", async () => {
+    answers({ ...BASE, edge_installed: true });
+    render(<Settings />);
+    await userEvent.click(await screen.findByRole("button", { name: /Entendido/ }));
+    expect(invoke).toHaveBeenCalledWith("prefs_set", {
+      prefs: { ...PREFS.prefs, edge_warning_dismissed: true },
+    });
+    expect(screen.queryByText(/saltándose el navegador/)).toBeNull();
+
+    cleanup();
+    answers(
+      { ...BASE, edge_installed: true },
+      {
+        prefs_get: () =>
+          Promise.resolve({ ...PREFS, prefs: { ...PREFS.prefs, edge_warning_dismissed: true } }),
+      },
+    );
+    render(<Settings />);
+    await screen.findByText(/recibe los enlaces/);
+    expect(screen.queryByText(/saltándose el navegador/)).toBeNull();
   });
 
   it("says nothing about Edge when Edge is not installed", async () => {

@@ -56,7 +56,8 @@ mod platform {
     use linkunbound_core::{Registered, link_handler, what_is_registered};
     use linkunbound_win::{
         Registration, association_report, installed_browsers, is_build_tree, is_default_browser,
-        notify_associations_changed, set_startup, startup_state,
+        notify_associations_changed, reclaim_startup, set_startup, startup_state,
+        sweep_legacy_edge_capture,
     };
     use std::path::PathBuf;
 
@@ -104,8 +105,10 @@ mod platform {
         Some(link_handler(&std::env::current_exe().ok()?))
     }
 
-    /// Reconciles on every launch, the way 1.x did: an update moves the
-    /// executable and the keys keep pointing at a path that no longer exists.
+    /// Follows an install that moved, on every launch: an update moves the executable and the
+    /// keys keep pointing at a path that no longer exists. Only keys that are there are
+    /// re-pointed — a registration the person took away stays away — and the Run value 1.x
+    /// left under the same name is claimed. Creating the keys is the installer's, by `--register`.
     pub fn reconcile() {
         // A packaged build is registered by its manifest, and its writes to these keys land in a
         // container the shell never reads — so writing them would only teach the health panel to
@@ -119,9 +122,38 @@ mod platform {
             return;
         }
         let registration = Registration::default();
-        if registration.register(&handler.to_string_lossy()).is_ok() {
+        if registration.is_registered() && registration.register(&handler.to_string_lossy()).is_ok()
+        {
             notify_associations_changed();
         }
+        if let Ok(running) = std::env::current_exe() {
+            reclaim_startup(&running);
+        }
+        sweep_legacy_edge_capture();
+    }
+
+    /// What the installer asks for once it has put the files in place.
+    pub fn register() -> bool {
+        if linkunbound_win::packaged() {
+            return true;
+        }
+        let Some(handler) = handler() else {
+            return false;
+        };
+        if !handler.exists() {
+            return false;
+        }
+        let done = Registration::default()
+            .register(&handler.to_string_lossy())
+            .is_ok();
+        if done {
+            notify_associations_changed();
+        }
+        if let Ok(running) = std::env::current_exe() {
+            reclaim_startup(&running);
+        }
+        sweep_legacy_edge_capture();
+        done
     }
 
     pub fn state() -> SystemState {
@@ -131,7 +163,8 @@ mod platform {
             health: health(&registration),
             registered_path: registration.registered_command(),
             edge_installed: installed_browsers().iter().any(|b| b.id.contains("edge")),
-            registered: registration.is_registered(),
+            // The manifest registers a packaged copy; the keys a person could flip are not read.
+            registered: linkunbound_win::packaged() || registration.is_registered(),
             is_default: is_default_browser(),
             associations: association_report()
                 .into_iter()
@@ -175,6 +208,11 @@ mod platform {
     }
 
     pub fn set_registered(enabled: bool) -> Result<SystemState, String> {
+        // Its writes would land in the package's own hive, and the panel would then report a
+        // registration nothing honours.
+        if linkunbound_win::packaged() {
+            return Err("packagedRegistration".to_owned());
+        }
         let registration = Registration::default();
         let outcome = if enabled {
             let handler = handler().ok_or_else(|| "ownPathUnknown".to_owned())?;
@@ -297,6 +335,10 @@ mod platform {
     /// build: there is nothing to reconcile at launch, and Launch Services owns
     /// the final choice the way `UserChoice` does on Windows.
     pub fn reconcile() {}
+
+    pub fn register() -> bool {
+        true
+    }
 
     /// Only two states can be true here. A copy outside a bundle declares no
     /// schemes at all, and the registration it would claim is the directory it
@@ -442,6 +484,10 @@ mod platform {
 
     pub fn reconcile() {}
 
+    pub fn register() -> bool {
+        true
+    }
+
     pub fn state() -> SystemState {
         SystemState {
             registered: false,
@@ -477,6 +523,6 @@ mod platform {
 }
 
 pub use platform::{
-    browsers, open_default_apps, reconcile, register_anyway, set_registered,
+    browsers, open_default_apps, reconcile, register, register_anyway, set_registered,
     set_starts_with_system, state,
 };

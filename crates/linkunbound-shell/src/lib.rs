@@ -191,6 +191,23 @@ pub fn in_the_row(index: i32) -> bool {
     IN_THE_ROW.contains(&index)
 }
 
+/// Where the keys land next, stepping over the reaches that are dead for this link: only the
+/// pointer was kept off them, and a rule written on one covered every site the wrapper serves.
+/// Stays put when nothing live lies that way.
+#[must_use]
+pub fn next_live(dead: &[bool], from: i32, delta: i32) -> i32 {
+    let mut at = from;
+    loop {
+        at += delta;
+        let Some(is_dead) = usize::try_from(at).ok().and_then(|i| dead.get(i)) else {
+            return from;
+        };
+        if !is_dead {
+            return at;
+        }
+    }
+}
+
 /// The strip atop the picker, worded. `None` is no strip: the copy is current, the offer was
 /// put away for this session, or nothing is under way.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -344,6 +361,9 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
     window.set_copy_label(words.picker_copy.into());
     window.set_update_later(words.update_later.into());
     window.set_private_on(false);
+    // Pinned for a link, not for the day: left set, every later picker opened privately.
+    window.set_pinned_private(false);
+    window.set_more_open(false);
     window.set_copied(false);
     window.set_reach_index(0);
     let wrapped = looks_unresolved(url);
@@ -358,7 +378,13 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
         .iter()
         .enumerate()
         .map(|(i, row)| Destination {
-            key: (i + 1).to_string().into(),
+            // The digits stop at 9; a tenth row is opened with the pointer and says so by
+            // showing no key.
+            key: if i < 9 {
+                (i + 1).to_string().into()
+            } else {
+                slint::SharedString::new()
+            },
             name: row.name.clone().into(),
             profile: row.profile.clone().into(),
             icon: image_for(row.icon.as_deref()),
@@ -565,6 +591,41 @@ mod tests {
             window.get_wanted_width(),
             348.0,
             "the classic look keeps its own width"
+        );
+    }
+
+    /// Two browsers with several profiles each pass nine rows easily, and the window used to grow
+    /// past the screen while offering keys no digit can press.
+    #[test]
+    fn the_classic_look_stops_growing_at_nine_rows_and_the_keys_stop_with_it() {
+        headless();
+        let window = crate::Picker::new().expect("a window");
+        window.set_classic(true);
+        let words = Language::Spanish.strings();
+        let two = dressed();
+        let mut many: Vec<Listed> = Vec::new();
+        for _ in 0..6 {
+            many.extend(two.iter().cloned());
+        }
+        assert_eq!(many.len(), 12);
+
+        dress(&window, &words, "https://docs.google.com/a", None, &two);
+        let with_two = window.get_wanted_height();
+        let mut nine = many.clone();
+        nine.truncate(9);
+        dress(&window, &words, "https://docs.google.com/a", None, &nine);
+        let with_nine = window.get_wanted_height();
+        assert_eq!(with_nine - with_two, 7.0 * 42.0);
+
+        dress(&window, &words, "https://docs.google.com/a", None, &many);
+        assert_eq!(window.get_wanted_height(), with_nine, "the rest scroll");
+        use slint::Model;
+        let rows = window.get_rows();
+        assert_eq!(rows.row_data(8).expect("ninth").key, "9");
+        assert_eq!(
+            rows.row_data(9).expect("tenth").key,
+            "",
+            "no digit opens the tenth"
         );
     }
 
@@ -1004,6 +1065,24 @@ mod tests {
         assert!(same[2].dead);
         let sub = reaches(&SPOKEN, PLAIN, "docs.google.com", "google.com", None);
         assert!(!sub[2].dead);
+    }
+
+    /// A wrapper nobody could unwrap leaves three reaches dead; the arrows used to land on them
+    /// anyway, and «1» then wrote a rule for everything the wrapper serves.
+    #[test]
+    fn the_keys_step_over_the_dead_reaches_and_stay_put_at_the_ends() {
+        use super::next_live;
+        let wrapped = [false, true, true, true, false];
+        assert_eq!(next_live(&wrapped, 0, 1), 4, "straight to the origin reach");
+        assert_eq!(next_live(&wrapped, 4, -1), 0);
+        assert_eq!(next_live(&wrapped, 4, 1), 4, "nothing beyond");
+        assert_eq!(next_live(&wrapped, 0, -1), 0);
+        let no_origin = [false, true, true, true];
+        assert_eq!(next_live(&no_origin, 0, 1), 0, "every other reach is dead");
+        let plain = [false, false, true, false];
+        assert_eq!(next_live(&plain, 1, 1), 3, "the same-site reach is skipped");
+        assert_eq!(next_live(&plain, 3, -1), 1);
+        assert_eq!(next_live(&[], 0, 1), 0);
     }
 
     #[test]

@@ -36,6 +36,7 @@ async function settled() {
 describe("theme", () => {
   beforeEach(() => {
     document.documentElement.classList.remove("dark");
+    localStorage.clear();
     invoke.mockReset();
   });
 
@@ -44,6 +45,20 @@ describe("theme", () => {
     invoke.mockReturnValue(new Promise(() => {}));
     follow();
     expect(isDark()).toBe(true);
+  });
+
+  /// A person on the light theme saw a dark frame at every open, before the backend answered.
+  it("starts from what it painted last time", async () => {
+    systemPrefers(false);
+    invoke.mockResolvedValue({ prefs: { theme: "light" } });
+    follow();
+    await settled();
+    expect(isDark()).toBe(false);
+
+    document.documentElement.classList.remove("dark");
+    invoke.mockReturnValue(new Promise(() => {}));
+    follow();
+    expect(isDark()).toBe(false);
   });
 
   it("follows what the backend chose", async () => {

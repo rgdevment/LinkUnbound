@@ -13,7 +13,10 @@ use objc2_uniform_type_identifiers::UTType;
 
 pub const SCHEMES: [&str; 2] = ["http", "https"];
 
-pub const DOCUMENTS: [&str; 3] = ["public.html", "public.xhtml", "public.svg-image"];
+/// What «make default» takes along with the schemes. SVG is declared in the bundle so it can be
+/// chosen, but never taken: a designer's drawings opening in a browser picker is a surprise 1.x
+/// never sprang.
+pub const DOCUMENTS: [&str; 2] = ["public.html", "public.xhtml"];
 
 const SAFARI: &str = "com.apple.Safari";
 
@@ -76,8 +79,10 @@ pub fn association_report() -> Vec<(String, bool)> {
     })
 }
 
+/// Both ids this program has gone by: the 1.x bundle was the handler on many a Mac when this one
+/// registered, and handing the links back to it hands them to a bundle in the bin.
 fn is_ours(bundle_id: &str) -> bool {
-    is_ours_among(bundle_id, own_bundle_id().as_deref())
+    crate::is_one_of_ours(bundle_id) || is_ours_among(bundle_id, own_bundle_id().as_deref())
 }
 
 /// The tests write somewhere of their own: the binary they run in has no
@@ -362,10 +367,7 @@ mod tests {
 
     #[test]
     fn each_document_type_remembers_its_own_previous_handler() {
-        assert_eq!(
-            super::key_for("public.svg-image"),
-            "HandedFrom.public.svg-image"
-        );
+        assert_eq!(super::key_for("public.xhtml"), "HandedFrom.public.xhtml");
         assert_ne!(
             super::key_for("public.html"),
             super::key_for("public.xhtml")
@@ -443,8 +445,7 @@ mod tests {
             super::remaining(|_| true),
             [
                 Step::Document("public.html"),
-                Step::Document("public.xhtml"),
-                Step::Document("public.svg-image"),
+                Step::Document("public.xhtml")
             ]
         );
         assert_eq!(
@@ -453,7 +454,6 @@ mod tests {
                 Step::Scheme("https"),
                 Step::Document("public.html"),
                 Step::Document("public.xhtml"),
-                Step::Document("public.svg-image"),
             ],
             "https is asked for only when http did not bring it along"
         );

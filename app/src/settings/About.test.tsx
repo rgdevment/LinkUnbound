@@ -137,6 +137,19 @@ describe("about", () => {
     expect(await screen.findByText("Versión 2.1.0 disponible")).toBeInTheDocument();
   });
 
+  /// No button, and a sentence that says what to do instead — not one promising an install that
+  /// nothing here can perform.
+  it("says what to do when the copy cannot install what it found", () => {
+    show({ ...NEWER, route: "store", installs: false });
+    expect(screen.queryByRole("button", { name: "Actualizar" })).toBeNull();
+    expect(screen.getByText(/Instálala desde Microsoft Store/)).toBeInTheDocument();
+    cleanup();
+
+    show({ ...NEWER, route: "brew", installs: false });
+    expect(screen.queryByRole("button", { name: "Actualizar" })).toBeNull();
+    expect(screen.getByText(/Mueve LinkUnbound a Aplicaciones/)).toBeInTheDocument();
+  });
+
   it("installs the version it showed, and only once", async () => {
     show(NEWER);
     const update = screen.getByRole("button", { name: "Actualizar" });
@@ -277,9 +290,10 @@ describe("about", () => {
 
   /// Two `<About>` in the DOM at once made an earlier version of this suite assert against the
   /// wrong tree, so the guard belongs here rather than in a comment.
-  it("leaves nothing behind between renders", () => {
+  it("leaves nothing behind between renders", async () => {
     show();
+    expect(await screen.findByText(/GPL-3.0/)).toBeInTheDocument();
     cleanup();
-    expect(screen.queryByText("Licencia GPL-3.0")).toBeNull();
+    expect(screen.queryByText(/GPL-3.0/)).toBeNull();
   });
 });

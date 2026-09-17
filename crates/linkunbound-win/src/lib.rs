@@ -15,17 +15,20 @@ pub use detect::installed_browsers;
 pub use icons::cached_or_extract as icon_for;
 #[cfg(windows)]
 pub use native::{
-    attach_parent_console, copy_text, cursor, digit_behind, is_in_front, keep_off_the_taskbar,
-    let_whoever_opens_next_come_forward, notify_associations_changed, shift_is_down, source_app,
-    take_the_keyboard, work_area_at,
+    attach_parent_console, copy_text, current_user_sid, cursor, digit_behind, front_is_ours,
+    front_window, is_in_front, keep_off_the_taskbar, let_whoever_opens_next_come_forward,
+    never_activates, notify_associations_changed, shift_is_down, source_app, take_the_keyboard,
+    work_area_at, write_line_to_pipe,
 };
 #[cfg(windows)]
 pub use registration::{
-    Registration, association_report, is_build_tree, is_default_browser, taskbar_is_light,
-    windows_are_light,
+    Registration, association_report, is_build_tree, is_default_browser, sweep_legacy_edge_capture,
+    taskbar_is_light, windows_are_light,
 };
 #[cfg(windows)]
-pub use startup::{Startup, packaged, set as set_startup, state as startup_state};
+pub use startup::{
+    Startup, packaged, reclaim as reclaim_startup, set as set_startup, state as startup_state,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RegistrationError {

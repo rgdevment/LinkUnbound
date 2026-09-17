@@ -116,7 +116,13 @@ impl Preferences {
     /// Hiding the tray with no shortcut left would leave no way back in.
     #[must_use]
     pub fn reachable(&self) -> bool {
-        !self.hide_tray || self.shortcut.is_some()
+        self.reachable_where(cfg!(target_os = "macos"))
+    }
+
+    /// On a Mac the menu bar icon is never hidden — the resident shows it whatever 1.x wrote —
+    /// so a `hide_tray` carried over from there must not hold the shortcut hostage.
+    fn reachable_where(&self, icon_always_shown: bool) -> bool {
+        icon_always_shown || !self.hide_tray || self.shortcut.is_some()
     }
 }
 
@@ -287,5 +293,11 @@ mod tests {
             ..Preferences::default()
         };
         assert!(with_key.reachable());
+
+        assert!(
+            hidden.reachable_where(true),
+            "where the icon is always shown, the shortcut may go"
+        );
+        assert!(!hidden.reachable_where(false));
     }
 }

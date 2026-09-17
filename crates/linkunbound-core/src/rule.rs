@@ -32,7 +32,7 @@ impl Scope {
     pub fn matches(&self, url: &str, host: &str) -> bool {
         match self {
             Self::Any => true,
-            Self::Url(u) => url == u,
+            Self::Url(u) => crate::url::same_address(url, u),
             Self::Host(h) => host == h,
             Self::Site(d) => host == d || host.strip_suffix(d).is_some_and(|p| p.ends_with('.')),
         }
@@ -131,6 +131,16 @@ impl RuleSet {
             Some(existing) => *existing = rule,
             None => self.rules.push(rule),
         }
+    }
+
+    /// The rule `upsert` would replace, if there is one: a form that adds a rule wants to say
+    /// so rather than quietly overwrite what the person wrote before.
+    #[must_use]
+    pub fn standing_in_for(&self, rule: &Rule) -> Option<&Rule> {
+        self.rules.iter().find(|r| {
+            r.scope == rule.scope
+                && same_origin(r.source_app.as_deref(), rule.source_app.as_deref())
+        })
     }
 
     /// The order the user sees is the order that decides, so moving a rule is
@@ -305,6 +315,34 @@ mod tests {
     fn an_unrecognised_host_keeps_itself_as_its_site() {
         assert_eq!(site_of("localhost"), "localhost");
         assert_eq!(site_of("box.invalid-tld-xyz"), "box.invalid-tld-xyz");
+    }
+
+    /// The form takes the address as typed and the link arrives as the browser spells it.
+    #[test]
+    fn an_exact_url_rule_matches_the_address_however_it_was_spelled() {
+        let rule = Scope::Url("https://Docs.Google.com/x".to_owned());
+        assert!(rule.matches("https://docs.google.com/x", "docs.google.com"));
+        assert!(!rule.matches("https://docs.google.com/y", "docs.google.com"));
+    }
+
+    #[test]
+    fn a_rule_the_form_would_overwrite_is_named_first() {
+        let site = || Scope::Site("a.test".to_owned());
+        let mut set = RuleSet::default();
+        set.upsert(rule("", site(), None, "chrome"));
+        assert!(
+            set.standing_in_for(&rule("", site(), None, "firefox"))
+                .is_some()
+        );
+        assert!(
+            set.standing_in_for(&rule("", Scope::Site("b.test".to_owned()), None, "firefox"))
+                .is_none()
+        );
+        assert!(
+            set.standing_in_for(&rule("", site(), Some("slack"), "firefox"))
+                .is_none(),
+            "another origin is another rule"
+        );
     }
 
     #[test]

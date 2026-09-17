@@ -28,6 +28,7 @@ catalogue! {
     picker_remember: "Recordar esta elección" | "Remember this choice",
     picker_private: "Privada" | "Private",
     picker_copy: "Copiar la dirección" | "Copy the address",
+    browser_copy_suffix: "{} (copia)" | "{} (copy)",
     reach_once: "Solo esta vez" | "Just this time",
     reach_url: "Esta URL" | "This URL",
     reach_subdomain: "Subdominio" | "Subdomain",

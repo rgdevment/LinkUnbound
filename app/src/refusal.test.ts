@@ -45,7 +45,7 @@ describe("refusals", () => {
 
     for (const body of Object.values(rust)) {
       for (const [, key] of body.matchAll(
-        /(?:Err|ok_or_else)\(\s*(?:\|\|\s*)?"([^"]+)"\.to_owned\(\)\s*\)/g,
+        /(?:Err|ok_or_else|ok_or)\(\s*(?:\|\|\s*)?"([A-Za-z][A-Za-z0-9]*)"(?:\.to_owned\(\))?\s*\)/g,
       )) {
         said.add(key);
       }

@@ -36,9 +36,28 @@ pub fn cached_icon(
     Some(target)
 }
 
+/// Sweeps the pictures of browsers no longer in the catalogue, and staging files a crash left
+/// behind. The cache otherwise grows with every browser ever installed, at every size ever
+/// asked for; a picture of a browser still here is kept at every size, screens being several.
+pub fn prune<'a>(dir: &Path, kept: impl Iterator<Item = &'a str>) {
+    let kept: Vec<String> = kept
+        .map(|id| format!("{}-", crate::as_file_name(id)))
+        .collect();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let stale = name.ends_with(".tmp") || !kept.iter().any(|prefix| name.starts_with(prefix));
+        if stale {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{cached_icon, fingerprint};
+    use super::{cached_icon, fingerprint, prune};
     use std::path::PathBuf;
 
     #[test]
@@ -52,6 +71,39 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("linkunbound-icons-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         dir.join(name)
+    }
+
+    #[test]
+    fn the_pictures_of_browsers_that_are_gone_are_swept_and_the_rest_kept_at_every_size() {
+        let dir =
+            std::env::temp_dir().join(format!("linkunbound-icons-prune-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a directory");
+        for name in [
+            "chrome-0000000000000001-24.png",
+            "chrome-0000000000000001-40.png",
+            "chrome-0000000000000002-24.png",
+            "opera-0000000000000003-24.png",
+            "chrome-0000000000000001-24.12345.tmp",
+        ] {
+            std::fs::write(dir.join(name), b"x").expect("a file");
+        }
+        prune(&dir, ["chrome", "firefox"].into_iter());
+        let mut left: Vec<String> = std::fs::read_dir(&dir)
+            .expect("readable")
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            [
+                "chrome-0000000000000001-24.png",
+                "chrome-0000000000000001-40.png",
+                "chrome-0000000000000002-24.png",
+            ]
+        );
+        prune(&dir.join("nowhere"), std::iter::empty());
     }
 
     #[test]

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
-import { useSpoken, useWords } from "../i18n";
+import { type Key, useSpoken, useWords } from "../i18n";
 import { saidPlainly } from "../refusal";
 import { Card, Line, Switch } from "./parts";
 import type { Ready, Underway } from "./update";
@@ -19,6 +19,14 @@ type Build = {
   candidates: boolean;
   candidatesApply: boolean;
 };
+
+/// What happens on «Actualizar» — or, when there is no button, what the person has to do instead:
+/// a copy the store keeps but did not sell cannot be installed from here, and one running from
+/// the disk image it was downloaded as cannot replace itself.
+function howItInstalls(newer: Ready): Key {
+  if (newer.installs) return newer.route === "store" ? "updateStore" : "updateAsk";
+  return newer.route === "store" ? "updateStoreByHand" : "updateFromMount";
+}
 
 function External({ href, children }: { href: string; children: string }) {
   return (
@@ -203,7 +211,7 @@ function Offer({
           </p>
         ) : (
           <p className="mt-0.5 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
-            {newer.route === "store" ? t("updateStore") : t("updateAsk")}
+            {t(howItInstalls(newer))}
           </p>
         )}
       </div>

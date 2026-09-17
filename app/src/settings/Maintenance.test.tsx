@@ -48,6 +48,16 @@ describe("maintenance", () => {
     expect(await screen.findByText(/Hecho/)).toBeInTheDocument();
   });
 
+  /// «Done» alone reads the same whether a browser appeared or nothing changed.
+  it("counts what the rescan found and what it lost", async () => {
+    invoke.mockResolvedValue({ browsers: [], added: 2, removed: 1 });
+    render(<Maintenance />);
+    await userEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    const ask = await screen.findByRole("alertdialog", { name: "Volver a buscar navegadores" });
+    await userEvent.click(within(ask).getByRole("button", { name: "Buscar" }));
+    expect(await screen.findByText(/2 nuevos, 1 que ya no están/)).toBeInTheDocument();
+  });
+
   it("wipes the configuration once confirmed", async () => {
     render(<Maintenance />);
     await userEvent.click(screen.getByRole("button", { name: "Restablecer" }));

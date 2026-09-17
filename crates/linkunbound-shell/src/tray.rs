@@ -84,6 +84,11 @@ impl Tray {
         let _ = self._icon.set_visible(visible);
     }
 
+    /// The taskbar changes colour on its own schedule; the glyph follows or turns invisible.
+    pub fn follow(&self, light_taskbar: bool) {
+        let _ = self._icon.set_icon(artwork(light_taskbar));
+    }
+
     /// A left click means the same as the menu entry, so both drain together.
     pub fn drain(&self, asks: &Sender<Asked>) {
         while let Ok(event) = MenuEvent::receiver().try_recv() {

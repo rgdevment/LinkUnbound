@@ -74,7 +74,8 @@ component Row inherits Rectangle {
             height: 22px;
             y: (parent.height - self.height) / 2;
             border-radius: 4px;
-            background: Palette.key-bg;
+            // No digit past the ninth row: the box keeps the column and shows nothing.
+            background: root.entry.key == "" ? transparent : Palette.key-bg;
             Text {
                 text: root.entry.key;
                 font-size: 13px;
@@ -404,6 +405,8 @@ export component Picker inherits Window {
     callback open(int, bool);
     /// Returns whether the key was a destination. See `key-pressed`.
     callback typed(string, bool) -> bool;
+    /// The reach the keys land on next, one step either way; the dead ones are stepped over.
+    pure callback step-reach(int) -> int;
     callback dismissed();
     callback copy();
 
@@ -433,10 +436,13 @@ export component Picker inherits Window {
         visible: false;
     }
 
+    // Nine rows at most on screen — the keys stop at 9 — and the rest scroll under them.
+    property <int> rows-shown: min(root.rows.length, 9);
+    property <length> rows-room: root.rows-shown * 42px + 14px;
     property <length> classic-height:
         root.strip-room
         + 66px + 1px
-        + (root.rows.length * 42px) + 16px
+        + root.rows-room + 2px
         + 1px + 38px + 22px + 12px
         + (root.problem == "" ? 0px : 36px);
 
@@ -472,12 +478,12 @@ export component Picker inherits Window {
             // Every reach, not only the two the row draws: the keyboard reaches the ones behind
             // the opener without having to open it.
             if (event.text == Key.LeftArrow) {
-                root.reach-index = max(0, root.reach-index - 1);
+                root.reach-index = root.step-reach(-1);
                 root.more-open = false;
                 return accept;
             }
             if (event.text == Key.RightArrow || event.text == Key.Tab) {
-                root.reach-index = min(root.reach-labels.length - 1, root.reach-index + 1);
+                root.reach-index = root.step-reach(1);
                 root.more-open = false;
                 return accept;
             }
@@ -614,16 +620,24 @@ export component Picker inherits Window {
 
                 Rectangle { height: 1px; background: Palette.line; }
 
-                    VerticalLayout {
-                        padding-left: 6px;
-                        padding-right: 6px;
-                        padding-top: 7px;
-                        padding-bottom: 7px;
-                        for item[i] in root.rows: Row {
-                            entry: item;
-                            icon-side: root.icon-side;
-                            private-wanted: root.private-on;
-                            chosen(private) => { root.open(i, private); }
+                    Rectangle {
+                        height: root.rows-room + 2px;
+                        Flickable {
+                            y: 1px;
+                            height: root.rows-room;
+                            viewport-height: root.rows.length * 42px + 14px;
+                            VerticalLayout {
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                padding-top: 7px;
+                                padding-bottom: 7px;
+                                for item[i] in root.rows: Row {
+                                    entry: item;
+                                    icon-side: root.icon-side;
+                                    private-wanted: root.private-on;
+                                    chosen(private) => { root.open(i, private); }
+                                }
+                            }
                         }
                     }
 
@@ -1093,8 +1107,10 @@ export component Notice inherits Window {
     icon: @image-url("../../../app/src-tauri/icons/128x128.png");
     no-frame: true;
     background: transparent;
-    width: 356px;
-    height: 76px;
+    out property <length> wanted-width: 356px;
+    out property <length> wanted-height: 76px;
+    width: root.wanted-width;
+    height: root.wanted-height;
     in property <string> family;
     default-font-family: root.family;
 
