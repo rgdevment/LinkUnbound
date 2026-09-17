@@ -230,6 +230,12 @@ pub fn from_a_mount() -> bool {
     mounted(std::env::current_exe().ok().as_deref())
 }
 
+/// The plugin asks for the chip it was built for, and under Rosetta that is not the machine's.
+#[must_use]
+pub fn platform(translated: bool) -> Option<&'static str> {
+    translated.then_some("darwin-aarch64")
+}
+
 const PREFIXES: [&str; 2] = ["/opt/homebrew", "/usr/local"];
 const CASKS: [&str; 2] = ["linkunbound", "linkunbound-beta"];
 
@@ -275,6 +281,16 @@ pub use linkunbound_core::update::{Progress, keep, looked, progress, settle, tel
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_copy_under_rosetta_asks_for_the_native_build_and_no_other_copy_chooses() {
+        assert_eq!(platform(true), Some("darwin-aarch64"));
+        assert_eq!(
+            platform(false),
+            None,
+            "the plugin's own architecture stands"
+        );
+    }
 
     /// A look that just happened is not a look that is due: counting it as due turns every call
     /// into a fetch, which for a Store copy is a round trip to the shop on every window.

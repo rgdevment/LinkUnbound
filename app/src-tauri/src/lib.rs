@@ -52,6 +52,16 @@ fn icon_data(_exe: &str, _id: &str) -> Option<String> {
     None
 }
 
+#[cfg(target_os = "macos")]
+fn translated() -> bool {
+    linkunbound_mac::translated()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn translated() -> bool {
+    false
+}
+
 /// Where the 1.x line kept its files, so an upgrade finds them in place.
 fn store() -> Store {
     Store::at(linkunbound_core::data_dir())
@@ -914,8 +924,11 @@ async fn install_from(
     started.store(true, std::sync::atomic::Ordering::Release);
 
     let asked = want.clone();
-    let update = app
-        .updater_builder()
+    let mut building = app.updater_builder();
+    if let Some(platform) = update::platform(translated()) {
+        building = building.target(platform);
+    }
+    let update = building
         .endpoints(
             update::feeds_for(&want)
                 .into_iter()

@@ -15,8 +15,6 @@ permissions:
   attestations: write
   id-token: write
 
-# Two releases at once interleave their writes to the feed, and the one that finishes last wins
-# rather than the newest.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -63,7 +61,7 @@ jobs:
 
   version:
     name: Resolve the version
-    needs: [gate, rust]
+    needs: [gate]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -129,8 +127,6 @@ jobs:
             version="${{ inputs.version }}"
           fi
 
-          # Strict semver: a leading zero is not a number semver will read, and a copy that
-          # cannot parse the version it is running stops hearing about every release after it.
           num='(0|[1-9][0-9]*)'
           pre='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
           if [[ ! "$version" =~ ^$num\.$num\.$num(-$pre(\.$pre)*)?$ ]]; then
@@ -138,8 +134,6 @@ jobs:
             exit 1
           fi
 
-          # rc10 is compared letter by letter against rc9, so it sorts *below* it: a copy on rc9
-          # would never be told about rc10. Dotted, the number is compared as a number.
           if [[ "$version" =~ -rc[0-9]{2,} ]]; then
             echo "::error::«$version» has to be written rc.${BASH_REMATCH[0]#-rc}: past rc9, \
           semver reads rc10 as older than rc2"
@@ -161,6 +155,8 @@ jobs:
     needs: version
     runs-on: windows-latest
     timeout-minutes: 60
+    outputs:
+      stage: ${{ steps.stage.outputs.sha }}
     env:
       TARGET: x86_64-pc-windows-msvc
       PFX_BASE64: ${{ secrets.PFX_BASE64 }}
@@ -185,18 +181,10 @@ jobs:
         working-directory: app
         run: npm ci
 
-      # The resident is a binary of its own and the bundler only carries what `externalBin` names.
-      # Without this the installer ships the settings window alone, and every link runs nothing.
       - name: The resident rides along
         shell: bash
-        run: |
-          cargo build --release --bin linkunbound-shell --target "$TARGET"
-          mkdir -p app/src-tauri/binaries
-          cp "target/$TARGET/release/linkunbound-shell.exe" \
-             "app/src-tauri/binaries/linkunbound-shell-$TARGET.exe"
+        run: bash scripts/sidecar.sh release
 
-      # A public key in the config makes the private one a build requirement, so a run without the
-      # secret has to say so rather than fail on a line about an environment variable.
       - name: Bundle
         working-directory: app
         shell: bash
@@ -213,16 +201,28 @@ jobs:
             echo "::error::the bundler produced no installer"
             exit 1
           fi
-          # Read from the generated script, not the installer: the payload is LZMA-compressed, so
-          # searching the exe for a filename finds nothing whether it is in there or not.
-          # A sidecar that silently failed to be picked up looks exactly like a working release
-          # until someone installs it and no link opens.
           script=$(ls target/release/nsis/*/installer.nsi | head -1)
           if [ -z "$script" ] || ! grep -q 'oname=linkunbound-shell.exe' "$script"; then
             echo "::error::the generated installer script does not lay down the resident; the           sidecar was not bundled"
             exit 1
           fi
           echo "the installer lays down the resident"
+
+      - name: Set the binaries aside for the MSIX
+        id: stage
+        shell: bash
+        run: |
+          mkdir -p stage
+          cp target/release/linkunbound-settings.exe stage/
+          cp target/release/linkunbound-shell.exe stage/
+          echo "sha=$(cat stage/linkunbound-settings.exe stage/linkunbound-shell.exe | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stage-windows
+          path: stage
+          retention-days: 5
+          if-no-files-found: error
 
       - name: Sign the installer
         if: env.PFX_BASE64 != ''
@@ -265,9 +265,6 @@ jobs:
           cp "$setup" "dist/linkunbound-installer-$v-windows-x86_64.exe"
           ls -l dist
 
-      # The bundler signed the installer it built, and signtool then rewrote those bytes. The
-      # signature the updater checks has to be made against what actually ships, so it is made
-      # last: a signature over bytes that no longer exist reads exactly like a working release.
       - name: Sign it for the updater
         if: env.TAURI_SIGNING_PRIVATE_KEY != ''
         working-directory: app
@@ -286,13 +283,22 @@ jobs:
           if-no-files-found: error
 
   bundle-macos:
-    name: linkunbound-macos-installer
+    name: linkunbound-macos-installer (${{ matrix.arch }})
     needs: version
     if: needs.version.outputs.macos == 'true'
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            arch: aarch64
+          - target: x86_64-apple-darwin
+            arch: x86_64
     env:
-      TARGET: universal-apple-darwin
+      TARGET: ${{ matrix.target }}
+      ARCH: ${{ matrix.arch }}
       MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
@@ -305,7 +311,8 @@ jobs:
       - uses: ./.github/actions/prepare
         with:
           version: ${{ needs.version.outputs.version }}
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.target }}
+          cache-key: ${{ matrix.target }}
 
       - uses: actions/setup-node@v7
         with:
@@ -317,7 +324,12 @@ jobs:
         working-directory: app
         run: npm ci
 
-      - name: The resident rides along, for both chips
+      - name: One deployment target for the resident and the app
+        run: |
+          floor=$(jq -r '.bundle.macOS.minimumSystemVersion' app/src-tauri/tauri.conf.json)
+          echo "MACOSX_DEPLOYMENT_TARGET=$floor" >> "$GITHUB_ENV"
+
+      - name: The resident rides along
         run: bash scripts/sidecar.sh release "$TARGET"
 
       - name: Import signing certificate
@@ -361,7 +373,7 @@ jobs:
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then sign="--no-sign"; fi
           npm run tauri bundle -- --target "$TARGET" --bundles app,dmg $sign
 
-      - name: It launches the resident, for a link, from the menu bar
+      - name: It launches the resident, for a link, from the menu bar, on one chip
         run: |
           app="target/$TARGET/release/bundle/macos/LinkUnbound.app"
           plist="$app/Contents/Info.plist"
@@ -377,14 +389,16 @@ jobs:
           want LSUIElement true
           want CFBundleIdentifier dev.rgdevment.linkunbound
           want CFBundleShortVersionString "${{ needs.version.outputs.version }}"
+          chip=x86_64; [ "$ARCH" = aarch64 ] && chip=arm64
           for one in linkunbound-shell linkunbound-settings; do
             bin="$app/Contents/MacOS/$one"
             test -x "$bin" || { echo "::error::$one is not in the bundle"; status=1; continue; }
             archs=$(lipo -archs "$bin")
-            case "$archs" in
-              *x86_64*arm64*|*arm64*x86_64*) echo "$one: $archs" ;;
-              *) echo "::error::$one is not universal: $archs"; status=1 ;;
-            esac
+            if [ "$archs" != "$chip" ]; then
+              echo "::error::$one is «$archs», not $chip alone"
+              status=1
+            fi
+            echo "$one: $archs"
           done
           exit $status
 
@@ -407,9 +421,6 @@ jobs:
             --team-id "$APPLE_TEAM_ID" --wait --timeout 900
           xcrun stapler staple "$dmg"
 
-      # The updater replaces the .app, not the disk image, and the bundler tars it long before any
-      # of the above. Left alone that tarball carries an app with no ticket stapled to it, and every
-      # launch after an update would wait on Gatekeeper asking Apple over the network.
       - name: Staple the app itself, and tar it again
         if: env.APPLE_ID != '' && env.MACOS_CERTIFICATE_P12 != ''
         run: |
@@ -426,8 +437,6 @@ jobs:
           rm -f "$out"/*.app.tar.gz "$out"/*.app.tar.gz.sig
           COPYFILE_DISABLE=1 tar --no-xattrs -czf "$out/LinkUnbound.app.tar.gz" -C "$out" LinkUnbound.app
 
-          # The tarball is what a copy out there will unpack over itself. If the ticket did not
-          # survive the round trip, better it fails here than on someone's machine.
           rm -rf "$RUNNER_TEMP/rt" && mkdir -p "$RUNNER_TEMP/rt"
           tar -xzf "$out/LinkUnbound.app.tar.gz" -C "$RUNNER_TEMP/rt"
           codesign --verify --deep --strict "$RUNNER_TEMP/rt/LinkUnbound.app"
@@ -446,16 +455,13 @@ jobs:
           v="${{ needs.version.outputs.version }}"
           mkdir -p dist
           out="target/$TARGET/release/bundle/macos"
-          # The bundler leaves a tarball of its own during the build, before any of the stapling.
-          # Publishing that one would replace a notarised app with an unnotarised one, so it only
-          # travels when the ticket is on it.
           app="$out/LinkUnbound.app"
           if xcrun stapler validate "$app" >/dev/null 2>&1 \
             && [ -s "$out/LinkUnbound.app.tar.gz.sig" ]; then
-            cp "$out/LinkUnbound.app.tar.gz" "dist/linkunbound-$v-macos-universal.app.tar.gz"
-            cp "$out/LinkUnbound.app.tar.gz.sig" "dist/linkunbound-$v-macos-universal.app.tar.gz.sig"
+            cp "$out/LinkUnbound.app.tar.gz" "dist/linkunbound-$v-macos-$ARCH.app.tar.gz"
+            cp "$out/LinkUnbound.app.tar.gz.sig" "dist/linkunbound-$v-macos-$ARCH.app.tar.gz.sig"
           else
-            echo "::warning::no stapled, signed tarball; macOS gets no self-update this release"
+            echo "::warning::no stapled, signed tarball; macOS $ARCH gets no self-update this release"
             rm -f "$out/LinkUnbound.app.tar.gz" "$out/LinkUnbound.app.tar.gz.sig"
           fi
           dmg=$(ls target/$TARGET/release/bundle/dmg/*.dmg 2>/dev/null | head -1) || true
@@ -463,12 +469,12 @@ jobs:
             echo "::error::the bundler produced no disk image"
             exit 1
           fi
-          cp "$dmg" "dist/linkunbound-installer-$v-macos-universal.dmg"
+          cp "$dmg" "dist/linkunbound-installer-$v-macos-$ARCH.dmg"
           ls -l dist
 
       - uses: actions/upload-artifact@v7
         with:
-          name: bundle-macos
+          name: bundle-macos-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
 
@@ -478,20 +484,17 @@ jobs:
 
   bundle-msix:
     name: linkunbound-windows-msix
-    needs: version
+    needs: [version, bundle-windows]
     if: needs.version.outputs.prerelease == 'false'
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     outputs:
       made: ${{ steps.gate.outputs.go }}
     env:
-      TARGET: x86_64-pc-windows-msvc
       MSIX_IDENTITY: ${{ vars.MSIX_IDENTITY }}
       MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
       MSIX_PUBLISHER_DISPLAY: ${{ vars.MSIX_PUBLISHER_DISPLAY }}
     steps:
-      # The identity is issued by Partner Center and cannot be guessed. Building a package with
-      # the wrong one produces something the Store refuses on upload, after the whole build.
       - name: Nothing to build without a reserved identity
         id: gate
         shell: bash
@@ -506,52 +509,30 @@ jobs:
       - uses: actions/checkout@v6
         if: steps.gate.outputs.go == 'yes'
 
-      - uses: ./.github/actions/prepare
+      - uses: actions/download-artifact@v7
         if: steps.gate.outputs.go == 'yes'
         with:
-          version: ${{ needs.version.outputs.version }}
-          targets: ${{ env.TARGET }}
-
-      - uses: actions/setup-node@v7
-        if: steps.gate.outputs.go == 'yes'
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: Frontend
-        if: steps.gate.outputs.go == 'yes'
-        working-directory: app
-        run: npm ci
-
-      - name: The resident rides along
-        if: steps.gate.outputs.go == 'yes'
-        shell: bash
-        run: bash scripts/sidecar.sh release
-
-      - name: Build
-        if: steps.gate.outputs.go == 'yes'
-        working-directory: app
-        run: npm run tauri build -- --no-bundle
+          name: stage-windows
+          path: msix
 
       - name: Lay the package out
         if: steps.gate.outputs.go == 'yes'
         shell: bash
         run: |
           v="${{ needs.version.outputs.version }}"
-          # Four numbers, the last always zero: MSIX has no room for a prerelease suffix, and
-          # the Store reserves the fourth for itself. `numbered()` in shop.rs reads the first
-          # three back, so anything else makes the Store offer a version nobody published.
           export QUAD="${v%%-*}.0"
 
+          test -s msix/linkunbound-settings.exe
+          test -s msix/linkunbound-shell.exe
+          test "$(cat msix/linkunbound-settings.exe msix/linkunbound-shell.exe | sha256sum | cut -d' ' -f1)" \
+            = "${{ needs.bundle-windows.outputs.stage }}"
+
           mkdir -p msix/Assets
-          cp target/release/linkunbound-settings.exe msix/
-          cp target/release/linkunbound-shell.exe msix/
           for logo in StoreLogo Square44x44Logo Square71x71Logo Square150x150Logo; do
             cp "app/src-tauri/icons/$logo.png" "msix/Assets/$logo.png"
           done
 
-          python3 scripts/fill_manifest.py app/src-tauri/msix/AppxManifest.xml.in msix/AppxManifest.xml
+          python scripts/fill_manifest.py app/src-tauri/msix/AppxManifest.xml.in msix/AppxManifest.xml
 
           if grep -q "@[A-Z_]*@" msix/AppxManifest.xml; then
             echo "::error::a placeholder survived the manifest"
@@ -573,8 +554,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::makeappx refused the package"; exit 1 }
           Get-ChildItem dist
 
-      # The identity is what decides whether somebody running 1.x is ever offered this. Read back
-      # from the package rather than from the file we wrote, so a pack that dropped it says so.
       - name: It went in under the identity 1.x shipped with
         if: steps.gate.outputs.go == 'yes'
         shell: pwsh
@@ -591,10 +570,6 @@ jobs:
           $quad = ($v -split '-')[0] + '.0'
           Write-Host "identity: $said   version: $($m.Package.Identity.Version)"
 
-          # What 1.x published, written down here rather than read from the variable that filled
-          # the manifest: comparing the package against its own input would pass a typo through,
-          # and under any other name the Store sees a different application — so nobody running
-          # LinkUnbound today would ever be offered this one.
           $was = "rgdevment.LinkUnbound-BrowserPicker"
           if ($said -ne $was) {
             Write-Host "::error::the package went in as $said. 1.x shipped as $was, and under any other name nobody who has it installed is offered this."; exit 1
@@ -616,48 +591,44 @@ jobs:
 
   publish:
     name: GitHub Release
-    needs: [version, bundle-windows, bundle-macos, bundle-msix]
+    needs: [rust, version, bundle-windows, bundle-macos, bundle-msix]
     if: >-
-      !cancelled() && needs.bundle-windows.result == 'success'
+      !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      && needs.rust.result == 'success' && needs.version.result == 'success'
+      && needs.bundle-windows.result == 'success'
       && (needs.bundle-macos.result == 'success' || needs.bundle-macos.result == 'skipped')
       && (needs.bundle-msix.result == 'success' || needs.bundle-msix.result == 'skipped')
-      && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
-      # Full history: the feed push retries with a rebase, which a shallow clone cannot do.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - uses: actions/download-artifact@v7
         with:
-          path: staged
+          pattern: bundle-*
+          path: dist
+          merge-multiple: true
 
       - name: Gather
         run: |
-          mkdir -p dist
-          find staged -type f -exec cp {} dist/ \;
-          # The package goes to the Store and nowhere else. Unsigned it cannot be installed by
-          # anybody who downloads it, and the Store signs it on publication — so putting it on the
-          # releases page offers a file that looks installable and is not.
           rm -f dist/*.msix
           ls -l dist
 
-      # Everything here happens before the release is created. A release published without a
-      # usable signature is one every copy is told about and none can take, and taking it back is
-      # not something an installed copy ever learns about.
       - name: Everything that should be here, is
         run: |
           v="${{ needs.version.outputs.version }}"
           status=0
           want="dist/linkunbound-installer-$v-windows-x86_64.exe"
           if [ "${BUILD_MACOS}" = "true" ]; then
-            want="$want dist/linkunbound-$v-macos-universal.app.tar.gz"
-            if [ ! -s "dist/linkunbound-installer-$v-macos-universal.dmg" ]; then
-              echo "::error::the macOS disk image is missing"
-              status=1
-            fi
+            for arch in aarch64 x86_64; do
+              want="$want dist/linkunbound-$v-macos-$arch.app.tar.gz"
+              if [ ! -s "dist/linkunbound-installer-$v-macos-$arch.dmg" ]; then
+                echo "::error::the macOS $arch disk image is missing"
+                status=1
+              fi
+            done
           fi
           for one in $want; do
             if [ ! -s "$one" ]; then
@@ -671,18 +642,15 @@ jobs:
           done
           exit $status
 
-      # The key that signed it has to be the key every copy carries. They are two secrets in two
-      # places, and the only thing that says they are halves of the same pair is this. Checked
-      # here, a mismatch costs a failed run; checked after publishing, it costs a release that
-      # verifies nowhere and a feed that already announced it.
       - name: The signature answers to the key this build ships
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq minisign
           v="${{ needs.version.outputs.version }}"
-          exe="dist/linkunbound-installer-$v-windows-x86_64.exe"
 
           jq -r '.plugins.updater.pubkey' app/src-tauri/tauri.conf.json | base64 -d > feed.pub
-          for one in "$exe" "dist/linkunbound-$v-macos-universal.app.tar.gz"; do
+          for one in "dist/linkunbound-installer-$v-windows-x86_64.exe" \
+                     "dist/linkunbound-$v-macos-aarch64.app.tar.gz" \
+                     "dist/linkunbound-$v-macos-x86_64.app.tar.gz"; do
             [ -s "$one" ] || continue
             base64 -d < "$one.sig" > one.minisig
             if ! minisign -Vm "$one" -p feed.pub -x one.minisig; then
@@ -692,6 +660,7 @@ jobs:
               exit 1
             fi
           done
+          rm -f feed.pub one.minisig
           echo "the signatures and the shipped key are halves of the same pair"
 
       - name: Checksums
@@ -720,47 +689,108 @@ jobs:
             echo "LU_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: softprops/action-gh-release@v3
-        with:
-          body: ${{ steps.notes.outputs.body }}
-          generate_release_notes: true
-          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
-          make_latest: ${{ needs.version.outputs.prerelease == 'false' }}
-          files: dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: The feed does not walk backwards
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          if ! git fetch origin manifest --depth 1 2>/dev/null; then
+            echo "no feed yet"
+            exit 0
+          fi
+          feed=$(git show FETCH_HEAD:release-manifest.json 2>/dev/null || echo '{}')
+          if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+            was=$(jq -r '.latestPrerelease // ""' <<< "$feed"); track="candidates"
+          else
+            was=$(jq -r '.latest // ""' <<< "$feed"); track="stable"
+          fi
+          if [ -n "$was" ] && [ "$was" != "$v" ] \
+             && [ "$(printf '%s\n%s\n' "$was" "$v" | sort -V | tail -1)" != "$v" ]; then
+            echo "::error::the $track feed already says $was; publishing $v would hand everybody \
+                  a version they left behind"
+            exit 1
+          fi
+          echo "the $track feed says «${was:-nothing}»; $v may follow"
 
-      # Where every installed copy looks: an orphan branch holding the three feeds and nothing
-      # else. Serving them from the release of each version is what cannot work —
-      # releases/latest/download/ follows the date a release was published rather than the version
-      # in it, and never points at a prerelease, so the candidate channel would be dead and a
-      # maintenance release for an older series would walk the feed backwards.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ steps.notes.outputs.body }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+
+          tags=$(gh release list --limit 200 --json tagName --jq '.[].tagName')
+          if ! grep -qx "$tag" <<< "$tags"; then
+            gh release create "$tag" --draft --verify-tag --title "$tag" \
+              --prerelease="$PRERELEASE" --generate-notes --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+
+          state=$(gh release view "$tag" --json isDraft,assets)
+          draft=$(jq -r .isDraft <<< "$state")
+          for f in dist/*; do
+            name=$(basename "$f")
+            have=$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .digest // ""' <<< "$state")
+            want="sha256:$(sha256sum "$f" | cut -d' ' -f1)"
+            if [ "$have" = "$want" ]; then
+              echo "$name is already up, same bytes"
+              continue
+            fi
+            if [ "$draft" = false ] && [ -n "$have" ]; then
+              echo "::error::$name is published with other bytes; this run would replace a live \
+                file. Rerun only the failed jobs, or delete the release and let it be made again."
+              exit 1
+            fi
+            secs=$((180 + $(stat -c %s "$f") / 50000))
+            for attempt in 1 2 3; do
+              began=$(date +%s)
+              if timeout "$secs" gh release upload "$tag" "$f" --clobber; then
+                echo "$name is up in $(( $(date +%s) - began ))s"
+                break
+              fi
+              if [ "$attempt" = 3 ]; then
+                echo "::error::$name never made it up; the release stays a draft"
+                exit 1
+              fi
+              echo "::warning::$name stalled after ${secs}s (${attempt}/3)"
+              sleep $((attempt * 10))
+            done
+          done
+
+          have=$(gh release view "$tag" --json assets -q '.assets[].name' | sort)
+          want=$(ls dist | sort)
+          if [ "$have" != "$want" ]; then
+            echo "::error::the release carries a different set of files than dist; it stays a draft"
+            diff <(echo "$want") <(echo "$have") || true
+            exit 1
+          fi
+
+          latest=false; [ "$PRERELEASE" = "false" ] && latest=true
+          gh release edit "$tag" --draft=false --latest="$latest"
+
       - name: The feed
         run: |
           v="${{ needs.version.outputs.version }}"
           base="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}"
           win="linkunbound-installer-$v-windows-x86_64.exe"
-          mac="linkunbound-$v-macos-universal.app.tar.gz"
+          arm="linkunbound-$v-macos-aarch64.app.tar.gz"
+          intel="linkunbound-$v-macos-x86_64.app.tar.gz"
 
-          # Composed before the checkout below swaps the working tree out from under us. The
-          # updater asks for its own chip by name, so the one universal archive is listed twice.
           if [ -s "dist/$win.sig" ]; then
             ws=$(cat "dist/$win.sig")
-            ms=$(cat "dist/$mac.sig" 2>/dev/null || true)
+            as=$(cat "dist/$arm.sig" 2>/dev/null || true)
+            is=$(cat "dist/$intel.sig" 2>/dev/null || true)
             jq -n --arg v "$v" \
                   --arg n "https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}" \
                   --arg wu "$base/$win" --arg ws "$ws" \
-                  --arg mu "$base/$mac" --arg ms "$ms" \
+                  --arg au "$base/$arm" --arg as "$as" \
+                  --arg iu "$base/$intel" --arg is "$is" \
               '{version: $v, notes: $n, platforms:
                  ({"windows-x86_64": {url: $wu, signature: $ws}}
-                  + (if $ms == "" then {}
-                     else {"darwin-aarch64": {url: $mu, signature: $ms},
-                           "darwin-x86_64":  {url: $mu, signature: $ms}} end))}' \
+                  + (if $as == "" then {} else {"darwin-aarch64": {url: $au, signature: $as}} end)
+                  + (if $is == "" then {} else {"darwin-x86_64": {url: $iu, signature: $is}} end))}' \
               > "$RUNNER_TEMP/channel.json"
             cat "$RUNNER_TEMP/channel.json"
           else
-            # The notice feed and the update feed have to move together. Advertising a version the
-            # updater cannot then find leaves every copy pressing a button that answers "gone".
             echo "::error::no updater signature for $v; the release would offer an update nobody can take"
             exit 1
           fi
@@ -768,18 +798,11 @@ jobs:
           if git fetch origin manifest --depth 1 2>/dev/null; then
             git checkout -B manifest FETCH_HEAD
           else
-            # Without a parent, or the branch carries a copy of the whole source beside the feed
-            # and that copy is never updated again.
             git checkout --orphan manifest
             git rm -rq --cached . 2>/dev/null || true
-            # The index is cleared but the files are not: the branch we came from carries copies
-            # of these, and they would be read as the feed and committed as it.
             rm -f release-manifest.json latest.json candidate.json
           fi
 
-          # Re-running the workflow of a release that has since been passed would otherwise walk
-          # the feed backwards and offer everybody a version they already left behind. Each track
-          # is held against its own: a candidate run never touches the stable one.
           if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
             was=$(jq -r '.latestPrerelease // ""' release-manifest.json 2>/dev/null || echo "")
             track="candidates"
@@ -815,10 +838,6 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Staged one at a time and compared after: naming a file that is not there is a pathspec
-          # error, and a stable release has just taken candidate.json away. Comparing after the
-          # staging keeps a channel file from being skipped on a run where the version manifest
-          # happened not to change.
           for one in release-manifest.json latest.json candidate.json; do
             git add -A -- "$one" 2>/dev/null || true
           done
@@ -842,8 +861,9 @@ jobs:
     name: Microsoft Store
     needs: [version, publish, bundle-msix]
     if: >-
-      !cancelled() && needs.publish.result == 'success' && needs.bundle-msix.result == 'success'
-      && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      && needs.version.result == 'success' && needs.publish.result == 'success'
+      && needs.bundle-msix.result == 'success'
       && needs.version.outputs.prerelease == 'false'
     runs-on: windows-latest
     timeout-minutes: 20
@@ -855,9 +875,6 @@ jobs:
       STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
       STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
     steps:
-      # Off unless somebody says otherwise. A submission is reviewed by people and cannot be
-      # taken back once it is in their queue, so it is not something a tag should start by
-      # accident on the way to fixing something else.
       - name: Nothing to submit without being asked
         id: gate
         shell: bash
@@ -881,9 +898,6 @@ jobs:
           name: bundle-msix
           path: dist
 
-      # v1.4 of the action installs a CLI that reads the Store's empty answer to a commit as broken
-      # JSON and dies in a .NET stack trace after the submission was taken. Pinned to the CLI that
-      # does not, the way Tisty publishes.
       - uses: microsoft/microsoft-store-apppublisher@v1.3
         if: steps.gate.outputs.go == 'yes'
         with:
@@ -909,8 +923,6 @@ jobs:
           code=${PIPESTATUS[0]}
           set -e
 
-          # The Store had the package and the commit was posted; what the client lost was the poll
-          # it was holding. Sending again would file the same submission twice.
           if [ "$code" -ne 0 ] && grep -q "CommitStarted" publish.log; then
             echo "::warning::the Store took the submission and is processing it; the client lost \
             the poll it was holding. Nothing here has to be sent again."
@@ -934,15 +946,13 @@ jobs:
     name: The update is installable
     needs: [version, publish]
     if: >-
-      !cancelled() && needs.publish.result == 'success'
-      && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      && needs.version.result == 'success' && needs.publish.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
-      # What a copy out there will do in a day's time, done here first. A signature made against
-      # the wrong bytes reads exactly like a working release until someone tries to install it.
       - name: Take the update the way an installed copy would
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq minisign
@@ -951,8 +961,6 @@ jobs:
           if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then file=candidate.json; fi
           feed="https://raw.githubusercontent.com/${{ github.repository }}/manifest/$file"
 
-          # raw serves with max-age=300, so the wait has to outlast the cache or it fails on that
-          # rather than on anything being wrong.
           said=""
           for attempt in 1 2 3 4 5 6; do
             if curl -fsSL -H "Cache-Control: no-cache" -o channel.json "$feed"; then
@@ -974,9 +982,6 @@ jobs:
             url=$(jq -r --arg os "$os" '.platforms[$os].url' channel.json)
             jq -r --arg os "$os" '.platforms[$os].signature' channel.json | base64 -d > one.sig
 
-            # The address has to be the tag of the version being offered, or a feed could announce
-            # one version and hand over the signed installer of another — a rollback the signature
-            # alone cannot catch, because those bytes really were ours.
             case "$url" in
               "https://github.com/${{ github.repository }}/releases/download/v$v/"*) ;;
               *) echo "::error::$os points at $url, which is not the v$v release"; exit 1 ;;
@@ -995,8 +1000,8 @@ jobs:
     name: Homebrew tap
     needs: [version, publish]
     if: >-
-      !cancelled() && needs.publish.result == 'success'
-      && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      && needs.version.result == 'success' && needs.publish.result == 'success'
       && needs.version.outputs.macos == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1011,7 +1016,8 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           VERSION="${{ needs.version.outputs.version }}"
           BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
-          DMG="linkunbound-installer-${VERSION}-macos-universal.dmg"
+          DMG_ARM="linkunbound-installer-${VERSION}-macos-aarch64.dmg"
+          DMG_INTEL="linkunbound-installer-${VERSION}-macos-x86_64.dmg"
 
           if [[ "$VERSION" == *-* ]]; then
             CASK="linkunbound-beta"; CASK_OTHER="linkunbound"; SUFFIX=" (beta)"
@@ -1019,15 +1025,21 @@ jobs:
             CASK="linkunbound"; CASK_OTHER="linkunbound-beta"; SUFFIX=""
           fi
 
-          for attempt in 1 2 3 4 5; do
-            if curl -fSL -o "/tmp/$DMG" "$BASE/$DMG" && [ -s "/tmp/$DMG" ]; then
-              break
-            fi
-            echo "$DMG not downloadable yet (attempt ${attempt}/5)"
-            sleep $((attempt * 10))
-          done
-          [ -s "/tmp/$DMG" ] || { echo "::error::could not download $DMG"; exit 1; }
-          DMG_SHA=$(sha256sum "/tmp/$DMG" | awk '{print $1}')
+          fetch() {
+            for attempt in 1 2 3 4 5; do
+              if curl -fSL -o "/tmp/$1" "$BASE/$1" && [ -s "/tmp/$1" ]; then
+                return 0
+              fi
+              echo "$1 not downloadable yet (attempt ${attempt}/5)"
+              sleep $((attempt * 10))
+            done
+            echo "::error::could not download $1"
+            return 1
+          }
+          fetch "$DMG_ARM"
+          fetch "$DMG_INTEL"
+          ARM_SHA=$(sha256sum "/tmp/$DMG_ARM" | awk '{print $1}')
+          INTEL_SHA=$(sha256sum "/tmp/$DMG_INTEL" | awk '{print $1}')
 
           git clone "https://x-access-token:${GIST_TOKEN}@github.com/rgdevment/homebrew-tap.git" /tmp/tap
           cd /tmp/tap
@@ -1037,10 +1049,13 @@ jobs:
 
           cat > "Casks/${CASK}.rb" <<-CASK
           	cask "${CASK}" do
-          	  version "${VERSION}"
-          	  sha256 "${DMG_SHA}"
+          	  arch arm: "aarch64", intel: "x86_64"
 
-          	  url "${BASE}/${DMG}"
+          	  version "${VERSION}"
+          	  sha256 arm:   "${ARM_SHA}",
+          	         intel: "${INTEL_SHA}"
+
+          	  url "${BASE}/linkunbound-installer-${VERSION}-macos-#{arch}.dmg"
           	  name "LinkUnbound"
           	  desc "Browser picker that asks which browser opens each link${SUFFIX}"
           	  homepage "https://github.com/${{ github.repository }}"

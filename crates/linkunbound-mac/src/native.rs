@@ -368,6 +368,25 @@ pub fn windows_are_light() -> bool {
     !dark()
 }
 
+/// Only an Apple Silicon Mac carries the key; an Intel one answers with an error, read as no.
+#[must_use]
+#[allow(unsafe_code)]
+pub fn translated() -> bool {
+    let mut yes: libc::c_int = 0;
+    let mut len = size_of::<libc::c_int>();
+    // SAFETY: a NUL-terminated literal, and two locals sized for the int the key answers with.
+    let rc = unsafe {
+        libc::sysctlbyname(
+            c"sysctl.proc_translated".as_ptr(),
+            (&raw mut yes).cast(),
+            &raw mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    rc == 0 && yes == 1
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

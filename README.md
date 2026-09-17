@@ -67,7 +67,7 @@
 </p>
 
 <p align="center">
-  <sub>Prefer a direct download? <a href="https://github.com/rgdevment/LinkUnbound/releases/latest">GitHub Releases</a> has standalone installers — Windows (.exe) · macOS (.dmg)</sub>
+  <sub>Prefer a direct download? <a href="https://github.com/rgdevment/LinkUnbound/releases/latest">GitHub Releases</a> has standalone installers — Windows (.exe) · macOS (.dmg, one per chip)</sub>
 </p>
 
 </div>
@@ -172,7 +172,7 @@ brew install --cask linkunbound          # stable
 brew install --cask linkunbound-beta     # pre-release
 ```
 
-Or download the `.dmg` directly from [GitHub Releases](https://github.com/rgdevment/LinkUnbound/releases/latest).
+Or download the `.dmg` directly from [GitHub Releases](https://github.com/rgdevment/LinkUnbound/releases/latest). There are two: `aarch64` for Apple Silicon and `x86_64` for Intel — Apple menu › *About This Mac* says which one yours is. Homebrew picks by itself.
 
 <details>
 <summary><strong>Windows standalone: security warnings</strong></summary>

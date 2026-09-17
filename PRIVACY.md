@@ -166,7 +166,10 @@ Pressing Update downloads the installer from the releases page and runs it.
 LinkUnbound makes that request itself; nothing is downloaded or installed
 without the press. The installer is verified against a signature key built into
 the copy you are running before a single byte of it is executed, and the address
-it comes from has to be the release of the version you were offered.
+it comes from has to be the release of the version you were offered. On a Mac
+the installer asked for is the one built for its chip, so the name of that
+download says whether the machine is Apple Silicon or Intel — as a download
+made by hand from the releases page would.
 
 A copy installed from the Microsoft Store takes its update from the Store
 instead, and never reads the feed above. A copy installed with Homebrew updates

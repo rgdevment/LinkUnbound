@@ -1,8 +1,5 @@
 name: Bundle
 
-# The installer script is generated from tauri.conf.json and the hooks beside it, and until now
-# nothing compiled it before a release did — so `hooks.nsh` was first read by makensis on a run
-# that had already pushed a tag. This builds it on the way in instead.
 on:
   push:
     branches: [main]
@@ -59,8 +56,6 @@ jobs:
         shell: bash
         run: bash scripts/sidecar.sh release
 
-      # Unsigned on purpose: the signing key is a release secret, and what this job is for is the
-      # NSIS script and the bundler configuration, not the signature.
       - name: Bundle
         working-directory: app
         shell: bash
@@ -75,8 +70,6 @@ jobs:
             exit 1
           fi
 
-          # Read from the generated script, not the installer: the payload is LZMA-compressed, so
-          # searching the exe for a filename finds nothing whether it is in there or not.
           script=$(ls target/release/nsis/*/installer.nsi 2>/dev/null | head -1) || true
           if [ -z "$script" ]; then
             echo "::error::makensis ran but left no script behind to read"
@@ -91,9 +84,6 @@ jobs:
             fi
           }
           want 'oname=linkunbound-shell.exe' "lay down the resident; the sidecar was not bundled"
-          # The hooks arrive as an !include of our own file, so this is what says the bundler
-          # picked it up. Their bodies are not in this script and looking for them here finds
-          # nothing whether they were included or not.
           want '!include .*nsis.hooks\.nsh' "include our hooks; installerHooks did not resolve"
           exit $status
 
@@ -106,12 +96,12 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     env:
-      TARGET: universal-apple-darwin
+      TARGET: aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
       - uses: Swatinem/rust-cache@v2
 
       - uses: actions/setup-node@v7
@@ -124,7 +114,12 @@ jobs:
         working-directory: app
         run: npm ci
 
-      - name: The resident rides along, for both chips
+      - name: One deployment target for the resident and the app
+        run: |
+          floor=$(jq -r '.bundle.macOS.minimumSystemVersion' app/src-tauri/tauri.conf.json)
+          echo "MACOSX_DEPLOYMENT_TARGET=$floor" >> "$GITHUB_ENV"
+
+      - name: The resident rides along
         run: bash scripts/sidecar.sh release "$TARGET"
 
       - name: Bundle
@@ -154,10 +149,11 @@ jobs:
             bin="$app/Contents/MacOS/$one"
             test -x "$bin" || { echo "::error::$one is not in the bundle"; status=1; continue; }
             archs=$(lipo -archs "$bin")
-            case "$archs" in
-              *x86_64*arm64*|*arm64*x86_64*) echo "$one: $archs" ;;
-              *) echo "::error::$one is not universal: $archs"; status=1 ;;
-            esac
+            if [ "$archs" != arm64 ]; then
+              echo "::error::$one is «$archs», not arm64 alone"
+              status=1
+            fi
+            echo "$one: $archs"
           done
           exit $status
 

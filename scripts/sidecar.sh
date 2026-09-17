@@ -3,14 +3,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# The resident is a binary of its own, and the bundler only carries what `externalBin` names —
-# with the target triple appended, which is how Tauri tells one platform's sidecar from another's.
 host=$(rustc -vV | sed -n 's/^host: //p')
 suffix=""
 case "$host" in *windows*) suffix=".exe" ;; esac
 
 profile="${1:-debug}"
-target="${2:-$host}"
+target="${2:-}"
 out="app/src-tauri/binaries"
 mkdir -p "$out"
 
@@ -19,7 +17,7 @@ case "$profile" in release) flags+=(--release) ;; esac
 
 build() {
   local triple="$1"
-  if [ "$triple" = "$host" ]; then
+  if [ -z "$triple" ]; then
     cargo build ${flags[@]+"${flags[@]}"} --bin linkunbound-shell
     echo "target/$profile/linkunbound-shell$suffix"
   else
@@ -37,6 +35,6 @@ if [ "$target" = "universal-apple-darwin" ]; then
   lipo -archs "$out/linkunbound-shell-$target"
 else
   built=$(build "$target" | tail -1)
-  cp "$built" "$out/linkunbound-shell-$target$suffix"
+  cp "$built" "$out/linkunbound-shell-${target:-$host}$suffix"
 fi
-echo "$out/linkunbound-shell-$target$suffix"
+echo "$out/linkunbound-shell-${target:-$host}$suffix"
