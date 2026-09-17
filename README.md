@@ -32,6 +32,9 @@
   <a href="#license">
     <img src="https://img.shields.io/github/license/rgdevment/LinkUnbound?style=flat-square&color=lightgrey" alt="License GPL-3.0"/>
   </a>
+  <a href="https://github.com/sponsors/rgdevment">
+    <img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?style=flat-square&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"/>
+  </a>
   <a href="https://buymeacoffee.com/rgdevment">
     <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-☕-FFDD00?style=flat-square&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee"/>
   </a>
@@ -299,9 +302,13 @@ Contributions are always appreciated:
 
 ## Support the Project
 
-LinkUnbound is free and will always be free. No ads, no premium tiers, no paywalls. If it saves you time and you want to support continued development, you can buy me a coffee:
+LinkUnbound is free and will always be free. No ads, no premium tiers, no paywalls. If it saves you time and you want to support continued development, sponsor it on GitHub or buy me a coffee:
 
 <p align="center">
+  <a href="https://github.com/sponsors/rgdevment">
+    <img src="https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub"/>
+  </a>
+  &nbsp;
   <a href="https://buymeacoffee.com/rgdevment">
     <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%E2%98%95-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee"/>
   </a>
@@ -335,6 +342,10 @@ separate terms: see [COMMERCIAL.md](COMMERCIAL.md).
 
 Contributions require a one-time [CLA](CLA.md); you keep the copyright on your
 work.
+
+What ships inside the binaries, each under its own licence, is listed in
+[THIRD-PARTY-BUNDLED.md](THIRD-PARTY-BUNDLED.md); `npm run notices` writes it
+from the lockfiles.
 
 ---
 
