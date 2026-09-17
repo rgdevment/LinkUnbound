@@ -135,9 +135,6 @@ const ES = {
   shortcutOff: "Desactivado",
   shortcutPress: "Presiona una combinación…",
   shortcutNone: "Sin atajo",
-  hideTrayTitle: "Ocultar el icono de la bandeja",
-  hideTrayWith: "Seguirás pudiendo abrir los ajustes con el atajo",
-  hideTrayNeeds: "Necesitas un atajo antes de poder ocultarlo",
   appUpdates: "Actualizaciones",
   looksTitle: "Buscar versiones nuevas en segundo plano",
   looksNote: "Cada seis horas, sin abrir esta ventana; el selector avisa cuando hay una",
@@ -251,7 +248,6 @@ const ES = {
   save: "Guardar",
   cancel: "Cancelar",
   remove: "Quitar",
-  unreachable: "Con la bandeja oculta y sin atajo no habría forma de volver aquí.",
 } as const;
 
 export type Key = keyof typeof ES;
@@ -389,9 +385,6 @@ const EN: Record<Key, string> = {
   shortcutOff: "Disabled",
   shortcutPress: "Press a combination…",
   shortcutNone: "No shortcut",
-  hideTrayTitle: "Hide the tray icon",
-  hideTrayWith: "You will still be able to open settings with the shortcut",
-  hideTrayNeeds: "You need a shortcut before you can hide it",
   appUpdates: "Updates",
   looksTitle: "Look for new versions in the background",
   looksNote: "Every six hours, without opening this window; the picker says when there is one",
@@ -505,7 +498,6 @@ const EN: Record<Key, string> = {
   save: "Save",
   cancel: "Cancel",
   remove: "Remove",
-  unreachable: "With the tray hidden and no shortcut there would be no way back here.",
 };
 
 export const SPEECH: Record<Language, Record<Key, string>> = { es: ES, en: EN };
@@ -522,15 +514,12 @@ const MAC_ES: Partial<Record<Key, string>> = {
   chooseGo: "Abrir Ajustes del Sistema",
   browsersNone: "macOS no reporta ningún navegador instalado.",
   startupWindows: "Desactivado desde Ajustes del Sistema > General > Ítems de inicio",
-  hideTrayTitle: "Ocultar el icono de la barra de menús",
   rescanBody:
     "Se olvida lo detectado y se vuelve a preguntar al sistema. Los navegadores que añadiste a mano se conservan; lo que hayas ocultado se mostrará de nuevo.",
   unregisterTitle: "Dejar de ser el navegador predeterminado",
   unregisterNote: "Los enlaces vuelven al navegador que los abría antes",
   unregisterBody:
     "macOS te pedirá confirmación. Podrás volver a elegir LinkUnbound desde la pestaña Enlaces.",
-  unreachable:
-    "Con el icono de la barra de menús oculto y sin atajo no habría forma de volver aquí.",
 };
 
 const MAC_EN: Partial<Record<Key, string>> = {
@@ -545,14 +534,12 @@ const MAC_EN: Partial<Record<Key, string>> = {
   chooseGo: "Open System Settings",
   browsersNone: "macOS reports no installed browser.",
   startupWindows: "Turned off in System Settings > General > Login Items",
-  hideTrayTitle: "Hide the menu bar icon",
   rescanBody:
     "What was detected is forgotten and the system is asked again. The browsers you added by hand are kept; whatever you hid will show up again.",
   unregisterTitle: "Stop being the default browser",
   unregisterNote: "Links go back to the browser that opened them before",
   unregisterBody:
     "macOS will ask you to confirm. You can pick LinkUnbound again from the Links tab.",
-  unreachable: "With the menu bar icon hidden and no shortcut there would be no way back here.",
 };
 
 export const MAC: Record<Language, Partial<Record<Key, string>>> = { es: MAC_ES, en: MAC_EN };

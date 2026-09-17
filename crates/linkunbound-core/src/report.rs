@@ -47,11 +47,10 @@ pub fn diagnostics(
     }
 
     out.push_str(&format!(
-        "\n## Preferencias\n- tema: {:?}\n- idioma: {:?}\n- atajo: {}\n- bandeja oculta: {}\n- avisa al aplicar una regla: {}\n",
+        "\n## Preferencias\n- tema: {:?}\n- idioma: {:?}\n- atajo: {}\n- avisa al aplicar una regla: {}\n",
         prefs.theme,
         prefs.locale,
         prefs.shortcut.as_deref().unwrap_or("ninguno"),
-        prefs.hide_tray,
         prefs.notify_on_rule,
     ));
 

@@ -271,13 +271,7 @@ impl Store {
         {
             return found;
         }
-        const LEGACY: [&str; 5] = [
-            "theme",
-            "locale",
-            "hide_tray",
-            "edge_warning_dismissed",
-            "global_hotkey",
-        ];
+        const LEGACY: [&str; 4] = ["theme", "locale", "edge_warning_dismissed", "global_hotkey"];
         LEGACY.iter().fold(
             crate::Preferences::default(),
             |said, named| match fs::read_to_string(self.dir.join(named)) {
@@ -384,13 +378,13 @@ mod tests {
         let store = Store::at(&dir);
 
         let prefs = crate::Preferences {
-            hide_tray: true,
             locale: crate::Locale::English,
+            notify_on_rule: false,
             ..Default::default()
         };
         store.save_prefs(&prefs).expect("saved");
         let read = Store::at(&dir).prefs();
-        assert!(read.hide_tray, "the file has to carry it");
+        assert!(!read.notify_on_rule, "the file has to carry it");
         assert_eq!(read.locale, crate::Locale::English);
 
         let mut browsers = crate::BrowserConfig::default();
@@ -510,8 +504,8 @@ mod tests {
     }
 
     /// What somebody upgrading from 1.x actually has on disk: no preferences.json, and one small
-    /// file per setting beside it. Reading only the theme put the language, the tray and the
-    /// shortcut back to their defaults without saying so.
+    /// file per setting beside it. Reading only the theme put the language and the shortcut
+    /// back to their defaults without saying so.
     #[test]
     fn everything_1_x_left_on_disk_is_read_on_the_way_in() {
         let dir = std::env::temp_dir().join("lu-legacy-prefs");
@@ -520,7 +514,6 @@ mod tests {
         for (named, said) in [
             ("theme", "dark"),
             ("locale", "es"),
-            ("hide_tray", "1"),
             ("edge_warning_dismissed", "1"),
             ("global_hotkey", "ctrl+shift+l"),
         ] {
@@ -530,13 +523,8 @@ mod tests {
         let said = Store::at(&dir).prefs();
         assert_eq!(said.theme, crate::Theme::Dark);
         assert_eq!(said.locale, crate::Locale::Spanish);
-        assert!(said.hide_tray);
         assert!(said.edge_warning_dismissed);
         assert_eq!(said.shortcut.as_deref(), Some("Ctrl+Shift+L"));
-        assert!(
-            said.reachable(),
-            "a hidden tray with a shortcut is still reachable"
-        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

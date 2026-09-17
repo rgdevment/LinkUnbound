@@ -587,9 +587,6 @@ fn spoken(prefs: &Preferences) -> &'static str {
 
 #[tauri::command]
 fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
-    if !prefs.reachable() {
-        return Err("unreachable".to_owned());
-    }
     store().save_prefs(&prefs).map_err(|e| e.to_string())?;
     shell::repaint(&app, prefs.theme);
     Ok(claim(&app, &prefs))

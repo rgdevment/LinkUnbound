@@ -275,6 +275,9 @@ Yes. LinkUnbound unwraps SafeLinks before matching rules, so your rules work on 
 **Why do Teams and Outlook still open Edge?**
 Some Microsoft applications hand links straight to Edge down a channel of their own, skipping the default browser, and Windows 11 no longer lets another application stand in the middle of it. When one of those links arrives wrapped in a SafeLink it is unwrapped; the rest is Microsoft's to change.
 
+**I do not see the tray icon on Windows.**
+It is there, in the hidden icons behind the `^` at the right of the taskbar: Windows keeps every new application's icon in that overflow until you drag it onto the bar, or promote it under Settings → Personalization → Taskbar → Other system tray icons. Closing the settings window never stops the resident; only *Exit* in the tray menu does.
+
 **Does the picker have a keyboard?**
 Yes: `1`–`9` open a row, `Shift` holds a private window, `Ctrl+P` pins it, the arrows or `Tab` walk the reaches, `Ctrl+C` copies the address and `Esc` closes. A global shortcut (default `Alt+Shift+L`) opens Settings.
 

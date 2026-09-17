@@ -12,7 +12,6 @@ const PREFS = {
   theme: "system" as "system" | "light" | "dark",
   locale: "system" as "system" | "spanish" | "english",
   shortcut: "Alt+Shift+L" as string | null,
-  hide_tray: false,
   notify_on_rule: true,
   picker_style: "classic" as "classic" | "sheet",
   looks_for_updates: true,
@@ -146,22 +145,11 @@ describe("application settings", () => {
     expect(await screen.findByText(/Otra aplicación ya usa/)).toBeInTheDocument();
   });
 
-  /// Hiding the tray with no shortcut left would strand the user, so the switch
-  /// cannot even be reached until there is one.
-  it("will not let the tray be hidden while there is no shortcut", async () => {
-    answers({ ...PREFS, shortcut: null }, null);
-    mount();
-    expect(
-      await screen.findByRole("switch", { name: "Ocultar el icono de la bandeja" }),
-    ).toBeDisabled();
-    expect(screen.getByText(/Necesitas un atajo/)).toBeInTheDocument();
-  });
-
   it("surfaces the backend refusal rather than looking like it worked", async () => {
-    answers(PREFS, "Alt+Shift+L", "con la bandeja oculta y sin atajo no habría forma de volver");
+    answers(PREFS, "Alt+Shift+L", "the file could not be written");
     mount();
     await userEvent.click(await screen.findByRole("radio", { name: "Claro" }));
-    expect(await screen.findByText(/no habría forma de volver/)).toBeInTheDocument();
+    expect(await screen.findByText(/could not be written/)).toBeInTheDocument();
   });
 
   it("turns the shortcut off when it is removed", async () => {

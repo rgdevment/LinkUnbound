@@ -814,7 +814,7 @@ impl Ui {
         paint(&self.picker, &self.notice, light);
         style(&self.picker, prefs.picker_style);
         if let Some(tray) = self.tray.as_ref() {
-            tray.show(!prefs.hide_tray || cfg!(target_os = "macos"));
+            tray.show(true);
             tray.relabel(&self.words.get());
         }
     }

@@ -36,7 +36,6 @@ const PREFS = {
     theme: "system",
     locale: "system",
     shortcut: "Alt+Shift+L",
-    hide_tray: false,
     notify_on_rule: true,
     picker_style: "classic",
     looks_for_updates: true,

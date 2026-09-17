@@ -39,8 +39,6 @@ pub struct Preferences {
     /// having chosen: an absent field falls back to the default combination.
     #[serde(default = "default_shortcut")]
     pub shortcut: Option<String>,
-    #[serde(default)]
-    pub hide_tray: bool,
     #[serde(default = "yes")]
     pub notify_on_rule: bool,
     /// Carried from 1.x so somebody who read the Edge notice once is not told again.
@@ -69,7 +67,6 @@ impl Default for Preferences {
             theme: Theme::default(),
             locale: Locale::default(),
             shortcut: default_shortcut(),
-            hide_tray: false,
             notify_on_rule: true,
             edge_warning_dismissed: false,
             picker_style: PickerStyle::default(),
@@ -105,24 +102,11 @@ impl Preferences {
                     _ => Locale::System,
                 };
             }
-            "hide_tray" => self.hide_tray = said == "1",
             "edge_warning_dismissed" => self.edge_warning_dismissed = said == "1",
             "global_hotkey" => self.shortcut = shortcut_of(said),
             _ => {}
         }
         self
-    }
-
-    /// Hiding the tray with no shortcut left would leave no way back in.
-    #[must_use]
-    pub fn reachable(&self) -> bool {
-        self.reachable_where(cfg!(target_os = "macos"))
-    }
-
-    /// On a Mac the menu bar icon is never hidden — the resident shows it whatever 1.x wrote —
-    /// so a `hide_tray` carried over from there must not hold the shortcut hostage.
-    fn reachable_where(&self, icon_always_shown: bool) -> bool {
-        icon_always_shown || !self.hide_tray || self.shortcut.is_some()
     }
 }
 
@@ -163,12 +147,11 @@ mod tests {
     }
 
     /// Everything 1.x kept beside the theme was being dropped on the way in: the language went
-    /// back to the system's, the tray came back, and the shortcut was gone.
+    /// back to the system's and the shortcut was gone.
     #[test]
     fn the_rest_of_what_1_x_chose_is_carried_over_too() {
         let said = Preferences::default()
             .with_legacy("locale", "es\n")
-            .with_legacy("hide_tray", "1")
             .with_legacy("edge_warning_dismissed", "1")
             .with_legacy("global_hotkey", "ctrl+shift+l");
 
@@ -182,7 +165,6 @@ mod tests {
             Locale::System,
             "a language this one does not speak follows the system"
         );
-        assert!(said.hide_tray);
         assert!(said.edge_warning_dismissed);
         assert_eq!(said.shortcut.as_deref(), Some("Ctrl+Shift+L"));
     }
@@ -277,31 +259,5 @@ mod tests {
     fn turning_the_shortcut_off_is_kept_as_off() {
         let p: Preferences = serde_json::from_str(r#"{"shortcut": null}"#).unwrap();
         assert!(p.shortcut.is_none());
-    }
-
-    #[test]
-    fn hiding_the_tray_without_a_shortcut_leaves_no_way_back_in() {
-        let hidden = Preferences {
-            hide_tray: true,
-            shortcut: None,
-            ..Preferences::default()
-        };
-        assert!(!hidden.reachable_where(false));
-
-        let with_key = Preferences {
-            hide_tray: true,
-            ..Preferences::default()
-        };
-        assert!(with_key.reachable_where(false));
-
-        assert!(
-            hidden.reachable_where(true),
-            "where the icon is always shown, the shortcut may go"
-        );
-        assert_eq!(
-            hidden.reachable(),
-            cfg!(target_os = "macos"),
-            "a Mac never hides the icon"
-        );
     }
 }
