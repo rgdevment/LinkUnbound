@@ -26,8 +26,46 @@ env:
   BUILD_MACOS: "true"
 
 jobs:
+  # A tag is a commit like any other and can be one the CI never saw pass: nothing is built from
+  # a tree that does not read, lint and format clean.
+  gate:
+    name: Style and prose
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run lint:md
+      - name: Frontend style
+        working-directory: app
+        run: |
+          npm ci
+          npm run lint
+
+  rust:
+    name: fmt + clippy
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - name: The resident rides along
+        shell: bash
+        run: bash scripts/sidecar.sh
+      - run: cargo clippy --workspace --all-targets
+
   version:
     name: Resolve the version
+    needs: [gate, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -678,11 +716,12 @@ jobs:
           done
           ls -l
 
+      # Everything that goes up, the updater tarball and the signatures included, not only the
+      # two installers: a copy taking an update is as entitled to the provenance as a person
+      # downloading one.
       - uses: actions/attest-build-provenance@v4
         with:
-          subject-path: |
-            dist/linkunbound-installer-*.exe
-            dist/linkunbound-installer-*.dmg
+          subject-path: dist/linkunbound-*
 
       - name: Notes from the tag
         id: notes
