@@ -847,11 +847,9 @@ impl Ui {
                 if host::is_in_front(ours) {
                     ui.held_focus.set(true);
                 } else if !ui.held_focus.get() {
-                    // The keyboard could not be taken — the window in front runs elevated, and
-                    // Windows keeps a plain process out of its input — so the picker sits there
-                    // unfocused. It cannot know the person is done with it until they go
-                    // somewhere else: the window they were in is remembered, and leaving it is
-                    // what dismisses.
+                    // An elevated window in front keeps a plain process out of its input, so
+                    // the picker sits there unfocused; the window the person was in is
+                    // remembered, and their leaving it is what dismisses.
                     let front = host::front_window();
                     match ui.shown_over.get() {
                         None => ui.shown_over.set(Some(front)),
