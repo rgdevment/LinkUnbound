@@ -26,8 +26,6 @@ env:
   BUILD_MACOS: "true"
 
 jobs:
-  # A tag is a commit like any other and can be one the CI never saw pass: nothing is built from
-  # a tree that does not read, lint and format clean.
   gate:
     name: Style and prose
     runs-on: ubuntu-latest
@@ -106,8 +104,6 @@ jobs:
           is one Gatekeeper refuses, and the README promises otherwise."
             fi
           fi
-          # Missing, the Windows signing was skipped in silence and an unsigned installer went
-          # out under a tag: SmartScreen then warns every person who runs it.
           if [ "${{ github.event_name }}" = "push" ] && [ -z "$PFX_BASE64" ]; then
             fail "no Windows signing certificate. Set PFX_BASE64 and PFX_PASSWORD, or the \
           installer goes out unsigned."
@@ -324,11 +320,6 @@ jobs:
       - name: The resident rides along, for both chips
         run: bash scripts/sidecar.sh release "$TARGET"
 
-      # The bundler signs the sidecar and the executable the bundle names, which here is the
-      # resident. The settings binary is the second executable in the bundle and codesign refuses
-      # an app with an unsigned one inside, so it is signed before the bundler copies it — which
-      # needs the certificate in a keychain of our own rather than the one the bundler makes and
-      # throws away.
       - name: Import signing certificate
         if: env.MACOS_CERTIFICATE_P12 != ''
         env:
@@ -361,9 +352,6 @@ jobs:
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$bin"
           codesign --verify --strict --verbose "$bin"
 
-      # The identity comes from the keychain imported above; handing the bundler the certificate
-      # as well would import it a second time, and two matches for one name is what codesign
-      # refuses as ambiguous.
       - name: Bundle
         working-directory: app
         env:
@@ -716,9 +704,6 @@ jobs:
           done
           ls -l
 
-      # Everything that goes up, the updater tarball and the signatures included, not only the
-      # two installers: a copy taking an update is as entitled to the provenance as a person
-      # downloading one.
       - uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/linkunbound-*
@@ -815,9 +800,6 @@ jobs:
               '{schema: 1, latest: $l, latestPrerelease: $c}' > release-manifest.json
             cp "$RUNNER_TEMP/channel.json" candidate.json
           else
-            # A stable release takes the candidate channel away, or a candidate would go on being
-            # offered a version nobody publishes any more — unless the candidate is of a later
-            # series than this release, in which case it is still the newest thing there is.
             ahead=$(jq -r '.latestPrerelease // ""' release-manifest.json 2>/dev/null || echo "")
             if [ -n "$ahead" ] \
                && [ "$(printf '%s\n%s\n' "$ahead" "$v" | sort -V | tail -1)" = "$ahead" ]; then
@@ -860,7 +842,8 @@ jobs:
     name: Microsoft Store
     needs: [version, publish, bundle-msix]
     if: >-
-      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      !cancelled() && needs.publish.result == 'success' && needs.bundle-msix.result == 'success'
+      && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
       && needs.version.outputs.prerelease == 'false'
     runs-on: windows-latest
     timeout-minutes: 20
@@ -951,7 +934,8 @@ jobs:
     name: The update is installable
     needs: [version, publish]
     if: >-
-      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      !cancelled() && needs.publish.result == 'success'
+      && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -1011,7 +995,8 @@ jobs:
     name: Homebrew tap
     needs: [version, publish]
     if: >-
-      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      !cancelled() && needs.publish.result == 'success'
+      && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
       && needs.version.outputs.macos == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1067,8 +1052,6 @@ jobs:
 
           	  app "LinkUnbound.app"
 
-          	  # The links go back to the browser that had them before the bundle goes, or Launch
-          	  # Services keeps naming an application that is not there; macOS asks to confirm.
           	  uninstall script: {
           	              executable:   "#{appdir}/LinkUnbound.app/Contents/MacOS/linkunbound-settings",
           	              args:         ["--unregister"],

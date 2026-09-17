@@ -271,7 +271,7 @@ pub fn fetch() -> Option<String> {
     asked.status().is_success().then(|| asked.text().ok())?
 }
 
-pub use linkunbound_core::update::{Progress, keep, looked, progress, tell, under_way_for};
+pub use linkunbound_core::update::{Progress, keep, looked, progress, settle, tell, under_way_for};
 
 #[cfg(test)]
 mod tests {

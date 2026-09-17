@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
 import { type Key, useSpoken, useWords } from "../i18n";
-import { saidPlainly } from "../refusal";
+import { offerMoved, saidPlainly } from "../refusal";
 import { Card, Line, Switch } from "./parts";
 import type { Ready, Underway } from "./update";
 
@@ -233,10 +233,11 @@ function Offer({
               })
               .catch((e: unknown) => {
                 setAsked(false);
-                // The progress stops arriving but never says so, and the button stays hidden
-                // behind it: a cancelled store update could not be tried again.
                 onSettled();
                 onProblem(saidPlainly(language, e));
+                if (offerMoved(e)) {
+                  onLook().catch(() => {});
+                }
               });
           }}
           className="shrink-0 rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white disabled:opacity-50 dark:bg-[#6E9BFF] dark:text-[#12141B]"

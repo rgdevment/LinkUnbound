@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { SPEECH } from "./i18n";
-import { saidPlainly } from "./refusal";
+import { offerMoved, saidPlainly } from "./refusal";
 
 describe("refusals", () => {
   it("says a known refusal in the reader's language", () => {
     expect(saidPlainly("es", "updateStopped")).toBe("La actualización se detuvo");
     expect(saidPlainly("en", "updateStopped")).toBe("The update was stopped");
+  });
+
+  it("fills a refusal that carries a detail after the colon", () => {
+    expect(saidPlainly("es", "updateMoved:2.0.2")).toBe(
+      "Esa versión ya no se ofrece; ahora se ofrece la 2.0.2",
+    );
+    expect(saidPlainly("en", "Error: updateMoved:2.0.2")).toBe(
+      "That version is no longer offered; 2.0.2 is",
+    );
+    expect(offerMoved("updateMoved:2.0.2")).toBe(true);
+    expect(offerMoved("updateGone")).toBe(true);
+    expect(offerMoved("updateBusy")).toBe(false);
   });
 
   it("survives the Error wrapper the bridge puts around a rejection", () => {

@@ -12,7 +12,17 @@ export function saidPlainly(language: Language, problem: unknown): string {
   if (raw in words) {
     return said(language, raw as Key);
   }
+  const at = raw.indexOf(":");
+  const key = at > 0 ? raw.slice(0, at) : "";
+  if (key in words) {
+    return fill(said(language, key as Key), raw.slice(at + 1).trim());
+  }
   return raw
     ? fill(said(language, "internal"), raw)
     : said(language, "internal").replace(" — {}", "");
+}
+
+export function offerMoved(problem: unknown): boolean {
+  const raw = String(problem).replace(/^Error:\s*/, "");
+  return raw === "updateGone" || raw.startsWith("updateMoved:");
 }

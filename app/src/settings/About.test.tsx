@@ -150,6 +150,18 @@ describe("about", () => {
     expect(screen.getByText(/Mueve LinkUnbound a Aplicaciones/)).toBeInTheDocument();
   });
 
+  it("looks again when the offer it pressed is off the feed, and shows what is out now", async () => {
+    answers({
+      update_install: () => Promise.reject("updateMoved:2.1.1"),
+      update_ready: () => Promise.resolve({ ...NEWER, version: "2.1.1" }),
+    });
+    show(NEWER);
+    await userEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("ahora se ofrece la 2.1.1");
+    expect(await screen.findByText("Versión 2.1.1 disponible")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actualizar" })).toBeEnabled();
+  });
+
   it("installs the version it showed, and only once", async () => {
     show(NEWER);
     const update = screen.getByRole("button", { name: "Actualizar" });

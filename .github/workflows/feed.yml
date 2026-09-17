@@ -65,8 +65,6 @@ jobs:
           # write the feed leaves it saying 0.0.0 too — which is the one moment this has to
           # speak. The 1.x releases are not on this feed at all: that series asks GitHub
           # directly and never reads this branch.
-          # The seed says nothing to the stable channel, and while every release out is a
-          # candidate the candidates' channel below is the only one anybody is reading.
           seeded=0
           if [ "$said" = "0.0.0" ]; then
             if [ -n "$newest" ]; then

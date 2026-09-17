@@ -889,7 +889,7 @@ async fn install_from(
         looked.candidates,
     )
     .map(|one| one.version) else {
-        return Err("updateGone".to_owned());
+        return Err(moved_on(dir, kept, looked.candidates).await);
     };
     // The claim in `update_install` is this process's; the file is every process's, and a second
     // install over a live one would run two installers. The `starting` the resident wrote is the
@@ -938,7 +938,7 @@ async fn install_from(
         .map_err(|why| why.to_string())?;
 
     let Some(mut update) = update else {
-        return Err("updateGone".to_owned());
+        return Err(moved_on(dir, kept, looked.candidates).await);
     };
 
     // The feed names the address the installer comes from, so it is checked against where our
@@ -1055,6 +1055,25 @@ fn relaunch_resident() {
     let _ = linkunbound_mac::retire(linkunbound_core::RESIDENT);
     let _ =
         linkunbound_core::spawn_and_forget(std::process::Command::new(resident).arg("--hushed"));
+}
+
+async fn moved_on(dir: &std::path::Path, kept: update::Kept, wants: Option<bool>) -> String {
+    let manifest = tauri::async_runtime::spawn_blocking(update::fetch)
+        .await
+        .ok()
+        .flatten();
+    let seen = manifest.and_then(|manifest| update::newer(HERE, &manifest, kept, wants));
+    let mut looked = update::looked(dir);
+    looked.checked_at = Some(update::now());
+    looked.found_version = seen.as_ref().map(|one| one.version.clone());
+    looked.found_route = seen.as_ref().map(|one| one.route.name().to_owned());
+    looked.found_installs = seen.as_ref().map(|one| one.installs);
+    update::keep(dir, &looked);
+    update::settle(dir);
+    match seen {
+        Some(one) => format!("updateMoved:{}", one.version),
+        None => "updateGone".to_owned(),
+    }
 }
 
 /// Windows ends the process to put the new package in place, so the progress left behind is the
