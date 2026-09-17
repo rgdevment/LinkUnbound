@@ -149,9 +149,11 @@ fn on_this_machine(path: &std::path::Path) -> bool {
     )
 }
 
+/// Spelled, not by component: `Path::starts_with("//")` compares components, and `//` is the
+/// root, so every absolute path started with it.
 #[cfg(not(windows))]
 fn on_this_machine(path: &std::path::Path) -> bool {
-    path.is_absolute() && !path.starts_with("//")
+    path.is_absolute() && !path.to_string_lossy().starts_with("//")
 }
 
 /// Windows resolves a mapped drive to its `\\?\UNC\` origin when canonicalising, which would
@@ -436,6 +438,18 @@ mod tests {
         assert!(local_file_parts("file://host/share/page.html").is_none());
         assert!(local_file_parts("file:///").is_none());
         assert!(local_file_parts("file:///Users/ana/Documents/").is_none());
+    }
+
+    /// Every absolute path used to read as a network one, since `//` is the root by component.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_path_of_this_machine_is_told_from_one_on_another() {
+        use super::on_this_machine;
+        use std::path::Path;
+        assert!(on_this_machine(Path::new("/tmp/page.html")));
+        assert!(on_this_machine(Path::new("/Users/ana/Desktop/page.html")));
+        assert!(!on_this_machine(Path::new("//host/share/page.html")));
+        assert!(!on_this_machine(Path::new("page.html")));
     }
 
     #[cfg(target_os = "macos")]
