@@ -83,7 +83,12 @@ fn main() -> Result<(), slint::PlatformError> {
         rows.extend(more);
     }
 
-    let words = if english { Language::English } else { Language::Spanish }.strings();
+    let words = if english {
+        Language::English
+    } else {
+        Language::Spanish
+    }
+    .strings();
     let window = Picker::new()?;
     let notice = linkunbound_shell::Notice::new()?;
     paint(&window, &notice, flag("--light"));
@@ -115,13 +120,7 @@ fn main() -> Result<(), slint::PlatformError> {
             far: if stage == "getting" { 42 } else { 0 },
             stage,
         });
-        let strip = linkunbound_shell::strip_for(
-            &words,
-            &looked,
-            progress.as_ref(),
-            "2.0.0",
-            None,
-        );
+        let strip = linkunbound_shell::strip_for(&words, &looked, progress.as_ref(), "2.0.0", None);
         linkunbound_shell::show_strip(&window, strip.as_ref());
     }
 

@@ -41,12 +41,7 @@
 </p>
 
 <p>
-  <img src="resources/assets/linkUnbound_2_0_picker_en.png" alt="The picker, classic look: a list of browsers with keys 1 to 3, the link's site and the app it came from" width="32%"/>
-  &nbsp;
-  <img src="resources/assets/linkUnbound_2_0_picker_mosaic_en.png" alt="The picker, mosaic look: tiles of browsers and profiles" width="35%"/>
-</p>
-<p>
-  <img src="resources/assets/linkUnbound_2_0_settings_en.png" alt="The settings window on the Rules page: a site rule and a rule for everything Slack sends" width="72%"/>
+  <img src="resources/assets/linkUnbound_2_0_hero_en.png" alt="LinkUnbound: the settings window on the Rules page, and the browser picker that appears next to a link with the browsers, their profiles and the keys 1 to 3" width="92%"/>
 </p>
 
 <h4>Download LinkUnbound</h4>
@@ -79,11 +74,11 @@
 
 ---
 
-**LinkUnbound** is a free, open source **browser picker**, **browser chooser** and **default browser manager** for Windows and macOS. Every link you click — in Teams, Outlook, Slack, Discord, a PDF, an email client, wherever — gets intercepted. If there's a domain rule, the assigned browser opens instantly. If not, a small **browser selection popup** appears next to your cursor so you can pick the right browser for that link.
+**LinkUnbound** is a free, open source **browser picker** for Windows and macOS — a small tool that makes itself the default browser and then asks *you* which real browser should open each link. Click a link in Teams, Outlook, Slack, Discord, a PDF, a terminal, anywhere: if you have a rule for it, the right browser opens at once; if not, a little **browser chooser** pops up next to your cursor and you pick with a click or a key.
 
-Think of it as a lightweight **link router** / **URL router** and **browser switcher** that sits between your operating system and your browsers. Perfect for separating **work and personal browsing**, routing client domains to specific browser profiles, or handling multiple browsers without changing the system default every time.
+It is the missing piece for anyone who lives with more than one browser: work in one, personal life in another, a client's tools in a third profile. Instead of changing the system default every week, you set a **rule per site, per subdomain, per exact address or per app** — "everything from Slack in Brave", "docs.google.com in the work profile of Chrome" — and the rest goes through the picker. A **default browser manager**, a **link router**, a **browser switcher**: call it what you like, it just routes links where you want them.
 
-This isn't a company product or a startup. I'm a solo developer who got tired of the OS deciding which browser opens a link, built this for myself, and decided to share it with the community. **No ads, no telemetry, no analytics, no accounts, no subscriptions, no cloud, no data collection.** Just a small native tool that lives on your machine and nowhere else.
+There is no company behind this. I am one developer who got tired of the operating system deciding which browser opens a link, built this for myself, and put it out for whoever has the same itch. That shapes everything about it: **no ads, no telemetry, no analytics, no accounts, no subscriptions, no cloud, no data collection** — the only thing it ever asks the network is whether a new version exists, and you can turn that off. Your rules live in a small JSON file on your own disk, and you can read every line of the code that touches them.
 
 ---
 
@@ -213,7 +208,13 @@ Since LinkUnbound is an independent open source project, the installer is signed
 
 **Link click without a rule:** a picker appears near your cursor, showing where the link comes from and the app it was clicked in. Pick a browser with the mouse or `1`–`9`. Hold **Shift** (or pin it with the *Private* pill) to open a private window. To remember the choice, pick a reach first — *this URL*, *this subdomain*, *the whole site* or *from this app* — with the arrows or the pills, then pick the browser. `Ctrl+C` copies the address; `Esc` puts the picker away. Links clicked while it is open wait their turn.
 
-**Two looks.** *Classic* is a list; *Mosaic* is a sheet of tiles. Choose under **Application** in Settings.
+**Two looks.** *Classic* is a list; *Mosaic* is a sheet of tiles that shows every profile at a glance. Choose under **Application** in Settings.
+
+<p align="center">
+  <img src="resources/assets/linkUnbound_2_0_picker_en.png" alt="The classic picker: a list of browsers with keys 1 to 3, the link's site and the app it came from"/>
+  &nbsp;&nbsp;
+  <img src="resources/assets/linkUnbound_2_0_picker_mosaic_en.png" alt="The mosaic picker: tiles for every browser and profile, six of them here"/>
+</p>
 
 **Settings (tray):** double-click the tray icon or right-click → Settings. Six pages:
 
