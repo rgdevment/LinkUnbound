@@ -284,6 +284,13 @@ export default function Settings() {
       .catch(noop);
   }, []);
 
+  useEffect(() => {
+    const painted = setTimeout(() => {
+      void invoke("settings_painted").catch(noop);
+    }, 0);
+    return () => clearTimeout(painted);
+  }, []);
+
   // A screen reader picks its voice from this, so leaving it at the document's
   // default reads Spanish with an English engine.
   useEffect(() => {

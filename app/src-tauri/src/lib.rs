@@ -721,6 +721,11 @@ struct Build {
 }
 
 #[tauri::command]
+fn settings_painted(window: tauri::WebviewWindow) {
+    shell::reveal(&window);
+}
+
+#[tauri::command]
 fn about() -> Build {
     let kept = update::looked(store().dir());
     Build {
@@ -1228,6 +1233,7 @@ pub fn run() {
             system_register_anyway,
             system_open_elsewhere,
             about,
+            settings_painted,
             update_ready,
             update_install,
             update_candidates

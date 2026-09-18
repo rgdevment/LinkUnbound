@@ -82,12 +82,15 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     build_settings(app, theme);
 }
 
+const LONG_ENOUGH_TO_PAINT: std::time::Duration = std::time::Duration::from_millis(1500);
+
 fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     let mut builder = tauri::WebviewWindowBuilder::new(app, SETTINGS, tauri::WebviewUrl::default())
         .title("LinkUnbound")
         .inner_size(780.0, 560.0)
         .min_inner_size(640.0, 480.0)
         .resizable(true)
+        .visible(false)
         .theme(dressed_as(theme));
     if let Some(color) = ground(theme) {
         builder = builder.background_color(color);
@@ -95,8 +98,20 @@ fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     let built = builder.build();
     if let Ok(window) = built {
         dress_natively(&window, theme);
-        let _ = window.set_focus();
+        let late = window.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(LONG_ENOUGH_TO_PAINT);
+            reveal(&late);
+        });
     }
+}
+
+pub fn reveal<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    if window.is_visible().unwrap_or(true) {
+        return;
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
 }
 
 #[cfg(test)]
