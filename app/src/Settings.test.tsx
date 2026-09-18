@@ -62,6 +62,13 @@ async function go(section: string) {
 }
 
 describe("settings", () => {
+  it("asks for the window once it has painted", async () => {
+    answers(BASE);
+    render(<Settings />);
+    await screen.findByText("Versión 2.0.0");
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("settings_painted"));
+  });
+
   /// The sidebar's corner said "Versión {}" for two different facts: the one you run and the one
   /// waiting. With an offer in hand it showed the new number where the installed one had been.
   it("shows the version it is running when there is nothing newer", async () => {
