@@ -1377,12 +1377,15 @@ fn main() -> Result<(), slint::PlatformError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        FRONT_SETTLES_WITHIN, Listed, Shown, WAITING_ROOM, claims_the_window, link_from, physical,
-        rule_for, still_settling, with_icons,
+        FRONT_SETTLES_WITHIN, Listed, Shown, UI, Ui, WAITING_ROOM, claims_the_window, host,
+        link_from, next_in_line, physical, present, rule_for, still_settling, with_icons,
     };
     use linkunbound_core::Scope;
-    use linkunbound_core::normalise;
-    use linkunbound_shell::Reaches;
+    use linkunbound_core::{Language, normalise};
+    use linkunbound_shell::{Notice, Picker, Reaches};
+    use slint::ComponentHandle;
+    use std::cell::{Cell, RefCell};
+    use std::rc::Rc;
 
     #[cfg(target_os = "macos")]
     mod launch_services {
@@ -1454,6 +1457,73 @@ mod tests {
                 assert_eq!(host::digit_behind(typed), digit, "{typed}");
             }
         }
+    }
+
+    fn headless_ui() -> Rc<Ui> {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = Rc::new(Ui {
+            picker: Picker::new().expect("a window"),
+            notice: Notice::new().expect("a notice"),
+            shown: Rc::new(RefCell::new(Shown::default())),
+            words: Cell::new(Language::English.strings()),
+            firing: RefCell::new(None),
+            tray: None,
+            watch: slint::Timer::default(),
+            countdown: slint::Timer::default(),
+            progress_watch: slint::Timer::default(),
+            looker: slint::Timer::default(),
+            put_away: RefCell::new(None),
+            prefs_seen: Cell::new(None),
+            held_focus: Cell::new(false),
+            launched_at: Cell::new(None),
+            light_seen: Cell::new(false),
+            taskbar_seen: Cell::new(false),
+            shown_over: Cell::new(None),
+            put_up: Cell::new(None),
+            #[cfg(target_os = "macos")]
+            launch_decided: Cell::new(false),
+        });
+        UI.with_borrow_mut(|slot| *slot = Some(Rc::clone(&ui)));
+        ui
+    }
+
+    #[test]
+    fn a_link_over_a_picker_nobody_answers_takes_its_place_and_the_queue_follows() {
+        let ui = headless_ui();
+        let words = ui.words.get();
+
+        assert!(present(
+            &ui.picker,
+            &words,
+            &ui.shown,
+            "https://one.test/".to_owned()
+        ));
+        ui.watch_focus();
+        assert!(ui.picker.window().is_visible());
+        assert_eq!(ui.shown.borrow().url.as_deref(), Some("https://one.test/"));
+        assert_eq!(ui.put_up.get().is_some(), host::takes_the_front_back());
+
+        assert!(present(
+            &ui.picker,
+            &words,
+            &ui.shown,
+            "https://two.test/".to_owned()
+        ));
+        assert_eq!(ui.shown.borrow().url.as_deref(), Some("https://two.test/"));
+        assert!(ui.shown.borrow().waiting.is_empty());
+
+        let _ = ui.picker.hide();
+        ui.shown
+            .borrow_mut()
+            .waiting
+            .push_back("https://three.test/".to_owned());
+        next_in_line(&ui.picker, &words, &ui.shown);
+        assert!(ui.picker.window().is_visible());
+        assert_eq!(
+            ui.shown.borrow().url.as_deref(),
+            Some("https://three.test/")
+        );
+        assert!(ui.shown.borrow().waiting.is_empty());
     }
 
     #[test]
