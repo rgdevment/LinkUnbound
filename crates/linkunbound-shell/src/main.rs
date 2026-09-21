@@ -78,8 +78,8 @@ mod host {
         linkunbound_win::front_window()
     }
 
-    pub fn last_input() -> Option<u32> {
-        linkunbound_win::last_input()
+    pub fn takes_the_front_back() -> bool {
+        true
     }
 
     pub fn never_activates(window: isize) {
@@ -157,9 +157,8 @@ mod host {
         linkunbound_mac::front_application()
     }
 
-    /// Launch Services brings the picker forward itself, link by link; nothing is taken back.
-    pub fn last_input() -> Option<u32> {
-        None
+    pub fn takes_the_front_back() -> bool {
+        false
     }
 
     pub fn never_activates(_window: isize) {}
@@ -233,8 +232,8 @@ mod host {
         0
     }
 
-    pub fn last_input() -> Option<u32> {
-        None
+    pub fn takes_the_front_back() -> bool {
+        false
     }
 
     pub fn never_activates(_window: isize) {}
@@ -665,10 +664,7 @@ struct Ui {
     taskbar_seen: Cell<bool>,
     /// The window the picker was shown over when it could not take the front.
     shown_over: Cell<Option<isize>>,
-    /// The moment the picker was last put up, and the last input then: losing the front in that
-    /// first moment, to the application that sent the link and with nobody having touched
-    /// anything since, is answered by taking it back rather than by putting the picker away.
-    put_up: Cell<Option<PutUp>>,
+    put_up: Cell<Option<std::time::Instant>>,
     #[cfg(target_os = "macos")]
     launch_decided: Cell<bool>,
 }
@@ -676,26 +672,10 @@ struct Ui {
 /// How long a browser gets to bring its window up after being launched.
 const BROWSER_ARRIVES_WITHIN: Duration = Duration::from_millis(1500);
 
-/// How long the picker keeps taking the front back after it was put up.
 const FRONT_SETTLES_WITHIN: Duration = Duration::from_millis(500);
 
-#[derive(Clone, Copy)]
-struct PutUp {
-    at: std::time::Instant,
-    last_input: Option<u32>,
-}
-
-/// Some applications pull their window forward again right after handing a link over. That is
-/// not the person walking away, and the front is taken back — only in the picker's first
-/// moment, and only while nobody has touched mouse or keyboard since it came up: wherever the
-/// person went themselves is where they meant to be. A system with no clock of the last input
-/// never takes it back.
-fn still_settling(put_up: Option<PutUp>, last_input: Option<u32>) -> bool {
-    put_up.is_some_and(|up| {
-        up.at.elapsed() < FRONT_SETTLES_WITHIN
-            && last_input.is_some()
-            && last_input == up.last_input
-    })
+fn still_settling(put_up: Option<std::time::Instant>) -> bool {
+    put_up.is_some_and(|at| at.elapsed() < FRONT_SETTLES_WITHIN)
 }
 
 thread_local! {
@@ -873,10 +853,8 @@ impl Ui {
     fn watch_focus(self: &Rc<Self>) {
         self.held_focus.set(false);
         self.shown_over.set(None);
-        self.put_up.set(Some(PutUp {
-            at: std::time::Instant::now(),
-            last_input: host::last_input(),
-        }));
+        self.put_up
+            .set(host::takes_the_front_back().then(std::time::Instant::now));
         let weak = Rc::downgrade(self);
         self.watch.start(
             slint::TimerMode::Repeated,
@@ -899,9 +877,10 @@ impl Ui {
                     .set_private_on(ui.picker.get_pinned_private() || host::shift_is_down());
                 if host::is_in_front(ours) {
                     ui.held_focus.set(true);
-                } else if still_settling(ui.put_up.get(), host::last_input())
+                } else if still_settling(ui.put_up.get())
                     && host::clicked_in() == ui.shown.borrow().source
                 {
+                    ui.held_focus.set(false);
                     host::take_the_keyboard(ours);
                 } else if !ui.held_focus.get() {
                     // An elevated window in front keeps a plain process out of its input, so
@@ -1398,8 +1377,8 @@ fn main() -> Result<(), slint::PlatformError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        FRONT_SETTLES_WITHIN, Listed, PutUp, Shown, WAITING_ROOM, claims_the_window, link_from,
-        physical, rule_for, still_settling, with_icons,
+        FRONT_SETTLES_WITHIN, Listed, Shown, WAITING_ROOM, claims_the_window, link_from, physical,
+        rule_for, still_settling, with_icons,
     };
     use linkunbound_core::Scope;
     use linkunbound_core::normalise;
@@ -1477,38 +1456,18 @@ mod tests {
         }
     }
 
-    /// The front is taken back only in the picker's first moment and only while the person has
-    /// touched nothing since; past the moment, or after any input, losing the front is the
-    /// person walking away. Never put up, or no clock of the input to ask, nothing is taken.
     #[test]
-    fn the_front_is_taken_back_for_a_moment_while_nothing_was_touched() {
+    fn the_front_is_taken_back_only_in_the_first_moment() {
         let now = std::time::Instant::now();
-        let fresh = PutUp {
-            at: now,
-            last_input: Some(7),
-        };
-        assert!(still_settling(Some(fresh), Some(7)));
-        assert!(!still_settling(Some(fresh), Some(8)), "a key was pressed");
-        assert!(!still_settling(Some(fresh), None), "no clock of the input");
-        let stale = PutUp {
-            at: now
-                .checked_sub(FRONT_SETTLES_WITHIN * 2)
-                .expect("uptime beyond a second"),
-            last_input: Some(7),
-        };
+        assert!(still_settling(Some(now)));
+        let stale = now
+            .checked_sub(FRONT_SETTLES_WITHIN * 2)
+            .expect("uptime beyond a second");
+        assert!(!still_settling(Some(stale)), "the moment has passed");
         assert!(
-            !still_settling(Some(stale), Some(7)),
-            "the moment has passed"
+            !still_settling(None),
+            "never put up, or a system that never takes it back"
         );
-        let unclocked = PutUp {
-            at: now,
-            last_input: None,
-        };
-        assert!(
-            !still_settling(Some(unclocked), None),
-            "the Mac never takes it back"
-        );
-        assert!(!still_settling(None, Some(7)));
     }
 
     /// The screen is measured in physical pixels and the window is described in logical ones, so

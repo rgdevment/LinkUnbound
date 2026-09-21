@@ -31,9 +31,7 @@ use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentProcess, GetCurrentThreadId, OpenProcess, OpenProcessToken,
     PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyState, GetLastInputInfo, LASTINPUTINFO, SetFocus, VK_SHIFT, VkKeyScanW,
-};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, SetFocus, VK_SHIFT, VkKeyScanW};
 use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -156,19 +154,6 @@ pub fn front_is_ours() -> bool {
 #[must_use]
 pub fn front_window() -> isize {
     unsafe { GetForegroundWindow() }.0 as isize
-}
-
-/// The tick of the last key or mouse event on this desktop, whoever it went to. Unchanged
-/// since a moment ago, the person has touched nothing since.
-#[must_use]
-pub fn last_input() -> Option<u32> {
-    let mut info = LASTINPUTINFO {
-        cbSize: size_of::<LASTINPUTINFO>() as u32,
-        dwTime: 0,
-    };
-    unsafe { GetLastInputInfo(&raw mut info) }
-        .as_bool()
-        .then_some(info.dwTime)
 }
 
 /// The account this process runs as, spelled the way a security descriptor string reads it.
