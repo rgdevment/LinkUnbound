@@ -26,18 +26,21 @@ use windows::Win32::System::DataExchange::{
 };
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
-use windows::Win32::System::Pipes::WaitNamedPipeW;
+use windows::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPipeW};
 use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentProcess, GetCurrentThreadId, OpenProcess, OpenProcessToken,
     PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, SetFocus, VK_SHIFT, VkKeyScanW};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetKeyState, GetLastInputInfo, LASTINPUTINFO, SetFocus, VK_SHIFT, VkKeyScanW,
+};
 use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW};
 use windows::Win32::UI::WindowsAndMessaging::{
     ASFW_ANY, AllowSetForegroundWindow, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow,
-    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE,
-    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, IsHungAppWindow, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
@@ -85,7 +88,8 @@ pub fn work_area_at(x: i32, y: i32) -> Option<(i32, i32, i32, i32)> {
 
 /// A tool window is kept out of the taskbar and the alt-tab list. The picker is
 /// summoned by a click and dismissed by one: an entry standing there outlives
-/// the window it names, with no icon of its own to show.
+/// the window it names, with no icon of its own to show. Raised without being
+/// activated: the front is asked for separately, once, by `take_the_keyboard`.
 pub fn keep_off_the_taskbar(window: isize) {
     let hwnd = HWND(window as *mut std::ffi::c_void);
     let style = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
@@ -100,7 +104,7 @@ pub fn keep_off_the_taskbar(window: isize) {
             0,
             0,
             0,
-            SWP_NOMOVE | SWP_NOSIZE,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         )
     };
 }
@@ -154,6 +158,19 @@ pub fn front_window() -> isize {
     unsafe { GetForegroundWindow() }.0 as isize
 }
 
+/// The tick of the last key or mouse event on this desktop, whoever it went to. Unchanged
+/// since a moment ago, the person has touched nothing since.
+#[must_use]
+pub fn last_input() -> Option<u32> {
+    let mut info = LASTINPUTINFO {
+        cbSize: size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    unsafe { GetLastInputInfo(&raw mut info) }
+        .as_bool()
+        .then_some(info.dwTime)
+}
+
 /// The account this process runs as, spelled the way a security descriptor string reads it.
 #[must_use]
 pub fn current_user_sid() -> Option<String> {
@@ -189,6 +206,10 @@ pub fn current_user_sid() -> Option<String> {
 /// One line down a named pipe, opened for identification only: a server squatting the name
 /// before the resident took it would otherwise be handed this process's token to impersonate.
 /// True when the line was written; false when nobody answers at that name.
+///
+/// The right to come forward belongs to the process the click started and dies with it, so the
+/// server is handed it before the line, when this copy holds it at all: a launch from a process
+/// that was not in front holds nothing to hand on, and the resident is left to its handshake.
 #[must_use]
 pub fn write_line_to_pipe(path: &str, line: &str) -> bool {
     let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
@@ -216,6 +237,10 @@ pub fn write_line_to_pipe(path: &str, line: &str) -> bool {
         }
         Err(_) => return false,
     };
+    let mut resident = 0u32;
+    if unsafe { GetNamedPipeServerProcessId(handle, &raw mut resident) }.is_ok() {
+        let _ = unsafe { AllowSetForegroundWindow(resident) };
+    }
     let body = format!("{line}\n");
     let mut written = 0u32;
     let wrote = unsafe { WriteFile(handle, Some(body.as_bytes()), Some(&raw mut written), None) };
@@ -239,24 +264,31 @@ pub fn never_activates(window: isize) {
     }
 }
 
-/// Windows refuses `SetForegroundWindow` to a process that is not already in
-/// front. Attaching to the input queue of the window that is lifts the refusal;
-/// this is the handshake every launcher performs.
+/// Windows refuses `SetForegroundWindow` to a process that is not already in front, unless one
+/// that is handed it the right — the copy the click started does, along with the link. When the
+/// plain call is still refused, attaching to the input queue of the window in front lifts the
+/// refusal; that is the handshake every launcher performs, and it fails against an elevated one.
 pub fn take_the_keyboard(window: isize) {
     let hwnd = HWND(window as *mut std::ffi::c_void);
+    let _ = unsafe { SetForegroundWindow(hwnd) };
+    let _ = unsafe { SetFocus(Some(hwnd)) };
+    if is_in_front(window) {
+        return;
+    }
     let front = unsafe { GetForegroundWindow() };
     let ours = unsafe { GetCurrentThreadId() };
     let theirs = unsafe { GetWindowThreadProcessId(front, None) };
-
-    if theirs != 0 && theirs != ours {
-        let _ = unsafe { AttachThreadInput(ours, theirs, true) };
-        let _ = unsafe { SetForegroundWindow(hwnd) };
-        let _ = unsafe { SetFocus(Some(hwnd)) };
-        let _ = unsafe { AttachThreadInput(ours, theirs, false) };
-    } else {
-        let _ = unsafe { SetForegroundWindow(hwnd) };
-        let _ = unsafe { SetFocus(Some(hwnd)) };
+    // Joined queues turn the other window's deactivation into a message waited on: against one
+    // that no longer pumps, the resident would hang with it.
+    if theirs == 0 || theirs == ours || unsafe { IsHungAppWindow(front) }.as_bool() {
+        return;
     }
+    if unsafe { AttachThreadInput(ours, theirs, true) }.as_bool() {
+        let _ = unsafe { SetForegroundWindow(hwnd) };
+        let _ = unsafe { AttachThreadInput(ours, theirs, false) };
+    }
+    // Parting the queues can leave this thread's focus on nothing until the next click.
+    let _ = unsafe { SetFocus(Some(hwnd)) };
 }
 
 /// Asked at the moment of the click rather than remembered from a key event: a modifier held

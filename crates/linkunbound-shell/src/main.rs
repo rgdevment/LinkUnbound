@@ -78,6 +78,10 @@ mod host {
         linkunbound_win::front_window()
     }
 
+    pub fn last_input() -> Option<u32> {
+        linkunbound_win::last_input()
+    }
+
     pub fn never_activates(window: isize) {
         linkunbound_win::never_activates(window);
     }
@@ -153,6 +157,11 @@ mod host {
         linkunbound_mac::front_application()
     }
 
+    /// Launch Services brings the picker forward itself, link by link; nothing is taken back.
+    pub fn last_input() -> Option<u32> {
+        None
+    }
+
     pub fn never_activates(_window: isize) {}
 
     pub fn shift_is_down() -> bool {
@@ -222,6 +231,10 @@ mod host {
 
     pub fn front_window() -> isize {
         0
+    }
+
+    pub fn last_input() -> Option<u32> {
+        None
     }
 
     pub fn never_activates(_window: isize) {}
@@ -452,19 +465,22 @@ struct Shown {
     /// Read when the link arrived, not when the user picks: by then the picker
     /// itself is the foreground window, and the rule would bind to us.
     source: Option<String>,
-    /// Links that arrived while one was already on screen. Redressing the window
-    /// under the user would open the wrong one, and dropping them would lose a
-    /// click they already made.
+    /// Links that arrived while one was on screen and being answered. Redressing
+    /// the window under the user would open the wrong one, and dropping them
+    /// would lose a click they already made.
     waiting: std::collections::VecDeque<String>,
 }
 
-/// A link that arrives while one is already on screen waits its turn. Redressing
-/// the window under the user opens the wrong one — they aimed at what they could
-/// see — and discarding it loses a click they already made.
+/// A link that arrives while one is on screen and attended waits its turn. Redressing the
+/// window under the user opens the wrong one — they aimed at what they could see — and
+/// discarding it loses a click they already made. One arriving over a picker nobody is
+/// answering — refused the front, or left behind by the very click that sent the link — takes
+/// its place instead: a picker that never answered was clicked past, and queueing behind it
+/// is how a dozen clicks came to show nothing at all.
 ///
 /// Kept apart from the window so the decision can be checked without one.
-fn claims_the_window(shown: &mut Shown, url: String, occupied: bool) -> Option<String> {
-    if occupied {
+fn claims_the_window(shown: &mut Shown, url: String, attended: bool) -> Option<String> {
+    if attended {
         // A program that retries the same link every second fills the queue with one click; a
         // link already waiting, or the one on screen, is that click.
         let already = shown.url.as_deref() == Some(url.as_str())
@@ -483,10 +499,16 @@ fn claims_the_window(shown: &mut Shown, url: String, occupied: bool) -> Option<S
 /// Past this many, the oldest goes: nobody clicks that many links while a picker is up.
 const WAITING_ROOM: usize = 12;
 
-fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: String) {
-    let occupied = picker.window().is_visible();
-    let Some(url) = claims_the_window(&mut shown.borrow_mut(), url, occupied) else {
-        return;
+/// Only a picker that holds the front is being looked at; one that is up without it is being
+/// clicked past. Shown means Slint's flag, which a window behind another still carries.
+fn attended(picker: &Picker) -> bool {
+    picker.window().is_visible() && native_handle(picker.window()).is_some_and(host::is_in_front)
+}
+
+/// Whether the link went on screen, rather than behind one already being answered.
+fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: String) -> bool {
+    let Some(url) = claims_the_window(&mut shown.borrow_mut(), url, attended(picker)) else {
+        return false;
     };
     let listed = rows(physical_icon_side(picker));
     if listed.is_empty() {
@@ -502,7 +524,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
             host::keep_off_the_taskbar(handle, corner_of(picker));
             host::take_the_keyboard(handle);
         }
-        return;
+        return true;
     }
     let source = host::clicked_in();
     dress(picker, words, &url, source.as_deref(), &listed);
@@ -539,6 +561,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
             ui.refresh_strip();
         }
     }
+    true
 }
 
 /// The picker is summoned by a click and answered with the keyboard, so it has
@@ -556,13 +579,13 @@ fn native_handle(window: &slint::Window) -> Option<isize> {
 /// clicked is silently dropped.
 fn next_in_line(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>) {
     let queued = shown.borrow_mut().waiting.pop_front();
-    if let Some(url) = queued {
-        present(picker, words, shown, url);
-        if let Some(ui) = ui() {
-            // The next link needs its own settle: carrying the previous one's
-            // state would dismiss it on the tick after it appeared.
-            ui.watch_focus();
-        }
+    if let Some(url) = queued
+        && present(picker, words, shown, url)
+        && let Some(ui) = ui()
+    {
+        // The next link needs its own settle: carrying the previous one's
+        // state would dismiss it on the tick after it appeared.
+        ui.watch_focus();
     }
 }
 
@@ -642,12 +665,38 @@ struct Ui {
     taskbar_seen: Cell<bool>,
     /// The window the picker was shown over when it could not take the front.
     shown_over: Cell<Option<isize>>,
+    /// The moment the picker was last put up, and the last input then: losing the front in that
+    /// first moment, to the application that sent the link and with nobody having touched
+    /// anything since, is answered by taking it back rather than by putting the picker away.
+    put_up: Cell<Option<PutUp>>,
     #[cfg(target_os = "macos")]
     launch_decided: Cell<bool>,
 }
 
 /// How long a browser gets to bring its window up after being launched.
 const BROWSER_ARRIVES_WITHIN: Duration = Duration::from_millis(1500);
+
+/// How long the picker keeps taking the front back after it was put up.
+const FRONT_SETTLES_WITHIN: Duration = Duration::from_millis(500);
+
+#[derive(Clone, Copy)]
+struct PutUp {
+    at: std::time::Instant,
+    last_input: Option<u32>,
+}
+
+/// Some applications pull their window forward again right after handing a link over. That is
+/// not the person walking away, and the front is taken back — only in the picker's first
+/// moment, and only while nobody has touched mouse or keyboard since it came up: wherever the
+/// person went themselves is where they meant to be. A system with no clock of the last input
+/// never takes it back.
+fn still_settling(put_up: Option<PutUp>, last_input: Option<u32>) -> bool {
+    put_up.is_some_and(|up| {
+        up.at.elapsed() < FRONT_SETTLES_WITHIN
+            && last_input.is_some()
+            && last_input == up.last_input
+    })
+}
 
 thread_local! {
     static UI: RefCell<Option<Rc<Ui>>> = const { RefCell::new(None) };
@@ -824,6 +873,10 @@ impl Ui {
     fn watch_focus(self: &Rc<Self>) {
         self.held_focus.set(false);
         self.shown_over.set(None);
+        self.put_up.set(Some(PutUp {
+            at: std::time::Instant::now(),
+            last_input: host::last_input(),
+        }));
         let weak = Rc::downgrade(self);
         self.watch.start(
             slint::TimerMode::Repeated,
@@ -846,6 +899,10 @@ impl Ui {
                     .set_private_on(ui.picker.get_pinned_private() || host::shift_is_down());
                 if host::is_in_front(ours) {
                     ui.held_focus.set(true);
+                } else if still_settling(ui.put_up.get(), host::last_input())
+                    && host::clicked_in() == ui.shown.borrow().source
+                {
+                    host::take_the_keyboard(ours);
                 } else if !ui.held_focus.get() {
                     // An elevated window in front keeps a plain process out of its input, so
                     // the picker sits there unfocused; the window the person was in is
@@ -931,8 +988,11 @@ fn arrived(raw: String) {
         }
         return;
     }
-    present(&ui.picker, &ui.words.get(), &ui.shown, url);
-    ui.watch_focus();
+    // A link that only queued leaves the picker's settle alone: restarting it would have the
+    // picker take the front back from wherever the person had just gone.
+    if present(&ui.picker, &ui.words.get(), &ui.shown, url) {
+        ui.watch_focus();
+    }
 }
 
 /// Links the socket took before the loop could: the copy that handed them over believes they
@@ -1283,6 +1343,7 @@ fn main() -> Result<(), slint::PlatformError> {
         light_seen: Cell::new(false),
         taskbar_seen: Cell::new(light_taskbar),
         shown_over: Cell::new(None),
+        put_up: Cell::new(None),
         #[cfg(target_os = "macos")]
         launch_decided: Cell::new(false),
     });
@@ -1337,7 +1398,8 @@ fn main() -> Result<(), slint::PlatformError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Listed, Shown, WAITING_ROOM, claims_the_window, link_from, physical, rule_for, with_icons,
+        FRONT_SETTLES_WITHIN, Listed, PutUp, Shown, WAITING_ROOM, claims_the_window, link_from,
+        physical, rule_for, still_settling, with_icons,
     };
     use linkunbound_core::Scope;
     use linkunbound_core::normalise;
@@ -1413,6 +1475,40 @@ mod tests {
                 assert_eq!(host::digit_behind(typed), digit, "{typed}");
             }
         }
+    }
+
+    /// The front is taken back only in the picker's first moment and only while the person has
+    /// touched nothing since; past the moment, or after any input, losing the front is the
+    /// person walking away. Never put up, or no clock of the input to ask, nothing is taken.
+    #[test]
+    fn the_front_is_taken_back_for_a_moment_while_nothing_was_touched() {
+        let now = std::time::Instant::now();
+        let fresh = PutUp {
+            at: now,
+            last_input: Some(7),
+        };
+        assert!(still_settling(Some(fresh), Some(7)));
+        assert!(!still_settling(Some(fresh), Some(8)), "a key was pressed");
+        assert!(!still_settling(Some(fresh), None), "no clock of the input");
+        let stale = PutUp {
+            at: now
+                .checked_sub(FRONT_SETTLES_WITHIN * 2)
+                .expect("uptime beyond a second"),
+            last_input: Some(7),
+        };
+        assert!(
+            !still_settling(Some(stale), Some(7)),
+            "the moment has passed"
+        );
+        let unclocked = PutUp {
+            at: now,
+            last_input: None,
+        };
+        assert!(
+            !still_settling(Some(unclocked), None),
+            "the Mac never takes it back"
+        );
+        assert!(!still_settling(None, Some(7)));
     }
 
     /// The screen is measured in physical pixels and the window is described in logical ones, so
@@ -1515,9 +1611,29 @@ mod tests {
         );
     }
 
-    /// A link arriving while one is on screen must not redress the window: the
-    /// user aimed at what they could see. And it must not be dropped either —
-    /// that click already happened.
+    /// A link arriving over a picker that never got the front, or lost it to the click that sent
+    /// the link, takes its place: the person clicked past a window that was not answering, and
+    /// the same link clicked again is that person trying once more, not a program retrying.
+    #[test]
+    fn a_link_arriving_over_a_picker_nobody_is_answering_takes_its_place() {
+        let mut shown = Shown {
+            url: Some("https://behind.test/".to_owned()),
+            ..Shown::default()
+        };
+        let next = claims_the_window(&mut shown, "https://next.test/".to_owned(), false);
+        assert_eq!(next.as_deref(), Some("https://next.test/"));
+        assert!(
+            shown.waiting.is_empty(),
+            "nothing queues behind an unanswered picker"
+        );
+
+        let again = claims_the_window(&mut shown, "https://behind.test/".to_owned(), false);
+        assert_eq!(again.as_deref(), Some("https://behind.test/"));
+    }
+
+    /// A link arriving while one is on screen and attended must not redress the
+    /// window: the user aimed at what they could see. And it must not be dropped
+    /// either — that click already happened.
     #[test]
     fn a_link_arriving_over_a_shown_one_waits_instead_of_replacing_it() {
         let mut shown = Shown::default();
