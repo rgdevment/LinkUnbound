@@ -87,6 +87,8 @@ impl Tray {
     /// The taskbar changes colour on its own schedule; the glyph follows or turns invisible.
     pub fn follow(&self, light_taskbar: bool) {
         let _ = self._icon.set_icon(artwork(light_taskbar));
+        // `set_icon` hands the menu bar a plain picture: put the flag back or the glyph goes black on a dark bar.
+        self._icon.set_icon_as_template(cfg!(target_os = "macos"));
     }
 
     /// A left click means the same as the menu entry, so both drain together.
