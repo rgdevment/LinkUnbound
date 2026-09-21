@@ -121,6 +121,8 @@ pub fn take_the_keyboard(view: isize) {
     };
     let app = NSApplication::sharedApplication(mtm);
     app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+    // In front of its level even when the activation is refused or still on its way.
+    window.orderFrontRegardless();
     #[allow(deprecated)]
     app.activateIgnoringOtherApps(true);
     window.makeKeyAndOrderFront(None);
