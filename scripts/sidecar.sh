@@ -13,7 +13,7 @@ out="app/src-tauri/binaries"
 mkdir -p "$out"
 
 flags=()
-case "$profile" in release) flags+=(--release) ;; esac
+case "$profile" in release) flags+=(--release --locked) ;; esac
 
 build() {
   local triple="$1"

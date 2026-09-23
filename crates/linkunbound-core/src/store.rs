@@ -286,8 +286,29 @@ impl Store {
             path: self.prefs_path(),
             source: crate::ConfigError::Malformed(source),
         })?;
-        keep_the_unread(&self.prefs_path());
-        save_atomically(&self.prefs_path(), &body)
+        guarded(&self.prefs_path(), || {
+            keep_the_unread(&self.prefs_path());
+            save_atomically(&self.prefs_path(), &body)
+        })
+    }
+
+    pub fn edit_prefs(
+        &self,
+        edit: impl FnOnce(&mut crate::Preferences) -> bool,
+    ) -> Result<bool, StoreError> {
+        guarded(&self.prefs_path(), || {
+            let mut prefs = self.prefs();
+            if !edit(&mut prefs) {
+                return Ok(false);
+            }
+            let body =
+                serde_json::to_string_pretty(&prefs).map_err(|source| StoreError::Content {
+                    path: self.prefs_path(),
+                    source: crate::ConfigError::Malformed(source),
+                })?;
+            keep_the_unread(&self.prefs_path());
+            save_atomically(&self.prefs_path(), &body).map(|()| true)
+        })
     }
 
     pub fn save_browsers(&self, config: &BrowserConfig) -> Result<(), StoreError> {
@@ -306,6 +327,56 @@ impl Store {
 mod tests {
     use super::*;
     use crate::config::SCHEMA_VERSION;
+
+    #[test]
+    fn a_field_the_window_never_sends_back_survives_a_save() {
+        let dir = std::env::temp_dir().join("lu-prefs-kept");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a place to write");
+        let store = Store::at(&dir);
+
+        store
+            .edit_prefs(|prefs| {
+                prefs.here_since = Some(1_700_000_000);
+                prefs.asked_for_a_star = true;
+                true
+            })
+            .expect("marked");
+
+        let arriving = crate::Preferences {
+            locale: crate::Locale::English,
+            ..Default::default()
+        };
+        let mut settled = arriving;
+        store
+            .edit_prefs(|kept| {
+                settled.here_since = kept.here_since;
+                settled.asked_for_a_star = kept.asked_for_a_star;
+                *kept = settled.clone();
+                true
+            })
+            .expect("saved");
+
+        let read = Store::at(&dir).prefs();
+        assert_eq!(read.locale, crate::Locale::English, "the window's change");
+        assert_eq!(
+            read.here_since,
+            Some(1_700_000_000),
+            "the mark it never saw"
+        );
+        assert!(read.asked_for_a_star, "and the answer it never saw");
+    }
+
+    #[test]
+    fn a_refused_edit_writes_nothing() {
+        let dir = std::env::temp_dir().join("lu-prefs-refused");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a place to write");
+        let store = Store::at(&dir);
+
+        assert!(!store.edit_prefs(|_| false).expect("asked"));
+        assert!(!store.prefs_path().exists());
+    }
 
     #[test]
     fn the_files_live_in_a_directory_of_their_own() {

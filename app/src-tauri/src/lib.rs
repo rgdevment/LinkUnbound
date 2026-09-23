@@ -7,8 +7,8 @@ mod update;
 use std::sync::Mutex;
 
 use linkunbound_core::{
-    Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of, merge, normalise,
-    site_of,
+    Asking, Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of, merge,
+    normalise, site_of,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -597,9 +597,17 @@ fn spoken(prefs: &Preferences) -> &'static str {
 
 #[tauri::command]
 fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
-    store().save_prefs(&prefs).map_err(|e| e.to_string())?;
-    shell::repaint(&app, prefs.theme);
-    Ok(claim(&app, &prefs))
+    let mut settled = prefs;
+    store()
+        .edit_prefs(|kept| {
+            settled.here_since = kept.here_since;
+            settled.asked_for_a_star = kept.asked_for_a_star;
+            *kept = settled.clone();
+            true
+        })
+        .map_err(|e| e.to_string())?;
+    shell::repaint(&app, settled.theme);
+    Ok(claim(&app, &settled))
 }
 
 #[tauri::command]
@@ -718,6 +726,7 @@ struct Build {
     repository: &'static str,
     candidates: bool,
     candidates_apply: bool,
+    kept_by_the_store: bool,
 }
 
 #[tauri::command]
@@ -728,13 +737,59 @@ fn settings_painted(window: tauri::WebviewWindow) {
 #[tauri::command]
 fn about() -> Build {
     let kept = update::looked(store().dir());
+    let store_copy = update::route().route == update::Route::Store;
     Build {
         version: HERE,
         license: "GPL-3.0-only",
         repository: "https://github.com/rgdevment/LinkUnbound",
         candidates: update::tracking(HERE, kept.candidates),
-        candidates_apply: update::route().route != update::Route::Store,
+        candidates_apply: !store_copy,
+        kept_by_the_store: store_copy,
     }
+}
+
+fn now_in_seconds() -> Option<u64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|since| since.as_secs())
+}
+
+#[tauri::command]
+fn star_due() -> Result<bool, String> {
+    let Some(now) = now_in_seconds() else {
+        return Ok(false);
+    };
+    let store = store();
+    let mut due = false;
+    store
+        .edit_prefs(|prefs| {
+            let counted = || store.rules().map(|set| set.rules.len()).unwrap_or_default();
+            match linkunbound_core::asking(prefs.asked_for_a_star, prefs.here_since, now, counted) {
+                Asking::Start => {
+                    prefs.here_since = Some(now);
+                    true
+                }
+                Asking::Wait => false,
+                Asking::Now => {
+                    due = true;
+                    false
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(due)
+}
+
+#[tauri::command]
+fn star_done() -> Result<(), String> {
+    store()
+        .edit_prefs(|prefs| {
+            prefs.asked_for_a_star = true;
+            true
+        })
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(windows)]
@@ -1236,7 +1291,9 @@ pub fn run() {
             settings_painted,
             update_ready,
             update_install,
-            update_candidates
+            update_candidates,
+            star_due,
+            star_done
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

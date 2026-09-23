@@ -312,6 +312,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const [state, setState] = useState<SystemState | null>(null);
   const [here, setHere] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [starring, setStarring] = useState(false);
 
   // Choosing the default browser happens in Windows, not here, so the answer to «does Windows
   // send links our way» changes while this window is in the background. Asked again every time
@@ -329,6 +330,10 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
     void invoke<Build>("about")
       .then(({ version }) => setHere(version))
       .catch(noop);
+  }, []);
+
+  useEffect(() => {
+    void invoke<boolean>("star_due").then(setStarring).catch(noop);
   }, []);
 
   const change = useCallback(
@@ -423,7 +428,16 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
           />
         )}
         {page === "care" && <Maintenance />}
-        {page === "about" && <About ready={ready} step={step} onSettled={settled} onLook={look} />}
+        {page === "about" && (
+          <About
+            ready={ready}
+            step={step}
+            starring={starring}
+            onStarSettled={() => setStarring(false)}
+            onSettled={settled}
+            onLook={look}
+          />
+        )}
       </main>
     </div>
   );

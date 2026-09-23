@@ -22,6 +22,7 @@ const BUILD = {
   repository: "https://github.com/rgdevment/LinkUnbound",
   candidates: false,
   candidatesApply: true,
+  keptByTheStore: false,
 };
 
 const NEWER: Ready = {
@@ -38,12 +39,23 @@ const settled = vi.fn();
 
 /// Stands in for the window that owns the offer, so a look really does move what the screen
 /// reads instead of the test asserting against a copy only it can see.
-function Host({ from, step }: { from: Ready | null; step: Underway | null }) {
+function Host({
+  from,
+  step,
+  starring = false,
+}: {
+  from: Ready | null;
+  step: Underway | null;
+  starring?: boolean;
+}) {
   const [ready, setReady] = useState(from);
+  const [asking, setAsking] = useState(starring);
   return (
     <About
       ready={ready}
       step={step}
+      starring={asking}
+      onStarSettled={() => setAsking(false)}
       onSettled={settled}
       onLook={(nowPlease) =>
         invoke("update_ready", { nowPlease }).then((one: unknown) => {
@@ -57,6 +69,10 @@ function Host({ from, step }: { from: Ready | null; step: Underway | null }) {
 
 function show(ready: Ready | null = null, step: Underway | null = null) {
   render(<Host from={ready} step={step} />);
+}
+
+function showAsking() {
+  render(<Host from={null} step={null} starring />);
 }
 
 function answers(overrides: Record<string, () => Promise<unknown>> = {}) {
@@ -115,6 +131,35 @@ describe("about", () => {
       "https://github.com/rgdevment/LinkUnbound",
       "https://github.com/rgdevment/LinkUnbound/issues",
     ]);
+  });
+
+  it("says what the copy is before asking anything of the reader", async () => {
+    show();
+    expect(await screen.findByText("Sin telemetría")).toBeInTheDocument();
+    expect(screen.getByText("Código abierto")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Dar una estrella en GitHub/ })).toBeInTheDocument();
+  });
+
+  it("asks for a rating only from a copy the store keeps", async () => {
+    show();
+    expect(await screen.findByText("2.0.0")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Valorar en la Store/ })).toBeNull();
+    cleanup();
+
+    answers({ about: () => Promise.resolve({ ...BUILD, keptByTheStore: true }) });
+    show();
+    await userEvent.click(await screen.findByRole("button", { name: /Valorar en la Store/ }));
+    expect(opened).toEqual(["ms-windows-store://review/?ProductId=9N9F7C8Q43KC"]);
+  });
+
+  it("asks for the star in the card instead of twice on the same screen", async () => {
+    showAsking();
+    expect(await screen.findByRole("status")).toHaveTextContent("Gracias por usar LinkUnbound");
+    expect(screen.queryByRole("button", { name: /Dar una estrella en GitHub/ })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Ahora no" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("button", { name: /Dar una estrella en GitHub/ })).toBeInTheDocument();
   });
 
   it("says the copy is current when nothing newer was found", async () => {

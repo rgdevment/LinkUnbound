@@ -1,0 +1,21 @@
+name: The resident the picker carries
+description: >-
+  `externalBin` in tauri.conf.json makes the binary a build-time requirement of
+  the picker, so anything that compiles the workspace — a test, a clippy run —
+  needs it there first, not only a bundle.
+
+inputs:
+  profile:
+    description: debug or release.
+    required: false
+    default: debug
+  target:
+    description: Rust target the resident is built for, empty for the host.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: bash scripts/sidecar.sh "${{ inputs.profile }}" "${{ inputs.target }}"

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type Key, useSpoken, useWords } from "../i18n";
 import { offerMoved, saidPlainly } from "../refusal";
 import { Card, Line, Switch } from "./parts";
+import Star from "./Star";
 import type { Ready, Underway } from "./update";
 
 const REPO = "https://github.com/rgdevment/LinkUnbound";
@@ -11,6 +12,7 @@ const COFFEE = "https://buymeacoffee.com/rgdevment";
 const COPYPASTE = "https://github.com/rgdevment/CopyPaste";
 const TISTY = "https://github.com/rgdevment/Tisty";
 const SPONSOR = "https://github.com/sponsors/rgdevment";
+const RATING = "ms-windows-store://review/?ProductId=9N9F7C8Q43KC";
 
 type Build = {
   version: string;
@@ -18,6 +20,7 @@ type Build = {
   repository: string;
   candidates: boolean;
   candidatesApply: boolean;
+  keptByTheStore: boolean;
 };
 
 /// What happens on «Actualizar» — or, when there is no button, what the person has to do instead:
@@ -49,14 +52,24 @@ function Rule({ said }: { said: string }) {
   );
 }
 
+function Badge({ said }: { said: string }) {
+  return (
+    <span className="rounded-full border border-black/[0.08] px-2.5 py-1 text-[11.5px] text-neutral-600 dark:border-white/[0.08] dark:text-[#A8AEBC]">
+      {said}
+    </span>
+  );
+}
+
 function Gives({
   said,
   where,
+  wide,
   onPick,
   children,
 }: {
   said: string;
   where: string;
+  wide?: boolean;
   onPick: () => void;
   children: React.ReactNode;
 }) {
@@ -64,7 +77,9 @@ function Gives({
     <button
       type="button"
       onClick={onPick}
-      className="flex items-center gap-2.5 rounded-[10px] border border-black/[0.08] px-3 py-2.5 text-left hover:bg-black/[0.03] dark:border-white/[0.08] dark:hover:bg-white/[0.04]"
+      className={`flex items-center gap-2.5 rounded-[10px] border border-black/[0.08] px-3 py-2.5 text-left hover:bg-black/[0.03] dark:border-white/[0.08] dark:hover:bg-white/[0.04] ${
+        wide ? "col-span-2" : ""
+      }`}
     >
       <svg viewBox="0 0 16 16" aria-hidden="true" className="h-[17px] w-[17px] shrink-0">
         {children}
@@ -290,11 +305,15 @@ function Candidates({
 export default function About({
   ready,
   step,
+  starring,
+  onStarSettled,
   onSettled,
   onLook,
 }: {
   ready: Ready | null;
   step: Underway | null;
+  starring: boolean;
+  onStarSettled: () => void;
   onSettled: () => void;
   onLook: (nowPlease?: boolean) => Promise<unknown>;
 }) {
@@ -335,12 +354,20 @@ export default function About({
         </span>
       </div>
 
-      <p className="mt-4 text-[13px] leading-relaxed text-neutral-600 dark:text-[#A8AEBC]">
-        {t("aboutWhat")}
-      </p>
-      <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-500 dark:text-[#8B92A1]">
-        {t("aboutPrivacy")}
-      </p>
+      <div className="mt-4 rounded-[10px] border border-black/[0.08] bg-black/[0.015] px-4 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.02]">
+        <p className="text-[12.5px] leading-relaxed text-neutral-600 dark:text-[#A8AEBC]">
+          {t("aboutWhat")}
+        </p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-500 dark:text-[#8B92A1]">
+          {t("aboutPrivacy")}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Badge said={t("badgeLocal")} />
+          <Badge said={t("badgeOpen")} />
+          <Badge said={t("badgeFree")} />
+          <Badge said={t("badgeQuiet")} />
+        </div>
+      </div>
 
       {trouble && (
         <div className="rounded-md bg-[#C0362F]/10 px-3 py-2 dark:bg-[#FF8A85]/10">
@@ -383,11 +410,38 @@ export default function About({
         />
       )}
 
+      {starring && <Star onSettled={onStarSettled} />}
+
       <Rule said={t("aboutSponsorSection")} />
       <p className="text-[13px] leading-relaxed text-neutral-600 dark:text-[#A8AEBC]">
         {t("aboutSupportWhy")}
       </p>
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+        {!starring && (
+          <Gives
+            wide={!build?.keptByTheStore}
+            said={t("aboutStar")}
+            where="github.com/rgdevment/LinkUnbound"
+            onPick={() => void openUrl(REPO).catch(noop)}
+          >
+            <path
+              fill="#e3b341"
+              d="M8 1.2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L8 12l-4.2 2.2.8-4.7L1.2 6.2l4.7-.7L8 1.2z"
+            />
+          </Gives>
+        )}
+        {build?.keptByTheStore && (
+          <Gives
+            said={t("aboutRate")}
+            where="Microsoft Store"
+            onPick={() => void openUrl(RATING).catch(noop)}
+          >
+            <path
+              fill="#0078d4"
+              d="M2 3h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6l-4 3V4a1 1 0 0 1 1-1Z"
+            />
+          </Gives>
+        )}
         <Gives
           said={t("aboutGitHubSponsor")}
           where="github.com/sponsors"

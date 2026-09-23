@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: rgdevment.LinkUnbound
+PackageVersion: 2.0.2
+Platform:
+  - Windows.Desktop
+MinimumOSVersion: 10.0.17763.0
+InstallerType: nullsoft
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+RequireExplicitUpgrade: true
+ReleaseDate: 2026-09-21
+InstallationMetadata:
+  DefaultInstallLocation: '%LOCALAPPDATA%\Programs\LinkUnbound'
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/rgdevment/LinkUnbound/releases/download/v2.0.2/linkunbound-installer-2.0.2-windows-x86_64.exe
+    InstallerSha256: ECBD1F7DC045DF8913FE14674E899109CB0A70AC281FF8C77963EF1BB16D6CFD
+ManifestType: installer
+ManifestVersion: 1.12.0

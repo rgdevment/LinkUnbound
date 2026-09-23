@@ -98,6 +98,7 @@ All data is stored locally under your user profile.
 | :------- | :------------------------------------------ |
 | Browsers | `%LOCALAPPDATA%\LinkUnbound\browsers.json`       |
 | Rules    | `%LOCALAPPDATA%\LinkUnbound\rules.json`          |
+| Settings | `%LOCALAPPDATA%\LinkUnbound\preferences.json`    |
 | Log      | `%LOCALAPPDATA%\LinkUnbound\navigate.log`        |
 | Crash log | `%LOCALAPPDATA%\LinkUnbound\startup_crash.log`  |
 | Icons    | `%LOCALAPPDATA%\LinkUnbound\icons\`              |
@@ -108,12 +109,15 @@ All data is stored locally under your user profile.
 | :------- | :--------------------------------------------------------------- |
 | Browsers | `~/Library/Application Support/LinkUnbound/browsers.json`        |
 | Rules    | `~/Library/Application Support/LinkUnbound/rules.json`           |
+| Settings | `~/Library/Application Support/LinkUnbound/preferences.json`     |
 | Log      | `~/Library/Application Support/LinkUnbound/navigate.log`         |
 | Crash log | `~/Library/Application Support/LinkUnbound/startup_crash.log`   |
 | Icons    | `~/Library/Application Support/LinkUnbound/icons/`               |
 | Previous default browser | `~/Library/Preferences/dev.rgdevment.linkunbound.plist` |
 
 On macOS, setting LinkUnbound as the default browser records which application held that role before (its bundle identifier, nothing else), so that "stop being the default" can hand the links back to it.
+
+`preferences.json` holds your settings — theme, language, shortcut — and two marks that exist only so the app can ask you for a GitHub star once, at a sensible moment rather than on day one: the date you first opened the settings window, and whether you have already answered. They are read on that screen and nowhere else, they never leave your machine, and deleting the file resets them.
 
 These folders are protected by your operating system's user account permissions. Other users on the same computer cannot access them under normal conditions.
 

@@ -1,29 +1,38 @@
 name: Update Downloads Badge
 
 on:
-    schedule:
-        - cron: "0 */12 * * *"
-    workflow_dispatch:
+  schedule:
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: downloads-badge
+  cancel-in-progress: false
 
 jobs:
-    update-badge:
-        runs-on: ubuntu-latest
-        timeout-minutes: 5
-        steps:
-            - uses: actions/checkout@v7
+  update-badge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-            - name: Setup uv
-              uses: astral-sh/setup-uv@v9.0.0
-              with:
-                  enable-cache: false
+      - name: Setup uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: false
 
-            - name: Update downloads badge
-              env:
-                  GITHUB_TOKEN: ${{ github.token }}
-                  GIST_ID: ${{ vars.GIST_ID }}
-                  GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
-                  STORE_TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
-                  STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
-                  STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
-                  STORE_APP_ID: ${{ vars.STORE_APP_ID }}
-              run: uv run resources/scripts/update_badge.py
+      - name: Update downloads badge
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GIST_ID: ${{ vars.GIST_ID }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          STORE_TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
+          STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
+          STORE_APP_ID: ${{ vars.STORE_APP_ID }}
+        run: uv run resources/scripts/update_badge.py

@@ -11,6 +11,7 @@ mod prefs;
 mod private;
 mod report;
 mod rule;
+mod star;
 mod store;
 pub mod update;
 mod url;
@@ -33,6 +34,7 @@ pub use prefs::{Locale, PickerStyle, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{Rule, RuleSet, Scope, Target, site_of};
+pub use star::{Asking, asking};
 pub use store::{Store, StoreError, data_dir, unmarked};
 pub use url::{
     host_of, is_launchable, local_file_parts, local_web_file, local_web_file_extensions,
