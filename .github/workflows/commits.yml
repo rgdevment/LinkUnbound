@@ -7,12 +7,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   conventional:
     name: Conventional commit messages
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -29,13 +34,15 @@ jobs:
             subject=$(git log -1 --format=%s "$sha" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
             if ! printf '%s' "$subject" | grep -qE "$pattern"; then
-              echo "::error::${sha:0:8} does not follow conventional commits: $subject"
+              echo "::error::${sha:0:8} does not follow conventional commits"
+              printf '  %s\n' "$subject"
               failed=1
               continue
             fi
 
             if [ "${#subject}" -gt 90 ]; then
-              echo "::error::${sha:0:8} subject is ${#subject} characters, keep it under 90: $subject"
+              echo "::error::${sha:0:8} subject is ${#subject} characters, keep it under 90"
+              printf '  %s\n' "$subject"
               failed=1
             fi
           done < <(git rev-list --no-merges "$BASE".."$HEAD")

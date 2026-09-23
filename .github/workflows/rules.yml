@@ -4,16 +4,31 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   conventions:
     name: Project conventions
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
 
       - name: The workflows parse
         run: |
@@ -21,7 +36,7 @@ jobs:
           # diagnosis — and release only ever runs once the tag is already pushed.
           status=0
           for one in .github/workflows/*.yml .github/actions/*/action.yml; do
-            if ! npx --yes js-yaml "$one" >/dev/null; then
+            if ! npx --no-install js-yaml "$one" >/dev/null; then
               echo "::error file=$one::this file is not valid YAML"
               status=1
             fi
@@ -109,11 +124,18 @@ jobs:
             exit 1
           fi
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: workspace
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Tests are deterministic
         run: |
-          for i in $(seq 1 20); do
+          turns=1
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] || [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            turns=20
+          fi
+          for i in $(seq 1 "$turns"); do
             cargo test -p linkunbound-core --quiet || exit 1
           done

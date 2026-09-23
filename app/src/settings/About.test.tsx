@@ -22,6 +22,7 @@ const BUILD = {
   repository: "https://github.com/rgdevment/LinkUnbound",
   candidates: false,
   candidatesApply: true,
+  keptByTheStore: false,
 };
 
 const NEWER: Ready = {
@@ -115,6 +116,25 @@ describe("about", () => {
       "https://github.com/rgdevment/LinkUnbound",
       "https://github.com/rgdevment/LinkUnbound/issues",
     ]);
+  });
+
+  it("says what the copy is before asking anything of the reader", async () => {
+    show();
+    expect(await screen.findByText("Sin telemetría")).toBeInTheDocument();
+    expect(screen.getByText("Código abierto")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Dar una estrella en GitHub/ })).toBeInTheDocument();
+  });
+
+  it("asks for a rating only from a copy the store keeps", async () => {
+    show();
+    expect(await screen.findByText("2.0.0")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Valorar en la Store/ })).toBeNull();
+    cleanup();
+
+    answers({ about: () => Promise.resolve({ ...BUILD, keptByTheStore: true }) });
+    show();
+    await userEvent.click(await screen.findByRole("button", { name: /Valorar en la Store/ }));
+    expect(opened).toEqual(["ms-windows-store://review/?ProductId=9N9F7C8Q43KC"]);
   });
 
   it("says the copy is current when nothing newer was found", async () => {

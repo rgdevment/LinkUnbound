@@ -1,5 +1,9 @@
 {
+  "name": "linkunbound",
+  "private": true,
+  "repository": "github:rgdevment/LinkUnbound",
   "devDependencies": {
+    "js-yaml": "^4.1.0",
     "markdownlint-cli2": "^0.20.0"
   },
   "scripts": {

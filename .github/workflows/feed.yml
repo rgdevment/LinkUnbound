@@ -20,14 +20,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Read it the way an installed copy does
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          for attempt in 1 2 3; do
+            sudo apt-get update -qq && sudo apt-get install -y -qq minisign && break
+            echo "minisign would not install (${attempt}/3)"
+            sleep $((attempt * 5))
+          done
+          command -v minisign
           feed="https://raw.githubusercontent.com/${{ github.repository }}/manifest"
 
           # The key every installed copy carries. Verifying against anything else would be
@@ -42,7 +47,8 @@ jobs:
             -q '.[] | select(.isPrerelease == false and .isDraft == false) | .tagName' \
             | sed 's/^v//' | grep -E '^[2-9][0-9]*\.' | sort -V | tail -1 || true)
 
-          if ! curl -fsSL -H "Cache-Control: no-cache" -o manifest.json "$feed/release-manifest.json"; then
+          if ! curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+            -H "Cache-Control: no-cache" -o manifest.json "$feed/release-manifest.json"; then
             echo "::error::the feed did not answer. Every copy out there is looking at nothing, \
                   and will go on looking at nothing until the branch is put back."
             exit 1
@@ -91,7 +97,8 @@ jobs:
           # bytes, which answers 200 and fails on every machine in the world.
           takes() {
             local what="$1" expected="$2"
-            if ! curl -fsSL -H "Cache-Control: no-cache" -o channel.json "$feed/$what"; then
+            if ! curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+              -H "Cache-Control: no-cache" -o channel.json "$feed/$what"; then
               echo "::error::$what did not answer, so what is announced is an update nobody \
                     can take"
               return 1
@@ -114,7 +121,7 @@ jobs:
             for os in $names; do
               url=$(jq -r --arg os "$os" '.platforms[$os].url' channel.json)
               jq -r --arg os "$os" '.platforms[$os].signature' channel.json | base64 -d > one.sig
-              if ! curl -fsSL -o one.bin "$url"; then
+              if ! curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o one.bin "$url"; then
                 echo "::error::the installer for $os in $what does not answer: $url"
                 return 1
               fi
@@ -139,7 +146,8 @@ jobs:
           if [ -n "$ahead" ]; then
             echo "the candidates' channel, announcing $ahead:"
             takes candidate.json "$ahead"
-          elif curl -fsSL -o /dev/null "$feed/candidate.json" 2>/dev/null; then
+          elif curl -fsSL -H "Cache-Control: no-cache" -o /dev/null \
+            "$feed/candidate.json" 2>/dev/null; then
             echo "::error::candidate.json is still being served and the feed announces no \
                   candidate. A copy that remembers one would be sent to a version nobody is \
                   publishing any more."

@@ -50,6 +50,10 @@ pub struct Preferences {
     /// settings window ever asks, and only while it is open.
     #[serde(default = "yes")]
     pub looks_for_updates: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub here_since: Option<u64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub asked_for_a_star: bool,
 }
 
 fn default_shortcut() -> Option<String> {
@@ -71,6 +75,8 @@ impl Default for Preferences {
             edge_warning_dismissed: false,
             picker_style: PickerStyle::default(),
             looks_for_updates: true,
+            here_since: None,
+            asked_for_a_star: false,
         }
     }
 }
