@@ -19,8 +19,8 @@ thiserror.workspace = true
 name = "linkunbound_win"
 
 [target."cfg(windows)".dependencies]
-winreg = "0.55"
-windows = { version = "0.61", features = [
+winreg = "0.56"
+windows = { version = "0.62", features = [
   "ApplicationModel",
   "Win32_Foundation",
   "Win32_Graphics_Gdi",

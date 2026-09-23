@@ -29,7 +29,7 @@ impl Default for Startup {
 fn task() -> Option<StartupTask> {
     StartupTask::GetAsync(&HSTRING::from(TASK_ID))
         .ok()?
-        .get()
+        .join()
         .ok()
 }
 
@@ -75,7 +75,7 @@ pub fn set(enabled: bool) -> Option<Startup> {
     if packaged() {
         let task = task()?;
         if enabled {
-            task.RequestEnableAsync().ok()?.get().ok()?;
+            task.RequestEnableAsync().ok()?.join().ok()?;
         } else {
             task.Disable().ok()?;
         }
@@ -83,7 +83,7 @@ pub fn set(enabled: bool) -> Option<Startup> {
     }
     if let Some(task) = task() {
         if enabled {
-            task.RequestEnableAsync().ok()?.get().ok()?;
+            task.RequestEnableAsync().ok()?.join().ok()?;
         } else {
             task.Disable().ok()?;
         }
