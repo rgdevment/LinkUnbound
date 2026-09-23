@@ -40,5 +40,7 @@ Documentations:
     DocumentUrl: https://github.com/rgdevment/LinkUnbound/blob/main/PRIVACY.md
   - DocumentLabel: Security
     DocumentUrl: https://github.com/rgdevment/LinkUnbound/blob/main/SECURITY.md
+  - DocumentLabel: Commercial licence
+    DocumentUrl: https://github.com/rgdevment/LinkUnbound/blob/main/COMMERCIAL.md
 ManifestType: defaultLocale
 ManifestVersion: 1.12.0
