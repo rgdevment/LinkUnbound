@@ -98,7 +98,7 @@ mod there {
     fn waiting(window: isize) -> windows::core::Result<Option<String>> {
         let updates = shop(window)?
             .GetAppAndOptionalStorePackageUpdatesAsync()?
-            .get()?;
+            .join()?;
         let ours = Package::Current()?.Id()?.FamilyName()?;
         for one in 0..updates.Size()? {
             let id = updates.GetAt(one)?.Package()?.Id()?;
@@ -123,12 +123,12 @@ mod there {
 
     fn taken(
         window: isize,
-        mut told: impl FnMut(&'static str, u64) + Send + 'static,
+        told: impl FnMut(&'static str, u64) + Send + 'static,
     ) -> Result<(), Trouble> {
         let shop = shop(window).map_err(sour)?;
         let updates = shop
             .GetAppAndOptionalStorePackageUpdatesAsync()
-            .and_then(|asking| asking.get())
+            .and_then(|asking| asking.join())
             .map_err(sour)?;
         if updates.Size().map_err(sour)? == 0 {
             return Err(Trouble::Gone);
@@ -137,11 +137,14 @@ mod there {
         let asking = shop
             .RequestDownloadAndInstallStorePackageUpdatesAsync(&updates)
             .map_err(sour)?;
+        let told = std::sync::Mutex::new(told);
         asking
             .SetProgress(&AsyncOperationProgressHandler::new(
                 move |_, far: Ref<'_, StorePackageUpdateStatus>| {
                     let (stage, how) = super::step(far.ok()?.PackageDownloadProgress);
-                    told(stage, how);
+                    if let Ok(mut told) = told.lock() {
+                        told(stage, how);
+                    }
                     Ok(())
                 },
             ))
@@ -149,7 +152,7 @@ mod there {
 
         // Windows takes the process with it to put the new package in place, so on the ordinary
         // path nothing below this line is ever reached.
-        let done = asking.get().map_err(sour)?;
+        let done = asking.join().map_err(sour)?;
         match done.OverallState().map_err(sour)? {
             StorePackageUpdateState::Completed => Ok(()),
             StorePackageUpdateState::Canceled => Err(Trouble::Stopped),
