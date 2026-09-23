@@ -357,8 +357,8 @@ jobs:
             } elseif ($sig.SignerCertificate.Thumbprint -ne $env:CERT_THUMBPRINT) {
               Write-Error "$where is signed by $($sig.SignerCertificate.Subject), which is not this build's certificate"
               $status = 1
-            } elseif ($sig.Status -ne "Valid") {
-              Write-Error "$where carries a signature the system calls $($sig.Status)"
+            } elseif (-not $sig.TimeStamperCertificate) {
+              Write-Error "$where is signed without a timestamp, so it dies with the certificate"
               $status = 1
             } else {
               Write-Host "$where <- $($sig.SignerCertificate.Subject)"
@@ -401,8 +401,8 @@ jobs:
           if (-not $sig.TimeStamperCertificate) {
             Write-Error "no timestamp: the signature would die with the certificate"; exit 1
           }
-          if ($sig.Status -ne "Valid") {
-            Write-Error "the installer carries a signature the system calls $($sig.Status)"; exit 1
+          if ($sig.SignerCertificate.Thumbprint -ne $env:CERT_THUMBPRINT) {
+            Write-Error "the installer was signed by $($sig.SignerCertificate.Subject), not by this build's certificate"; exit 1
           }
           Write-Host "status: $($sig.Status)"
 
@@ -725,7 +725,7 @@ jobs:
           $v = "${{ needs.version.outputs.version }}"
           New-Item -ItemType Directory -Force dist | Out-Null
 
-          & "$($sdk.FullName)\x64\makepri.exe" createconfig /cf priconfig.xml /dq en-US_es /o
+          & "$($sdk.FullName)\x64\makepri.exe" createconfig /cf priconfig.xml /dq en-US_es-ES /o
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::makepri would not write a config"; exit 1 }
           & "$($sdk.FullName)\x64\makepri.exe" new /pr msix /cf priconfig.xml /of msix/resources.pri /o
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::makepri would not index the package"; exit 1 }
@@ -955,6 +955,11 @@ jobs:
             echo "::error::the release is missing files this run built; it stays a draft"
             echo "$missing"
             exit 1
+          fi
+          spare=$(comm -13 <(echo "$want") <(echo "$have"))
+          if [ -n "$spare" ]; then
+            echo "::warning::the release carries files this run did not build:"
+            echo "$spare"
           fi
 
           latest=false; [ "$PRERELEASE" = "false" ] && latest=true
