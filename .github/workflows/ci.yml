@@ -153,6 +153,7 @@ jobs:
   coverage-mac:
     name: coverage / the Mac crate
     runs-on: macos-latest
+    if: github.actor != 'dependabot[bot]'
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7

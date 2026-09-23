@@ -23,6 +23,7 @@ jobs:
   crates-on-the-branch:
     name: crates / the lines this branch changed
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -82,6 +83,7 @@ jobs:
   mac-on-the-branch:
     name: mac / the lines this branch changed
     runs-on: macos-latest
+    if: github.actor != 'dependabot[bot]'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -135,6 +137,7 @@ jobs:
   settings-on-the-branch:
     name: settings / the lines this branch changed
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -198,6 +201,7 @@ jobs:
   window-on-the-branch:
     name: window / the lines this branch changed
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
