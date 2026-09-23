@@ -97,7 +97,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
 
   coverage:
     name: coverage
@@ -161,8 +161,7 @@ jobs:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: workspace
-          save-if: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@nextest
       - name: The Mac crate, and the Mac branches of the core and the picker
@@ -199,7 +198,7 @@ jobs:
           name: coverage-mac
           path: .
 
-      - uses: SonarSource/sonarqube-scan-action@v6
+      - uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
@@ -212,6 +211,7 @@ jobs:
             -Dsonar.exclusions=crates/*/tests/**,app/src/tests/**
             -Dsonar.rust.lcov.reportPaths=lcov-rust.info,lcov-mac.info
             -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info
+            -Dsonar.cpd.exclusions=app/src/i18n.ts
             -Dsonar.rust.clippy.enabled=false
             -Dsonar.coverage.exclusions=app/src/main.tsx,app/src-tauri/src/**
             -Dsonar.qualitygate.wait=true

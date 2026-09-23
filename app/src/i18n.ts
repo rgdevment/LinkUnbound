@@ -492,7 +492,7 @@ const EN: Record<Key, string> = {
   badgeQuiet: "No telemetry",
   starThanks: "Thank you for using LinkUnbound.",
   starWhy: "No telemetry, no ads: people only find it when somebody recommends it.",
-  starGo: "Star on GitHub",
+  starGo: "Give it a star",
   starNo: "Don't show again",
   starLater: "Not now",
   aboutGitHubSponsor: "Sponsor on GitHub",

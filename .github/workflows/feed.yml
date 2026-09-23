@@ -8,7 +8,7 @@ on:
   schedule:
     - cron: "23 7 * * *"
   release:
-    types: [published, unpublished, deleted, edited, released]
+    types: [unpublished, deleted, edited]
   workflow_dispatch:
 
 permissions:

@@ -14,7 +14,10 @@ export default function Star({ onSettled }: { onSettled: () => void }) {
   };
 
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3.5 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+    <div
+      role="status"
+      className="flex items-start gap-3 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3.5 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]"
+    >
       <svg
         viewBox="0 0 16 16"
         aria-hidden="true"

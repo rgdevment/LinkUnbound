@@ -216,10 +216,8 @@ jobs:
       stage: ${{ steps.stage.outputs.sha }}
     env:
       TARGET: x86_64-pc-windows-msvc
-      PFX_BASE64: ${{ secrets.PFX_BASE64 }}
-      PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      HAS_PFX: ${{ secrets.PFX_BASE64 != '' }}
+      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -243,8 +241,11 @@ jobs:
           profile: release
 
       - name: Teach the bundler to sign what it packs
-        if: env.PFX_BASE64 != ''
+        if: env.HAS_PFX == 'true'
         shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.PFX_PASSWORD }}
         run: |
           $pfx = Join-Path $env:RUNNER_TEMP "bundler.pfx"
           Set-Content -Path $pfx -Value ([Convert]::FromBase64String($env:PFX_BASE64)) -AsByteStream
@@ -267,11 +268,15 @@ jobs:
             args = @("sign", "/sha1", $cert.Thumbprint, "/fd", "sha256",
               "/tr", "http://timestamp.digicert.com", "/td", "sha256", "%1")
           } } } } | ConvertTo-Json -Depth 8 | Set-Content -Path app/sign.json -Encoding utf8
+          "CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "the bundler signs with $($cert.Thumbprint)"
 
       - name: Bundle
         working-directory: app
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           sign=""
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then sign="--no-sign"; fi
@@ -302,28 +307,22 @@ jobs:
           cp target/release/linkunbound-shell.exe stage/
 
       - name: Sign what the MSIX will carry
-        if: env.PFX_BASE64 != ''
+        if: env.HAS_PFX == 'true'
         shell: pwsh
         run: |
-          $bytes = [Convert]::FromBase64String($env:PFX_BASE64)
-          Set-Content -Path signingCert.pfx -Value $bytes -AsByteStream
-          try {
-            $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" `
-              -Recurse -Filter "signtool.exe" |
-              Where-Object { $_.FullName -like "*x64*" } |
-              Sort-Object FullName -Descending | Select-Object -First 1
-            if (-not $signtool) { Write-Error "signtool not found"; exit 1 }
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter "signtool.exe" |
+            Where-Object { $_.FullName -like "*x64*" } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { Write-Error "signtool not found"; exit 1 }
 
-            & $signtool.FullName sign /f signingCert.pfx /p $env:PFX_PASSWORD `
-              /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
-              stage/linkunbound-settings.exe stage/linkunbound-shell.exe
-            if ($LASTEXITCODE -ne 0) { Write-Error "signing failed"; exit 1 }
-          } finally {
-            Remove-Item signingCert.pfx -ErrorAction SilentlyContinue
-          }
+          & $signtool.FullName sign /sha1 $env:CERT_THUMBPRINT /fd sha256 `
+            /tr http://timestamp.digicert.com /td sha256 `
+            stage/linkunbound-settings.exe stage/linkunbound-shell.exe
+          if ($LASTEXITCODE -ne 0) { Write-Error "signing failed"; exit 1 }
 
       - name: What the installer will put on disk is signed
-        if: env.PFX_BASE64 != ''
+        if: env.HAS_PFX == 'true'
         shell: pwsh
         run: |
           $setup = Get-ChildItem -Path "target/release/bundle/nsis" -Filter "*-setup.exe" |
@@ -345,18 +344,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Error "the installer could not be opened"; exit 1 }
 
           $mine = Get-ChildItem -Path $peek -Recurse -File |
-            Where-Object { $_.Extension -eq ".exe" -and $_.FullName -notmatch [regex]::Escape('$PLUGINSDIR') }
+            Where-Object { $_.Extension -in ".exe", ".dll" -and $_.FullName -notmatch [regex]::Escape('$PLUGINSDIR') }
           if (-not $mine) { Write-Error "the installer holds nothing to run"; exit 1 }
 
           $status = 0
           foreach ($one in $mine) {
             $where = $one.FullName.Substring($peek.Length).TrimStart("\\")
             $sig = Get-AuthenticodeSignature $one.FullName
-            if ($sig.SignerCertificate) {
-              Write-Host "$where <- $($sig.SignerCertificate.Subject)"
-            } else {
+            if (-not $sig.SignerCertificate) {
               Write-Error "$where goes out unsigned"
               $status = 1
+            } elseif ($sig.SignerCertificate.Thumbprint -ne $env:CERT_THUMBPRINT) {
+              Write-Error "$where is signed by $($sig.SignerCertificate.Subject), which is not this build's certificate"
+              $status = 1
+            } elseif ($sig.Status -ne "Valid") {
+              Write-Error "$where carries a signature the system calls $($sig.Status)"
+              $status = 1
+            } else {
+              Write-Host "$where <- $($sig.SignerCertificate.Subject)"
             }
           }
           exit $status
@@ -375,12 +380,9 @@ jobs:
           if-no-files-found: error
 
       - name: Sign the installer
-        if: env.PFX_BASE64 != ''
+        if: env.HAS_PFX == 'true'
         shell: pwsh
         run: |
-          $bytes = [Convert]::FromBase64String($env:PFX_BASE64)
-          Set-Content -Path signingCert.pfx -Value $bytes -AsByteStream
-
           $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" `
             -Recurse -Filter "signtool.exe" |
             Where-Object { $_.FullName -like "*x64*" } |
@@ -391,14 +393,16 @@ jobs:
             Select-Object -First 1
           if (-not $setup) { Write-Error "no installer to sign"; exit 1 }
 
-          & $signtool.FullName sign /f signingCert.pfx /p $env:PFX_PASSWORD `
-            /tr http://timestamp.digicert.com /td sha256 /fd sha256 $setup.FullName
+          & $signtool.FullName sign /sha1 $env:CERT_THUMBPRINT /fd sha256 `
+            /tr http://timestamp.digicert.com /td sha256 $setup.FullName
           if ($LASTEXITCODE -ne 0) { Write-Error "signing failed"; exit 1 }
-          Remove-Item signingCert.pfx
 
           $sig = Get-AuthenticodeSignature $setup.FullName
           if (-not $sig.TimeStamperCertificate) {
             Write-Error "no timestamp: the signature would die with the certificate"; exit 1
+          }
+          if ($sig.Status -ne "Valid") {
+            Write-Error "the installer carries a signature the system calls $($sig.Status)"; exit 1
           }
           Write-Host "status: $($sig.Status)"
 
@@ -416,9 +420,12 @@ jobs:
           ls -l dist
 
       - name: Sign it for the updater
-        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        if: env.HAS_UPDATER_KEY == 'true'
         working-directory: app
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           v="${{ needs.version.outputs.version }}"
           exe="../dist/linkunbound-installer-$v-windows-x86_64.exe"
@@ -450,12 +457,9 @@ jobs:
     env:
       TARGET: ${{ matrix.target }}
       ARCH: ${{ matrix.arch }}
-      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      HAS_P12: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+      HAS_APPLE_ID: ${{ secrets.APPLE_ID != '' }}
+      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -486,8 +490,9 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Import signing certificate
-        if: env.MACOS_CERTIFICATE_P12 != ''
+        if: env.HAS_P12 == 'true'
         env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
@@ -509,7 +514,7 @@ jobs:
         run: npm run tauri build -- --target "$TARGET" --no-bundle
 
       - name: Sign the settings binary
-        if: env.MACOS_CERTIFICATE_P12 != ''
+        if: env.HAS_P12 == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -521,6 +526,8 @@ jobs:
         working-directory: app
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           sign=""
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then sign="--no-sign"; fi
@@ -556,7 +563,7 @@ jobs:
           exit $status
 
       - name: The app is really signed
-        if: env.MACOS_CERTIFICATE_P12 != ''
+        if: env.HAS_P12 == 'true'
         run: |
           app="target/$TARGET/release/bundle/macos/LinkUnbound.app"
           codesign --verify --deep --strict --verbose=2 "$app"
@@ -566,7 +573,11 @@ jobs:
           fi
 
       - name: Notarize
-        if: env.APPLE_ID != '' && env.MACOS_CERTIFICATE_P12 != ''
+        if: env.HAS_APPLE_ID == 'true' && env.HAS_P12 == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           dmg=$(ls target/$TARGET/release/bundle/dmg/*.dmg | head -1)
           xcrun notarytool submit "$dmg" \
@@ -575,7 +586,11 @@ jobs:
           xcrun stapler staple "$dmg"
 
       - name: Staple the app itself, and tar it again
-        if: env.APPLE_ID != '' && env.MACOS_CERTIFICATE_P12 != ''
+        if: env.HAS_APPLE_ID == 'true' && env.HAS_P12 == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           out="target/$TARGET/release/bundle/macos"
           app="$out/LinkUnbound.app"
@@ -596,8 +611,11 @@ jobs:
           xcrun stapler validate "$RUNNER_TEMP/rt/LinkUnbound.app"
 
       - name: Sign it for the updater
-        if: env.TAURI_SIGNING_PRIVATE_KEY != '' && env.APPLE_ID != ''
+        if: env.HAS_UPDATER_KEY == 'true' && env.HAS_APPLE_ID == 'true'
         working-directory: app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           out="../target/$TARGET/release/bundle/macos"
           npm run tauri -- signer sign "$out/LinkUnbound.app.tar.gz"
@@ -698,12 +716,20 @@ jobs:
         shell: pwsh
         run: |
           $sdk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
-            Where-Object { Test-Path "$($_.FullName)\x64\makeappx.exe" } |
+            Where-Object {
+              (Test-Path "$($_.FullName)\x64\makeappx.exe") -and (Test-Path "$($_.FullName)\x64\makepri.exe")
+            } |
             Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $sdk) { Write-Host "::error::no Windows SDK with makeappx"; exit 1 }
+          if (-not $sdk) { Write-Host "::error::no Windows SDK with makeappx and makepri"; exit 1 }
 
           $v = "${{ needs.version.outputs.version }}"
           New-Item -ItemType Directory -Force dist | Out-Null
+
+          & "$($sdk.FullName)\x64\makepri.exe" createconfig /cf priconfig.xml /dq en-US_es /o
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::makepri would not write a config"; exit 1 }
+          & "$($sdk.FullName)\x64\makepri.exe" new /pr msix /cf priconfig.xml /of msix/resources.pri /o
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::makepri would not index the package"; exit 1 }
+
           & "$($sdk.FullName)\x64\makeappx.exe" pack /d msix /p "dist/linkunbound-$v-windows-x64.msix" /o
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::makeappx refused the package"; exit 1 }
           Get-ChildItem dist
@@ -924,9 +950,10 @@ jobs:
 
           have=$(gh release view "$tag" --json assets -q '.assets[].name' | sort)
           want=$(ls dist | sort)
-          if [ "$have" != "$want" ]; then
-            echo "::error::the release carries a different set of files than dist; it stays a draft"
-            diff <(echo "$want") <(echo "$have") || true
+          missing=$(comm -23 <(echo "$want") <(echo "$have"))
+          if [ -n "$missing" ]; then
+            echo "::error::the release is missing files this run built; it stays a draft"
+            echo "$missing"
             exit 1
           fi
 
@@ -1066,7 +1093,7 @@ jobs:
             echo "the channel still says «${said:-nothing}» (${attempt}/6)"
             sleep $((attempt * 20))
           done
-          jq . channel.json
+          if [ -s channel.json ]; then jq . channel.json; fi
 
           ahead=$(jq -r .version channel.json 2>/dev/null || echo "")
           if [ ! -s channel.json ] && [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
@@ -1256,8 +1283,10 @@ jobs:
             echo "::error::could not download $1"
             return 1
           }
-          fetch "$DMG_ARM"
-          fetch "$DMG_INTEL"
+          if ! fetch "$DMG_ARM" || ! fetch "$DMG_INTEL"; then
+            echo "::warning::a disk image is missing for ${VERSION}; leaving the cask as it is"
+            exit 0
+          fi
           ARM_SHA=$(sha256sum "/tmp/$DMG_ARM" | awk '{print $1}')
           INTEL_SHA=$(sha256sum "/tmp/$DMG_INTEL" | awk '{print $1}')
 
@@ -1268,6 +1297,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           mkdir -p Casks
+
+          if [ -f "Casks/${CASK}.rb" ]; then
+            had=$(sed -n 's/^[[:space:]]*version "\(.*\)"/\1/p' "Casks/${CASK}.rb" | head -1)
+            if [ -n "$had" ] && [ "$had" != "$VERSION" ] \
+               && [ "$(printf '%s\n%s\n' "$had" "$VERSION" | sort -V | tail -1)" != "$VERSION" ]; then
+              echo "::warning::the tap already offers ${had}; writing ${VERSION} would downgrade every Mac that runs brew upgrade"
+              exit 0
+            fi
+          fi
 
           cat > "Casks/${CASK}.rb" <<-CASK
           	cask "${CASK}" do
@@ -1330,7 +1368,11 @@ jobs:
             fi
             echo "push rejected (attempt ${attempt}/5); rebasing onto the concurrent release"
             git fetch origin main
-            git rebase origin/main || { git rebase --abort || true; continue; }
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::error::the tap moved under this commit and it will not rebase cleanly"
+              exit 1
+            fi
           done
           echo "::error::could not push the tap after 5 attempts"
           exit 1

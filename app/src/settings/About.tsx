@@ -305,11 +305,15 @@ function Candidates({
 export default function About({
   ready,
   step,
+  starring,
+  onStarSettled,
   onSettled,
   onLook,
 }: {
   ready: Ready | null;
   step: Underway | null;
+  starring: boolean;
+  onStarSettled: () => void;
   onSettled: () => void;
   onLook: (nowPlease?: boolean) => Promise<unknown>;
 }) {
@@ -318,7 +322,6 @@ export default function About({
   const [build, setBuild] = useState<Build | null>(null);
   const [trouble, setTrouble] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [starring, setStarring] = useState(false);
 
   const look = useCallback(() => {
     setTrouble(null);
@@ -328,10 +331,6 @@ export default function About({
   }, [language]);
 
   useEffect(look, [look]);
-
-  useEffect(() => {
-    void invoke<boolean>("star_due").then(setStarring).catch(noop);
-  }, []);
 
   return (
     <>
@@ -411,24 +410,26 @@ export default function About({
         />
       )}
 
-      {starring && <Star onSettled={() => setStarring(false)} />}
+      {starring && <Star onSettled={onStarSettled} />}
 
       <Rule said={t("aboutSponsorSection")} />
       <p className="text-[13px] leading-relaxed text-neutral-600 dark:text-[#A8AEBC]">
         {t("aboutSupportWhy")}
       </p>
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">
-        <Gives
-          wide={!build?.keptByTheStore}
-          said={t("aboutStar")}
-          where="github.com/rgdevment/LinkUnbound"
-          onPick={() => void openUrl(REPO).catch(noop)}
-        >
-          <path
-            fill="#e3b341"
-            d="M8 1.2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L8 12l-4.2 2.2.8-4.7L1.2 6.2l4.7-.7L8 1.2z"
-          />
-        </Gives>
+        {!starring && (
+          <Gives
+            wide={!build?.keptByTheStore}
+            said={t("aboutStar")}
+            where="github.com/rgdevment/LinkUnbound"
+            onPick={() => void openUrl(REPO).catch(noop)}
+          >
+            <path
+              fill="#e3b341"
+              d="M8 1.2l2.1 4.3 4.7.7-3.4 3.3.8 4.7L8 12l-4.2 2.2.8-4.7L1.2 6.2l4.7-.7L8 1.2z"
+            />
+          </Gives>
+        )}
         {build?.keptByTheStore && (
           <Gives
             said={t("aboutRate")}

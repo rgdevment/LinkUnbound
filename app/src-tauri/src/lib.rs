@@ -597,16 +597,17 @@ fn spoken(prefs: &Preferences) -> &'static str {
 
 #[tauri::command]
 fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
-    let store = store();
-    let kept = store.prefs();
-    let prefs = Preferences {
-        here_since: kept.here_since,
-        asked_for_a_star: kept.asked_for_a_star,
-        ..prefs
-    };
-    store.save_prefs(&prefs).map_err(|e| e.to_string())?;
-    shell::repaint(&app, prefs.theme);
-    Ok(claim(&app, &prefs))
+    let mut settled = prefs;
+    store()
+        .edit_prefs(|kept| {
+            settled.here_since = kept.here_since;
+            settled.asked_for_a_star = kept.asked_for_a_star;
+            *kept = settled.clone();
+            true
+        })
+        .map_err(|e| e.to_string())?;
+    shell::repaint(&app, settled.theme);
+    Ok(claim(&app, &settled))
 }
 
 #[tauri::command]
@@ -747,36 +748,48 @@ fn about() -> Build {
     }
 }
 
-fn now_in_seconds() -> u64 {
+fn now_in_seconds() -> Option<u64> {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs())
+        .ok()
+        .map(|since| since.as_secs())
 }
 
 #[tauri::command]
 fn star_due() -> Result<bool, String> {
+    let Some(now) = now_in_seconds() else {
+        return Ok(false);
+    };
     let store = store();
-    let mut prefs = store.prefs();
-    let now = now_in_seconds();
-    let counted = || store.rules().map(|set| set.rules.len()).unwrap_or_default();
-    let decided = linkunbound_core::asking(prefs.asked_for_a_star, prefs.here_since, now, counted);
-    match decided {
-        Asking::Start => {
-            prefs.here_since = Some(now);
-            store.save_prefs(&prefs).map_err(|e| e.to_string())?;
-            Ok(false)
-        }
-        Asking::Wait => Ok(false),
-        Asking::Now => Ok(true),
-    }
+    let mut due = false;
+    store
+        .edit_prefs(|prefs| {
+            let counted = || store.rules().map(|set| set.rules.len()).unwrap_or_default();
+            match linkunbound_core::asking(prefs.asked_for_a_star, prefs.here_since, now, counted) {
+                Asking::Start => {
+                    prefs.here_since = Some(now);
+                    true
+                }
+                Asking::Wait => false,
+                Asking::Now => {
+                    due = true;
+                    false
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(due)
 }
 
 #[tauri::command]
 fn star_done() -> Result<(), String> {
-    let store = store();
-    let mut prefs = store.prefs();
-    prefs.asked_for_a_star = true;
-    store.save_prefs(&prefs).map_err(|e| e.to_string())
+    store()
+        .edit_prefs(|prefs| {
+            prefs.asked_for_a_star = true;
+            true
+        })
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(windows)]
