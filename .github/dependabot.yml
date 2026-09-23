@@ -31,6 +31,9 @@ updates:
     open-pull-requests-limit: 3
     commit-message:
       prefix: "chore"
+    ignore:
+      - dependency-name: muda
+      - dependency-name: tray-icon
     groups:
       rust:
         patterns:

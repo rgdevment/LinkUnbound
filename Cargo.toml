@@ -23,8 +23,8 @@ slint = { version = "1.17", default-features = false, features = [
   "unstable-winit-030",
 ] }
 slint-build = "1.17"
-tray-icon = "0.25"
-muda = "0.20"
+tray-icon = "0.24"
+muda = "0.19"
 interprocess = "2.4"
 # No tray feature: the resident owns the tray, through the `tray-icon` crate.
 # `common-controls-v6` is a default feature, and Cargo unifies features across
