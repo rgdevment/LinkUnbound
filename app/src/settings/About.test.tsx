@@ -126,8 +126,8 @@ describe("about", () => {
     expect(opened).toEqual([
       "https://github.com/sponsors/rgdevment",
       "https://buymeacoffee.com/rgdevment",
-      "https://github.com/rgdevment/Tisty",
-      "https://github.com/rgdevment/CopyPaste",
+      "https://rgdevment.com/tisty/",
+      "https://rgdevment.com/copypaste/",
       "https://github.com/rgdevment/LinkUnbound",
       "https://github.com/rgdevment/LinkUnbound/issues",
     ]);
