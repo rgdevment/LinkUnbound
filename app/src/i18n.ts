@@ -143,7 +143,7 @@ const ES = {
   reportWhat:
     "El informe reúne en un archivo la versión de LinkUnbound, tus reglas y qué sistema usas, sin las direcciones que visitas.",
   reportStays: "No se envía a ninguna parte.",
-  reportPick: "Se guarda donde tú elijas y solo lo adjuntas si quieres.",
+  reportPick: "Queda en tu equipo y solo lo adjuntas si quieres.",
   reportGo: "Guardar informe…",
   reportSaved: "Guardado en {}",
   rescanTitle: "Volver a buscar navegadores",
@@ -403,7 +403,7 @@ const EN: Record<Key, string> = {
   reportWhat:
     "The report gathers into one file LinkUnbound's version, your rules and which system you are on, without the addresses you visit.",
   reportStays: "It is never sent anywhere.",
-  reportPick: "It is saved where you choose, and you attach it only if you want to.",
+  reportPick: "It stays on your machine, and you attach it only if you want to.",
   reportGo: "Save report…",
   reportSaved: "Saved to {}",
   rescanTitle: "Look for browsers again",

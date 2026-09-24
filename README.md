@@ -194,10 +194,10 @@ Since LinkUnbound is an independent open source project, the installer is signed
 
 - **Links** — whether the system sends links here, what is wrong when it does not and the button that fixes it; on Windows, the associations held
 - **Rules** — every rule, the most precise one deciding; change where each opens, add one, remove one
-- **Browsers** — what was detected, with profiles; hide, duplicate, or add a custom one with its arguments
+- **Browsers** — what was detected, with profiles; hide, duplicate, or add a custom one with its arguments, and look for browsers again after installing one
 - **Application** — theme, language, picker look, start at sign-in, the global shortcut, background update checks
-- **Maintenance** — export a diagnostic report, rescan browsers, reset the configuration, remove LinkUnbound from the system's list
-- **About** — version, licence, the update button, the candidate-versions switch, support links
+- **Maintenance** — the two that destroy something: reset the configuration, and remove LinkUnbound from the system's list
+- **About** — version, licence, the update button, the candidate-versions switch, the diagnostic report when something goes wrong, and support links
 
 **Updates.** Every six hours the resident asks the release feed, without a window. A newer version shows up as a strip atop the picker and in About; **Update** downloads the signed installer and runs it, and the resident comes back on its own. A copy from the Microsoft Store updates through the Store; a Homebrew copy updates itself the same way as a downloaded one (the cask says `auto_updates`), and `brew upgrade` works as well. Turn the background check off under Application if you prefer to ask by hand.
 
