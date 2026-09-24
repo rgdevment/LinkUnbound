@@ -42,16 +42,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rgdevment/LinkUnbound/releases">
-    <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/rgdevment/283d803e965b119371a704501932961f/raw/linkunbound_downloads_windows.json&style=flat-square&logo=windows&logoColor=white" alt="Windows Downloads"/>
-  </a>
-  &nbsp;
-  <a href="https://github.com/rgdevment/LinkUnbound/releases">
-    <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/rgdevment/283d803e965b119371a704501932961f/raw/linkunbound_downloads_macos.json&style=flat-square&logo=apple&logoColor=white" alt="macOS Downloads"/>
-  </a>
-</p>
-
-<p align="center">
   <sub>Prefer a direct download? <a href="https://github.com/rgdevment/LinkUnbound/releases/latest">GitHub Releases</a> has standalone installers — Windows (.exe) · macOS (.dmg, one per chip)</sub>
 </p>
 
