@@ -2,12 +2,6 @@ name: Mutants
 
 on:
   pull_request:
-    paths:
-      - crates/**
-      - app/src/**
-      - .cargo/mutants.toml
-      - app/stryker.config.json
-      - .github/workflows/mutants.yml
 
 permissions:
   contents: read
@@ -20,10 +14,35 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # `paths` on the trigger leaves a required check unreported for good; a skipped job counts as met.
+  changes:
+    name: what the branch touched
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mutable: ${{ steps.look.outputs.mutable }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: look
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          watched='^(crates/|app/src/|\.cargo/mutants\.toml$|app/stryker\.config\.json$|\.github/workflows/mutants\.yml$)'
+          from=$(git merge-base "$BASE" HEAD)
+          if git diff --name-only --diff-filter=d "$from" HEAD | grep -qE "$watched"; then
+            echo "mutable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mutable=false" >> "$GITHUB_OUTPUT"
+          fi
+
   crates-on-the-branch:
     name: crates / the lines this branch changed
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -83,7 +102,8 @@ jobs:
   mac-on-the-branch:
     name: mac / the lines this branch changed
     runs-on: macos-latest
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -137,7 +157,8 @@ jobs:
   settings-on-the-branch:
     name: settings / the lines this branch changed
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -201,7 +222,8 @@ jobs:
   window-on-the-branch:
     name: window / the lines this branch changed
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
