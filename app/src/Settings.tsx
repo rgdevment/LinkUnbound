@@ -36,8 +36,6 @@ type Spoken = { language: string };
 /// Only the one field this screen touches; the rest travels back untouched.
 type Noticed = { prefs: { edge_warning_dismissed: boolean } & Record<string, unknown> };
 
-type Build = { version: string };
-
 const RELEASES = "https://github.com/rgdevment/LinkUnbound/releases/latest";
 
 type Remedy = { label: Key; note?: Key } & { command: string; args?: Record<string, unknown> };
@@ -88,7 +86,9 @@ function Wrappable({ path }: { path: string }) {
 
 type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
 
-const PAGES: { id: Page; label: Key; icon: React.ReactNode }[] = [
+type Entry = { id: Page; label: Key; icon: React.ReactNode };
+
+const PAGES: Entry[] = [
   {
     id: "links",
     label: "navLinks",
@@ -130,17 +130,20 @@ const PAGES: { id: Page; label: Key; icon: React.ReactNode }[] = [
       </>
     ),
   },
-  {
-    id: "about",
-    label: "navAbout",
-    icon: (
-      <>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 16v-4M12 8h.01" />
-      </>
-    ),
-  },
 ];
+
+/// Kept out of the list and pinned to the foot of the bar: it is where a person looks for it,
+/// and it is the one page that is about the program rather than about what it does.
+const ABOUT: Entry = {
+  id: "about",
+  label: "navAbout",
+  icon: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 16v-4M12 8h.01" />
+    </>
+  ),
+};
 
 function Links({
   state,
@@ -310,7 +313,6 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const { ready, step, look, settled } = useUpdate();
   const [page, setPage] = useState<Page>("links");
   const [state, setState] = useState<SystemState | null>(null);
-  const [here, setHere] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [starring, setStarring] = useState(false);
 
@@ -324,12 +326,6 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
     ask();
     window.addEventListener("focus", ask);
     return () => window.removeEventListener("focus", ask);
-  }, []);
-
-  useEffect(() => {
-    void invoke<Build>("about")
-      .then(({ version }) => setHere(version))
-      .catch(noop);
   }, []);
 
   useEffect(() => {
@@ -365,52 +361,30 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
         className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-black/[0.08] bg-black/[0.02] p-2 dark:border-white/[0.08] dark:bg-white/[0.02]"
       >
         {PAGES.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            aria-current={p.id === page ? "page" : undefined}
-            onClick={() => setPage(p.id)}
-            className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[12.5px] transition ${
-              p.id === page
-                ? "bg-[#2F62D8]/[0.11] font-semibold text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
-                : "text-neutral-500 hover:bg-black/[0.04] hover:text-inherit dark:text-[#8B92A1] dark:hover:bg-white/[0.06]"
-            }`}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              className="h-[15px] w-[15px] shrink-0"
-              aria-hidden="true"
-            >
-              {p.icon}
-            </svg>
-            {t(p.label)}
-          </button>
+          <Tab key={p.id} tab={p} on={page} onPick={setPage} />
         ))}
-        {ready ? (
-          <button
-            type="button"
-            onClick={() => setPage("about")}
-            aria-label={`${t("navAbout")} · ${t("updateWaiting")}`}
-            className="mt-auto flex items-center gap-1.5 rounded-md bg-[#2F62D8]/[0.11] px-2.5 py-1.5 text-[10.5px] font-medium text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
-          >
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
-            {t("updateGoTo", ready.version)}
-          </button>
-        ) : (
-          <span className="mt-auto px-2.5 py-2 text-[10.5px] text-neutral-400 dark:text-[#646B7C]">
-            {here ? t("version", here) : ""}
-          </span>
-        )}
+        <div className="mt-auto flex flex-col gap-0.5">
+          {ready && (
+            <button
+              type="button"
+              onClick={() => setPage("about")}
+              aria-label={`${t("navAbout")} · ${t("updateWaiting")}`}
+              className="flex items-center gap-1.5 rounded-md bg-[#2F62D8]/[0.11] px-2.5 py-1.5 text-[10.5px] font-medium text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
+            >
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+              {t("updateGoTo", ready.version)}
+            </button>
+          )}
+          <Tab tab={ABOUT} on={page} onPick={setPage} />
+        </div>
       </nav>
 
       <main className="scroller flex min-w-0 flex-1 flex-col gap-4 p-5">
-        <h1 className="text-[15px] font-semibold">
-          {t(PAGES.find((p) => p.id === page)?.label ?? "navLinks")}
-        </h1>
+        {page !== "about" && (
+          <h1 className="text-[15px] font-semibold">
+            {t(PAGES.find((p) => p.id === page)?.label ?? "navLinks")}
+          </h1>
+        )}
         {problem && (
           <p className="rounded-md bg-[#C0362F]/10 px-3 py-2 text-[11.5px] text-[#C0362F] dark:bg-[#FF8A85]/10 dark:text-[#FF8A85]">
             {problem}
@@ -440,6 +414,36 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
         )}
       </main>
     </div>
+  );
+}
+
+function Tab({ tab, on, onPick }: { tab: Entry; on: Page; onPick: (next: Page) => void }) {
+  const t = useWords();
+  const here = tab.id === on;
+  return (
+    <button
+      type="button"
+      aria-current={here ? "page" : undefined}
+      onClick={() => onPick(tab.id)}
+      className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[12.5px] transition ${
+        here
+          ? "bg-[#2F62D8]/[0.11] font-semibold text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
+          : "text-neutral-500 hover:bg-black/[0.04] hover:text-inherit dark:text-[#8B92A1] dark:hover:bg-white/[0.06]"
+      }`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        className="h-[15px] w-[15px] shrink-0"
+        aria-hidden="true"
+      >
+        {tab.icon}
+      </svg>
+      {t(tab.label)}
+    </button>
   );
 }
 

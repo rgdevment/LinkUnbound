@@ -40,8 +40,15 @@ describe("theme", () => {
     invoke.mockReset();
   });
 
-  it("is dark before the backend has said anything", () => {
+  it("follows the system before the backend has said anything", () => {
     systemPrefers(false);
+    invoke.mockReturnValue(new Promise(() => {}));
+    follow();
+    expect(isDark()).toBe(false);
+  });
+
+  it("follows a dark system too, with nothing remembered", () => {
+    systemPrefers(true);
     invoke.mockReturnValue(new Promise(() => {}));
     follow();
     expect(isDark()).toBe(true);
@@ -117,6 +124,6 @@ describe("theme", () => {
     invoke.mockRejectedValue(new Error("no bridge"));
     follow();
     await settled();
-    expect(isDark()).toBe(true);
+    expect(isDark()).toBe(false);
   });
 });

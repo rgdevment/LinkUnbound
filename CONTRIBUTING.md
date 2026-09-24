@@ -42,7 +42,7 @@ We believe in:
 
 1. **Fork** the repository.
 2. **Choose the base branch:**
-   - `main` — active development. Version 2.0 lands here.
+   - `main` — active development. The 2.x line lands here.
    - `v1-stable` — the frozen 1.4.x line. Security and crash fixes only, no new features.
 3. **Create a branch** from it (`git checkout -b feature/my-improvement`).
 4. **Make your changes** following the style guide below.
@@ -64,6 +64,19 @@ LinkUnbound supports English and Spanish. Help bring it to more languages — se
 ### Improve Documentation
 
 Found something confusing? Missing information? PRs welcome.
+
+---
+
+## Architecture
+
+Two binaries, one package:
+
+- `linkunbound-shell` → the resident: tray or menu bar, the picker, the notice; Windows and macOS run it for every link, and a second copy hands its link to the one already running and exits
+- `linkunbound-settings` → the settings window, opened on demand, and the errands the resident sends it on with no window (`--look` asks the feed, `--update` installs)
+
+**Windows.** A named pipe of the user's own (`linkunbound-<user>.sock`) links second instances to the resident, and holding its name is what keeps a second resident from starting. The installer writes the app's own ProgId, `RegisteredApplications` and `StartMenuInternet` keys; the settings window re-points them when the install moves and never recreates what the person took away; Windows itself owns the final choice through `UserChoice`, which no application may write.
+
+**macOS.** The bundle's `CFBundleExecutable` is the resident, so Launch Services starts it — or talks to the running copy — for every link. Nothing arrives on the command line: links, documents, launches and reopens come in as Apple Events (`GURL`, `odoc`, `oapp`, `rapp`), and the launch event says whether the session started the app as a login item, which is what keeps the settings window closed at sign-in. A Unix socket under `~/Library/Application Support/LinkUnbound/` carries links handed over from a terminal. Default-browser registration goes through `NSWorkspace.setDefaultApplication` for `http`, `https` and the web document types, which the system confirms with its own prompt; the browser that held the links before is remembered and gets them back on unregistering. Login items use `SMAppService`. A browser is started through `open` either way — plainly for a bare link, as an instance of its own when a private window or a profile rides along — so Launch Services starts it and it answers for its own permissions rather than for LinkUnbound's. The web document types are declared as an alternate opener: double-clicking an `.html` keeps opening wherever it did until the person chooses. The app runs as `LSUIElement`, so it lives in the menu bar instead of the Dock, and the picker floats above every Space, full-screen apps included.
 
 ---
 

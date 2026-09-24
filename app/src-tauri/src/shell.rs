@@ -49,6 +49,16 @@ fn dress_natively<R: Runtime>(window: &tauri::WebviewWindow<R>, theme: Theme) {
 #[cfg(not(target_os = "macos"))]
 fn dress_natively<R: Runtime>(_window: &tauri::WebviewWindow<R>, _theme: Theme) {}
 
+#[cfg(target_os = "windows")]
+fn drop_the_title_icon<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    if let Ok(hwnd) = window.hwnd() {
+        linkunbound_win::strip_title_icon(hwnd.0 as isize);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn drop_the_title_icon<R: Runtime>(_window: &tauri::WebviewWindow<R>) {}
+
 /// Set while the webview is being built. A second instance's knock, or the global shortcut,
 /// arrives inside that build's own message pump — the WebView2 environment is created by
 /// pumping messages until it answers — and building again from in there leaves both sides
@@ -98,6 +108,7 @@ fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     let built = builder.build();
     if let Ok(window) = built {
         dress_natively(&window, theme);
+        drop_the_title_icon(&window);
         let late = window.clone();
         std::thread::spawn(move || {
             std::thread::sleep(LONG_ENOUGH_TO_PAINT);

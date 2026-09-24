@@ -15,15 +15,16 @@ function paint(theme: Theme, systemIsDark: boolean) {
 }
 
 /// What was painted last time, so the first frame is not the default flashing before the
-/// choice arrives. The default is dark, as a fresh install's is.
+/// choice arrives. With nothing remembered it follows the system, as a fresh install does.
 function remembered(): Theme {
   try {
     const was = localStorage.getItem(REMEMBERED);
     if (was === "0") return "light";
+    if (was === "1") return "dark";
   } catch {
     // As above.
   }
-  return "dark";
+  return "system";
 }
 
 let reread: (() => void) | null = null;

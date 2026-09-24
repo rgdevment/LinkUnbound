@@ -65,16 +65,18 @@ describe("settings", () => {
   it("asks for the window once it has painted", async () => {
     answers(BASE);
     render(<Settings />);
-    await screen.findByText("Versión 2.0.0");
+    await screen.findByRole("heading", { name: "Enlaces" });
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("settings_painted"));
   });
 
   /// The sidebar's corner said "Versión {}" for two different facts: the one you run and the one
-  /// waiting. With an offer in hand it showed the new number where the installed one had been.
-  it("shows the version it is running when there is nothing newer", async () => {
+  /// waiting, and with an offer in hand it showed the new number where the installed one had been.
+  /// The corner is gone and About carries the number, so the bar must stay quiet with nothing new.
+  it("says nothing in the bar when there is no newer version", async () => {
     answers(BASE);
     render(<Settings />);
-    expect(await screen.findByText("Versión 2.0.0")).toBeInTheDocument();
+    await go("Acerca de");
+    expect(await screen.findByText("2.0.0")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /hay una versión nueva/ })).toBeNull();
   });
 
@@ -453,7 +455,7 @@ describe("settings", () => {
       ["Navegadores", "Navegadores"],
       ["Aplicación", "Aplicación"],
       ["Mantenimiento", "Mantenimiento"],
-      ["Acerca de", "Acerca de"],
+      ["Acerca de", "LinkUnbound"],
       ["Enlaces", "Enlaces"],
     ]) {
       await go(name);

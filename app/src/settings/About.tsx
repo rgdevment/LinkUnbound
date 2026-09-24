@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
 import { type Key, useSpoken, useWords } from "../i18n";
 import { offerMoved, saidPlainly } from "../refusal";
+import { CloudOff, Code, Gift, Key as KeyIcon } from "./Icons";
 import { Card, Line, Switch } from "./parts";
 import Star from "./Star";
 import type { Ready, Underway } from "./update";
@@ -13,6 +14,7 @@ const COPYPASTE = "https://github.com/rgdevment/CopyPaste";
 const TISTY = "https://github.com/rgdevment/Tisty";
 const SPONSOR = "https://github.com/sponsors/rgdevment";
 const RATING = "ms-windows-store://review/?ProductId=9N9F7C8Q43KC";
+const ALTERNATIVETO = "https://alternativeto.net/software/linkunbound/";
 
 type Build = {
   version: string;
@@ -33,28 +35,20 @@ function howItInstalls(newer: Ready): Key {
 
 function External({ href, children }: { href: string; children: string }) {
   return (
-    <button
-      type="button"
-      onClick={() => void openUrl(href).catch(noop)}
-      className="shrink-0 rounded-md px-3 py-1.5 text-[11.5px] text-[#2F62D8] dark:text-[#6E9BFF]"
-    >
+    <button type="button" onClick={() => void openUrl(href).catch(noop)}>
       {children}
     </button>
   );
 }
 
 function Rule({ said }: { said: string }) {
-  return (
-    <div className="mt-6 mb-2 flex items-center gap-2.5 text-[11.5px] font-semibold uppercase tracking-[0.05em] text-neutral-500 dark:text-[#8B92A1]">
-      <span>{said}</span>
-      <span className="h-px flex-1 bg-black/[0.08] dark:bg-white/[0.08]" />
-    </div>
-  );
+  return <div className="rule">{said}</div>;
 }
 
-function Badge({ said }: { said: string }) {
+function Badge({ said, children }: { said: string; children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-black/[0.08] px-2.5 py-1 text-[11.5px] text-neutral-600 dark:border-white/[0.08] dark:text-[#A8AEBC]">
+    <span className="badge">
+      {children}
       {said}
     </span>
   );
@@ -74,21 +68,13 @@ function Gives({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onPick}
-      className={`flex items-center gap-2.5 rounded-[10px] border border-black/[0.08] px-3 py-2.5 text-left hover:bg-black/[0.03] dark:border-white/[0.08] dark:hover:bg-white/[0.04] ${
-        wide ? "col-span-2" : ""
-      }`}
-    >
-      <svg viewBox="0 0 16 16" aria-hidden="true" className="h-[17px] w-[17px] shrink-0">
+    <button type="button" onClick={onPick} className={wide ? "give wide" : "give"}>
+      <svg viewBox="0 0 16 16" aria-hidden="true">
         {children}
       </svg>
       <span className="min-w-0">
-        <span className="block text-[12.5px] font-medium">{said}</span>
-        <span className="block truncate text-[11.5px] text-neutral-500 dark:text-[#8B92A1]">
-          {where}
-        </span>
+        <b>{said}</b>
+        <span>{where}</span>
       </span>
     </button>
   );
@@ -98,51 +84,32 @@ function Gives({
 /// project, and a missing file here would leave a broken image in a row that is only a pointer.
 function Tool({
   mark,
-  tone,
+  hue,
   said,
   note,
   onPick,
 }: {
   mark: string;
-  tone: string;
+  hue: string;
   said: string;
   note: string;
   onPick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onPick}
-      className="mb-2 flex w-full items-start gap-3 rounded-[10px] border border-black/[0.08] px-3.5 py-3 text-left hover:bg-black/[0.03] dark:border-white/[0.08] dark:hover:bg-white/[0.04]"
-    >
-      <span
-        aria-hidden="true"
-        className={`mt-px grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-semibold text-white ${tone}`}
-      >
+    <button type="button" className="tool" onClick={onPick}>
+      <span className="ico" aria-hidden="true" style={{ background: hue }}>
         {mark}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-semibold">{said}</span>
-        <span className="mt-0.5 block text-[12.5px] leading-relaxed text-neutral-500 dark:text-[#8B92A1]">
-          {note}
-        </span>
-      </span>
-      <span aria-hidden="true" className="mt-0.5 text-[13px] text-neutral-400 dark:text-[#6B7280]">
-        ↗
+        <b>{said}</b>
+        <span>{note}</span>
       </span>
     </button>
   );
 }
 
 function Pip({ ok }: { ok?: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={`h-[7px] w-[7px] shrink-0 rounded-full ${
-        ok ? "bg-[#1E7A52] dark:bg-[#4CC38A]" : "bg-[#2F62D8] dark:bg-[#6E9BFF]"
-      }`}
-    />
-  );
+  return <span aria-hidden="true" className={ok ? "pip ok" : "pip"} />;
 }
 
 function Offer({
@@ -175,15 +142,12 @@ function Offer({
 
   if (!newer) {
     return (
-      <div className="flex items-center gap-2.5 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3.5 py-3 dark:border-white/[0.08] dark:bg-white/[0.02]">
+      <div className="newer">
         <Pip ok />
-        <span className="flex-1 text-[11.5px]">{looking ? t("lookingNow") : t("lookNowNone")}</span>
-        <button
-          type="button"
-          disabled={looking}
-          onClick={lookAgain}
-          className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] disabled:opacity-40 dark:border-white/[0.12]"
-        >
+        <span className="grow">
+          <b>{looking ? t("lookingNow") : t("lookNowNone")}</b>
+        </span>
+        <button type="button" disabled={looking} onClick={lookAgain} className="mild">
           {t("lookNow")}
         </button>
       </div>
@@ -191,43 +155,32 @@ function Offer({
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-[#2F62D8]/25 bg-[#2F62D8]/[0.06] px-3.5 py-3 dark:border-[#6E9BFF]/25 dark:bg-[#6E9BFF]/[0.08]">
+    <div className="newer there">
       <Pip />
-      <div className="min-w-0 flex-1" aria-live="polite">
-        <p className="text-[12.5px] font-semibold">{t("updateThere", newer.version)}</p>
+      <div className="grow" aria-live="polite">
+        <b>{t("updateThere", newer.version)}</b>
         {step ? (
           step.stage === "installing" ? (
-            <p className="mt-0.5 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
-              {t(newer.route === "store" ? "updateInstallingStore" : "updateInstalling")}
-            </p>
+            <span>{t(newer.route === "store" ? "updateInstallingStore" : "updateInstalling")}</span>
           ) : (
             <>
-              <p className="mt-0.5 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
-                {t("updateGetting", `${step.far} %`)}
-              </p>
+              <span>{t("updateGetting", `${step.far} %`)}</span>
               <span
                 role="progressbar"
                 aria-label={t("updateInstall")}
                 aria-valuenow={step.far}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                className="mt-1.5 block h-1 overflow-hidden rounded-full bg-black/[0.08] dark:bg-white/[0.12]"
+                className="bar"
               >
-                <span
-                  className="block h-full rounded-full bg-[#2F62D8] transition-[width] dark:bg-[#6E9BFF]"
-                  style={{ width: `${step.far}%` }}
-                />
+                <span style={{ width: `${step.far}%` }} />
               </span>
             </>
           )
         ) : asked ? (
-          <p className="mt-0.5 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
-            {t("updateStarting")}
-          </p>
+          <span>{t("updateStarting")}</span>
         ) : (
-          <p className="mt-0.5 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
-            {t(howItInstalls(newer))}
-          </p>
+          <span>{t(howItInstalls(newer))}</span>
         )}
       </div>
       {!step && newer.installs && (
@@ -255,7 +208,7 @@ function Offer({
                 }
               });
           }}
-          className="shrink-0 rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white disabled:opacity-50 dark:bg-[#6E9BFF] dark:text-[#12141B]"
+          className="strong"
         >
           {t("updateInstall")}
         </button>
@@ -322,6 +275,14 @@ export default function About({
   const [build, setBuild] = useState<Build | null>(null);
   const [trouble, setTrouble] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+
+  const report = () => {
+    setProblem(null);
+    invoke<string>("maintenance_report")
+      .then(setSaved)
+      .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+  };
 
   const look = useCallback(() => {
     setTrouble(null);
@@ -334,61 +295,47 @@ export default function About({
 
   return (
     <>
-      <div className="flex items-center gap-3.5">
-        <span
-          aria-hidden="true"
-          className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-[10px] bg-[#2F62D8] text-[21px] font-semibold text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
-        >
-          L
-        </span>
-        <span className="min-w-0">
-          <h2 className="text-[21px] font-semibold tracking-[-0.015em]">LinkUnbound</h2>
-          <span className="mt-px flex items-center gap-2 text-[11.5px] text-neutral-500 tabular-nums dark:text-[#8B92A1]">
-            <span>{build?.version ?? "—"}</span>
-            <span
-              aria-hidden="true"
-              className="h-[3px] w-[3px] rounded-full bg-black/20 dark:bg-white/20"
-            />
-            <span>{build?.license ?? "—"}</span>
-          </span>
+      <div className="brow">
+        <h1>LinkUnbound</h1>
+        <span className="line2">
+          <span>{build?.version ?? "—"}</span>
+          <i />
+          <span>{build?.license ?? "—"}</span>
         </span>
       </div>
 
-      <div className="mt-4 rounded-[10px] border border-black/[0.08] bg-black/[0.015] px-4 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.02]">
-        <p className="text-[12.5px] leading-relaxed text-neutral-600 dark:text-[#A8AEBC]">
-          {t("aboutWhat")}
-        </p>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-neutral-500 dark:text-[#8B92A1]">
-          {t("aboutPrivacy")}
-        </p>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <Badge said={t("badgeLocal")} />
-          <Badge said={t("badgeOpen")} />
-          <Badge said={t("badgeFree")} />
-          <Badge said={t("badgeQuiet")} />
+      <div className="what-is">
+        <p>{t("aboutWhat")}</p>
+        <p>{t("aboutPrivacy")}</p>
+        <div className="badges">
+          <Badge said={t("badgeLocal")}>
+            <KeyIcon />
+          </Badge>
+          <Badge said={t("badgeOpen")}>
+            <Code />
+          </Badge>
+          <Badge said={t("badgeFree")}>
+            <Gift />
+          </Badge>
+          <Badge said={t("badgeQuiet")}>
+            <CloudOff />
+          </Badge>
         </div>
       </div>
 
       {trouble && (
-        <div className="rounded-md bg-[#C0362F]/10 px-3 py-2 dark:bg-[#FF8A85]/10">
-          <p role="alert" className="text-[11.5px] text-[#C0362F] dark:text-[#FF8A85]">
+        <div className="alarm">
+          <p role="alert">
             {t("aboutFailed")} · {trouble}
           </p>
-          <button
-            type="button"
-            onClick={look}
-            className="mt-1.5 rounded-md border border-black/[0.12] px-2.5 py-1 text-[11.5px] dark:border-white/[0.12]"
-          >
+          <button type="button" onClick={look} className="mild" style={{ marginTop: 6 }}>
             {t("tryAgain")}
           </button>
         </div>
       )}
 
       {problem && (
-        <p
-          role="alert"
-          className="rounded-md bg-[#C0362F]/10 px-3 py-2 text-[11.5px] text-[#C0362F] dark:bg-[#FF8A85]/10 dark:text-[#FF8A85]"
-        >
+        <p role="alert" className="alarm">
           {problem}
         </p>
       )}
@@ -413,10 +360,8 @@ export default function About({
       {starring && <Star onSettled={onStarSettled} />}
 
       <Rule said={t("aboutSponsorSection")} />
-      <p className="text-[13px] leading-relaxed text-neutral-600 dark:text-[#A8AEBC]">
-        {t("aboutSupportWhy")}
-      </p>
-      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+      <p className="quiet">{t("aboutSupportWhy")}</p>
+      <div className="gives">
         {!starring && (
           <Gives
             wide={!build?.keptByTheStore}
@@ -467,22 +412,42 @@ export default function About({
       <Rule said={t("aboutOtherTools")} />
       <Tool
         mark="T"
-        tone="bg-[#6f4bd8]"
+        hue="#6f4bd8"
         said={t("aboutTisty")}
         note={t("aboutTistyNote")}
         onPick={() => void openUrl(TISTY).catch(noop)}
       />
       <Tool
         mark="CP"
-        tone="bg-[#1E7A52] dark:bg-[#2E9B6B]"
+        hue="#1e7a52"
         said={t("aboutCopyPaste")}
         note={t("aboutCopyPasteNote")}
         onPick={() => void openUrl(COPYPASTE).catch(noop)}
       />
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <Rule said={t("troubleSection")} />
+      <p className="trouble">
+        {t("reportWhat")} <b>{t("reportStays")}</b> {t("reportPick")}
+      </p>
+      <div className="row">
+        <button type="button" onClick={report} className="mild">
+          {t("reportGo")}
+        </button>
+        <button
+          type="button"
+          onClick={() => void openUrl(`${REPO}/issues`).catch(noop)}
+          className="mild"
+        >
+          {t("aboutIssue")}
+        </button>
+      </div>
+      {saved && <p className="saved">{t("reportSaved", saved)}</p>}
+
+      <div className="links">
         <External href={build?.repository ?? REPO}>{t("aboutRepo")}</External>
-        <External href={`${REPO}/issues`}>{t("aboutIssue")}</External>
+        <External href={ALTERNATIVETO}>AlternativeTo</External>
+        <External href={`${REPO}/blob/main/PRIVACY.md`}>{t("aboutPrivacyLink")}</External>
+        <External href={`${REPO}/blob/main/THIRD-PARTY-BUNDLED.md`}>{t("aboutNotices")}</External>
       </div>
     </>
   );

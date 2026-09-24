@@ -17,8 +17,8 @@ pub use icons::cached_or_extract as icon_for;
 pub use native::{
     attach_parent_console, copy_text, current_user_sid, cursor, digit_behind, front_is_ours,
     front_window, is_in_front, keep_off_the_taskbar, let_whoever_opens_next_come_forward,
-    never_activates, notify_associations_changed, shift_is_down, source_app, take_the_keyboard,
-    work_area_at, write_line_to_pipe,
+    never_activates, notify_associations_changed, shift_is_down, source_app, strip_title_icon,
+    take_the_keyboard, work_area_at, write_line_to_pipe,
 };
 #[cfg(windows)]
 pub use registration::{

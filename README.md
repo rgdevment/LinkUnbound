@@ -1,6 +1,6 @@
 ﻿<div align="center">
 
-<img src="resources/assets/icon_128.png" alt="LinkUnbound icon" width="96" height="96"/>
+<img src="app/src-tauri/icons/icon.png" alt="LinkUnbound icon" width="96" height="96"/>
 
 # LinkUnbound
 
@@ -9,21 +9,6 @@
 **Open source. Local-first. Privacy-first. Zero telemetry.**
 
 <p>
-  <a href="https://github.com/rgdevment/LinkUnbound/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/rgdevment/LinkUnbound/ci.yml?style=flat-square&logo=github-actions&label=Build" alt="Build Status"/>
-  </a>
-  <a href="https://sonarcloud.io/summary/overall?id=rgdevment_LinkUnbound">
-    <img src="https://img.shields.io/sonar/quality_gate/rgdevment_LinkUnbound?server=https%3A%2F%2Fsonarcloud.io&style=flat-square&logo=sonarcloud&label=Quality%20Gate" alt="Quality Gate"/>
-  </a>
-  <a href="https://github.com/rgdevment/LinkUnbound/actions/workflows/mutants-sweep.yml">
-    <img src="https://img.shields.io/endpoint?style=flat-square&url=https%3A%2F%2Fraw.githubusercontent.com%2Frgdevment%2FLinkUnbound%2Fscore%2Fmutants.json" alt="Mutation score"/>
-  </a>
-  <a href="https://dashboard.stryker-mutator.io/reports/github.com/rgdevment/LinkUnbound/main">
-    <img src="https://img.shields.io/endpoint?style=flat-square&label=window%20logic&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2Frgdevment%2FLinkUnbound%2Fmain" alt="Window mutation score"/>
-  </a>
-  <a href="https://sonarcloud.io/summary/overall?id=rgdevment_LinkUnbound">
-    <img src="https://img.shields.io/sonar/coverage/rgdevment_LinkUnbound?server=https%3A%2F%2Fsonarcloud.io&style=flat-square&logo=sonarcloud&label=Coverage" alt="Coverage"/>
-  </a>
   <a href="https://github.com/rgdevment/LinkUnbound/releases">
     <img src="https://img.shields.io/github/v/release/rgdevment/LinkUnbound?include_prereleases&style=flat-square&label=Latest&color=0078D4" alt="Latest Release"/>
   </a>
@@ -76,7 +61,7 @@
 
 **LinkUnbound** is a free, open source **browser picker** for Windows and macOS — a small tool that makes itself the default browser and then asks *you* which real browser should open each link. Click a link in Teams, Outlook, Slack, Discord, a PDF, a terminal, anywhere: if you have a rule for it, the right browser opens at once; if not, a little **browser chooser** pops up next to your cursor and you pick with a click or a key.
 
-It is the missing piece for anyone who lives with more than one browser: work in one, personal life in another, a client's tools in a third profile. Instead of changing the system default every week, you set a **rule per site, per subdomain, per exact address or per app** — "everything from Slack in Brave", "docs.google.com in the work profile of Chrome" — and the rest goes through the picker. A **default browser manager**, a **link router**, a **browser switcher**: call it what you like, it just routes links where you want them.
+It is the missing piece for anyone who lives with more than one browser: work in one, personal life in another, a client's tools in a third profile. Instead of changing the system default every week, you set a **rule per site, per subdomain, per exact address or per app** — "everything from Slack in Brave", "docs.google.com in the work profile of Chrome" — and the rest goes through the picker.
 
 There is no company behind this. I am one developer who got tired of the operating system deciding which browser opens a link, built this for myself, and put it out for whoever has the same itch. That shapes everything about it: **no ads, no telemetry, no analytics, no accounts, no subscriptions, no cloud, no data collection** — the only thing it ever asks the network is whether a new version exists, and you can turn that off. Your rules live in a small JSON file on your own disk, and you can read every line of the code that touches them.
 
@@ -85,7 +70,6 @@ There is no company behind this. I am one developer who got tired of the operati
 ## Table of Contents
 
 - [What It Does](#what-it-does)
-- [What It Is / What It Isn't](#what-it-is--what-it-isnt)
 - [Privacy and Security](#privacy-and-security)
 - [Getting Started](#getting-started)
 - [How It Works](#how-it-works)
@@ -96,6 +80,7 @@ There is no company behind this. I am one developer who got tired of the operati
 - [Want to Help?](#want-to-help)
 - [Support the Project](#support-the-project)
 - [Other Tools](#other-tools)
+- [Alternatives](#alternatives)
 - [License](#license)
 
 ---
@@ -115,23 +100,6 @@ There is no company behind this. I am one developer who got tired of the operati
 - **Updates itself** — looks at the release feed in the background, says so in the picker and in Settings, and one press installs it; a Microsoft Store copy updates through the Store
 - **Tells you when links are not arriving** — Settings explains why and offers the repair
 - **Two languages, three themes** — English and Spanish with automatic detection; light, dark or the system's
-
----
-
-## What It Is / What It Isn't
-
-**LinkUnbound is:**
-
-- A **local-first browser picker** and **default browser manager** for Windows and macOS
-- A lightweight **browser switcher** and **browser selector** that works offline
-- An **open source** tool you can trust — GPL v3, inspect every line, fork it, contribute
-
-**LinkUnbound is not:**
-
-- A browser, toolbar, or extension
-- A telemetry or analytics tool
-- A "platform" with accounts, subscriptions, or ads
-- A corporate product — it's a personal project shared with the community
 
 ---
 
@@ -219,7 +187,7 @@ Since LinkUnbound is an independent open source project, the installer is signed
 **Settings (tray):** double-click the tray icon or right-click → Settings. Six pages:
 
 - **Links** — whether the system sends links here, what is wrong when it does not and the button that fixes it; on Windows, the associations held
-- **Rules** — every rule, in the order that decides; change where each opens, add one, remove one
+- **Rules** — every rule, the most precise one deciding; change where each opens, add one, remove one
 - **Browsers** — what was detected, with profiles; hide, duplicate, or add a custom one with its arguments
 - **Application** — theme, language, picker look, start at sign-in, the global shortcut, background update checks
 - **Maintenance** — export a diagnostic report, rescan browsers, reset the configuration, remove LinkUnbound from the system's list
@@ -239,14 +207,7 @@ Rules are written from the picker — pick the reach, then the browser — or fr
 
 ## Architecture
 
-Two binaries, one package:
-
-- `linkunbound-shell` → the resident: tray or menu bar, the picker, the notice; Windows and macOS run it for every link, and a second copy hands its link to the one already running and exits
-- `linkunbound-settings` → the settings window, opened on demand, and the errands the resident sends it on with no window (`--look` asks the feed, `--update` installs)
-
-**Windows.** A named pipe of the user's own (`linkunbound-<user>.sock`) links second instances to the resident, and holding its name is what keeps a second resident from starting. The installer writes the app's own ProgId, `RegisteredApplications` and `StartMenuInternet` keys; the settings window re-points them when the install moves and never recreates what the person took away; Windows itself owns the final choice through `UserChoice`, which no application may write.
-
-**macOS.** The bundle's `CFBundleExecutable` is the resident, so Launch Services starts it — or talks to the running copy — for every link. Nothing arrives on the command line: links, documents, launches and reopens come in as Apple Events (`GURL`, `odoc`, `oapp`, `rapp`), and the launch event says whether the session started the app as a login item, which is what keeps the settings window closed at sign-in. A Unix socket under `~/Library/Application Support/LinkUnbound/` carries links handed over from a terminal. Default-browser registration goes through `NSWorkspace.setDefaultApplication` for `http`, `https` and the web document types, which the system confirms with its own prompt; the browser that held the links before is remembered and gets them back on unregistering. Login items use `SMAppService`. A browser is started through `open` either way — plainly for a bare link, as an instance of its own when a private window or a profile rides along — so Launch Services starts it and it answers for its own permissions rather than for LinkUnbound's. The web document types are declared as an alternate opener: double-clicking an `.html` keeps opening wherever it did until the person chooses. The app runs as `LSUIElement`, so it lives in the menu bar instead of the Dock, and the picker floats above every Space, full-screen apps included.
+Two binaries, one package: a resident that receives the links and draws the picker, and a settings window opened on demand. How they talk to each other on each system is in [CONTRIBUTING.md](CONTRIBUTING.md#architecture).
 
 **Coming from 1.x.** 2.0 is not compatible with the settings of the 1.x line, and does not promise to carry them over: it starts from what it can read and keeps the rest out of the way. On Windows it reads the rules and browsers of a standalone 1.x install where they are, and keeps a copy of the originals as `rules.1x.json` and `browsers.1x.json` before writing its own format; a copy installed from the Microsoft Store kept its files inside its package and they are not read. Going back to 1.x means restoring those copies over `rules.json` and `browsers.json`. Remove 1.x before installing 2.0 — the installer offers to — or the two fight over the same registration; a Store copy of 1.x has to be uninstalled by hand. On macOS 2.0 ships under the bundle identifier `dev.rgdevment.linkunbound`; 1.x was `com.rgdevment.linkunbound`, kept its files under that name, and nothing of it is read. macOS treats them as two applications: quit 1.x, remove it, then open Settings and set LinkUnbound as the default once more, and remove the old entry under System Settings → General → Login Items if one is left behind.
 
@@ -333,6 +294,24 @@ I build free, open source tools focused on privacy and productivity. If you like
 
 ---
 
+## Alternatives
+
+Other browser pickers, so you can pick the one that fits. Platform and licence checked against each project in September 2026; everything else changes, so go and look.
+
+| Project | Platform | Licence |
+| :-- | :-- | :-- |
+| [Finicky](https://github.com/johnste/finicky) | macOS | MIT |
+| [Browserosaurus](https://github.com/will-stone/browserosaurus) | macOS | GPL-3.0, archived by its author |
+| [BrowserPicker](https://github.com/mortenn/BrowserPicker) | Windows | MIT |
+| [Browser Tamer](https://github.com/aloneguid/bt) | Windows, Linux | Apache-2.0 |
+| [Junction](https://github.com/sonnyp/Junction) | Linux | GPL-3.0 |
+| [Choosy](https://www.choosyosx.com/) | macOS, Windows | Paid |
+| [Velja](https://sindresorhus.com/velja) | macOS | Free, closed source |
+
+What LinkUnbound does that most of these do not: **one build for Windows and macOS**, rules that match **the app a link came from** and not only its address, **browser profiles** detected on their own, and signed automatic updates. Finicky is configured in a file and is macOS only; Browserosaurus is no longer maintained; Junction is Linux only.
+
+---
+
 ## License
 
 **LinkUnbound** — A free, open source browser picker for Windows and macOS.
@@ -358,4 +337,24 @@ from the lockfiles.
 
 I built LinkUnbound because I was tired of my OS not letting me choose which browser opens a link. This is a personal tool, built from a real need, shared because others might need it too. Free to use, free to inspect, free forever.
 
-<sub>**Keywords:** browser picker, browser chooser, default browser manager, browser switcher, link router, URL router, link handler, multi-browser workflow, open source browser picker Windows, browser picker macOS, Microsoft Store browser picker, privacy-first link handler, local-first browser routing, no telemetry, work and personal browser separation, Teams links browser, Outlook links browser, Slack links browser, SafeLinks resolver, Browserosaurus alternative, Choosy alternative, BrowserPick alternative.</sub>
+---
+
+## Project health
+
+<p>
+  <a href="https://github.com/rgdevment/LinkUnbound/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/rgdevment/LinkUnbound/ci.yml?style=flat-square&logo=github-actions&label=Build" alt="Build Status"/>
+  </a>
+  <a href="https://sonarcloud.io/summary/overall?id=rgdevment_LinkUnbound">
+    <img src="https://img.shields.io/sonar/quality_gate/rgdevment_LinkUnbound?server=https%3A%2F%2Fsonarcloud.io&style=flat-square&logo=sonarcloud&label=Quality%20Gate" alt="Quality Gate"/>
+  </a>
+  <a href="https://github.com/rgdevment/LinkUnbound/actions/workflows/mutants-sweep.yml">
+    <img src="https://img.shields.io/endpoint?style=flat-square&url=https%3A%2F%2Fraw.githubusercontent.com%2Frgdevment%2FLinkUnbound%2Fscore%2Fmutants.json" alt="Mutation score"/>
+  </a>
+  <a href="https://dashboard.stryker-mutator.io/reports/github.com/rgdevment/LinkUnbound/main">
+    <img src="https://img.shields.io/endpoint?style=flat-square&label=window%20logic&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2Frgdevment%2FLinkUnbound%2Fmain" alt="Window mutation score"/>
+  </a>
+  <a href="https://sonarcloud.io/summary/overall?id=rgdevment_LinkUnbound">
+    <img src="https://img.shields.io/sonar/coverage/rgdevment_LinkUnbound?server=https%3A%2F%2Fsonarcloud.io&style=flat-square&logo=sonarcloud&label=Coverage" alt="Coverage"/>
+  </a>
+</p>
