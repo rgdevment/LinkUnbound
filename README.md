@@ -26,7 +26,7 @@
 </p>
 
 <p>
-  <img src="resources/assets/linkUnbound_2_0_hero_en.png" alt="LinkUnbound: the settings window on the Rules page, and the browser picker that appears next to a link with the browsers, their profiles and the keys 1 to 3" width="92%"/>
+  <img src="resources/assets/github-en/a-dark.png" alt="LinkUnbound: choose which browser opens every link. The picker sits next to the link, listing Google Chrome, Mozilla Firefox and Vivaldi with the profiles each one carries" width="92%"/>
 </p>
 
 <h4>Download LinkUnbound</h4>
@@ -86,6 +86,12 @@ There is no company behind this. I am one developer who got tired of the operati
 ---
 
 ## What It Does
+
+<p align="center">
+  <img src="resources/assets/linkUnbound_2_picker.gif" alt="A link is clicked inside a desktop application; the picker opens beside the cursor naming the address and the application it came from, and the link opens in the browser chosen" width="700"/>
+</p>
+
+The picker names the address and the application the link came from, and each browser carries the profile it will open in. The settings window covers the rest: the rules and how they are matched, the browsers it found and the ones you add by hand, the diagnostic report, and what is kept on disk.
 
 - **Registers as default browser** — intercepts every link click system-wide on Windows and macOS
 - **Shows a floating picker** near your cursor, in two looks: a classic list or a mosaic of tiles. Pick with the mouse or the keys `1`–`9`; hold **Shift** for a private window; `Ctrl+C` copies the address; `Esc` puts it away
@@ -234,7 +240,9 @@ Yes. LinkUnbound detects all browsers registered with the operating system. You 
 Yes. LinkUnbound unwraps SafeLinks before matching rules, so your rules work on the actual destination — and the picker names it, not the wrapper.
 
 **Why do Teams and Outlook still open Edge?**
-Some Microsoft applications hand links straight to Edge down a channel of their own, skipping the default browser, and Windows 11 no longer lets another application stand in the middle of it. When one of those links arrives wrapped in a SafeLink it is unwrapped; the rest is Microsoft's to change.
+Both carry a setting of their own that sends links to whatever your default browser is, and that is the first thing to change: in Teams it lives under *Settings → Files and links*, and in classic Outlook under *File → Options → Advanced → «Open hyperlinks from Outlook in»*. Microsoft moves these menus about, so look for «link open preference» or «hyperlinks» if they are not where this says. Set that way, their links reach LinkUnbound like anybody else's.
+
+What is left after that is a channel of Microsoft's own that hands links straight to Edge, skipping the default browser altogether, and Windows 11 no longer lets another application stand in the middle of it. When one of those arrives wrapped in a SafeLink it is unwrapped; the rest is Microsoft's to change.
 
 **I do not see the tray icon on Windows.**
 It is there, in the hidden icons behind the `^` at the right of the taskbar: Windows keeps every new application's icon in that overflow until you drag it onto the bar, or promote it under Settings → Personalization → Taskbar → Other system tray icons. Closing the settings window never stops the resident; only *Exit* in the tray menu does.
@@ -301,14 +309,16 @@ Other browser pickers, so you can pick the one that fits. Platform and licence c
 | Project | Platform | Licence |
 | :-- | :-- | :-- |
 | [Finicky](https://github.com/johnste/finicky) | macOS | MIT |
-| [Browserosaurus](https://github.com/will-stone/browserosaurus) | macOS | GPL-3.0, archived by its author |
+| [Browserino](https://github.com/AlexStrNik/Browserino) | macOS | GPL-3.0 |
+| [Browserosaurus](https://github.com/will-stone/browserosaurus) | macOS | GPL-3.0, no longer maintained |
 | [BrowserPicker](https://github.com/mortenn/BrowserPicker) | Windows | MIT |
 | [Browser Tamer](https://github.com/aloneguid/bt) | Windows, Linux | Apache-2.0 |
 | [Junction](https://github.com/sonnyp/Junction) | Linux | GPL-3.0 |
-| [Choosy](https://www.choosyosx.com/) | macOS, Windows | Paid |
+| [Switchbar](https://switchbar.app/) | Windows, macOS | Freemium, closed source |
+| [Choosy](https://choosy.app/) | macOS | Paid |
 | [Velja](https://sindresorhus.com/velja) | macOS | Free, closed source |
 
-What LinkUnbound does that most of these do not: **one build for Windows and macOS**, rules that match **the app a link came from** and not only its address, **browser profiles** detected on their own, and signed automatic updates. Finicky is configured in a file and is macOS only; Browserosaurus is no longer maintained; Junction is Linux only.
+What LinkUnbound does that most of these do not: **one build for Windows and macOS**, rules that match **the app a link came from** and not only its address, **browser profiles** detected on their own, and signed automatic updates. Finicky is configured in a file and is macOS only; Junction is Linux only; Browserosaurus now points its own readers at Browserino, which is macOS only too.
 
 ---
 

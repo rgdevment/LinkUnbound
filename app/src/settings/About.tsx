@@ -293,6 +293,11 @@ export default function About({
 
   useEffect(look, [look]);
 
+  const store = build?.keptByTheStore ?? false;
+  const offerStar = !starring || store;
+  const offerRate = store && !starring;
+  const lopsided = (offerStar ? 1 : 0) + (offerRate ? 1 : 0) === 1;
+
   return (
     <>
       <div className="brow">
@@ -357,14 +362,14 @@ export default function About({
         />
       )}
 
-      {starring && <Star onSettled={onStarSettled} />}
+      {starring && <Star store={store} onSettled={onStarSettled} />}
 
       <Rule said={t("aboutSponsorSection")} />
       <p className="quiet">{t("aboutSupportWhy")}</p>
       <div className="gives">
-        {!starring && (
+        {offerStar && (
           <Gives
-            wide={!build?.keptByTheStore}
+            wide={lopsided}
             said={t("aboutStar")}
             where="github.com/rgdevment/LinkUnbound"
             onPick={() => void openUrl(REPO).catch(noop)}
@@ -375,7 +380,7 @@ export default function About({
             />
           </Gives>
         )}
-        {build?.keptByTheStore && (
+        {offerRate && (
           <Gives
             said={t("aboutRate")}
             where="Microsoft Store"
