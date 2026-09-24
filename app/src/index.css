@@ -267,6 +267,7 @@ body {
 .give span span {
   display: block;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 11.5px;
   color: var(--muted);
