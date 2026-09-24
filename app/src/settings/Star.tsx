@@ -3,14 +3,17 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useWords } from "../i18n";
 
 const REPO = "https://github.com/rgdevment/LinkUnbound";
+const RATING = "ms-windows-store://review/?ProductId=9N9F7C8Q43KC";
 
-export default function Star({ onSettled }: { onSettled: () => void }) {
+/// A copy the Store sold is asked for the rating instead of the star: the rating is what decides
+/// whether anybody searching the Store ever sees this, and the star does nothing there.
+export default function Star({ store, onSettled }: { store: boolean; onSettled: () => void }) {
   const t = useWords();
 
   const settle = (open: boolean) => {
     onSettled();
     void invoke("star_done").catch(noop);
-    if (open) void openUrl(REPO).catch(noop);
+    if (open) void openUrl(store ? RATING : REPO).catch(noop);
   };
 
   return (
@@ -39,7 +42,7 @@ export default function Star({ onSettled }: { onSettled: () => void }) {
             onClick={() => settle(true)}
             className="rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
           >
-            {t("starGo")}
+            {t(store ? "aboutRate" : "starGo")}
           </button>
           <button
             type="button"

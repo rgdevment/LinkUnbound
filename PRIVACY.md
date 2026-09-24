@@ -224,29 +224,31 @@ After these steps, no LinkUnbound data remains on your system.
 
 ## Diagnostics Export
 
-LinkUnbound includes an optional **Export diagnostics** feature (Settings → Maintenance) that generates a ZIP file for troubleshooting. This file is created locally and **never sent automatically** — you choose whether and where to share it.
+LinkUnbound can write a diagnostic report for troubleshooting: Settings → **About** → *Save report*. The file is written locally and **never sent anywhere** — you decide whether to share it and with whom.
 
-### What the ZIP Contains
+It is a single Markdown file named `linkunbound-diagnostico.md`. On Windows it is written to your Desktop; where that folder does not exist, it goes to the system's temporary directory. The message on screen names the exact path it landed in.
 
-| File                  | Content                                                                   |
-| :-------------------- | :------------------------------------------------------------------------ |
-| `system_info.txt`     | OS version, locale, app version, executable path, data files              |
-| `registry.txt`        | Windows only — LinkUnbound's own registry entries, those three keys alone |
-| `launch_services.txt` | macOS only — the system's URL-handler associations (see the note below)   |
-| `navigate.log`        | Last 200 lines of the navigation log (URLs already redacted)              |
+### What the report contains
 
-### What the ZIP Does NOT Contain
+| Section | Content |
+| :-- | :-- |
+| Heading | The version of LinkUnbound you are running |
+| `Sistema` | Operating system, whether LinkUnbound is registered and default, the health check, how many associations it holds, whether it starts with the system, whether Edge is installed, and the names of the browsers it detected |
+| `Preferencias` | Theme, language, the global shortcut, and whether a rule announces itself when it decides |
+| `Reglas` | Every rule you have: what it matches, the application it is tied to when it has one, the browser it opens in, and whether it opens privately |
 
-- **Browser list** (`browsers.json`) — not included
-- **Domain rules** (`rules.json`) — not included, so no originating app names leave your machine through the export
-- **Icons** — not included
-- **Actual URLs** — URLs are redacted at the source (log writing), not at export time
+### What the report does not contain
 
-**Worth knowing before you share one:** on macOS the export includes
-`launch_services.txt`, which lists which application your system uses to open
-each URL scheme and file type. That is information about your machine rather
-than about your browsing, but it does name other software you have installed.
-Open the ZIP and look before attaching it to a public issue.
+- **The addresses you open.** It carries your rules, not your browsing.
+- **Passwords, tokens or anything from a URL's authority** — those never reach a file at all.
+- **Icons, executables or the contents of any browser profile.**
+
+**Worth knowing before you share one:** the rules section names the sites you
+wrote rules for and the applications they answer to — `desde ms-teams`, for
+example — and the system section lists the browsers installed on the machine.
+That is the point of the file, because a rule is usually what decided where a
+link went, but it is your information: open it and read it before attaching it
+to a public issue.
 
 ### URL Redaction
 
