@@ -42,6 +42,10 @@
 </p>
 
 <p align="center">
+  <a href="https://rgdevment.com/linkunbound/"><b>rgdevment.com/linkunbound</b></a>
+</p>
+
+<p align="center">
   <sub>Prefer a direct download? <a href="https://github.com/rgdevment/LinkUnbound/releases/latest">GitHub Releases</a> has standalone installers — Windows (.exe) · macOS (.dmg, one per chip)</sub>
 </p>
 
@@ -288,7 +292,8 @@ Every contribution helps keep these tools alive and maintained. But if you can't
 
 I build free, open source tools focused on privacy and productivity. If you like LinkUnbound, you might also find these useful:
 
-- **[CopyPaste](https://github.com/rgdevment/CopyPaste)** — A local-first clipboard manager and clipboard history tool for Windows, macOS, and Linux. Same philosophy: no ads, no telemetry, no accounts. Everything local.
+- **[Tisty](https://rgdevment.com/tisty/)** — Notes, documents and tasks kept as plain files on your own disk, readable without the application. Windows and macOS.
+- **[CopyPaste](https://rgdevment.com/copypaste/)** — A local-first clipboard manager that keeps a searchable history and ignores what comes from a password manager. Windows and macOS.
 
 ---
 
