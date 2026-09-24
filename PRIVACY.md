@@ -64,8 +64,10 @@ macOS does not report which application opened a link, so the foreground app sta
 What this means in practice:
 
 - **Only the application name is read.** Not its windows, not its title, not
-  its contents. `explorer`, `cmd` and `powershell` are discarded, since they
-  are the shell itself rather than an app worth writing a rule about.
+  its contents. The shell counts as an application like any other: a link
+  opened from a file on the desktop reports `explorer`, and whether that is
+  worth a rule is yours to decide, not ours. The picker names the rule that
+  decided every time one does.
 - **It is read at the moment a link arrives**, not continuously. LinkUnbound
   does not watch which applications you use.
 - **It reaches the disk only if you ask it to.** The name is used in memory to

@@ -74,8 +74,6 @@ const ES = {
   rulesFooter:
     "Gana siempre la regla más precisa: una URL concreta antes que un subdominio, y este antes que el sitio entero. Las marcadas «Desde» ganan sobre todas y responden a los enlaces de una aplicación, sea cual sea la dirección.",
   rulePrivate: "privada",
-  ruleUp: "Subir la regla de {}",
-  ruleDown: "Bajar la regla de {}",
   ruleRemove: "Eliminar la regla de {}",
   ruleBrowser: "Navegador para la regla de {}",
   ruleDeleteTitle: "Eliminar la regla de {}",
@@ -277,7 +275,7 @@ const EN: Record<Key, string> = {
   healthStale:
     "The registration points at another copy of LinkUnbound. Links will go there, not here, until you repair it.",
   healthBuildTree:
-    "You are running a freshly built copy. Windows cannot trust links to a path that disappears when the project is cleaned.",
+    "You are running a freshly built copy. Windows cannot trust links to a path that disappears when the project is cleaned, so this copy does not register.",
   healthWrongBinary:
     "The registration points at the settings window, which cannot open a link. Repair it so it points at the process that can.",
   healthNoResident:
@@ -334,8 +332,6 @@ const EN: Record<Key, string> = {
   rulesFooter:
     "The most precise rule always wins: one URL before a subdomain, and that before the whole site. The ones marked «From» win over all of them, and answer the links of one application whatever the address.",
   rulePrivate: "private",
-  ruleUp: "Move the rule for {} up",
-  ruleDown: "Move the rule for {} down",
   ruleRemove: "Delete the rule for {}",
   ruleBrowser: "Browser for the rule for {}",
   ruleDeleteTitle: "Delete the rule for {}",

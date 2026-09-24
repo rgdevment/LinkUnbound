@@ -219,7 +219,7 @@ Since LinkUnbound is an independent open source project, the installer is signed
 **Settings (tray):** double-click the tray icon or right-click → Settings. Six pages:
 
 - **Links** — whether the system sends links here, what is wrong when it does not and the button that fixes it; on Windows, the associations held
-- **Rules** — every rule, in the order that decides; change where each opens, add one, remove one
+- **Rules** — every rule, the most precise one deciding; change where each opens, add one, remove one
 - **Browsers** — what was detected, with profiles; hide, duplicate, or add a custom one with its arguments
 - **Application** — theme, language, picker look, start at sign-in, the global shortcut, background update checks
 - **Maintenance** — export a diagnostic report, rescan browsers, reset the configuration, remove LinkUnbound from the system's list
