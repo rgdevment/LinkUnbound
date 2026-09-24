@@ -35,11 +35,11 @@ LinkUnbound makes exactly **one type of network request** on its own: a read-onl
 
 | Version          | Supported                              |
 | :--------------- | :------------------------------------: |
-| 2.0.x            | Yes                                    |
+| 2.x              | Yes                                    |
 | 1.4.x            | Security and crash fixes only          |
 | Older than 1.4.x | No                                     |
 
-The 2.0 line is `main`. The 1.4.x line lives on the `v1-stable` branch and receives security and crash fixes only — no new features. Always use the [latest version](https://github.com/rgdevment/LinkUnbound/releases/latest).
+The 2.x line is `main`. The 1.4.x line lives on the `v1-stable` branch and receives security and crash fixes only — no new features. Always use the [latest version](https://github.com/rgdevment/LinkUnbound/releases/latest).
 
 ---
 
