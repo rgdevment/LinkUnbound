@@ -1323,7 +1323,7 @@ jobs:
           	  url "${BASE}/linkunbound-installer-${VERSION}-macos-#{arch}.dmg"
           	  name "LinkUnbound"
           	  desc "Browser picker that asks which browser opens each link${SUFFIX}"
-          	  homepage "https://github.com/${{ github.repository }}"
+          	  homepage "https://rgdevment.com/linkunbound/"
 
           	  auto_updates true
 
