@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type Key, useSpoken, useWords } from "../i18n";
 import { saidPlainly } from "../refusal";
 import Confirm from "./Confirm";
-import { Card, Section, Switch } from "./parts";
+import { Card, Line, Section, Switch } from "./parts";
 
 type BrowserView = {
   id: string;
@@ -176,6 +176,8 @@ export default function Browsers() {
   const [problem, setProblem] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [asking, setAsking] = useState<BrowserView | null>(null);
+  const [rescanning, setRescanning] = useState(false);
+  const [counted, setCounted] = useState<string | null>(null);
 
   const run = useCallback(
     (command: string, params: Record<string, unknown> = {}) => {
@@ -219,6 +221,36 @@ export default function Browsers() {
         <p className="rounded-md bg-[#C0362F]/10 px-3 py-2 text-[11.5px] text-[#C0362F] dark:bg-[#FF8A85]/10 dark:text-[#FF8A85]">
           {problem}
         </p>
+      )}
+
+      {counted && (
+        <p className="rounded-md bg-[#1E7A52]/10 px-3 py-2 text-[11.5px] text-[#1E7A52] dark:bg-[#4CC38A]/10 dark:text-[#4CC38A]">
+          {counted}
+        </p>
+      )}
+
+      {rescanning && (
+        <Confirm
+          title={t("rescanTitle")}
+          body={t("rescanBody")}
+          go={t("rescanGo")}
+          onConfirm={() => {
+            setRescanning(false);
+            setCounted(null);
+            void invoke<{ added?: number; removed?: number } | null>("maintenance_rescan")
+              .then((said) => {
+                setCounted(
+                  t(
+                    "doneWith",
+                    t("rescanCounts", String(said?.added ?? 0), String(said?.removed ?? 0)),
+                  ),
+                );
+                run("browsers_list");
+              })
+              .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+          }}
+          onCancel={() => setRescanning(false)}
+        />
       )}
 
       {asking && (
@@ -306,6 +338,15 @@ export default function Browsers() {
               {t("browsersNone")}
             </p>
           )}
+          <Line title={t("rescanTitle")} note={t("rescanNote")}>
+            <button
+              type="button"
+              onClick={() => setRescanning(true)}
+              className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+            >
+              {t("rescanGo")}
+            </button>
+          </Line>
         </Card>
       </Section>
 

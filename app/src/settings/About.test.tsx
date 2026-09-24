@@ -353,4 +353,29 @@ describe("about", () => {
     cleanup();
     expect(screen.queryByText(/GPL-3.0/)).toBeNull();
   });
+
+  /// The report is meant to be pasted into a public issue, so the screen has to
+  /// promise what the core actually redacts.
+  it("saves a report and says where it landed", async () => {
+    answers({
+      maintenance_report: () => Promise.resolve("C:/Users/x/Desktop/linkunbound-diagnostico.md"),
+    });
+    show();
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar informe…" }));
+    expect(invoke).toHaveBeenCalledWith("maintenance_report");
+    expect(await screen.findByText(/linkunbound-diagnostico\.md/)).toBeInTheDocument();
+  });
+
+  it("saves the report without asking, since it destroys nothing", async () => {
+    show();
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar informe…" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("says a refusal instead of leaving the report looking saved", async () => {
+    answers({ maintenance_report: () => Promise.reject("the folder refused the write") });
+    show();
+    await userEvent.click(await screen.findByRole("button", { name: "Guardar informe…" }));
+    expect(await screen.findByText(/folder refused/)).toBeInTheDocument();
+  });
 });

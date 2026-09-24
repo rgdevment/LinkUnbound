@@ -3,7 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
 import { type Key, useSpoken, useWords } from "../i18n";
 import { offerMoved, saidPlainly } from "../refusal";
-import { CloudOff, Code, Gift, Info, Key as KeyIcon } from "./Icons";
+import { CloudOff, Code, Gift, Key as KeyIcon } from "./Icons";
 import { Card, Line, Switch } from "./parts";
 import Star from "./Star";
 import type { Ready, Underway } from "./update";
@@ -14,6 +14,7 @@ const COPYPASTE = "https://github.com/rgdevment/CopyPaste";
 const TISTY = "https://github.com/rgdevment/Tisty";
 const SPONSOR = "https://github.com/sponsors/rgdevment";
 const RATING = "ms-windows-store://review/?ProductId=9N9F7C8Q43KC";
+const ALTERNATIVETO = "https://alternativeto.net/software/linkunbound/";
 
 type Build = {
   version: string;
@@ -274,6 +275,14 @@ export default function About({
   const [build, setBuild] = useState<Build | null>(null);
   const [trouble, setTrouble] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+
+  const report = () => {
+    setProblem(null);
+    invoke<string>("maintenance_report")
+      .then(setSaved)
+      .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+  };
 
   const look = useCallback(() => {
     setTrouble(null);
@@ -287,24 +296,15 @@ export default function About({
   return (
     <>
       <div className="brow">
-        <span className="mark" aria-hidden="true">
-          L
-        </span>
-        <span className="min-w-0">
-          <h2>LinkUnbound</h2>
-          <span className="line2">
-            <span>{build?.version ?? "—"}</span>
-            <i />
-            <span>{build?.license ?? "—"}</span>
-          </span>
+        <h1>LinkUnbound</h1>
+        <span className="line2">
+          <span>{build?.version ?? "—"}</span>
+          <i />
+          <span>{build?.license ?? "—"}</span>
         </span>
       </div>
 
       <div className="what-is">
-        <p className="eyebrow">
-          <Info />
-          LinkUnbound
-        </p>
         <p>{t("aboutWhat")}</p>
         <p>{t("aboutPrivacy")}</p>
         <div className="badges">
@@ -425,9 +425,29 @@ export default function About({
         onPick={() => void openUrl(COPYPASTE).catch(noop)}
       />
 
+      <Rule said={t("troubleSection")} />
+      <p className="trouble">
+        {t("reportWhat")} <b>{t("reportStays")}</b> {t("reportPick")}
+      </p>
+      <div className="row">
+        <button type="button" onClick={report} className="mild">
+          {t("reportGo")}
+        </button>
+        <button
+          type="button"
+          onClick={() => void openUrl(`${REPO}/issues`).catch(noop)}
+          className="mild"
+        >
+          {t("aboutIssue")}
+        </button>
+      </div>
+      {saved && <p className="saved">{t("reportSaved", saved)}</p>}
+
       <div className="links">
         <External href={build?.repository ?? REPO}>{t("aboutRepo")}</External>
-        <External href={`${REPO}/issues`}>{t("aboutIssue")}</External>
+        <External href={ALTERNATIVETO}>AlternativeTo</External>
+        <External href={`${REPO}/blob/main/PRIVACY.md`}>{t("aboutPrivacyLink")}</External>
+        <External href={`${REPO}/blob/main/THIRD-PARTY-BUNDLED.md`}>{t("aboutNotices")}</External>
       </div>
     </>
   );

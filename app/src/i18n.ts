@@ -11,7 +11,6 @@ const ES = {
   navCare: "Mantenimiento",
   navAbout: "Acerca de",
   navLabel: "Secciones",
-  version: "Versión {}",
 
   healthTitle: "LinkUnbound no está recibiendo los enlaces",
   healthStale:
@@ -140,11 +139,13 @@ const ES = {
   notifyTitle: "Avisar cuando una regla abre sin preguntar",
   notifyNote: "Un aviso breve, con la opción de deshacer",
 
-  careReport: "Informar de un problema",
-  reportTitle: "Guardar un informe de diagnóstico",
-  reportNote: "Un archivo con el estado de la app y tus reglas, sin las direcciones que visitas",
+  troubleSection: "Si algo va mal",
+  reportWhat:
+    "El informe reúne en un archivo la versión de LinkUnbound, tus reglas y qué sistema usas, sin las direcciones que visitas.",
+  reportStays: "No se envía a ninguna parte.",
+  reportPick: "Se guarda donde tú elijas y solo lo adjuntas si quieres.",
+  reportGo: "Guardar informe…",
   reportSaved: "Guardado en {}",
-  careBrowsers: "Navegadores",
   rescanTitle: "Volver a buscar navegadores",
   rescanNote: "Útil si instalaste uno y no aparece en el selector",
   rescanCounts: "{} nuevos, {} que ya no están",
@@ -236,12 +237,13 @@ const ES = {
   aboutSponsorSection: "Apoyar a LinkUnbound",
   aboutRepo: "Abrir el repositorio",
   aboutTisty: "Tisty",
-  aboutTistyNote:
-    "Notas, documentos y tareas en tu propio equipo. Misma filosofía: sin anuncios, sin telemetría, todo local.",
+  aboutTistyNote: "Notas, documentos y tareas, en archivos que puedes leer sin él.",
   aboutProject: "Proyecto",
   aboutSource: "Código fuente",
   aboutSourceNote: "GPL-3.0 · las aportaciones son bienvenidas",
   aboutIssue: "Informar de un problema",
+  aboutPrivacyLink: "Privacidad",
+  aboutNotices: "Avisos de terceros",
   aboutIssueNote: "Errores, ideas y navegadores que no detecta",
   aboutSponsor: "Invítame un café",
   aboutSponsorNote:
@@ -250,8 +252,7 @@ const ES = {
   aboutLicenseNote: "Software libre: puedes leerlo, cambiarlo y compartirlo",
   aboutOtherTools: "Otras herramientas",
   aboutCopyPaste: "CopyPaste",
-  aboutCopyPasteNote:
-    "Gestor de portapapeles gratuito y de código abierto para Windows, macOS y Linux. Misma filosofía: sin anuncios, sin telemetría, todo local.",
+  aboutCopyPasteNote: "Recupera lo que copiaste hace diez minutos, o ayer.",
   open: "Abrir",
 
   save: "Guardar",
@@ -269,7 +270,6 @@ const EN: Record<Key, string> = {
   navCare: "Maintenance",
   navAbout: "About",
   navLabel: "Sections",
-  version: "Version {}",
 
   healthTitle: "LinkUnbound is not receiving links",
   healthStale:
@@ -399,11 +399,13 @@ const EN: Record<Key, string> = {
   notifyTitle: "Warn when a rule opens without asking",
   notifyNote: "A brief notice, with the option to undo",
 
-  careReport: "Report a problem",
-  reportTitle: "Save a diagnostic report",
-  reportNote: "A file with the state of the app and your rules, without the addresses you visit",
+  troubleSection: "If something goes wrong",
+  reportWhat:
+    "The report gathers into one file LinkUnbound's version, your rules and which system you are on, without the addresses you visit.",
+  reportStays: "It is never sent anywhere.",
+  reportPick: "It is saved where you choose, and you attach it only if you want to.",
+  reportGo: "Save report…",
   reportSaved: "Saved to {}",
-  careBrowsers: "Browsers",
   rescanTitle: "Look for browsers again",
   rescanNote: "Useful if you installed one and it does not show up in the picker",
   rescanCounts: "{} new, {} no longer there",
@@ -495,12 +497,13 @@ const EN: Record<Key, string> = {
   aboutSponsorSection: "Support LinkUnbound",
   aboutRepo: "Open the repository",
   aboutTisty: "Tisty",
-  aboutTistyNote:
-    "Notes, documents and tasks on your own machine. Same idea: no ads, no telemetry, all local.",
+  aboutTistyNote: "Notes, documents and tasks, in files you can read without it.",
   aboutProject: "Project",
   aboutSource: "Source code",
   aboutSourceNote: "GPL-3.0 · contributions are welcome",
   aboutIssue: "Report a problem",
+  aboutPrivacyLink: "Privacy",
+  aboutNotices: "Third-party notices",
   aboutIssueNote: "Bugs, ideas and browsers it fails to detect",
   aboutSponsor: "Buy me a coffee",
   aboutSponsorNote:
@@ -509,8 +512,7 @@ const EN: Record<Key, string> = {
   aboutLicenseNote: "Free software: you can read it, change it and share it",
   aboutOtherTools: "Other tools",
   aboutCopyPaste: "CopyPaste",
-  aboutCopyPasteNote:
-    "A free, open source clipboard manager for Windows, macOS and Linux. Same idea: no ads, no telemetry, all local.",
+  aboutCopyPasteNote: "Brings back what you copied ten minutes ago, or yesterday.",
   open: "Open",
 
   save: "Save",

@@ -7,7 +7,8 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
 use windows::Win32::Foundation::{
-    CloseHandle, ERROR_PIPE_BUSY, GENERIC_WRITE, GlobalFree, HANDLE, HLOCAL, HWND, LocalFree, POINT,
+    CloseHandle, ERROR_PIPE_BUSY, GENERIC_WRITE, GlobalFree, HANDLE, HLOCAL, HWND, LPARAM,
+    LocalFree, POINT, WPARAM,
 };
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits,
@@ -36,9 +37,10 @@ use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify
 use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW};
 use windows::Win32::UI::WindowsAndMessaging::{
     ASFW_ANY, AllowSetForegroundWindow, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow,
-    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, IsHungAppWindow, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW,
+    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, ICON_BIG, ICON_SMALL,
+    IsHungAppWindow, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SendMessageW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WM_SETICON,
+    WS_EX_DLGMODALFRAME, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
@@ -103,6 +105,42 @@ pub fn keep_off_the_taskbar(window: isize) {
             0,
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        )
+    };
+}
+
+/// Windows draws the window's own icon beside the title, and this one has nothing to say there
+/// that the title does not. Clearing both icons alone still leaves the frame reserving the space,
+/// so the window is given a dialog's frame, which draws none.
+pub fn strip_title_icon(window: isize) {
+    let hwnd = HWND(window as *mut std::ffi::c_void);
+    unsafe {
+        SendMessageW(
+            hwnd,
+            WM_SETICON,
+            Some(WPARAM(ICON_SMALL as usize)),
+            Some(LPARAM(0)),
+        );
+        SendMessageW(
+            hwnd,
+            WM_SETICON,
+            Some(WPARAM(ICON_BIG as usize)),
+            Some(LPARAM(0)),
+        );
+    }
+    let style = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+    unsafe {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_DLGMODALFRAME.0 as isize);
+    }
+    let _ = unsafe {
+        SetWindowPos(
+            hwnd,
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
         )
     };
 }

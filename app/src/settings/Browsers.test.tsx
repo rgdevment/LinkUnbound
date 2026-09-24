@@ -254,4 +254,36 @@ describe("browsers", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
   });
+
+  /// The confirmation promises the hand-added browsers survive, and that was
+  /// asserted as text and never as the command that runs.
+  it("looks for browsers without wiping anything", async () => {
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Buscar" }));
+    const ask = await screen.findByRole("alertdialog", { name: "Volver a buscar navegadores" });
+    await userEvent.click(within(ask).getByRole("button", { name: "Buscar" }));
+
+    expect(invoke).toHaveBeenCalledWith("maintenance_rescan");
+    expect(invoke).not.toHaveBeenCalledWith("maintenance_reset", expect.anything());
+  });
+
+  it("explains that a rescan keeps what the user added by hand", async () => {
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Buscar" }));
+    expect(await screen.findByText(/añadiste a mano se conservan/)).toBeInTheDocument();
+  });
+
+  /// «Done» alone reads the same whether a browser appeared or nothing changed.
+  it("counts what the rescan found and what it lost, and shows the new list", async () => {
+    answers([CHROME, EDGE, ODD, MINE], {
+      maintenance_rescan: () => Promise.resolve({ added: 2, removed: 1 }),
+    });
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Buscar" }));
+    const ask = await screen.findByRole("alertdialog", { name: "Volver a buscar navegadores" });
+    await userEvent.click(within(ask).getByRole("button", { name: "Buscar" }));
+
+    expect(await screen.findByText(/2 nuevos, 1 que ya no están/)).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("browsers_list", {});
+  });
 });
