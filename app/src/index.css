@@ -50,3 +50,407 @@ body {
 .dark .scroller:hover {
   scrollbar-color: rgb(255 255 255 / 0.2) transparent;
 }
+
+:root {
+  --panel: #ffffff;
+  --card: #fbfbfc;
+  --tile: #f1f2f6;
+  --hair: rgb(20 24 48 / 0.08);
+  --ink: #16181d;
+  --muted: #6b6d7a;
+  --accent: #2f62d8;
+  --accent-dim: #4f7ce4;
+  --accent-soft: rgb(47 98 216 / 0.09);
+  --danger: #c0362f;
+  --danger-soft: rgb(192 54 47 / 0.1);
+  --good: #1e7a52;
+}
+
+.dark {
+  --panel: #191a1f;
+  --card: #1e2027;
+  --tile: #262a33;
+  --hair: rgb(255 255 255 / 0.08);
+  --ink: #f0f1f4;
+  --muted: #8b92a1;
+  --accent: #6e9bff;
+  --accent-dim: #4f7ce4;
+  --accent-soft: rgb(110 155 255 / 0.12);
+  --danger: #ff8a85;
+  --danger-soft: rgb(255 138 133 / 0.12);
+  --good: #4cc38a;
+}
+
+.brow {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.brow .mark {
+  width: 50px;
+  height: 50px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(150deg, var(--accent), var(--accent-dim));
+  color: var(--panel);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.brow h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 640;
+  letter-spacing: -0.015em;
+}
+
+.brow .line2 {
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.brow .line2 i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.what-is {
+  margin-top: 15px;
+  border: 1px solid var(--hair);
+  border-radius: 11px;
+  background: var(--card);
+  padding: 12px 14px;
+}
+
+.what-is p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.what-is p + p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.eyebrow svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  border: 1px solid var(--hair);
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.badge svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 9px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hair);
+}
+
+.quiet {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.gives {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.give {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  border: 1px solid var(--hair);
+  border-radius: 11px;
+  background: var(--card);
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+
+.give.wide {
+  grid-column: span 2;
+}
+
+.give:hover {
+  background: var(--tile);
+}
+
+.give svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.give b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 560;
+}
+
+.give span span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.tool {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--hair);
+  border-radius: 11px;
+  background: transparent;
+  padding: 10px 12px;
+  margin-bottom: 7px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+
+.tool:hover {
+  background: var(--tile);
+}
+
+.tool .ico {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tool b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tool span span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+.links button {
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.links button:hover {
+  background: var(--accent-soft);
+}
+
+.newer {
+  margin-top: 17px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--hair);
+  border-radius: 11px;
+  background: var(--card);
+  padding: 11px 13px;
+}
+
+.newer.there {
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+}
+
+.newer .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.newer b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.newer .grow > span {
+  display: block;
+  margin-top: 1px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.pip {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.pip.ok {
+  background: var(--good);
+  box-shadow: 0 0 0 3px rgb(30 122 82 / 0.12);
+}
+
+.dark .pip.ok {
+  box-shadow: 0 0 0 3px rgb(76 195 138 / 0.14);
+}
+
+.mild {
+  flex: none;
+  border: 1px solid var(--hair);
+  border-radius: 7px;
+  background: transparent;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.mild:hover:not(:disabled) {
+  background: var(--tile);
+}
+
+.mild:disabled {
+  opacity: 0.4;
+}
+
+.strong {
+  flex: none;
+  border: 0;
+  border-radius: 7px;
+  background: var(--accent);
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 560;
+  color: var(--panel);
+}
+
+.strong:disabled {
+  opacity: 0.5;
+}
+
+.bar {
+  margin-top: 6px;
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hair);
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+
+.alarm {
+  margin: 0;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  padding: 8px 12px;
+  font-size: 11.5px;
+  color: var(--danger);
+}
