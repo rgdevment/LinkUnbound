@@ -62,6 +62,22 @@ catalogue! {
     fail_profile_gone: "El perfil {} ya no existe" | "The profile {} is no longer there",
     fail_private_impossible: "Este navegador no puede abrir una ventana privada" | "This browser cannot open a private window",
     fail_spawn: "El navegador no arrancó" | "The browser would not start",
+    report_system: "Sistema" | "System",
+    report_prefs: "Preferencias" | "Preferences",
+    report_rules: "Reglas" | "Rules",
+    report_theme: "tema" | "theme",
+    report_locale: "idioma" | "language",
+    report_shortcut: "atajo" | "shortcut",
+    report_notify: "avisa al aplicar una regla" | "says so when a rule decides",
+    report_nothing: "ninguno" | "none",
+    report_any_link: "cualquier enlace" | "any link",
+    report_the_link: "el enlace {}" | "the link {}",
+    report_the_host: "el host {}" | "the host {}",
+    report_the_site: "el sitio {}" | "the site {}",
+    report_from: " desde {}" | " from {}",
+    report_private: " en privado" | " privately",
+    report_redacted: "[redactado]" | "[redacted]",
+    report_file: "linkunbound-diagnostico" | "linkunbound-diagnostics",
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

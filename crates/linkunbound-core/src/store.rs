@@ -220,6 +220,28 @@ impl Store {
         self.dir.join("preferences.json")
     }
 
+    fn held_path(&self) -> PathBuf {
+        self.dir.join("shortcut")
+    }
+
+    #[must_use]
+    pub fn shortcut_held(&self) -> Option<String> {
+        let said = fs::read_to_string(self.held_path()).ok()?;
+        let said = said.trim();
+        (!said.is_empty()).then(|| said.to_owned())
+    }
+
+    pub fn hold_shortcut(&self, held: Option<&str>) {
+        match held {
+            Some(said) => {
+                let _ = save_atomically(&self.held_path(), said);
+            }
+            None => {
+                let _ = fs::remove_file(self.held_path());
+            }
+        }
+    }
+
     fn browsers_path(&self) -> PathBuf {
         self.dir.join("browsers.json")
     }
@@ -279,17 +301,6 @@ impl Store {
                 Err(_) => said,
             },
         )
-    }
-
-    pub fn save_prefs(&self, prefs: &crate::Preferences) -> Result<(), StoreError> {
-        let body = serde_json::to_string_pretty(prefs).map_err(|source| StoreError::Content {
-            path: self.prefs_path(),
-            source: crate::ConfigError::Malformed(source),
-        })?;
-        guarded(&self.prefs_path(), || {
-            keep_the_unread(&self.prefs_path());
-            save_atomically(&self.prefs_path(), &body)
-        })
     }
 
     pub fn edit_prefs(
@@ -453,7 +464,12 @@ mod tests {
             notify_on_rule: false,
             ..Default::default()
         };
-        store.save_prefs(&prefs).expect("saved");
+        store
+            .edit_prefs(|kept| {
+                *kept = prefs.clone();
+                true
+            })
+            .expect("saved");
         let read = Store::at(&dir).prefs();
         assert!(!read.notify_on_rule, "the file has to carry it");
         assert_eq!(read.locale, crate::Locale::English);
@@ -564,13 +580,13 @@ mod tests {
             "unreadable reads as the defaults"
         );
 
-        store.save_prefs(&read).expect("saved");
+        store.edit_prefs(|_| true).expect("saved");
         assert!(
             std::fs::read_to_string(dir.join("preferences.unread.json"))
                 .expect("kept")
                 .contains("amoled")
         );
-        store.save_prefs(&read).expect("saved again");
+        store.edit_prefs(|_| true).expect("saved again");
         assert!(dir.join("preferences.unread.json").exists());
     }
 

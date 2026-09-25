@@ -49,6 +49,12 @@ pub struct Association {
     pub held: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct Legacy {
+    pub path: String,
+    pub version: Option<String>,
+}
+
 #[cfg(windows)]
 mod platform {
     use super::Health;
@@ -233,6 +239,17 @@ mod platform {
     pub fn browsers() -> Vec<linkunbound_core::Browser> {
         installed_browsers()
     }
+
+    pub fn legacy() -> Option<super::Legacy> {
+        None
+    }
+
+    pub fn retire_legacy() -> Result<(), String> {
+        Err("notOnThisPlatform".to_owned())
+    }
+
+    pub fn reveal_legacy() {}
+
     #[cfg(test)]
     mod tests {
         use super::super::Health;
@@ -410,6 +427,21 @@ mod platform {
         linkunbound_mac::installed_browsers()
     }
 
+    pub fn legacy() -> Option<super::Legacy> {
+        linkunbound_mac::legacy_installed().map(|found| super::Legacy {
+            path: found.path,
+            version: found.version,
+        })
+    }
+
+    pub fn retire_legacy() -> Result<(), String> {
+        linkunbound_mac::retire_legacy()
+    }
+
+    pub fn reveal_legacy() {
+        linkunbound_mac::reveal_legacy();
+    }
+
     #[cfg(test)]
     mod tests {
         use super::super::Health;
@@ -520,9 +552,19 @@ mod platform {
     pub fn open_default_apps() -> Result<(), String> {
         Err("notOnThisPlatform".to_owned())
     }
+
+    pub fn legacy() -> Option<super::Legacy> {
+        None
+    }
+
+    pub fn retire_legacy() -> Result<(), String> {
+        Err("notOnThisPlatform".to_owned())
+    }
+
+    pub fn reveal_legacy() {}
 }
 
 pub use platform::{
-    browsers, open_default_apps, reconcile, register_anyway, register_for_the_installer,
-    set_registered, set_starts_with_system, state,
+    browsers, legacy, open_default_apps, reconcile, register_anyway, register_for_the_installer,
+    retire_legacy, reveal_legacy, set_registered, set_starts_with_system, state,
 };

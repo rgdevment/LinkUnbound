@@ -335,6 +335,19 @@ mod tests {
         assert_eq!(FILE_EXTENSIONS.to_vec(), opened);
     }
 
+    #[test]
+    fn the_installer_sweeps_every_type_the_registration_claims() {
+        let hooks = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../app/src-tauri/nsis/hooks.nsh"),
+        )
+        .expect("the uninstall hook");
+        for ext in FILE_EXTENSIONS {
+            let swept = format!(r#""Software\Classes\{ext}\OpenWithProgIds" "{PROG_ID}""#);
+            assert!(hooks.contains(&swept), "hooks.nsh leaves {ext} behind");
+        }
+    }
+
     /// One root per test: they run in parallel and a shared root means each
     /// one's cleanup deletes the others' keys mid-assertion.
     fn scratch(name: &str) -> String {

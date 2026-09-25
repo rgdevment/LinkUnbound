@@ -21,7 +21,7 @@ def gh(*args):
 
 
 def listed(ref=None):
-    args = ["cache", "list", "--limit", "100", "--json", "key,ref,sizeInBytes,createdAt"]
+    args = ["cache", "list", "--limit", "1000", "--json", "key,ref,sizeInBytes,createdAt"]
     if ref:
         args += ["--ref", ref]
     return json.loads(gh(*args))

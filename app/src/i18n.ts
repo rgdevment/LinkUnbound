@@ -46,6 +46,13 @@ const ES = {
   edgeRelief:
     "Lo que sí hace: cuando uno de esos enlaces llega envuelto en un enlace protegido, LinkUnbound lo desenvuelve y te ofrece el destino real en lugar del intermediario.",
   edgeUnderstood: "Entendido, no volver a mostrarlo",
+  legacyTitle: "Tienes LinkUnbound {} instalado",
+  legacyBody:
+    "Arranca al iniciar sesión y se ofrece para los enlaces igual que esta versión, porque macOS las ve como dos aplicaciones distintas. Tus reglas y tus navegadores se conservan.",
+  legacyGo: "Quitar la versión anterior",
+  legacyLater: "Ahora no",
+  legacyReveal: "Mostrarla en el Finder",
+  legacyGone: "La versión anterior está en la papelera.",
 
   kindAny: "Cualquiera",
   kindUrl: "Esta URL",
@@ -305,6 +312,13 @@ const EN: Record<Key, string> = {
   edgeRelief:
     "What it does do: when one of those links arrives wrapped in a protected link, LinkUnbound unwraps it and offers you the real destination instead of the middleman.",
   edgeUnderstood: "Got it, do not show this again",
+  legacyTitle: "LinkUnbound {} is still installed",
+  legacyBody:
+    "It starts at sign-in and offers itself for links just as this version does, because macOS sees the two as different applications. Your rules and your browsers are kept.",
+  legacyGo: "Remove the older version",
+  legacyLater: "Not now",
+  legacyReveal: "Show it in Finder",
+  legacyGone: "The older version is in the Trash.",
 
   kindAny: "Anything",
   kindUrl: "This URL",

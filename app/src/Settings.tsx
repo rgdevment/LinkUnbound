@@ -36,6 +36,8 @@ type Spoken = { language: string };
 /// Only the one field this screen touches; the rest travels back untouched.
 type Noticed = { prefs: { edge_warning_dismissed: boolean } & Record<string, unknown> };
 
+type Legacy = { path: string; version: string | null };
+
 const RELEASES = "https://github.com/rgdevment/LinkUnbound/releases/latest";
 
 type Remedy = { label: Key; note?: Key } & { command: string; args?: Record<string, unknown> };
@@ -145,6 +147,84 @@ const ABOUT: Entry = {
   ),
 };
 
+function Legacy1x({ onRetired }: { onRetired: () => void }) {
+  const t = useWords();
+  const language = useSpoken();
+  const [found, setFound] = useState<Legacy | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [retired, setRetired] = useState(false);
+  const [away, setAway] = useState(false);
+
+  useEffect(() => {
+    if (platform() !== "macos") return;
+    void invoke<Legacy | null>("system_legacy")
+      .then((said) => setFound(said?.path ? said : null))
+      .catch(noop);
+  }, []);
+
+  const retire = () => {
+    setProblem(null);
+    void invoke("system_retire_legacy")
+      .then(() => {
+        setFound(null);
+        setRetired(true);
+        onRetired();
+      })
+      .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+  };
+
+  if (away) return null;
+
+  return (
+    <div role="status">
+      {found && (
+        <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
+          <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">
+            {t("legacyTitle", found.version ?? "1.x")}
+          </p>
+          <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
+            {t("legacyBody")}
+          </p>
+          <p className="mt-1 font-mono text-[10.5px] break-words text-neutral-500 dark:text-[#8B92A1]">
+            <Wrappable path={found.path} />
+          </p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <button
+              type="button"
+              onClick={retire}
+              className="rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
+            >
+              {t("legacyGo")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAway(true)}
+              className="rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+            >
+              {t("legacyLater")}
+            </button>
+          </div>
+          {problem && (
+            <div className="mt-2.5">
+              <p className="text-[11.5px] text-[#A85B14] dark:text-[#E9A05C]">{problem}</p>
+              <button
+                type="button"
+                onClick={() => invoke("system_reveal_legacy").catch(noop)}
+                className="mt-1.5 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+              >
+                {t("legacyReveal")}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {retired && (
+        <p className="text-[11.5px] text-[#1E7A52] dark:text-[#4CC38A]">{t("legacyGone")}</p>
+      )}
+    </div>
+  );
+}
+
 function Links({
   state,
   change,
@@ -177,6 +257,7 @@ function Links({
 
   return (
     <>
+      <Legacy1x onRetired={() => run("system_state")} />
       {ailment && (
         <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
           <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">

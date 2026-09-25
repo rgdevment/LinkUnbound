@@ -5,6 +5,8 @@ mod events;
 #[cfg(target_os = "macos")]
 mod icons;
 #[cfg(target_os = "macos")]
+mod legacy;
+#[cfg(target_os = "macos")]
 mod native;
 #[cfg(target_os = "macos")]
 mod registration;
@@ -28,6 +30,10 @@ pub use detect::installed_browsers;
 pub use events::{Event, Listening, listen};
 #[cfg(target_os = "macos")]
 pub use icons::icon_for;
+#[cfg(target_os = "macos")]
+pub use legacy::{
+    Legacy, installed as legacy_installed, retire as retire_legacy, reveal as reveal_legacy,
+};
 #[cfg(target_os = "macos")]
 pub use native::{
     Watching, copy_text, cursor, digit_behind, dress_window, front_application, front_is_ours,

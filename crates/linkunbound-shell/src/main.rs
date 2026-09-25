@@ -6,6 +6,7 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use linkunbound_core::{Language, Rule, Store, Strings, Target, data_dir, host_of, normalise};
+use linkunbound_shell::hotkey::Hotkey;
 use linkunbound_shell::tray::{Asked, Tray};
 use linkunbound_shell::{
     ICON_SIDE, Listed, Notice, Picker, Reaches, TILE_ICON_SIDE, dress, paint, place, single,
@@ -338,6 +339,10 @@ fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
         host::never_activates(handle);
     }
     in_the_corner(notice);
+    #[cfg(target_os = "macos")]
+    if !ui().is_some_and(|ui| ui.picker.window().is_visible()) {
+        host::let_whoever_opens_next_come_forward();
+    }
 }
 
 const NOTICE_MARGIN: f32 = 16.0;
@@ -664,6 +669,7 @@ struct Ui {
     taskbar_seen: Cell<bool>,
     /// The window the picker was shown over when it could not take the front.
     shown_over: Cell<Option<isize>>,
+    hotkey: RefCell<Option<Hotkey>>,
     put_up: Cell<Option<std::time::Instant>>,
     #[cfg(target_os = "macos")]
     launch_decided: Cell<bool>,
@@ -846,6 +852,13 @@ impl Ui {
             tray.show(true);
             tray.relabel(&self.words.get());
         }
+        self.hold(prefs.shortcut.as_deref());
+    }
+
+    fn hold(&self, wanted: Option<&str>) {
+        let mut slot = self.hotkey.borrow_mut();
+        let held = slot.as_mut().and_then(|hotkey| hotkey.claim(wanted));
+        store().hold_shortcut(held.as_deref());
     }
 
     /// Slint offers no focus-lost event, so this polls — but only while the
@@ -1085,7 +1098,10 @@ fn wants_light(theme: linkunbound_core::Theme) -> bool {
 fn asked_for(what: Asked) {
     match what {
         Asked::Settings => open_settings(),
-        Asked::Quit => slint::quit_event_loop().unwrap_or(()),
+        Asked::Quit => {
+            store().hold_shortcut(None);
+            slint::quit_event_loop().unwrap_or(());
+        }
     }
 }
 
@@ -1141,6 +1157,7 @@ fn main() -> Result<(), slint::PlatformError> {
     #[cfg(target_os = "macos")]
     without_taking_the_front()?;
     let picker = Picker::new()?;
+    picker.set_on_mac(cfg!(target_os = "macos"));
     let shown = Rc::new(RefCell::new(Shown::default()));
 
     // Alt+F4 reaches the window as a close request, which Slint answers by hiding it: the queue
@@ -1323,6 +1340,7 @@ fn main() -> Result<(), slint::PlatformError> {
         taskbar_seen: Cell::new(light_taskbar),
         shown_over: Cell::new(None),
         put_up: Cell::new(None),
+        hotkey: RefCell::new(Hotkey::new()),
         #[cfg(target_os = "macos")]
         launch_decided: Cell::new(false),
     });
@@ -1362,6 +1380,15 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(tray) = state.tray.as_ref() {
                 tray.drain(&asks);
             }
+            if state
+                .hotkey
+                .borrow()
+                .as_ref()
+                .is_some_and(linkunbound_shell::hotkey::Hotkey::pressed)
+                && asks.send(Asked::Settings).is_err()
+            {
+                return;
+            }
             while let Ok(what) = tray_inbox.try_recv() {
                 if what == Asked::Settings {
                     state.catch_up();
@@ -1371,7 +1398,9 @@ fn main() -> Result<(), slint::PlatformError> {
         },
     );
 
-    slint::run_event_loop_until_quit()
+    let ran = slint::run_event_loop_until_quit();
+    store().hold_shortcut(None);
+    ran
 }
 
 #[cfg(test)]
@@ -1480,6 +1509,7 @@ mod tests {
             taskbar_seen: Cell::new(false),
             shown_over: Cell::new(None),
             put_up: Cell::new(None),
+            hotkey: RefCell::new(None),
             #[cfg(target_os = "macos")]
             launch_decided: Cell::new(false),
         });

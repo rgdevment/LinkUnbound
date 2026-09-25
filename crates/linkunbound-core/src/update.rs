@@ -160,6 +160,23 @@ pub fn newer_than(found: &str, here: &str) -> bool {
     }
 }
 
+#[must_use]
+pub fn on_the_candidate_track(here: &str, wants: Option<bool>) -> bool {
+    wants.unwrap_or_else(|| {
+        semver::Version::parse(here.trim_start_matches('v')).is_ok_and(|here| !here.pre.is_empty())
+    })
+}
+
+#[must_use]
+pub fn worth_offering(found: &str, here: &str, wants: Option<bool>) -> bool {
+    if !newer_than(found, here) {
+        return false;
+    }
+    let candidate = semver::Version::parse(found.trim_start_matches('v'))
+        .is_ok_and(|found| !found.pre.is_empty());
+    !candidate || on_the_candidate_track(here, wants)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
