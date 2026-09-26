@@ -60,7 +60,7 @@ serde.workspace = true
 [target."cfg(windows)".dependencies]
 
 linkunbound-win.workspace = true
-windows-future = "0.3"
+windows-future = "0.100"
 windows = { version = "0.62", features = [
   "ApplicationModel",
   "Services_Store",
