@@ -40,6 +40,8 @@ const PICKERS: { id: PickerStyle; label: Key }[] = [
 
 const MODIFIERS = new Set(["Control", "Alt", "Shift", "Meta"]);
 
+const RESIDENT_ANSWERS_WITHIN = 1400;
+
 /// Tauri parses the combination, and it wants `Control`, `Super` and the
 /// physical key name rather than whatever the layout produced.
 function combinationOf(e: React.KeyboardEvent): string | null {
@@ -122,9 +124,16 @@ export default function Application({
         onLanguage(spoken(next.language));
         refresh();
         setProblem(null);
+        if ("shortcut" in patch) askAgainOnceTheResidentHasIt();
       })
       .catch((e: unknown) => setProblem(saidPlainly(language, e)))
       .finally(() => setCapturing(false));
+  };
+
+  const askAgainOnceTheResidentHasIt = () => {
+    setTimeout(() => {
+      void invoke<Settings>("prefs_get").then(setSettings).catch(noop);
+    }, RESIDENT_ANSWERS_WITHIN);
   };
 
   useEffect(() => {

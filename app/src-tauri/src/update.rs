@@ -115,10 +115,7 @@ struct Manifest {
 /// otherwise, and saying otherwise is what walks it back to the stable track.
 #[must_use]
 pub fn tracking(now: &str, wants: Option<bool>) -> bool {
-    wants.unwrap_or_else(|| {
-        now.parse::<semver::Version>()
-            .is_ok_and(|here| !here.pre.is_empty())
-    })
+    linkunbound_core::update::on_the_candidate_track(now, wants)
 }
 
 #[must_use]

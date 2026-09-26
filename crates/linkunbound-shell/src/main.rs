@@ -325,6 +325,8 @@ fn answered_by_rule(url: &str, source: Option<&str>) -> Option<Fired> {
     })
 }
 
+const TICKS_BETWEEN_LOOKS: u32 = 8;
+
 const NOTICE_SECONDS: i32 = 6;
 
 /// Never focused: it must not take the keyboard from whatever is being done.
@@ -696,13 +698,20 @@ impl Ui {
     /// Settings runs in another process: the file is the only channel between
     /// them. Read when something is about to be shown rather than on a clock.
     fn catch_up(&self) {
+        if self.settings_moved() {
+            self.obey(&store().prefs());
+        } else {
+            self.follow_the_system();
+        }
+    }
+
+    fn settings_moved(&self) -> bool {
         let now = prefs_touched_at();
         if now == self.prefs_seen.get() {
-            self.follow_the_system();
-            return;
+            return false;
         }
         self.prefs_seen.set(now);
-        self.obey(&store().prefs());
+        true
     }
 
     /// «System» is read when the picker is about to show, not once at start: Windows turns dark
@@ -1373,12 +1382,17 @@ fn main() -> Result<(), slint::PlatformError> {
     // this is the one thing still on a clock — and only while the app is idle,
     // which is exactly when nothing else needs the CPU.
     let pump = slint::Timer::default();
+    let mut ticks = 0u32;
     pump.start(
         slint::TimerMode::Repeated,
         Duration::from_millis(120),
         move || {
             if let Some(tray) = state.tray.as_ref() {
                 tray.drain(&asks);
+            }
+            ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(TICKS_BETWEEN_LOOKS) && state.settings_moved() {
+                state.obey(&store().prefs());
             }
             if state
                 .hotkey
