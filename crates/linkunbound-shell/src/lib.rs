@@ -2,13 +2,14 @@
 
 slint::include_modules!();
 
+pub mod hotkey;
 pub mod place;
 pub mod single;
 pub mod tray;
 
 use std::rc::Rc;
 
-use linkunbound_core::update::{Looked, Progress, newer_than};
+use linkunbound_core::update::{Looked, Progress};
 use linkunbound_core::{Browser, Scope, Strings, local_file_parts, looks_unresolved, site_of};
 
 /// Both windows read the same palette, so the choice is applied once per window
@@ -241,7 +242,7 @@ pub fn strip_for(
     put_away: Option<&str>,
 ) -> Option<Strip> {
     let found = looked.found_version.as_deref()?;
-    if !newer_than(found, here) {
+    if !linkunbound_core::update::worth_offering(found, here, looked.candidates) {
         return None;
     }
     let store = looked.found_route.as_deref() == Some("store");

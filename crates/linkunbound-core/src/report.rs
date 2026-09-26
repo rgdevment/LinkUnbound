@@ -1,11 +1,11 @@
-use crate::{Preferences, RuleSet, Scope};
+use crate::{Preferences, RuleSet, Scope, Strings};
 
 /// A report is meant to be pasted into a public issue, so nothing that names a
 /// place the user has been may survive it: the host stays, the rest goes.
 #[must_use]
-pub fn redact(url: &str) -> String {
+pub fn redact(url: &str, instead: &str) -> String {
     let Some((scheme, rest)) = url.split_once("://") else {
-        return "[redactado]".to_owned();
+        return instead.to_owned();
     };
     let host = rest
         .split(['/', '?', '#'])
@@ -15,7 +15,7 @@ pub fn redact(url: &str) -> String {
         .next()
         .unwrap_or_default();
     if host.is_empty() {
-        return "[redactado]".to_owned();
+        return instead.to_owned();
     }
     if rest.len() > host.len() {
         return format!("{scheme}://{host}/…");
@@ -23,12 +23,12 @@ pub fn redact(url: &str) -> String {
     format!("{scheme}://{host}")
 }
 
-fn describe(scope: &Scope) -> String {
+fn describe(scope: &Scope, words: &Strings) -> String {
     match scope {
-        Scope::Any => "cualquier enlace".to_owned(),
-        Scope::Url(u) => format!("el enlace {}", redact(u)),
-        Scope::Host(h) => format!("el host {h}"),
-        Scope::Site(d) => format!("el sitio {d}"),
+        Scope::Any => words.report_any_link.to_owned(),
+        Scope::Url(u) => Strings::fill(words.report_the_link, &redact(u, words.report_redacted)),
+        Scope::Host(h) => Strings::fill(words.report_the_host, h),
+        Scope::Site(d) => Strings::fill(words.report_the_site, d),
     }
 }
 
@@ -40,30 +40,44 @@ pub fn diagnostics(
     system: &[(String, String)],
     rules: &RuleSet,
     prefs: &Preferences,
+    words: &Strings,
 ) -> String {
-    let mut out = format!("LinkUnbound {version}\n\n## Sistema\n");
+    let mut out = format!("LinkUnbound {version}\n\n## {}\n", words.report_system);
     for (key, value) in system {
         out.push_str(&format!("- {key}: {value}\n"));
     }
 
     out.push_str(&format!(
-        "\n## Preferencias\n- tema: {:?}\n- idioma: {:?}\n- atajo: {}\n- avisa al aplicar una regla: {}\n",
+        "\n## {}\n- {}: {:?}\n- {}: {:?}\n- {}: {}\n- {}: {}\n",
+        words.report_prefs,
+        words.report_theme,
         prefs.theme,
+        words.report_locale,
         prefs.locale,
-        prefs.shortcut.as_deref().unwrap_or("ninguno"),
+        words.report_shortcut,
+        prefs.shortcut.as_deref().unwrap_or(words.report_nothing),
+        words.report_notify,
         prefs.notify_on_rule,
     ));
 
-    out.push_str(&format!("\n## Reglas ({})\n", rules.rules.len()));
+    out.push_str(&format!(
+        "\n## {} ({})\n",
+        words.report_rules,
+        rules.rules.len()
+    ));
     for rule in &rules.rules {
         let origin = rule
             .source_app
             .as_ref()
-            .map_or(String::new(), |a| format!(" desde {a}"));
-        let private = if rule.private { " en privado" } else { "" };
+            .map_or(String::new(), |a| Strings::fill(words.report_from, a));
+        let private = if rule.private {
+            words.report_private
+        } else {
+            ""
+        };
         out.push_str(&format!(
             "- {}{origin} → {}{private}\n",
-            describe(&rule.scope),
+            describe(&rule.scope, words),
             rule.target.browser_id,
         ));
     }
@@ -73,21 +87,23 @@ pub fn diagnostics(
 #[cfg(test)]
 mod tests {
     use super::{diagnostics, redact};
-    use crate::{Preferences, Rule, RuleSet, Scope, Target};
+    use crate::{Language, Preferences, Rule, RuleSet, Scope, Target};
+
+    const GONE: &str = "[redactado]";
 
     #[test]
     fn a_link_keeps_its_host_and_loses_everywhere_it_leads() {
         assert_eq!(
-            redact("https://intranet.corp/informes/2026/sueldos?id=44"),
+            redact("https://intranet.corp/informes/2026/sueldos?id=44", GONE),
             "https://intranet.corp/…"
         );
-        assert_eq!(redact("https://example.test"), "https://example.test");
+        assert_eq!(redact("https://example.test", GONE), "https://example.test");
     }
 
     /// Credentials in the authority would ride along with the host otherwise.
     #[test]
     fn a_password_in_the_url_never_reaches_the_report() {
-        let out = redact("https://ana:hunter2@intranet.corp/x");
+        let out = redact("https://ana:hunter2@intranet.corp/x", GONE);
         assert!(!out.contains("hunter2"));
         assert!(!out.contains("ana"));
         assert!(out.contains("intranet.corp"));
@@ -95,8 +111,8 @@ mod tests {
 
     #[test]
     fn something_that_is_not_a_link_is_dropped_whole() {
-        assert_eq!(redact("C:/Users/Ana/secreto.pdf"), "[redactado]");
-        assert_eq!(redact("https://"), "[redactado]");
+        assert_eq!(redact("C:/Users/Ana/secreto.pdf", GONE), GONE);
+        assert_eq!(redact("https://", GONE), GONE);
     }
 
     #[test]
@@ -114,12 +130,49 @@ mod tests {
                 private: true,
             }],
         };
-        let out = diagnostics("2.0.0", &[], &rules, &Preferences::default());
+        let out = diagnostics(
+            "2.0.0",
+            &[],
+            &rules,
+            &Preferences::default(),
+            &Language::Spanish.strings(),
+        );
         assert!(out.contains("mail.corp"));
         assert!(!out.contains("token=abc"));
         assert!(!out.contains("inbox"));
         assert!(out.contains("desde teams"));
         assert!(out.contains("en privado"));
+    }
+
+    #[test]
+    fn the_report_is_written_in_the_language_that_was_chosen() {
+        let rules = RuleSet {
+            schema_version: 2,
+            rules: vec![Rule {
+                id: "site:x".to_owned(),
+                scope: Scope::Site("example.test".to_owned()),
+                source_app: Some("teams".to_owned()),
+                target: Target {
+                    browser_id: "firefox".to_owned(),
+                    profile_id: None,
+                },
+                private: true,
+            }],
+        };
+        let out = diagnostics(
+            "2.0.0",
+            &[],
+            &rules,
+            &Preferences::default(),
+            &Language::English.strings(),
+        );
+        assert!(out.contains("## System"), "{out}");
+        assert!(out.contains("## Preferences"));
+        assert!(out.contains("## Rules (1)"));
+        assert!(out.contains("the site example.test from teams"));
+        assert!(out.contains("privately"));
+        assert!(!out.contains("desde"));
+        assert!(!out.contains("Sistema"));
     }
 
     #[test]
@@ -130,6 +183,7 @@ mod tests {
             &facts,
             &RuleSet::default(),
             &Preferences::default(),
+            &Language::Spanish.strings(),
         );
         assert!(out.contains("LinkUnbound 2.0.0"));
         assert!(out.contains("- navegador predeterminado: no"));

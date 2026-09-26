@@ -220,6 +220,28 @@ impl Store {
         self.dir.join("preferences.json")
     }
 
+    fn held_path(&self) -> PathBuf {
+        self.dir.join("shortcut")
+    }
+
+    #[must_use]
+    pub fn shortcut_held(&self) -> Option<String> {
+        let said = fs::read_to_string(self.held_path()).ok()?;
+        let said = said.trim();
+        (!said.is_empty()).then(|| said.to_owned())
+    }
+
+    pub fn hold_shortcut(&self, held: Option<&str>) {
+        match held {
+            Some(said) => {
+                let _ = save_atomically(&self.held_path(), said);
+            }
+            None => {
+                let _ = fs::remove_file(self.held_path());
+            }
+        }
+    }
+
     fn browsers_path(&self) -> PathBuf {
         self.dir.join("browsers.json")
     }
@@ -279,17 +301,6 @@ impl Store {
                 Err(_) => said,
             },
         )
-    }
-
-    pub fn save_prefs(&self, prefs: &crate::Preferences) -> Result<(), StoreError> {
-        let body = serde_json::to_string_pretty(prefs).map_err(|source| StoreError::Content {
-            path: self.prefs_path(),
-            source: crate::ConfigError::Malformed(source),
-        })?;
-        guarded(&self.prefs_path(), || {
-            keep_the_unread(&self.prefs_path());
-            save_atomically(&self.prefs_path(), &body)
-        })
     }
 
     pub fn edit_prefs(
@@ -453,7 +464,12 @@ mod tests {
             notify_on_rule: false,
             ..Default::default()
         };
-        store.save_prefs(&prefs).expect("saved");
+        store
+            .edit_prefs(|kept| {
+                *kept = prefs.clone();
+                true
+            })
+            .expect("saved");
         let read = Store::at(&dir).prefs();
         assert!(!read.notify_on_rule, "the file has to carry it");
         assert_eq!(read.locale, crate::Locale::English);
@@ -564,13 +580,13 @@ mod tests {
             "unreadable reads as the defaults"
         );
 
-        store.save_prefs(&read).expect("saved");
+        store.edit_prefs(|_| true).expect("saved");
         assert!(
             std::fs::read_to_string(dir.join("preferences.unread.json"))
                 .expect("kept")
                 .contains("amoled")
         );
-        store.save_prefs(&read).expect("saved again");
+        store.edit_prefs(|_| true).expect("saved again");
         assert!(dir.join("preferences.unread.json").exists());
     }
 
@@ -726,6 +742,53 @@ mod tests {
         let store = Store::at(scratch("empty"));
         assert!(store.rules().unwrap().rules.is_empty());
         assert!(store.browsers().unwrap().browsers.is_empty());
+    }
+
+    #[test]
+    fn what_the_resident_holds_survives_the_process_that_wrote_it() {
+        let store = Store::at(scratch("held"));
+        assert_eq!(store.shortcut_held(), None, "nothing written, nobody holds");
+
+        store.hold_shortcut(Some("Alt+Shift+L"));
+        assert_eq!(
+            Store::at(store.dir()).shortcut_held(),
+            Some("Alt+Shift+L".to_owned()),
+            "the settings window reads what the resident wrote"
+        );
+
+        store.hold_shortcut(Some("Control+Alt+B"));
+        assert_eq!(
+            store.shortcut_held(),
+            Some("Control+Alt+B".to_owned()),
+            "a second claim replaces the first"
+        );
+
+        store.hold_shortcut(None);
+        assert_eq!(store.shortcut_held(), None, "letting go leaves nothing");
+        store.hold_shortcut(None);
+        assert_eq!(
+            store.shortcut_held(),
+            None,
+            "letting go twice is not a fault"
+        );
+    }
+
+    #[test]
+    fn a_combination_of_blanks_is_nobody_holding_anything() {
+        let store = Store::at(scratch("blank-held"));
+        store.hold_shortcut(Some("  \n "));
+        assert_eq!(
+            store.shortcut_held(),
+            None,
+            "a file with nothing in it must not read as a shortcut in force"
+        );
+
+        store.hold_shortcut(Some(" Alt+Shift+L\n"));
+        assert_eq!(
+            store.shortcut_held(),
+            Some("Alt+Shift+L".to_owned()),
+            "what a trailing newline surrounds is still the combination"
+        );
     }
 
     #[test]

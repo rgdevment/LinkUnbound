@@ -142,6 +142,17 @@ FunctionEnd
       DeleteRegKey HKCU "Software\Clients\StartMenuInternet\LinkUnbound"
       DeleteRegKey HKCU "Software\LinkUnbound"
       DeleteRegValue HKCU "Software\RegisteredApplications" "LinkUnbound"
+
+      DeleteRegValue HKCU "Software\Classes\.htm\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.html\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.xhtml\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.xht\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.pdf\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.svg\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.mhtml\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.mht\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.shtml\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.webp\OpenWithProgIds" "LinkUnboundURL"
     ${EndIf}
 
     ; The sign-in entry names the resident being removed; left behind, it runs nothing every

@@ -52,6 +52,7 @@ function answers(
     if (cmd === "rules_list") return Promise.resolve([]);
     if (cmd === "prefs_get" || cmd === "prefs_set") return Promise.resolve(PREFS);
     if (cmd === "update_ready") return Promise.resolve(null);
+    if (cmd === "system_legacy") return Promise.resolve(null);
     if (cmd === "about") return Promise.resolve(BUILD);
     return Promise.resolve(state);
   });
@@ -364,6 +365,49 @@ describe("settings", () => {
       await go("Aplicación");
       expect(await screen.findByText(/Ítems de inicio/)).toBeInTheDocument();
     });
+
+    it("offers to remove a 1.x still installed, and says where it is", async () => {
+      answers(BASE, {
+        system_legacy: () =>
+          Promise.resolve({ path: "/Applications/LinkUnbound.app", version: "1.4.0" }),
+      });
+      render(<Settings />);
+      expect(await screen.findByText(/LinkUnbound 1\.4\.0 instalado/)).toBeInTheDocument();
+      expect(screen.getByText(/Applications/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Quitar la versión anterior" }));
+      await waitFor(() => expect(invoke).toHaveBeenCalledWith("system_retire_legacy"));
+      expect(await screen.findByText(/está en la papelera/)).toBeInTheDocument();
+    });
+
+    it("sends to Finder when the trash refuses the old copy", async () => {
+      answers(BASE, {
+        system_legacy: () =>
+          Promise.resolve({ path: "/Applications/LinkUnbound.app", version: "1.4.0" }),
+        system_retire_legacy: () => Promise.reject("no permission"),
+      });
+      render(<Settings />);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Quitar la versión anterior" }),
+      );
+      await userEvent.click(await screen.findByRole("button", { name: "Mostrarla en el Finder" }));
+      expect(invoke).toHaveBeenCalledWith("system_reveal_legacy");
+    });
+
+    it("says nothing about 1.x when there is none installed", async () => {
+      answers(BASE);
+      render(<Settings />);
+      await screen.findByText(/recibe los enlaces/);
+      expect(screen.queryByText(/instalado/)).toBeNull();
+    });
+  });
+
+  it("never offers to remove 1.x on Windows", async () => {
+    answers(BASE, {
+      system_legacy: () => Promise.resolve({ path: "C:/x/LinkUnbound.exe", version: "1.4.0" }),
+    });
+    render(<Settings />);
+    await screen.findByRole("heading", { name: "Enlaces" });
+    expect(invoke).not.toHaveBeenCalledWith("system_legacy");
   });
 
   it("counts the associations it holds against the ones a browser is asked to carry", async () => {

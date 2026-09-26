@@ -2,7 +2,7 @@ fn main() {
     slint_build::compile("ui/shell.slint").expect("the interface must compile");
 
     #[cfg(windows)]
-    {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         println!("cargo:rerun-if-changed=linkunbound-shell.manifest");
         embed_manifest::embed_manifest_file("linkunbound-shell.manifest")
             .expect("the manifest must be embedded");

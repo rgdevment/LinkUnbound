@@ -157,4 +157,29 @@ describe("application settings", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Quitar" }));
     expect(invoke).toHaveBeenCalledWith("prefs_set", { prefs: { ...PREFS, shortcut: null } });
   });
+
+  it("asks again after a change of combination, once the resident has claimed it", async () => {
+    vi.useFakeTimers();
+    try {
+      answers(PREFS, "Alt+Shift+L");
+      mount();
+      const button = await vi.waitFor(() => screen.getByRole("button", { name: "Alt+Shift+L" }));
+
+      answers({ ...PREFS, shortcut: "Control+Alt+B" }, null);
+      fireEvent.click(button);
+      fireEvent.keyDown(button, { code: "KeyB", ctrlKey: true, altKey: true });
+      await vi.waitFor(() =>
+        expect(invoke).toHaveBeenCalledWith("prefs_set", {
+          prefs: { ...PREFS, shortcut: "Control+Alt+B" },
+        }),
+      );
+      invoke.mockClear();
+
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(invoke).toHaveBeenCalledWith("prefs_get");
+      await vi.waitFor(() => expect(screen.getByText(/Otra aplicación ya usa/)).toBeTruthy());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

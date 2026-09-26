@@ -178,25 +178,23 @@ fn hand_over_at(socket: &str, url: &str) -> bool {
 /// This user and the system, nobody else: the pipe's default descriptor lets every account on
 /// the machine read it. Labelled low so a sandboxed browser can still hand a link across.
 #[cfg(windows)]
-fn only_this_user(options: ListenerOptions<'_>) -> ListenerOptions<'_> {
+fn guarded<'a>(options: ListenerOptions<'a>, sid: Option<String>) -> Option<ListenerOptions<'a>> {
     use interprocess::os::windows::local_socket::ListenerOptionsExt;
     use interprocess::os::windows::security_descriptor::SecurityDescriptor;
-    let Some(sid) = linkunbound_win::current_user_sid() else {
-        return options;
-    };
-    let sddl = format!("D:(A;;GA;;;SY)(A;;GA;;;{sid})S:(ML;;NW;;;LW)");
-    let Ok(wide) = widestring::U16CString::from_str(&sddl) else {
-        return options;
-    };
-    match SecurityDescriptor::deserialize(&wide) {
-        Ok(descriptor) => options.security_descriptor(descriptor),
-        Err(_) => options,
-    }
+    let sddl = format!("D:(A;;GA;;;SY)(A;;GA;;;{})S:(ML;;NW;;;LW)", sid?);
+    let wide = widestring::U16CString::from_str(&sddl).ok()?;
+    let descriptor = SecurityDescriptor::deserialize(&wide).ok()?;
+    Some(options.security_descriptor(descriptor))
+}
+
+#[cfg(windows)]
+fn only_this_user(options: ListenerOptions<'_>) -> Option<ListenerOptions<'_>> {
+    guarded(options, linkunbound_win::current_user_sid())
 }
 
 #[cfg(not(windows))]
-fn only_this_user(options: ListenerOptions<'_>) -> ListenerOptions<'_> {
-    options
+fn only_this_user(options: ListenerOptions<'_>) -> Option<ListenerOptions<'_>> {
+    Some(options)
 }
 
 /// Hands each link to `arrived` on the listener thread. A callback rather than a
@@ -230,7 +228,7 @@ fn claim_at(
     #[cfg(not(windows))]
     let _room = make_room(socket);
     let name = named(socket)?;
-    let listener = only_this_user(ListenerOptions::new().name(name))
+    let listener = only_this_user(ListenerOptions::new().name(name))?
         .create_sync()
         .ok()?;
 
@@ -287,6 +285,35 @@ mod tests {
             ))
             .to_string_lossy()
             .into_owned()
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn a_channel_that_cannot_be_guarded_is_not_opened() {
+        use interprocess::local_socket::{GenericNamespaced, ListenerOptions, ToNsName};
+
+        let name = scratch("guard");
+        let named = name.to_ns_name::<GenericNamespaced>().expect("a name");
+        assert!(
+            super::guarded(ListenerOptions::new().name(named.clone()), None).is_none(),
+            "no account to name means no channel"
+        );
+        assert!(
+            super::guarded(
+                ListenerOptions::new().name(named.clone()),
+                Some("not-a-sid".to_owned())
+            )
+            .is_none(),
+            "a descriptor the system refuses means no channel"
+        );
+        assert!(
+            super::guarded(
+                ListenerOptions::new().name(named),
+                linkunbound_win::current_user_sid()
+            )
+            .is_some(),
+            "this account's own sid builds one"
+        );
     }
 
     #[test]

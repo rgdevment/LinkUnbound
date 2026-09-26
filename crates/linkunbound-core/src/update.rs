@@ -160,13 +160,69 @@ pub fn newer_than(found: &str, here: &str) -> bool {
     }
 }
 
+#[must_use]
+pub fn on_the_candidate_track(here: &str, wants: Option<bool>) -> bool {
+    wants.unwrap_or_else(|| {
+        semver::Version::parse(here.trim_start_matches('v')).is_ok_and(|here| !here.pre.is_empty())
+    })
+}
+
+#[must_use]
+pub fn worth_offering(found: &str, here: &str, wants: Option<bool>) -> bool {
+    if !newer_than(found, here) {
+        return false;
+    }
+    let candidate = semver::Version::parse(found.trim_start_matches('v'))
+        .is_ok_and(|found| !found.pre.is_empty());
+    !candidate || on_the_candidate_track(here, wants)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        Looked, Progress, gone_quiet, keep, looked, newer_than, progress, settle, tell,
-        under_way_for,
+        Looked, Progress, gone_quiet, keep, looked, newer_than, on_the_candidate_track, progress,
+        settle, tell, under_way_for, worth_offering,
     };
     use std::time::Duration;
+
+    #[test]
+    fn a_copy_that_is_itself_a_candidate_stays_on_that_track_until_told_otherwise() {
+        assert!(on_the_candidate_track("2.1.0-rc.1", None));
+        assert!(!on_the_candidate_track("2.1.0", None));
+        assert!(on_the_candidate_track("2.1.0", Some(true)));
+        assert!(!on_the_candidate_track("2.1.0-rc.1", Some(false)));
+        assert!(!on_the_candidate_track("tomorrow", None));
+    }
+
+    #[test]
+    fn a_leading_v_is_the_same_version_either_way() {
+        assert!(on_the_candidate_track("v2.1.0-rc.1", None));
+        assert!(worth_offering("v2.2.0", "v2.1.0", None));
+    }
+
+    #[test]
+    fn a_stable_copy_is_never_walked_onto_a_candidate() {
+        assert!(
+            !worth_offering("2.2.0-rc.1", "2.1.0", None),
+            "the strip offered candidates the errand behind the button then refused"
+        );
+        assert!(
+            worth_offering("2.2.0-rc.1", "2.1.0", Some(true)),
+            "asked for"
+        );
+        assert!(
+            worth_offering("2.2.0-rc.1", "2.2.0-rc.0", None),
+            "already on it"
+        );
+    }
+
+    #[test]
+    fn nothing_older_or_unreadable_is_ever_worth_offering() {
+        assert!(!worth_offering("2.0.0", "2.1.0", None));
+        assert!(!worth_offering("2.1.0", "2.1.0", None));
+        assert!(!worth_offering("tomorrow", "2.1.0", Some(true)));
+        assert!(worth_offering("2.2.0", "2.1.0", None));
+    }
 
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir =

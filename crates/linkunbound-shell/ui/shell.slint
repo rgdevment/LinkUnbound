@@ -377,6 +377,7 @@ export component Picker inherits Window {
 
     // Rows the way 1.x users know them, or the sheet of tiles behind a preference.
     in property <bool> classic: true;
+    in property <bool> on-mac: false;
     // Room around the sheet for the shadow it draws itself. Zero where the system draws one.
     in property <length> halo: 0px;
 
@@ -488,11 +489,11 @@ export component Picker inherits Window {
                 root.more-open = false;
                 return accept;
             }
-            if (event.text == "c" && event.modifiers.control) {
+            if (event.text == "c" && (root.on-mac ? event.modifiers.meta : event.modifiers.control)) {
                 root.copy();
                 return accept;
             }
-            if (event.text == "p" && event.modifiers.control) {
+            if (event.text == "p" && (root.on-mac ? event.modifiers.meta : event.modifiers.control)) {
                 root.pinned-private = !root.pinned-private;
                 root.private-on = root.pinned-private;
                 return accept;

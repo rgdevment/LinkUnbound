@@ -115,10 +115,7 @@ struct Manifest {
 /// otherwise, and saying otherwise is what walks it back to the stable track.
 #[must_use]
 pub fn tracking(now: &str, wants: Option<bool>) -> bool {
-    wants.unwrap_or_else(|| {
-        now.parse::<semver::Version>()
-            .is_ok_and(|here| !here.pre.is_empty())
-    })
+    linkunbound_core::update::on_the_candidate_track(now, wants)
 }
 
 #[must_use]
@@ -178,14 +175,10 @@ fn offered(version: String, kept: Kept) -> Ready {
 /// whatever was true when the answer was written down.
 #[must_use]
 pub fn remembered(now: &str, said: Option<&str>, kept: Kept, wants: Option<bool>) -> Option<Ready> {
-    let here: semver::Version = now.parse().ok()?;
-    let kept_version: semver::Version = said?.parse().ok()?;
-
-    if !tracking(now, wants) && !kept_version.pre.is_empty() {
-        return None;
-    }
-
-    (kept_version > here).then(|| offered(kept_version.to_string(), kept))
+    let said = said?;
+    let found: semver::Version = said.parse().ok()?;
+    linkunbound_core::update::worth_offering(said, now, wants)
+        .then(|| offered(found.to_string(), kept))
 }
 
 /// A clock put back leaves the last look in the future, and a copy that only counts forward from

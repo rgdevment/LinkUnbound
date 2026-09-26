@@ -2091,7 +2091,6 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "once_cell",
- "serde",
  "thiserror 2.0.21",
  "windows-sys 0.59.0",
  "x11rb",
@@ -3545,7 +3544,6 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
- "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
@@ -3559,6 +3557,7 @@ name = "linkunbound-shell"
 version = "2.0.0"
 dependencies = [
  "embed-manifest",
+ "global-hotkey",
  "i-slint-backend-testing",
  "interprocess",
  "linkunbound-core",
@@ -6609,21 +6608,6 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
-]
-
-[[package]]
-name = "tauri-plugin-global-shortcut"
-version = "2.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4dd9f4c5136c09cd962da0c86dc4accd4666db2ea591cf16e6597435843bd2b"
-dependencies = [
- "global-hotkey",
- "log",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.21",
 ]
 
 [[package]]

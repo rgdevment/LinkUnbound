@@ -1,10 +1,7 @@
 mod shell;
 mod shop;
-mod shortcut;
 mod system;
 mod update;
-
-use std::sync::Mutex;
 
 use linkunbound_core::{
     Asking, Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of, merge,
@@ -12,13 +9,6 @@ use linkunbound_core::{
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
-
-/// The combination actually claimed, which the settings screen needs and only
-/// the registration knows.
-#[derive(Default)]
-struct Held {
-    shortcut: Option<String>,
-}
 
 #[cfg(any(windows, target_os = "macos"))]
 fn icons_dir() -> std::path::PathBuf {
@@ -554,7 +544,6 @@ fn maintenance_reset() -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// The shortcut the app really holds, which is not always the one asked for.
 #[derive(Serialize)]
 struct Settings {
     prefs: Preferences,
@@ -563,29 +552,17 @@ struct Settings {
     language: &'static str,
 }
 
-fn claim(app: &AppHandle, prefs: &Preferences) -> Settings {
-    let shortcut_held = shortcut::install(app, prefs.shortcut.as_deref());
-    if let Ok(mut held) = app.state::<Mutex<Held>>().lock() {
-        held.shortcut.clone_from(&shortcut_held);
-    }
+fn claim(prefs: &Preferences) -> Settings {
     Settings {
         language: spoken(prefs),
         prefs: prefs.clone(),
-        shortcut_held,
+        shortcut_held: store().shortcut_held(),
     }
 }
 
-/// Reads without touching the registration: the picker asks for this too, and
-/// re-claiming the combination on every link would be gratuitous.
 #[tauri::command]
-fn prefs_get(state: tauri::State<'_, Mutex<Held>>) -> Settings {
-    let prefs = store().prefs();
-    let shortcut_held = state.lock().ok().and_then(|h| h.shortcut.clone());
-    Settings {
-        language: spoken(&prefs),
-        prefs,
-        shortcut_held,
-    }
+fn prefs_get() -> Settings {
+    claim(&store().prefs())
 }
 
 fn spoken(prefs: &Preferences) -> &'static str {
@@ -607,7 +584,7 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
         })
         .map_err(|e| e.to_string())?;
     shell::repaint(&app, settled.theme);
-    Ok(claim(&app, &settled))
+    Ok(claim(&settled))
 }
 
 #[tauri::command]
@@ -681,21 +658,26 @@ fn maintenance_report() -> Result<String, String> {
         ),
     ];
     let store = store();
+    let prefs = store.prefs();
+    let words = Language::chosen(prefs.locale).strings();
     let body = linkunbound_core::diagnostics(
         env!("CARGO_PKG_VERSION"),
         &facts,
         &store.rules().unwrap_or_default(),
-        &store.prefs(),
+        &prefs,
+        &words,
     );
 
+    let named = format!("{}.md", words.report_file);
     let target = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
         .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
         .join("Desktop")
-        .join("linkunbound-diagnostico.md");
+        .join(&named);
     let target = if target.parent().is_some_and(std::path::Path::is_dir) {
         target
     } else {
-        std::env::temp_dir().join("linkunbound-diagnostico.md")
+        std::env::temp_dir().join(&named)
     };
     std::fs::write(&target, body).map_err(|e| e.to_string())?;
     Ok(target.to_string_lossy().into_owned())
@@ -704,6 +686,21 @@ fn maintenance_report() -> Result<String, String> {
 #[tauri::command]
 fn system_state() -> system::SystemState {
     system::state()
+}
+
+#[tauri::command]
+fn system_legacy() -> Option<system::Legacy> {
+    system::legacy()
+}
+
+#[tauri::command(async)]
+fn system_retire_legacy() -> Result<(), String> {
+    system::retire_legacy()
+}
+
+#[tauri::command]
+fn system_reveal_legacy() {
+    system::reveal_legacy();
 }
 
 #[tauri::command(async)]
@@ -1261,7 +1258,6 @@ pub fn run() {
     let errand = errand_in(&args);
 
     let builder = tauri::Builder::default()
-        .manage(Mutex::new(Held::default()))
         .manage(Updating::default())
         .invoke_handler(tauri::generate_handler![
             rules_list,
@@ -1281,6 +1277,9 @@ pub fn run() {
             prefs_get,
             prefs_set,
             system_state,
+            system_legacy,
+            system_retire_legacy,
+            system_reveal_legacy,
             system_set_registered,
             system_set_startup,
             system_open_default_apps,
@@ -1296,12 +1295,8 @@ pub fn run() {
             star_done
         ])
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
-    // Two tray clicks used to mean two processes, each writing the registry and each claiming
-    // the shortcut. The second now raises the first. An errand is not a second copy of the
-    // window, though: it must neither knock on the one that is open nor answer knocks itself.
     let builder = if errand.is_some() {
         builder
     } else {
@@ -1333,9 +1328,6 @@ pub fn run() {
             }
 
             system::reconcile();
-            // The resident owns the tray and the shortcut; this binary is only
-            // the settings window, opened and closed on demand.
-            claim(app.handle(), &store().prefs());
             #[cfg(target_os = "macos")]
             relay_links(app.handle().clone());
             shell::open_settings(app.handle(), store().prefs().theme);
