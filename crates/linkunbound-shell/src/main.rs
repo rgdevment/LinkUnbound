@@ -706,7 +706,10 @@ impl Ui {
     }
 
     fn settings_moved(&self) -> bool {
-        let now = prefs_touched_at();
+        self.moved_since(prefs_touched_at())
+    }
+
+    fn moved_since(&self, now: Option<std::time::SystemTime>) -> bool {
         if now == self.prefs_seen.get() {
             return false;
         }
@@ -1529,6 +1532,31 @@ mod tests {
         });
         UI.with_borrow_mut(|slot| *slot = Some(Rc::clone(&ui)));
         ui
+    }
+
+    #[test]
+    fn the_file_moving_is_what_says_settings_changed_something() {
+        let ui = headless_ui();
+        let first = std::time::SystemTime::UNIX_EPOCH;
+        let later = first + std::time::Duration::from_secs(1);
+
+        assert!(
+            ui.moved_since(Some(first)),
+            "nothing seen yet, so this is new"
+        );
+        assert!(
+            !ui.moved_since(Some(first)),
+            "the same file is not a change"
+        );
+        assert!(
+            ui.moved_since(Some(later)),
+            "a shortcut changed with the window open has to reach the resident"
+        );
+        assert!(!ui.moved_since(Some(later)));
+        assert!(
+            ui.moved_since(None),
+            "a file that cannot be read is not the one already seen"
+        );
     }
 
     #[test]

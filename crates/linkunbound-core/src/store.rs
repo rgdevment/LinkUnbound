@@ -745,6 +745,53 @@ mod tests {
     }
 
     #[test]
+    fn what_the_resident_holds_survives_the_process_that_wrote_it() {
+        let store = Store::at(scratch("held"));
+        assert_eq!(store.shortcut_held(), None, "nothing written, nobody holds");
+
+        store.hold_shortcut(Some("Alt+Shift+L"));
+        assert_eq!(
+            Store::at(store.dir()).shortcut_held(),
+            Some("Alt+Shift+L".to_owned()),
+            "the settings window reads what the resident wrote"
+        );
+
+        store.hold_shortcut(Some("Control+Alt+B"));
+        assert_eq!(
+            store.shortcut_held(),
+            Some("Control+Alt+B".to_owned()),
+            "a second claim replaces the first"
+        );
+
+        store.hold_shortcut(None);
+        assert_eq!(store.shortcut_held(), None, "letting go leaves nothing");
+        store.hold_shortcut(None);
+        assert_eq!(
+            store.shortcut_held(),
+            None,
+            "letting go twice is not a fault"
+        );
+    }
+
+    #[test]
+    fn a_combination_of_blanks_is_nobody_holding_anything() {
+        let store = Store::at(scratch("blank-held"));
+        store.hold_shortcut(Some("  \n "));
+        assert_eq!(
+            store.shortcut_held(),
+            None,
+            "a file with nothing in it must not read as a shortcut in force"
+        );
+
+        store.hold_shortcut(Some(" Alt+Shift+L\n"));
+        assert_eq!(
+            store.shortcut_held(),
+            Some("Alt+Shift+L".to_owned()),
+            "what a trailing newline surrounds is still the combination"
+        );
+    }
+
+    #[test]
     fn what_is_saved_is_what_comes_back() {
         let store = Store::at(scratch("roundtrip"));
         let mut set = RuleSet {

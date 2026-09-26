@@ -72,6 +72,18 @@ mod tests {
     fn with_no_old_copy_there_is_nothing_to_offer() {
         if installed().is_none() {
             assert_eq!(retire(), Err("legacyGone".to_owned()));
+            super::reveal();
+        }
+    }
+
+    #[test]
+    fn what_is_found_is_named_by_a_path_and_nothing_else_is_promised() {
+        if let Some(found) = installed() {
+            assert!(
+                !found.path.is_empty(),
+                "a copy with no path is not one to offer"
+            );
+            assert!(found.path.ends_with(".app"), "{}", found.path);
         }
     }
 }
