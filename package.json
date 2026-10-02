@@ -4,7 +4,7 @@
   "repository": "github:rgdevment/LinkUnbound",
   "devDependencies": {
     "js-yaml": "^5.4.2",
-    "markdownlint-cli2": "^0.20.0"
+    "markdownlint-cli2": "^0.23.3"
   },
   "scripts": {
     "lint:md": "markdownlint-cli2",
