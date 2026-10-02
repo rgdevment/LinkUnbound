@@ -21,6 +21,18 @@
 				<string>https</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>LinkUnbound URL</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>linkunbound</string>
+			</array>
+		</dict>
 	</array>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>LinkUnbound opens a web page you double-clicked on your Desktop with the browser you pick.</string>

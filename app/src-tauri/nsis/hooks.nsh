@@ -139,6 +139,7 @@ FunctionEnd
     ${If} $0 <> 0
       DetailPrint "Handing back the browser registration the short way"
       DeleteRegKey HKCU "Software\Classes\LinkUnboundURL"
+      DeleteRegKey HKCU "Software\Classes\linkunbound"
       DeleteRegKey HKCU "Software\Clients\StartMenuInternet\LinkUnbound"
       DeleteRegKey HKCU "Software\LinkUnbound"
       DeleteRegValue HKCU "Software\RegisteredApplications" "LinkUnbound"
