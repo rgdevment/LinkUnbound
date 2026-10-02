@@ -36,6 +36,34 @@ pub fn unwrap_edge_protocol(raw: &str) -> String {
     raw.to_owned()
 }
 
+pub const OWN_SCHEME: &str = "linkunbound";
+
+#[must_use]
+pub fn unwrap_own_scheme(raw: &str) -> String {
+    let Ok(url) = Url::parse(raw) else {
+        return raw.to_owned();
+    };
+    if url.scheme() != OWN_SCHEME {
+        return raw.to_owned();
+    }
+    let addressed_to_open = url.host_str() == Some("open")
+        && matches!(url.path(), "" | "/")
+        && url.fragment().is_none();
+    if !addressed_to_open {
+        return raw.to_owned();
+    }
+    let mut targets = url.query_pairs().filter(|(k, _)| k == "url");
+    let (Some((_, inner)), None) = (targets.next(), targets.next()) else {
+        return raw.to_owned();
+    };
+    match Url::parse(&inner) {
+        Ok(target) if LAUNCHABLE_SCHEMES.contains(&target.scheme()) && target.has_host() => {
+            inner.into_owned()
+        }
+        _ => raw.to_owned(),
+    }
+}
+
 fn parsed(raw: &str) -> Option<Url> {
     let url = Url::parse(raw).ok()?;
     url.has_host().then_some(url)
@@ -231,7 +259,7 @@ pub fn is_launchable(raw: &str) -> bool {
 /// Everything an inbound link goes through before it may be shown or launched.
 #[must_use]
 pub fn normalise(raw: &str) -> Option<String> {
-    let unwrapped = unwrap_safe_link(&unwrap_edge_protocol(raw));
+    let unwrapped = unwrap_safe_link(&unwrap_edge_protocol(&unwrap_own_scheme(raw)));
     if let Some(document) = launchable_file(&unwrapped) {
         return Some(document);
     }
@@ -306,6 +334,56 @@ mod tests {
             assert!(!is_launchable(said), "{said}");
         }
         assert!(is_launchable("https://github.com/a"));
+    }
+
+    #[test]
+    fn a_link_sent_through_our_own_scheme_arrives_as_the_link_it_carries() {
+        let sent = format!(
+            "linkunbound://open?url={}",
+            percent("https://github.com/a?b=1&c=2#d")
+        );
+
+        assert_eq!(unwrap_own_scheme(&sent), "https://github.com/a?b=1&c=2#d");
+        assert_eq!(
+            normalise(&sent).as_deref(),
+            Some("https://github.com/a?b=1&c=2#d")
+        );
+        assert_eq!(
+            normalise("LinkUnbound://open/?url=https%3A%2F%2Fgithub.com%2Fa").as_deref(),
+            Some("https://github.com/a")
+        );
+    }
+
+    #[test]
+    fn our_own_scheme_hands_over_nothing_a_browser_should_not_receive() {
+        for inner in [
+            "javascript:alert(1)",
+            "file:///C:/Windows/System32/calc.exe",
+            "file://attacker.test/share/x",
+            "data:text/html,<script>x</script>",
+            "ms-settings:defaultapps",
+            "linkunbound://open?url=https%3A%2F%2Fgithub.com",
+            "--gpu-launcher=calc.exe",
+            "https://",
+        ] {
+            let sent = format!("linkunbound://open?url={}", percent(inner));
+            assert_eq!(normalise(&sent), None, "«{inner}» got through");
+        }
+    }
+
+    #[test]
+    fn our_own_scheme_is_refused_when_it_is_not_spelled_the_one_way_we_read_it() {
+        for sent in [
+            "linkunbound:https://github.com/a",
+            "linkunbound://github.com/a",
+            "linkunbound://open",
+            "linkunbound://open?link=https%3A%2F%2Fgithub.com",
+            "linkunbound://open/elsewhere?url=https%3A%2F%2Fgithub.com",
+            "linkunbound://open?url=https%3A%2F%2Fa.test&url=https%3A%2F%2Fb.test",
+            "linkunbound://open?url=https%3A%2F%2Fa.test#x",
+        ] {
+            assert_eq!(normalise(sent), None, "«{sent}» was read");
+        }
     }
 
     fn percent(said: &str) -> String {

@@ -85,6 +85,13 @@
           </uap3:Protocol>
         </uap3:Extension>
 
+        <uap3:Extension Category="windows.protocol">
+          <uap3:Protocol Name="linkunbound" Parameters="&quot;%1&quot;">
+            <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
+            <uap:DisplayName>LinkUnbound</uap:DisplayName>
+          </uap3:Protocol>
+        </uap3:Extension>
+
         <uap:Extension Category="windows.fileTypeAssociation">
           <uap:FileTypeAssociation Name="linkunbound">
             <uap:DisplayName>LinkUnbound</uap:DisplayName>

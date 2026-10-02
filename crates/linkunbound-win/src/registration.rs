@@ -1,6 +1,8 @@
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
 
+use linkunbound_core::OWN_SCHEME;
+
 use crate::RegistrationError;
 
 pub const PROG_ID: &str = "LinkUnboundURL";
@@ -95,6 +97,21 @@ impl Registration {
         Ok(())
     }
 
+    fn write_own_scheme(&self, exe: &str) -> Result<(), RegistrationError> {
+        let quoted_exe = quoted(exe);
+        let (scheme, _) =
+            Self::hkcu().create_subkey(format!(r"{}\{OWN_SCHEME}", self.classes()))?;
+        scheme.set_value("", &"URL:LinkUnbound")?;
+        scheme.set_value("URL Protocol", &"")?;
+
+        let (icon, _) = scheme.create_subkey("DefaultIcon")?;
+        icon.set_value("", &format!("{quoted_exe},0"))?;
+
+        let (command, _) = scheme.create_subkey(r"shell\open\command")?;
+        command.set_value("", &format!("{quoted_exe} \"%1\""))?;
+        Ok(())
+    }
+
     fn write_start_menu(&self, exe: &str) -> Result<(), RegistrationError> {
         let quoted_exe = quoted(exe);
         let path = format!(r"{}\Clients\StartMenuInternet\{APP_NAME}", self.root);
@@ -168,7 +185,8 @@ impl Registration {
         self.write_start_menu(exe)?;
         self.write_capabilities(exe)?;
         self.write_registered_applications()?;
-        self.write_open_with()
+        self.write_open_with()?;
+        self.write_own_scheme(exe)
     }
 
     /// Removal has to mirror the write exactly, or the shell keeps offering an
@@ -176,6 +194,7 @@ impl Registration {
     pub fn unregister(&self) -> Result<(), RegistrationError> {
         let hkcu = Self::hkcu();
         let _ = hkcu.delete_subkey_all(format!(r"{}\{PROG_ID}", self.classes()));
+        let _ = hkcu.delete_subkey_all(format!(r"{}\{OWN_SCHEME}", self.classes()));
         let _ = hkcu.delete_subkey_all(format!(
             r"{}\Clients\StartMenuInternet\{APP_NAME}",
             self.root
@@ -346,6 +365,55 @@ mod tests {
             let swept = format!(r#""Software\Classes\{ext}\OpenWithProgIds" "{PROG_ID}""#);
             assert!(hooks.contains(&swept), "hooks.nsh leaves {ext} behind");
         }
+        assert!(
+            hooks.contains(&format!(
+                r#"DeleteRegKey HKCU "Software\Classes\{OWN_SCHEME}""#
+            )),
+            "hooks.nsh leaves the {OWN_SCHEME}: scheme behind"
+        );
+    }
+
+    #[test]
+    fn the_package_and_the_mac_bundle_answer_for_our_own_scheme_too() {
+        let src_tauri =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src-tauri");
+        let manifest = std::fs::read_to_string(src_tauri.join("msix/AppxManifest.xml.in"))
+            .expect("the package manifest");
+        assert!(manifest.contains(&format!(r#"<uap3:Protocol Name="{OWN_SCHEME}""#)));
+        let plist =
+            std::fs::read_to_string(src_tauri.join("Info.plist")).expect("the bundle plist");
+        assert!(plist.contains(&format!("<string>{OWN_SCHEME}</string>")));
+    }
+
+    #[test]
+    fn our_own_scheme_is_written_with_the_registration_and_leaves_with_it() {
+        let root = scratch("own-scheme");
+        scrub(&root);
+        let reg = Registration::under(&root);
+        reg.register(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe")
+            .expect("the registration is written");
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let scheme = hkcu
+            .open_subkey(format!(r"{root}\Classes\{OWN_SCHEME}"))
+            .expect("the scheme key");
+        scheme
+            .get_value::<String, _>("URL Protocol")
+            .expect("without it Windows does not treat the key as a scheme");
+        assert_eq!(
+            scheme
+                .open_subkey(r"shell\open\command")
+                .and_then(|k| k.get_value::<String, _>(""))
+                .expect("the command"),
+            r#""C:\Program Files\LinkUnbound\linkunbound-shell.exe" "%1""#
+        );
+
+        reg.unregister().unwrap();
+        assert!(
+            hkcu.open_subkey(format!(r"{root}\Classes\{OWN_SCHEME}"))
+                .is_err()
+        );
+        scrub(&root);
     }
 
     /// One root per test: they run in parallel and a shared root means each
