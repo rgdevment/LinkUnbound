@@ -34,6 +34,13 @@ updates:
     ignore:
       - dependency-name: muda
       - dependency-name: tray-icon
+      - dependency-name: windows-future
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "tauri*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-major
     groups:
       rust:
         patterns:
@@ -54,6 +61,11 @@ updates:
     open-pull-requests-limit: 3
     commit-message:
       prefix: "chore"
+    ignore:
+      - dependency-name: "@tauri-apps/*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-major
     groups:
       picker:
         patterns:
