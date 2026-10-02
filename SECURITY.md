@@ -19,11 +19,22 @@ This is a personal open source project, not a company product. Security here is 
 ### Security Practices
 
 - **Local JSON Storage** — Configuration is stored as plain JSON files in your user profile. No database, no network storage.
-- **Minimal Permissions** — LinkUnbound reads the Windows registry to detect installed browsers and writes only its own browser registration, under the current user. It never writes the default-browser choice itself; Windows and macOS keep that for the person.
+- **Minimal Permissions** — LinkUnbound reads the Windows registry to detect installed browsers and writes only its own browser registration and its own `linkunbound://` scheme, under the current user. It never writes the default-browser choice itself; Windows and macOS keep that for the person.
 - **Open Source** — Every line of code is public under GPLv3. You can inspect, audit, and verify everything.
 - **Dependency Updates** — Dependencies are regularly updated to patch known vulnerabilities.
 - **Code Reviews** — All contributions go through review before merging.
 - **URL Redaction in Logs** — All URLs are automatically redacted at write time before reaching the log file. The `navigate.log` never contains actual URLs, only privacy-safe placeholders.
+
+### Links From Other Applications
+
+LinkUnbound answers for its own scheme, `linkunbound://open?url=<link>`, so an application can send it a link without LinkUnbound being the default browser. Any program on the machine, and any web page that gets the browser to follow it, can open that address, so it is treated as untrusted input:
+
+- **One shape only** — the host must be `open`, with exactly one `url` parameter and no fragment. Any other spelling is dropped.
+- **Web links only** — the link inside must be `http` or `https` with a host. `file:`, UNC paths, `javascript:`, `data:`, settings pages, other schemes and a `linkunbound://` nested inside another are refused before anything is shown or launched.
+- **Same guards as a click** — past that check the link goes through the same validation every link does: nothing that a browser would read as a command-line switch reaches it, SafeLinks are unwrapped only when Microsoft serves them, and the URL is redacted in the log.
+- **Nothing new is trusted** — a link that arrives this way decides nothing on its own. Your rules or the picker decide where it opens, as they would for a click.
+
+The scheme is registered with the rest of the browser registration and removed with it: uninstalling removes it everywhere, and on Windows so does **Unregister** under Maintenance.
 
 ### Network Requests
 
@@ -54,6 +65,7 @@ If you discover a security vulnerability in LinkUnbound, please report it respon
 - Unauthorized access to stored configuration or rules
 - Privilege escalation issues
 - URL injection or manipulation that could redirect to unintended targets
+- Anything other than an `http` or `https` link getting through `linkunbound://`
 - Bypass of domain rule matching
 - Command injection through browser arguments or URL handling
 - Data leakage or unintended storage
