@@ -92,6 +92,7 @@ The picker names the address and the application the link came from, and each br
 - **Remembers the choice at the reach you pick** — this URL, this subdomain, the whole site, or everything a given app sends
 - **Rules from Settings too** — a rule for a site you have not visited yet, or for an app, without waiting for the picker
 - **Unwraps Microsoft SafeLinks** and the Edge-only scheme Teams and Outlook wrap links in, so rules see the real destination
+- **Takes links from your other apps** — an application can send a link to `linkunbound://open?url=…` and it goes through your rules, even when LinkUnbound is not the default browser
 - **Tells you when a rule decided** — a small notice with an Undo, six seconds, no focus taken
 - **Opens local documents** when you choose it for them — `.html`, `.pdf` and the rest on Windows, `.html` and `.xhtml` on macOS
 - **Runs silently** in the system tray (or menu bar on macOS) — starts at sign-in, stays out of the way
@@ -111,6 +112,7 @@ The picker names the address and the application the link came from, and each br
 - **URL redaction** — URLs are automatically redacted in logs at write time; the log file never contains actual URLs
 - **No tracking** — no telemetry, no analytics, no hidden collection
 - **No accounts** — no sign-up, no login, no profiles
+- **Web links only from other apps** — `linkunbound://` accepts an `http` or `https` link and nothing else, and tells the sender nothing back
 - **One network request** — a read-only check of the release feed the project publishes on GitHub for updates (no user data sent, works offline)
 
 **By design, LinkUnbound will never have:** accounts, subscriptions, ads, cloud sync, or data collection of any kind.

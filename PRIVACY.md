@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** September 17, 2026
+**Last updated:** October 2, 2026
 
 ---
 
@@ -73,6 +73,19 @@ What this means in practice:
 - **It reaches the disk only if you ask it to.** The name is used in memory to
   match rules and to label the picker. It is written to `rules.json` only when
   you tick "always open" on a link whose origin is known.
+
+### Links From Other Applications
+
+An application can hand LinkUnbound a link through its own address,
+`linkunbound://open?url=<link>`, even when LinkUnbound is not your default
+browser. Such a link is treated exactly like one you clicked:
+
+- **Nothing about it is kept** beyond what a click keeps — the address is held
+  in memory while it is routed and redacted in the log like any other.
+- **Nothing is sent back** to the application that sent it. It cannot learn
+  which browser opened the link, whether a rule decided, or what your rules are.
+- **Only web links are accepted.** A file, a script or anything else is dropped
+  before it is shown or opened.
 
 ### Navigation Log
 
@@ -203,7 +216,7 @@ For Microsoft's own privacy practices, refer to [Microsoft's Privacy Statement](
 Settings → **Maintenance** tab provides:
 
 - **Reset configuration** — clears all browsers, rules, and icons, then re-scans installed browsers.
-- **Unregister** — removes LinkUnbound's browser registration from the system: the registry entries on Windows; on macOS, hands `http`, `https` and the web document types back to the application that held them before (Safari when none is remembered).
+- **Unregister** — removes LinkUnbound's browser registration from the system: the registry entries on Windows, `linkunbound://` included; on macOS, hands `http`, `https` and the web document types back to the application that held them before (Safari when none is remembered).
 
 ### Complete Removal
 
@@ -214,7 +227,7 @@ Settings → **Maintenance** tab provides:
 
 **macOS:**
 
-1. Drag `LinkUnbound.app` from `/Applications` to the Trash (or `brew uninstall --cask linkunbound`).
+1. Drag `LinkUnbound.app` from `/Applications` to the Trash (or `brew uninstall --cask linkunbound`). The `linkunbound://` address goes with the app: macOS reads it from the app itself.
 2. Delete the data folder: `~/Library/Application Support/LinkUnbound/`
 3. Optional: remove preferences (`~/Library/Preferences/dev.rgdevment.linkunbound.plist`, and `com.rgdevment.linkunbound.plist` left by 1.x), saved app state under `~/Library/Saved Application State/`, and the login item under System Settings → General → Login Items if one was enabled.
 
