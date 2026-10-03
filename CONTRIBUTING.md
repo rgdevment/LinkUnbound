@@ -199,8 +199,8 @@ lines of comment in a row, a file grown past what anybody reads through, Spanish
 where the code should be English or Spanish that is not neutral, the core
 printing to a terminal the picker inherits or panicking where it should answer,
 and unsafe outside the files audited for it. `scripts/commits.sh` holds the
-shape and the length of a subject. Run either whenever you like, and if you want
-them run for you:
+shape and the length of a subject. Run either whenever you like; the `npm ci`
+at the root of a fresh clone also points git at `hooks/`, which is the same as:
 
 ```sh
 git config core.hooksPath hooks
