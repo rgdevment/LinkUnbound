@@ -1,0 +1,2 @@
+\b(vos|tenés|querés|podés|andá|mirá|hacé|che)\b
+\b(fichero|ficheros|ordenador|pulsa|pulsar|pulsando)\b
