@@ -108,8 +108,8 @@ The picker names the address and the application the link came from, and each br
 
 **Everything stays local.** LinkUnbound is built on a single, non-negotiable principle: your data never leaves your computer.
 
-- **Local-only storage** — browser list, domain rules, and logs stay on your machine
-- **URL redaction** — URLs are automatically redacted in logs at write time; the log file never contains actual URLs
+- **Local-only storage** — browser list, rules and preferences stay on your machine
+- **No link log** — links are routed in memory and never logged
 - **No tracking** — no telemetry, no analytics, no hidden collection
 - **No accounts** — no sign-up, no login, no profiles
 - **Web links only from other apps** — `linkunbound://` accepts an `http` or `https` link and nothing else, and tells the sender nothing back
@@ -223,13 +223,13 @@ Two binaries, one package: a resident that receives the links and draws the pick
 Yes. Completely free and open source. No premium tiers, no subscriptions, no paywalls — ever. That covers using it anywhere, including across a company. Only redistributing it inside a product of your own needs [separate terms](COMMERCIAL.md).
 
 **Does it track my browsing?**
-No. LinkUnbound does not track or transmit anything. URLs are processed in memory and automatically redacted before being written to the navigation log — the log file never contains actual URLs, only privacy-safe placeholders.
+No. LinkUnbound does not track or transmit anything. Links are routed in memory and never logged. An address reaches the disk only inside a rule you asked it to remember for that exact address.
 
 **Does it need internet?**
 No. LinkUnbound works fully offline. The only network request is a lightweight update check against the release feed the project publishes on GitHub — no user data sent. The app works perfectly without a connection.
 
 **Where is my data stored?**
-Everything stays on your machine — `%LOCALAPPDATA%\LinkUnbound\` on Windows, `~/Library/Application Support/LinkUnbound/` on macOS. Browser list (`browsers.json`), rules (`rules.json`), preferences (`preferences.json`), what the last update check found (`update.json`), the navigation log (`navigate.log`), and extracted icons. Removing the program keeps the rules and browsers unless you ask otherwise.
+Everything stays on your machine — `%LOCALAPPDATA%\LinkUnbound\` on Windows, `~/Library/Application Support/LinkUnbound/` on macOS. Browser list (`browsers.json`), rules (`rules.json`), preferences (`preferences.json`), what the last update check found (`update.json`) and extracted icons. Removing the program keeps the rules and browsers unless you ask otherwise.
 
 **Does it work with any browser?**
 Yes. LinkUnbound detects all browsers registered with the operating system. You can also add custom browsers manually with any executable path and arguments.

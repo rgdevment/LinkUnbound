@@ -159,6 +159,7 @@ FunctionEnd
     ; The sign-in entry names the resident being removed; left behind, it runs nothing every
     ; morning, and a later install reads it as a choice already made.
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LinkUnbound"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "LinkUnbound"
   ${EndIf}
 !macroend
 

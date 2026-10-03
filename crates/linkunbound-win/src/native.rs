@@ -464,10 +464,48 @@ pub fn foreground_process_path() -> Option<String> {
 
 /// Rules key off a stable name, not a full path that changes with every update.
 #[must_use]
-pub fn source_app() -> Option<String> {
-    let path = foreground_process_path()?;
-    let stem = Path::new(&path).file_stem()?.to_str()?.to_ascii_lowercase();
-    (!stem.is_empty()).then_some(stem)
+pub fn source_app() -> Option<linkunbound_core::Origin> {
+    let front = foreground_process_path()?;
+    let stem = remembered(origin_of(&front), is_the_picker(&front), &LAST_SEEN);
+    stem.map(|stem| linkunbound_core::Origin::named(&stem))
+}
+
+/// Only the picker stands between a queued link and the app it came from. A link clicked in
+/// Settings comes from Settings, which is no origin at all, not from whoever came before.
+fn is_the_picker(path: &str) -> bool {
+    Path::new(path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .is_some_and(|stem| stem.eq_ignore_ascii_case("linkunbound-shell"))
+}
+
+static LAST_SEEN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// A link that queues behind the picker finds the picker in front, which is never the origin:
+/// the app that was in front before it stands in, as on a Mac.
+fn remembered(
+    found: Option<String>,
+    behind_the_picker: bool,
+    last: &std::sync::Mutex<Option<String>>,
+) -> Option<String> {
+    let Ok(mut last) = last.lock() else {
+        return found;
+    };
+    match found {
+        Some(stem) => {
+            *last = Some(stem.clone());
+            Some(stem)
+        }
+        None if behind_the_picker => last.clone(),
+        None => None,
+    }
+}
+
+/// The picker or settings in front is not where the link came from, and a rule bound to them
+/// would never fire again.
+fn origin_of(path: &str) -> Option<String> {
+    let stem = Path::new(path).file_stem()?.to_str()?.to_lowercase();
+    (!stem.is_empty() && !stem.starts_with("linkunbound")).then_some(stem)
 }
 
 /// The pixels behind a bitmap, as RGBA. Windows hands them back bottom-up and
@@ -653,11 +691,51 @@ mod tests {
     #[test]
     fn the_foreground_process_is_named_by_its_stem() {
         if let Some(app) = source_app() {
-            assert!(!app.is_empty());
-            assert!(!app.contains('\\'));
-            assert!(!app.ends_with(".exe"));
-            assert_eq!(app, app.to_ascii_lowercase());
+            assert!(!app.key.is_empty());
+            assert!(!app.key.contains('\\'));
+            assert!(!app.key.ends_with(".exe"));
+            assert_eq!(app.key, app.key.to_lowercase());
         }
+    }
+
+    #[test]
+    fn behind_our_own_window_the_app_in_front_before_it_is_the_origin() {
+        let last = std::sync::Mutex::new(None);
+        assert_eq!(remembered(None, true, &last), None);
+        assert_eq!(
+            remembered(Some("outlook".to_owned()), false, &last).as_deref(),
+            Some("outlook")
+        );
+        assert_eq!(remembered(None, true, &last).as_deref(), Some("outlook"));
+        assert_eq!(
+            remembered(None, false, &last),
+            None,
+            "Settings in front is no origin"
+        );
+        assert!(is_the_picker(r"C:\Apps\LinkUnbound\linkunbound-shell.exe"));
+        assert!(!is_the_picker(
+            r"C:\Apps\LinkUnbound\LinkUnbound-Settings.exe"
+        ));
+    }
+
+    #[test]
+    fn our_own_windows_are_never_where_a_link_came_from() {
+        assert_eq!(
+            origin_of(r"C:\Program Files\Slack\Slack.exe").as_deref(),
+            Some("slack")
+        );
+        assert_eq!(
+            origin_of(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe"),
+            None
+        );
+        assert_eq!(
+            origin_of(r"C:\Program Files\LinkUnbound\LinkUnbound-Settings.exe"),
+            None
+        );
+        assert_eq!(
+            origin_of(r"C:\Programme\Übersicht\Übersicht.exe").as_deref(),
+            Some("übersicht")
+        );
     }
 
     /// The pipe's descriptor names this account by SID; an account that cannot be named leaves

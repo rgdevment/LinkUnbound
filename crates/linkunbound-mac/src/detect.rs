@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use linkunbound_core::{Browser, Profile, id_for, private_flag_for, profiles_in};
+use linkunbound_core::{
+    Browser, Profile, chromium_home_on_mac, id_for, private_flag_for, profiles_in,
+};
 use objc2::Message;
 use objc2_app_kit::NSWorkspace;
-use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSString, NSURL};
+use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSLocale, NSString, NSURL};
 
 /// Asked of a link rather than of a scheme: `LSCopyAllHandlersForURLScheme` is
 /// the deprecated half of this pair and answers the same question.
@@ -93,37 +95,8 @@ fn web_ranks(bundle: &NSBundle) -> Vec<String> {
 
 /// Chromium keeps its profiles beside the browser's own support directory, with
 /// no `User Data` level in between as on Windows.
-/// Matched on the bundle's own name, never on the path it sits in: a browser
-/// under `/Users/marc/Applications` is not Arc, and one under a folder called
-/// `operations` is not Opera.
 fn family_of(app: &Path) -> Option<&'static str> {
-    let name = app.file_name()?.to_string_lossy().to_ascii_lowercase();
-    let suffix = if name.contains("microsoft edge") {
-        "Microsoft Edge"
-    } else if name.contains("brave") {
-        "BraveSoftware/Brave-Browser"
-    } else if name.contains("vivaldi") {
-        "Vivaldi"
-    } else if name.contains("chrome canary") {
-        "Google/Chrome Canary"
-    } else if name.contains("chrome beta") {
-        "Google/Chrome Beta"
-    } else if name.contains("chrome dev") {
-        "Google/Chrome Dev"
-    } else if name.contains("chrome") {
-        "Google/Chrome"
-    } else if name.contains("chromium") {
-        "Chromium"
-    } else if name == "arc.app" {
-        "Arc/User Data"
-    } else if name.contains("opera gx") {
-        "com.operasoftware.OperaGX"
-    } else if name.contains("opera") {
-        "com.operasoftware.Opera"
-    } else {
-        return None;
-    };
-    Some(suffix)
+    chromium_home_on_mac(&app.file_name()?.to_string_lossy())
 }
 
 fn user_data_dir_under(app: &Path, home: &Path) -> Option<PathBuf> {
@@ -161,6 +134,89 @@ fn bundle_name(app: &Path) -> String {
 fn preferred(bundle_id: &str) -> Option<objc2::rc::Retained<NSURL>> {
     NSWorkspace::sharedWorkspace()
         .URLForApplicationWithBundleIdentifier(&NSString::from_str(bundle_id))
+}
+
+/// The name an app goes by, for an origin a rule saved as its bundle id.
+#[must_use]
+pub fn app_named(bundle_id: &str) -> Option<String> {
+    let url = preferred(bundle_id)?;
+    let path = text(url.path())?;
+    let bundle = NSBundle::bundleWithURL(&url)?;
+    let name = spoken_name(&bundle).or_else(|| name_of(&bundle, Path::new(&path)))?;
+    Some(linkunbound_core::visible(&name))
+}
+
+/// The bundle id of the app that goes by this name, among the running ones and the folders
+/// apps are installed in: a rule saved by name would stop matching when the language changes.
+#[must_use]
+pub fn bundle_id_named(name: &str) -> Option<String> {
+    let running = NSWorkspace::sharedWorkspace().runningApplications();
+    let by_running = running.iter().find_map(|app| {
+        let shown = app.localizedName()?.to_string();
+        linkunbound_core::same_name(&shown, name)
+            .then(|| app.bundleIdentifier().map(|id| id.to_string()))
+            .flatten()
+    });
+    by_running.or_else(|| {
+        objc2::rc::autoreleasepool(|_| {
+            installed_apps()
+                .into_iter()
+                .find_map(|app| named_as(&app, name))
+        })
+    })
+}
+
+fn installed_apps() -> Vec<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let folders = [
+        Some(PathBuf::from("/Applications")),
+        Some(PathBuf::from("/Applications/Utilities")),
+        Some(PathBuf::from("/System/Applications")),
+        Some(PathBuf::from("/System/Applications/Utilities")),
+        home.map(|home| home.join("Applications")),
+    ];
+    folders
+        .into_iter()
+        .flatten()
+        .filter_map(|folder| std::fs::read_dir(folder).ok())
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "app"))
+        .collect()
+}
+
+fn named_as(app: &Path, name: &str) -> Option<String> {
+    let url = NSURL::fileURLWithPath(&NSString::from_str(&app.to_string_lossy()));
+    let bundle = NSBundle::bundleWithURL(&url)?;
+    let shown = spoken_name(&bundle).or_else(|| name_of(&bundle, app))?;
+    linkunbound_core::same_name(&shown, name)
+        .then(|| text(bundle.bundleIdentifier()))
+        .flatten()
+}
+
+/// In the person's language, not in this process's: Settings ships in English only, and asked
+/// plainly the system answers «Notes» where the picker, reading the running app, says «Notas».
+fn spoken_name(bundle: &NSBundle) -> Option<String> {
+    let wanted = NSBundle::preferredLocalizationsFromArray_forPreferences(
+        &bundle.localizations(),
+        Some(&NSLocale::preferredLanguages()),
+    );
+    let table = NSString::from_str("InfoPlist");
+    ["CFBundleDisplayName", "CFBundleName"]
+        .into_iter()
+        .find_map(|key| {
+            let asked = NSString::from_str(key);
+            let said = bundle
+                .localizedStringForKey_value_table_localizations(
+                    &asked,
+                    None,
+                    Some(&table),
+                    &wanted,
+                )
+                .to_string();
+            (!said.is_empty() && said != key).then_some(said)
+        })
 }
 
 fn read_bundle(found: &NSURL) -> Option<Browser> {
@@ -278,6 +334,32 @@ mod tests {
             "org.mozilla.firefox",
             &ranked(&["Alternate", "Default"])
         ));
+    }
+
+    #[test]
+    fn a_bundle_id_is_shown_by_the_name_of_its_app() {
+        assert_eq!(
+            super::app_named("com.apple.Safari").as_deref(),
+            Some("Safari")
+        );
+        assert_eq!(super::app_named("test.linkunbound.nothing-installed"), None);
+        assert_eq!(
+            super::bundle_id_named("safari").as_deref(),
+            Some("com.apple.Safari")
+        );
+        assert_eq!(super::bundle_id_named("no app is called this"), None);
+        if let Some(notes) = super::app_named("com.apple.Notes") {
+            let spanish = objc2_foundation::NSLocale::preferredLanguages()
+                .firstObject()
+                .is_some_and(|first| first.to_string().starts_with("es"));
+            assert_eq!(notes, if spanish { "Notas" } else { "Notes" });
+        }
+        if let Some(whatsapp) = super::app_named("net.whatsapp.WhatsApp") {
+            assert_eq!(
+                whatsapp, "WhatsApp",
+                "the direction mark it ships with is not shown"
+            );
+        }
     }
 
     /// Dropping a browser over a plist this could not parse takes somebody's browser out of

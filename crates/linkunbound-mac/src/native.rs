@@ -1,6 +1,8 @@
 use std::ptr::NonNull;
 use std::sync::Mutex;
 
+use linkunbound_core::Origin;
+
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
@@ -263,16 +265,19 @@ pub fn shift_is_down() -> bool {
     NSEvent::modifierFlags_class().contains(NSEventModifierFlags::Shift)
 }
 
-fn named_unless_ours(app: &NSRunningApplication) -> Option<String> {
+fn named_unless_ours(app: &NSRunningApplication) -> Option<Origin> {
     let bundle_id = app.bundleIdentifier()?.to_string();
     if crate::is_one_of_ours(&bundle_id) {
         return None;
     }
-    let name = app.localizedName()?.to_string().to_lowercase();
-    (!name.is_empty()).then_some(name)
+    let name = linkunbound_core::visible(&app.localizedName()?.to_string()).to_lowercase();
+    (!name.is_empty()).then_some(Origin {
+        key: bundle_id,
+        label: name,
+    })
 }
 
-static LAST_SEEN: Mutex<Option<String>> = Mutex::new(None);
+static LAST_SEEN: Mutex<Option<Origin>> = Mutex::new(None);
 
 fn note_activation(app: Option<Retained<NSRunningApplication>>) {
     if let Some(name) = app.as_deref().and_then(named_unless_ours)
@@ -316,15 +321,15 @@ impl Drop for Watching {
 }
 
 fn origin(
-    front: Option<String>,
-    last_seen: Option<String>,
-    menu_bar: Option<String>,
-) -> Option<String> {
+    front: Option<Origin>,
+    last_seen: Option<Origin>,
+    menu_bar: Option<Origin>,
+) -> Option<Origin> {
     front.or(last_seen).or(menu_bar)
 }
 
 #[must_use]
-pub fn source_app() -> Option<String> {
+pub fn source_app() -> Option<Origin> {
     let workspace = NSWorkspace::sharedWorkspace();
     origin(
         workspace
@@ -395,6 +400,7 @@ mod tests {
         LAST_SEEN, contains, down, is_another_copy_of, located, named_unless_ours, note_activation,
         origin, placed, pointed, retire, whole,
     };
+    use linkunbound_core::Origin;
     use objc2_app_kit::{NSRunningApplication, NSWorkspace};
     use objc2_foundation::{NSPoint, NSRect, NSSize};
 
@@ -497,8 +503,16 @@ mod tests {
             .find(|app| app.bundleIdentifier().is_some() && app.localizedName().is_some())
             .expect("something is always running");
         let name = named_unless_ours(&someone).expect("a name");
-        assert_eq!(name, name.to_lowercase());
-        assert!(!name.is_empty());
+        assert_eq!(name.label, name.label.to_lowercase());
+        assert!(!name.label.is_empty());
+        assert_eq!(
+            Some(name.key.as_str()),
+            someone
+                .bundleIdentifier()
+                .map(|id| id.to_string())
+                .as_deref(),
+            "the key a rule saves is the bundle id, which no language changes"
+        );
 
         note_activation(None);
         note_activation(Some(someone.clone()));
@@ -508,7 +522,7 @@ mod tests {
         );
         let _watching = super::watch_activations();
         let workspace = NSWorkspace::sharedWorkspace();
-        let candidates: Vec<Option<String>> = vec![
+        let candidates: Vec<Option<Origin>> = vec![
             workspace
                 .frontmostApplication()
                 .as_deref()
@@ -520,17 +534,17 @@ mod tests {
                 .and_then(named_unless_ours),
         ];
         let origin = super::source_app().expect("somebody was activated last");
-        assert!(!origin.is_empty());
-        assert_eq!(origin, origin.to_lowercase());
+        assert!(!origin.label.is_empty());
+        assert_eq!(origin.label, origin.label.to_lowercase());
         assert!(
             candidates.contains(&Some(origin.clone())),
-            "{origin} vs {candidates:?}"
+            "{origin:?} vs {candidates:?}"
         );
     }
 
     #[test]
     fn the_origin_is_whoever_was_in_front_then_whoever_was_activated_last_then_the_menu_bar() {
-        let some = |s: &str| Some(s.to_owned());
+        let some = |s: &str| Some(Origin::named(s));
         assert_eq!(
             origin(some("slack"), some("finder"), some("orca")),
             some("slack")

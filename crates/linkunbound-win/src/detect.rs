@@ -1,4 +1,6 @@
-use linkunbound_core::{Browser, Profile, id_for, private_flag_for, profiles_in};
+use linkunbound_core::{
+    Browser, Profile, chromium_home_on_windows, id_for, private_flag_for, profiles_in,
+};
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 
@@ -92,19 +94,8 @@ pub fn installed_browsers() -> Vec<Browser> {
 
 fn user_data_dir(exe: &str) -> Option<std::path::PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA")?;
-    let needle = exe.to_ascii_lowercase();
-    let suffix = if needle.contains("msedge") {
-        r"Microsoft\Edge\User Data"
-    } else if needle.contains("brave") {
-        r"BraveSoftware\Brave-Browser\User Data"
-    } else if needle.contains("vivaldi") {
-        r"Vivaldi\User Data"
-    } else if needle.contains("chrome") {
-        r"Google\Chrome\User Data"
-    } else {
-        return None;
-    };
-    Some(std::path::Path::new(&local).join(suffix))
+    let home = chromium_home_on_windows(exe)?;
+    Some(std::path::Path::new(&local).join(home).join("User Data"))
 }
 
 #[must_use]

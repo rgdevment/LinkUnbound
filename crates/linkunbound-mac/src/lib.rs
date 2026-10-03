@@ -25,7 +25,7 @@ pub(crate) fn is_one_of_ours(bundle_id: &str) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-pub use detect::installed_browsers;
+pub use detect::{app_named, bundle_id_named, installed_browsers};
 #[cfg(target_os = "macos")]
 pub use events::{Event, Listening, listen};
 #[cfg(target_os = "macos")]

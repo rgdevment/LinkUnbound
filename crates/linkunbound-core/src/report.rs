@@ -4,23 +4,25 @@ use crate::{Preferences, RuleSet, Scope, Strings};
 /// place the user has been may survive it: the host stays, the rest goes.
 #[must_use]
 pub fn redact(url: &str, instead: &str) -> String {
-    let Some((scheme, rest)) = url.split_once("://") else {
+    // Parsed, not split on `/`: a browser reads `\` as a separator too, and a path written with
+    // backslashes rode along whole as part of the host.
+    let Ok(parsed) = url::Url::parse(url) else {
         return instead.to_owned();
     };
-    let host = rest
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or_default()
-        .rsplit('@')
-        .next()
-        .unwrap_or_default();
-    if host.is_empty() {
+    let Some(host) = parsed.host_str() else {
         return instead.to_owned();
+    };
+    let at = match parsed.port() {
+        Some(port) => format!("{}://{host}:{port}", parsed.scheme()),
+        None => format!("{}://{host}", parsed.scheme()),
+    };
+    let goes_further =
+        parsed.path() != "/" || parsed.query().is_some() || parsed.fragment().is_some();
+    if goes_further {
+        format!("{at}/…")
+    } else {
+        at
     }
-    if rest.len() > host.len() {
-        return format!("{scheme}://{host}/…");
-    }
-    format!("{scheme}://{host}")
 }
 
 fn describe(scope: &Scope, words: &Strings) -> String {
@@ -107,6 +109,17 @@ mod tests {
         assert!(!out.contains("hunter2"));
         assert!(!out.contains("ana"));
         assert!(out.contains("intranet.corp"));
+    }
+
+    #[test]
+    fn a_path_written_with_backslashes_is_cut_like_any_other() {
+        let out = redact(r"https://intranet.corp\reports\salaries", GONE);
+        assert_eq!(out, "https://intranet.corp/…");
+        assert_eq!(
+            redact("https://intranet.corp:8443/x", GONE),
+            "https://intranet.corp:8443/…"
+        );
+        assert_eq!(redact("https://a.test/?q=1", GONE), "https://a.test/…");
     }
 
     #[test]

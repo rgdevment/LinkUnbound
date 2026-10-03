@@ -4,8 +4,8 @@ mod system;
 mod update;
 
 use linkunbound_core::{
-    Asking, Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of, merge,
-    normalise, site_of,
+    Asking, Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of,
+    is_public_suffix, merge, normalise, same_name, site_of,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -81,6 +81,50 @@ struct RuleView {
     resolved: bool,
 }
 
+fn is_scheme(said: &str) -> bool {
+    said.starts_with(|c: char| c.is_ascii_alphabetic())
+        && said
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+}
+
+/// What the picker would have saved for the app typed: on a Mac its bundle id when one is
+/// installed by that name, so the rule outlives a change of language; otherwise the name.
+fn app_key(said: &str) -> String {
+    #[cfg(target_os = "macos")]
+    if let Some(id) = linkunbound_mac::bundle_id_named(said) {
+        return id;
+    }
+    said.to_lowercase().trim_end_matches(".exe").to_owned()
+}
+
+/// An app typed by its name is the app a rule already saved by bundle id, when that id goes by
+/// the same name: the form would otherwise add a second rule the first one hides.
+fn named_alike(rules: &[Rule], rule: &Rule) -> bool {
+    let Some(typed) = rule.source_app.as_deref() else {
+        return false;
+    };
+    let names = |said: &str| [said.to_owned(), shown_origin(said)];
+    let wanted = names(typed);
+    rules.iter().any(|r| {
+        r.scope == rule.scope
+            && r.source_app.as_deref().is_some_and(|saved| {
+                names(saved)
+                    .iter()
+                    .any(|name| wanted.iter().any(|typed| same_name(name, typed)))
+            })
+    })
+}
+
+/// A Mac picker saves the bundle id, which no language changes; the person reads the app's name.
+fn shown_origin(saved: &str) -> String {
+    #[cfg(target_os = "macos")]
+    if let Some(name) = linkunbound_mac::app_named(saved) {
+        return name;
+    }
+    saved.to_owned()
+}
+
 fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
     let found = browsers.iter().find(|b| b.id == rule.target.browser_id);
     let profile = rule.target.profile_id.as_ref().and_then(|id| {
@@ -106,7 +150,7 @@ fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
         profile,
         icon: found.and_then(|b| icon_data(&b.exe, &b.id)),
         private: rule.private,
-        source_app: rule.source_app.clone(),
+        source_app: rule.source_app.as_deref().map(shown_origin),
         resolved,
     }
 }
@@ -158,19 +202,34 @@ fn rule_from(
     if said.is_empty() {
         return Err("ruleValueEmpty");
     }
-    // Read the way an arriving link's host is read, so `user@`, a port, a trailing dot or an
-    // accented name come out as the host a rule would be matched against — or not at all.
+    // Read the way an arriving link's host is read, so `user@`, a port or a trailing dot come out
+    // as the host a rule is matched against. A wildcard never matches; a lone name like
+    // `intranet` is a host when no path follows it, as the picker already treats it.
     let host_named = || -> Result<String, &'static str> {
-        let address = if said.contains("://") {
-            said.to_owned()
-        } else {
-            format!("https://{}", said.trim_end_matches('/'))
-        };
-        let host = host_of(&address).ok_or("ruleValueNotHost")?;
-        if !host.contains('.') {
+        // Only a scheme at the very start makes it a link: `a.com/?next=https://b.com` is a.com.
+        let bare = match said.split_once("://") {
+            Some((scheme, rest)) if is_scheme(scheme) => rest,
+            _ => said,
+        }
+        .trim_end_matches('/');
+        let host = host_of(&format!("https://{bare}")).ok_or("ruleValueNotHost")?;
+        let single = !host.contains('.') && !host.starts_with('[');
+        if host.contains('*') || (single && bare.contains(['/', '\\', '?', '#'])) {
             return Err("ruleValueNotHost");
         }
         Ok(host)
+    };
+    // A site is a registrable domain: a lone name is either a whole country's ending (`np`) or
+    // a word that no address carries as its site (`github`).
+    let site_named = || -> Result<String, &'static str> {
+        let site = site_of(&host_named()?);
+        if !site.contains('.') && !site.starts_with('[') {
+            return Err("ruleValueNotSite");
+        }
+        if is_public_suffix(&site) {
+            return Err("ruleValueIsSuffix");
+        }
+        Ok(site)
     };
     let (scope, source_app) = match kind {
         "url" => {
@@ -178,13 +237,9 @@ fn rule_from(
             (Scope::Url(url), None)
         }
         "host" => (Scope::Host(host_named()?), None),
-        "site" => (Scope::Site(site_of(&host_named()?)), None),
-        // The picker records an origin lowercased, and on Windows by its process name: «Slack»
-        // and «Slack.exe» both mean the app somebody sees in «Desde …».
-        "app" => (
-            Scope::Any,
-            Some(said.to_lowercase().trim_end_matches(".exe").to_owned()),
-        ),
+        "site" => (Scope::Site(site_named()?), None),
+        // «Slack» and «Slack.exe» both mean the app somebody sees in «Desde …».
+        "app" => (Scope::Any, Some(app_key(said))),
         _ => return Err("ruleKindUnknown"),
     };
     Ok(Rule {
@@ -196,7 +251,9 @@ fn rule_from(
     })
 }
 
-#[tauri::command]
+// Async so it runs off the main thread: on a Mac an app typed by name may be looked for among
+// every installed one.
+#[tauri::command(async)]
 fn rules_add(
     kind: String,
     value: String,
@@ -214,7 +271,7 @@ fn rules_add(
     let mut standing = false;
     store()
         .edit_rules(|rules| {
-            if rules.standing_in_for(&rule).is_some() {
+            if rules.standing_in_for(&rule).is_some() || named_alike(&rules.rules, &rule) {
                 standing = true;
                 return false;
             }
@@ -511,26 +568,58 @@ struct Rescanned {
     removed: usize,
 }
 
-/// Everything the app decided on its own goes; what the user chose stays. Counted, as 1.x did:
-/// «done» alone reads the same whether a browser appeared or nothing changed.
+/// Asks the system again and shows what was hidden. Names, arguments, icons and order the person
+/// gave a detected browser stay: detection only owns its path and profiles. Counted against what
+/// was saved: «done» alone reads the same whether a browser appeared or nothing changed.
 #[tauri::command]
 fn maintenance_rescan() -> Result<Rescanned, String> {
-    let before = catalogue();
-    let after = keep(only_mine(before.clone()))?;
-    let was = |id: &str| before.iter().any(|b| b.id == id);
-    let is = |id: &str| after.iter().any(|b| b.id == id);
+    let saved = store().browsers().map_err(|e| e.to_string())?.browsers;
+    let found = rescanned(system::browsers(), &saved);
+    // What was just detected and saved is the list; reading the catalogue again would detect twice.
+    keep_in(&store(), found.browsers.clone())?;
     Ok(Rescanned {
-        added: after.iter().filter(|b| !was(&b.id)).count(),
-        removed: before.iter().filter(|b| !is(&b.id)).count(),
-        browsers: after,
+        browsers: found.browsers.iter().map(seen).collect(),
+        added: found.added,
+        removed: found.removed,
     })
 }
 
-/// Forgets what detection found so the next read picks it up again. What the
-/// user added by hand is not detectable, so dropping it would be a deletion.
-fn only_mine(mut all: Vec<Browser>) -> Vec<Browser> {
-    all.retain(|b| b.custom);
-    all
+struct Found {
+    browsers: Vec<Browser>,
+    added: usize,
+    removed: usize,
+}
+
+fn rescanned(detected: Vec<Browser>, saved: &[Browser]) -> Found {
+    let known = |id: &str| saved.iter().any(|b| b.id == id);
+    let removed = saved
+        .iter()
+        .filter(|b| !b.custom && !detected.iter().any(|d| d.id == b.id))
+        .count();
+    // With no detected browser saved, the list on screen was detection itself: nothing is new.
+    let added = if saved.iter().any(|b| !b.custom) {
+        detected.iter().filter(|d| !known(&d.id)).count()
+    } else {
+        0
+    };
+    let mut browsers = merge(detected.clone(), saved);
+    for browser in browsers.iter_mut().filter(|b| !b.custom) {
+        browser.hidden = false;
+        // Detection owns whether a known browser opens privately, and the form hides the field
+        // once it has a value: a wrong one could otherwise only be cleared by resetting everything.
+        if let Some(known) = detected
+            .iter()
+            .find(|d| d.id == browser.id)
+            .and_then(|d| d.private_flag.clone())
+        {
+            browser.private_flag = Some(known);
+        }
+    }
+    Found {
+        browsers,
+        added,
+        removed,
+    }
 }
 
 #[tauri::command]
@@ -660,13 +749,19 @@ fn maintenance_report() -> Result<String, String> {
     let store = store();
     let prefs = store.prefs();
     let words = Language::chosen(prefs.locale).strings();
-    let body = linkunbound_core::diagnostics(
-        env!("CARGO_PKG_VERSION"),
-        &facts,
-        &store.rules().unwrap_or_default(),
-        &prefs,
-        &words,
-    );
+    let mut rules = store.rules().unwrap_or_default();
+    for rule in &mut rules.rules {
+        // The name a person reads, with the key the rule matches by when they differ.
+        rule.source_app = rule
+            .source_app
+            .as_deref()
+            .map(|saved| match shown_origin(saved) {
+                name if same_name(&name, saved) => name,
+                name => format!("{name} ({saved})"),
+            });
+    }
+    let body =
+        linkunbound_core::diagnostics(env!("CARGO_PKG_VERSION"), &facts, &rules, &prefs, &words);
 
     let named = format!("{}.md", words.report_file);
     let target = std::env::var_os("USERPROFILE")
@@ -1376,7 +1471,7 @@ pub fn run() {
 mod tests {
     use super::{
         Edit, Errand, Store, added, describe, duplicated_in, edited, errand_in, far_along, free_id,
-        hidden_in, keep_in, only_mine, ordered, readable, seen, spoken, without,
+        hidden_in, keep_in, ordered, readable, rescanned, seen, spoken, without,
     };
     use linkunbound_core::{Locale, Preferences, Profile, Rule, Scope, Target};
 
@@ -1485,6 +1580,46 @@ mod tests {
         assert_eq!(odd.scope, Scope::Host("docs.google.com".to_owned()));
     }
 
+    #[test]
+    fn an_app_typed_by_name_is_the_one_a_rule_already_names() {
+        use super::named_alike;
+        let saved = |app: &str| Rule {
+            id: String::new(),
+            scope: Scope::Any,
+            source_app: Some(app.to_owned()),
+            target: aimed("chrome", None),
+            private: false,
+        };
+        let typed = saved("slack");
+        assert!(named_alike(&[saved("Slack")], &typed));
+        assert!(!named_alike(&[saved("teams")], &typed));
+        #[cfg(target_os = "macos")]
+        assert!(named_alike(&[saved("com.apple.Safari")], &saved("safari")));
+    }
+
+    /// The picker saves a rule for `intranet` or `localhost`; the form has to accept what the
+    /// picker writes, or the same rule can be made one way and not the other.
+    #[test]
+    fn a_single_name_is_a_host_in_the_form_as_in_the_picker() {
+        use super::rule_from;
+        let all = vec![with_profiles("chrome", &["Default"])];
+        for (said, host) in [
+            ("localhost", "localhost"),
+            ("intranet", "intranet"),
+            ("https://intranet/", "intranet"),
+            ("localhost:3000", "localhost"),
+            ("https://intranet:8080/", "intranet"),
+            ("intranet.", "intranet"),
+            ("ana@intranet", "intranet"),
+        ] {
+            let rule = rule_from("host", said, aimed("chrome", None), false, &all).expect(said);
+            assert_eq!(rule.scope, Scope::Host(host.to_owned()), "{said}");
+        }
+        let site =
+            rule_from("site", "bbc.co.uk", aimed("chrome", None), false, &all).expect("a site");
+        assert_eq!(site.scope, Scope::Site("bbc.co.uk".to_owned()));
+    }
+
     /// Every refusal names what to fix; none of them writes a rule that would match nothing or
     /// open nowhere.
     #[test]
@@ -1506,8 +1641,38 @@ mod tests {
             Err("ruleValueNotHost")
         );
         assert_eq!(
-            rule_from("host", "localhost", chrome(), false, &all),
+            rule_from("host", "*.example.com", chrome(), false, &all),
             Err("ruleValueNotHost")
+        );
+        assert_eq!(
+            rule_from("site", "co.uk", chrome(), false, &all),
+            Err("ruleValueIsSuffix")
+        );
+        for said in [
+            "github.com/login?return_to=https://gitlab.com/",
+            "example.com/redirect/https://foo",
+        ] {
+            let rule = rule_from("host", said, chrome(), false, &all).expect(said);
+            assert_ne!(rule.scope, Scope::Host("gitlab.com".to_owned()), "{said}");
+            assert_ne!(rule.scope, Scope::Host("foo".to_owned()), "{said}");
+        }
+        for said in [r"a\b.com", r"intranet\reports"] {
+            assert_eq!(
+                rule_from("host", said, chrome(), false, &all),
+                Err("ruleValueNotHost"),
+                "{said}"
+            );
+        }
+        for said in ["np", "github", "intranet"] {
+            assert_eq!(
+                rule_from("site", said, chrome(), false, &all),
+                Err("ruleValueNotSite"),
+                "{said}"
+            );
+        }
+        assert_eq!(
+            rule_from("site", "https://github.io/", chrome(), false, &all),
+            Err("ruleValueIsSuffix")
         );
         assert_eq!(
             rule_from("site", "a/b.com", chrome(), false, &all),
@@ -1791,12 +1956,68 @@ mod tests {
         );
     }
 
+    /// Forgetting every detected entry would take the name, arguments, icon and
+    /// place the person had given each one. Only what was hidden comes back.
     #[test]
-    fn what_the_user_added_survives_a_rescan() {
-        let all = vec![detected("chrome"), custom("custom-1"), detected("firefox")];
-        let kept = only_mine(all);
-        assert_eq!(kept.len(), 1);
-        assert_eq!(kept[0].id, "custom-1", "detection finds the rest again");
+    fn a_rescan_shows_what_was_hidden_and_keeps_everything_else_the_person_set() {
+        let mut chrome = detected("chrome");
+        chrome.name = "Work".to_owned();
+        chrome.extra_args = vec!["--new-window".to_owned()];
+        chrome.hidden = true;
+        let saved = vec![
+            detected("firefox"),
+            chrome,
+            custom("custom-1"),
+            detected("gone"),
+        ];
+
+        let found = rescanned(
+            vec![detected("chrome"), detected("firefox"), detected("brave")],
+            &saved,
+        );
+
+        let ids: Vec<&str> = found.browsers.iter().map(|b| b.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["firefox", "chrome", "custom-1", "brave"],
+            "order is kept"
+        );
+        let chrome = &found.browsers[1];
+        assert_eq!(chrome.name, "Work");
+        assert_eq!(chrome.extra_args, ["--new-window"]);
+        assert!(!chrome.hidden);
+        assert_eq!((found.added, found.removed), (1, 1));
+
+        let first = rescanned(vec![detected("chrome"), detected("firefox")], &[]);
+        assert_eq!(
+            (first.added, first.removed),
+            (0, 0),
+            "nothing saved, nothing new"
+        );
+        let only_mine = rescanned(vec![detected("chrome")], &[custom("custom-1")]);
+        assert_eq!(
+            only_mine.added, 0,
+            "only my own browsers saved, nothing detected"
+        );
+
+        let mut typed = detected("chrome");
+        typed.private_flag = Some("--private".to_owned());
+        let fixed = rescanned(vec![detected("chrome")], &[typed]);
+        assert_eq!(
+            fixed.browsers[0].private_flag.as_deref(),
+            Some("--incognito")
+        );
+
+        let mut unknown = detected("comet");
+        unknown.private_flag = None;
+        let mut mine = detected("comet");
+        mine.private_flag = Some("--incognito".to_owned());
+        let kept = rescanned(vec![unknown], &[mine]);
+        assert_eq!(
+            kept.browsers[0].private_flag.as_deref(),
+            Some("--incognito"),
+            "what detection does not know stays as the person typed it"
+        );
     }
 
     fn edit_of(name: &str, exe: &str) -> Edit {

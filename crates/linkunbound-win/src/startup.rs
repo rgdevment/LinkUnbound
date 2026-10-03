@@ -65,10 +65,35 @@ pub fn state() -> Option<Startup> {
                 && state != StartupTaskState::DisabledByPolicy,
         });
     }
-    Some(Startup {
-        enabled: listed(),
-        ours_to_change: true,
-    })
+    Some(read_as(listed(), approved_by(approval().as_deref())))
+}
+
+/// Turned off from Windows only binds while the entry it turned off is there: Windows lists
+/// nothing to turn back on once the value is gone, and the switch here is then the only way.
+fn read_as(listed: bool, approved: bool) -> Startup {
+    Startup {
+        enabled: listed && approved,
+        ours_to_change: approved || !listed,
+    }
+}
+
+const APPROVED: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+/// Where Task Manager and Settings › Startup record turning an entry off, beside the Run value
+/// rather than in it: the value stays listed and starts nothing.
+fn approval() -> Option<Vec<u8>> {
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(APPROVED, KEY_READ)
+        .and_then(|approved| approved.get_raw_value(RUN_NAME))
+        .ok()
+        .map(|value| value.bytes.to_vec())
+}
+
+/// The first byte is odd when the entry was turned off; no record at all means never touched.
+fn approved_by(record: Option<&[u8]>) -> bool {
+    record
+        .and_then(<[u8]>::first)
+        .is_none_or(|first| first & 1 == 0)
 }
 
 pub fn set(enabled: bool) -> Option<Startup> {
@@ -138,6 +163,12 @@ fn list(enabled: bool) -> Option<()> {
     let run = RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(RUN, KEY_READ | KEY_WRITE)
         .ok()?;
+    // A record left from turning off an entry that is gone would turn the new one off too.
+    if let Ok(approved) =
+        RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(APPROVED, KEY_WRITE)
+    {
+        let _ = approved.delete_value(RUN_NAME);
+    }
     if enabled {
         run.set_value(RUN_NAME, &command(&std::env::current_exe().ok()?))
             .ok()?;
@@ -150,6 +181,28 @@ fn list(enabled: bool) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_record_of_turning_off_an_entry_that_is_gone_does_not_lock_the_switch() {
+        let off_in_windows = super::read_as(true, false);
+        assert!(!off_in_windows.enabled && !off_in_windows.ours_to_change);
+        let orphan = super::read_as(false, false);
+        assert!(!orphan.enabled && orphan.ours_to_change);
+        assert!(super::read_as(true, true).enabled);
+    }
+
+    #[test]
+    fn an_entry_turned_off_in_task_manager_reads_as_off_and_not_ours_to_turn_on() {
+        assert!(super::approved_by(None), "never touched");
+        assert!(super::approved_by(Some(&[
+            0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ])));
+        assert!(super::approved_by(Some(&[0x06, 0, 0, 0])));
+        assert!(!super::approved_by(Some(&[0x03, 0x8a, 0x1f, 0x00])));
+        assert!(!super::approved_by(Some(&[0x07])));
+        assert!(super::approved_by(Some(&[])));
+    }
+
     use super::*;
 
     /// A `cargo test` binary is never a packaged MSIX identity, so there is no startup task to

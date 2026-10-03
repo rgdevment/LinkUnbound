@@ -14,7 +14,7 @@ This is a personal open source project, not a company product. Security here is 
 
 - **100% Local** — Your browser list, domain rules, and configuration never leave your machine. No cloud, no sync, no servers.
 - **No Tracking** — No telemetry, no analytics, no usage data collection of any kind.
-- **No Data Collection** — LinkUnbound stores only what it needs to work: browser paths, domain rules, and a navigation log. Nothing else.
+- **No Data Collection** — LinkUnbound stores only what it needs to work: browser paths, rules and preferences. Nothing else, and no log of the links it handles.
 
 ### Security Practices
 
@@ -23,7 +23,7 @@ This is a personal open source project, not a company product. Security here is 
 - **Open Source** — Every line of code is public under GPLv3. You can inspect, audit, and verify everything.
 - **Dependency Updates** — Dependencies are regularly updated to patch known vulnerabilities.
 - **Code Reviews** — All contributions go through review before merging.
-- **URL Redaction in Logs** — All URLs are automatically redacted at write time before reaching the log file. The `navigate.log` never contains actual URLs, only privacy-safe placeholders.
+- **No Link Log** — Links are routed in memory and never logged. The only addresses written to disk are the exact-address rules you ask it to remember, and the diagnostic report cuts those down to their host.
 
 ### Links From Other Applications
 
@@ -70,7 +70,7 @@ If you discover a security vulnerability in LinkUnbound, please report it respon
 - Bypass of domain rule matching
 - Command injection through browser arguments or URL handling
 - Data leakage or unintended storage
-- Bypass of URL redaction in log service
+- A path, query or credential from a rule surviving into the diagnostic report
 
 **Not security issues:**
 

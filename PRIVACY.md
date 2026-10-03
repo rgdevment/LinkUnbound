@@ -44,10 +44,14 @@ LinkUnbound stores only what it needs to function:
 
 | Data            | Purpose                                             | Format |
 | :-------------- | :-------------------------------------------------- | :----- |
-| Domain          | Match URLs to a browser (e.g., `github.com`)        | JSON   |
+| What it covers  | A site, a host or one exact address (e.g., `github.com`) | JSON |
 | Browser ID      | Which browser opens that domain                     | JSON   |
 | Originating app | Scope the rule to the app a link came from          | JSON   |
 | Private flag    | Whether the rule opens the link in a private window | JSON   |
+
+A rule for one exact address keeps that address whole, query string included, because that is
+what it has to match. If a link carries a session or a reset token, choose the site or the host
+instead of "this address" when you ask LinkUnbound to remember it.
 
 ### Originating Application
 
@@ -56,20 +60,22 @@ application asked the system to open the link. It is read like this:
 
 | Platform | How the origin is determined                     | Reliability |
 | :------- | :----------------------------------------------- | :---------- |
-| Windows  | Parent process of the process the shell launched | Accurate    |
+| Windows  | The application in the foreground at that moment | Approximate |
 | macOS    | The application in the foreground at that moment | Approximate |
 
-macOS does not report which application opened a link, so the foreground app stands in for it. An app-scoped rule is only written when you tick "always open" on a link whose origin is known.
+Neither system reports which application opened a link, so the foreground app stands in for it. LinkUnbound itself is never taken for the origin. On Windows the application is named by its executable (`slack`); on macOS a rule keeps its bundle identifier (`com.tinyspeck.slackmacgap`), which does not change with the system language, and the picker and Settings show its name. An app-scoped rule is only written when you tick "always open" on a link whose origin is known.
 
 What this means in practice:
 
-- **Only the application name is read.** Not its windows, not its title, not
+- **Only the application's name and identifier are read.** Not its windows, not its title, not
   its contents. The shell counts as an application like any other: a link
   opened from a file on the desktop reports `explorer`, and whether that is
   worth a rule is yours to decide, not ours. The picker names the rule that
   decided every time one does.
-- **It is read at the moment a link arrives**, not continuously. LinkUnbound
-  does not watch which applications you use.
+- **It is read at the moment a link arrives.** On macOS the resident also notes which
+  application was last brought to the front, in memory only, so a link that arrives while
+  nothing is in front still has an origin; on Windows it remembers the origin of the last
+  link for the same reason. Neither is written anywhere or kept past the session.
 - **It reaches the disk only if you ask it to.** The name is used in memory to
   match rules and to label the picker. It is written to `rules.json` only when
   you tick "always open" on a link whose origin is known.
@@ -81,25 +87,25 @@ An application can hand LinkUnbound a link through its own address,
 browser. Such a link is treated exactly like one you clicked:
 
 - **Nothing about it is kept** beyond what a click keeps — the address is held
-  in memory while it is routed and redacted in the log like any other.
+  in memory while it is routed, like any other.
 - **Nothing is sent back** to the application that sent it. It cannot learn
   which browser opened the link, whether a rule decided, or what your rules are.
 - **Only web links are accepted.** A file, a script or anything else is dropped
   before it is shown or opened.
 
-### Navigation Log
+### No Log
 
-| Data      | Purpose                                      | Format     |
-| :-------- | :------------------------------------------- | :--------- |
-| Timestamp | When a link was processed                    | Plain text |
-| Log level | Severity (INFO, WARNING, etc.)               | Plain text |
-| Message   | Application events and errors                | Plain text |
-
-The navigation log **does not contain actual URLs**. All URLs are automatically redacted at write time before reaching the log file — they are replaced with privacy-safe placeholders like `https://<redacted>/2 segments`. The original URLs exist only in memory during processing and are never persisted to disk.
+LinkUnbound keeps no log of the links it handles. An address you open is held in memory while
+it is routed and is written to disk only as part of a rule you asked it to remember.
 
 ### Extracted Icons
 
 Browser icons are extracted locally from installed browser executables and stored as image files. These are visual assets only.
+
+### Left by 1.x
+
+An upgrade from 1.x can leave `navigate.log` and `startup_crash.log` in the same folder. 2.x
+never writes or reads them; delete them whenever you like.
 
 ---
 
@@ -114,8 +120,10 @@ All data is stored locally under your user profile.
 | Browsers | `%LOCALAPPDATA%\LinkUnbound\browsers.json`       |
 | Rules    | `%LOCALAPPDATA%\LinkUnbound\rules.json`          |
 | Settings | `%LOCALAPPDATA%\LinkUnbound\preferences.json`    |
-| Log      | `%LOCALAPPDATA%\LinkUnbound\navigate.log`        |
-| Crash log | `%LOCALAPPDATA%\LinkUnbound\startup_crash.log`  |
+| Last update check | `%LOCALAPPDATA%\LinkUnbound\update.json` (and `updating.json` while one installs) |
+| Global shortcut held | `%LOCALAPPDATA%\LinkUnbound\shortcut` |
+| Lock files | `rules.lock`, `browsers.lock`, `preferences.lock`, empty |
+| Kept aside | `rules.1x.json`, `browsers.1x.json` (the 1.x files, kept once when upgrading), `preferences.unread.json` (a preferences file that could not be read) |
 | Icons    | `%LOCALAPPDATA%\LinkUnbound\icons\`              |
 
 **macOS** — `~/Library/Application Support/LinkUnbound/`:
@@ -125,8 +133,11 @@ All data is stored locally under your user profile.
 | Browsers | `~/Library/Application Support/LinkUnbound/browsers.json`        |
 | Rules    | `~/Library/Application Support/LinkUnbound/rules.json`           |
 | Settings | `~/Library/Application Support/LinkUnbound/preferences.json`     |
-| Log      | `~/Library/Application Support/LinkUnbound/navigate.log`         |
-| Crash log | `~/Library/Application Support/LinkUnbound/startup_crash.log`   |
+| Last update check | `~/Library/Application Support/LinkUnbound/update.json` (and `updating.json` while one installs) |
+| Global shortcut held | `~/Library/Application Support/LinkUnbound/shortcut` |
+| Resident's socket | `~/Library/Application Support/LinkUnbound/shell.sock` |
+| Lock files | `rules.lock`, `browsers.lock`, `preferences.lock`, empty |
+| Kept aside | `rules.1x.json`, `browsers.1x.json` (the 1.x files, kept once when upgrading), `preferences.unread.json` (a preferences file that could not be read) |
 | Icons    | `~/Library/Application Support/LinkUnbound/icons/`               |
 | Previous default browser | `~/Library/Preferences/dev.rgdevment.linkunbound.plist` |
 
@@ -252,8 +263,10 @@ It is a single Markdown file named `linkunbound-diagnostico.md`. On Windows it i
 
 ### What the report does not contain
 
-- **The addresses you open.** It carries your rules, not your browsing.
-- **Passwords, tokens or anything from a URL's authority** — those never reach a file at all.
+- **The addresses you open.** It carries your rules, not your browsing. A rule for one exact
+  address is written as its scheme, host and port only (`https://mail.google.com/…`).
+- **Passwords, tokens or anything from a URL's authority** — the report drops them. The
+  rules file itself does not: a rule for one exact address keeps the whole address.
 - **Icons, executables or the contents of any browser profile.**
 
 **Worth knowing before you share one:** the rules section names the sites you
@@ -262,17 +275,6 @@ example — and the system section lists the browsers installed on the machine.
 That is the point of the file, because a rule is usually what decided where a
 link went, but it is your information: open it and read it before attaching it
 to a public issue.
-
-### URL Redaction
-
-URLs are redacted **at write time** — before they ever reach the log file on disk. Every URL is replaced with a privacy-safe placeholder that preserves only the protocol and the number of path segments:
-
-- `https://mail.google.com/inbox/123` → `https://<redacted>/3 segments`
-- `http://internal.company.net/app` → `http://<redacted>/2 segments`
-
-This means the `navigate.log` file on your machine never contains real URLs. The diagnostics export simply copies the last 200 lines of this already-redacted log.
-
-Redaction covers the whole log record, including attached error objects and stack traces. This matters because a failed browser launch raises an error whose text embeds the full command line — that is, the URL. The same redaction is applied to `startup_crash.log`, a separate file written only when the app fails during startup; it is capped in size and is safe to delete at any time.
 
 ---
 
