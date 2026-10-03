@@ -51,7 +51,7 @@ nothing_past_what_a_person_holds() {
     return
   fi
   verdict=$(awk -v ceiling=1500 '
-      FNR == NR { sub(/\r$/, ""); if ($2 != "") kept[$2] = $1; next }
+      FILENAME == ARGV[1] { sub(/\r$/, ""); if ($2 != "") kept[$2] = $1; next }
       {
         seen[$2] = 1
         if (!($2 in kept)) {
