@@ -72,14 +72,15 @@ nothing_past_what_a_person_holds() {
 }
 
 read_by_a_person() {
-  local where=(app/src/i18n.ts crates/linkunbound-core/src/i18n.rs)
-  local docs
+  local where=(app/src/i18n.ts crates/linkunbound-core/src/i18n.rs) doc
   if [ ! -f .github/not-this-spanish.txt ]; then
     amiss "the words the Spanish may not use are not here, so nobody looked for them"
     return
   fi
-  docs=$(find . -name '*.md' -not -path '*/node_modules/*' -not -path './target/*' | sort)
-  grep -niEf .github/not-this-spanish.txt "${where[@]}" $docs
+  while IFS= read -r doc; do
+    where+=("$doc")
+  done < <(find . -name '*.md' -not -path '*/node_modules/*' -not -path './target/*' | sort)
+  grep -niEf .github/not-this-spanish.txt "${where[@]}"
   looked_through \
     "the Spanish a person reads is neutral, with no voseo and nothing peninsular" $? \
     "the Spanish a person reads could not be looked through where it is written" \

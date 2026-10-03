@@ -10,7 +10,8 @@ status=0
 while read -r _ mine _ theirs; do
   [ -n "${mine:-}" ] || continue
   [ "$mine" != "$nothing" ] || continue
-  if [ "${theirs:-$nothing}" != "$nothing" ]; then
+  # A remote commit never fetched here cannot start a range; main can.
+  if [ "${theirs:-$nothing}" != "$nothing" ] && git cat-file -e "$theirs^{commit}" 2> /dev/null; then
     range="$theirs..$mine"
   elif base=$(git merge-base "$mine" origin/main 2> /dev/null) && [ -n "$base" ]; then
     range="$base..$mine"

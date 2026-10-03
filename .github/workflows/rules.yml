@@ -22,6 +22,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -56,15 +58,19 @@ jobs:
       - name: The conventions the script keeps
         run: bash scripts/rules.sh
 
-      # Nothing else looks at a subject that reached main without a pull request.
-      - name: The subject that landed
+      # Nothing else looks at a subject that reached main without a pull request, and one push
+      # can carry several: every commit it brought is weighed, not only the last.
+      - name: The subjects that landed
         if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
         run: |
-          said=$(git log -1 --format=%s)
-          case "$said" in
-            Merge\ * | Revert\ *) echo "a merge keeps its own shape" ;;
-            *) bash scripts/commits.sh --subject "$said" ;;
-          esac
+          if git cat-file -e "$BEFORE^{commit}" 2> /dev/null; then
+            bash scripts/commits.sh "$BEFORE..$AFTER"
+          else
+            bash scripts/commits.sh --subject "$(git log -1 --format=%s)"
+          fi
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
