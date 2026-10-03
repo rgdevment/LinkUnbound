@@ -12,6 +12,9 @@ fn main() {
         println!("cargo:rerun-if-changed=../../app/src-tauri/icons/icon.ico");
         tauri_winres::WindowsResource::new()
             .set_icon("../../app/src-tauri/icons/icon.ico")
+            // Browsers name the app in their "Open …?" prompt from these, not from the registry.
+            .set("ProductName", "LinkUnbound")
+            .set("FileDescription", "LinkUnbound")
             .compile()
             .expect("the icon must be embedded");
     }

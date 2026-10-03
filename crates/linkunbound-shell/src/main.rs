@@ -5,7 +5,9 @@ use std::rc::Rc;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use linkunbound_core::{Language, Rule, Store, Strings, Target, data_dir, host_of, normalise};
+use linkunbound_core::{
+    Language, Rule, Store, Strings, Target, data_dir, host_of, is_own_scheme, normalise,
+};
 use linkunbound_shell::hotkey::Hotkey;
 use linkunbound_shell::tray::{Asked, Tray};
 use linkunbound_shell::{
@@ -23,6 +25,13 @@ fn link_from(args: &[String]) -> Option<String> {
         return None;
     }
     normalise(&args[1..].join(" ")).or_else(|| args.iter().skip(1).find_map(|a| normalise(a)))
+}
+
+/// A refused `linkunbound:` link came from a page or another process, not from a person
+/// starting the app, so it must not answer with the settings window.
+fn wants_no_window(args: &[String], incoming: Option<&str>) -> bool {
+    args.iter().any(|a| a == "--hushed")
+        || (incoming.is_none() && args.iter().skip(1).any(|a| is_own_scheme(a)))
 }
 
 #[cfg(windows)]
@@ -1124,7 +1133,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let incoming = link_from(&args);
     // Sign-in and a click on the icon both start this with no link, and only one of them wants a
     // window: the startup task passes this, the Start menu tile does not.
-    let hushed = args.iter().any(|a| a == "--hushed");
+    let hushed = wants_no_window(&args, incoming.as_deref());
 
     let _server = match single::claim(handed_to_the_loop) {
         Some(server) => server,
@@ -1424,7 +1433,8 @@ fn main() -> Result<(), slint::PlatformError> {
 mod tests {
     use super::{
         FRONT_SETTLES_WITHIN, Listed, Shown, UI, Ui, WAITING_ROOM, claims_the_window, host,
-        link_from, next_in_line, physical, present, rule_for, still_settling, with_icons,
+        link_from, next_in_line, physical, present, rule_for, still_settling, wants_no_window,
+        with_icons,
     };
     use linkunbound_core::Scope;
     use linkunbound_core::{Language, normalise};
@@ -1699,6 +1709,7 @@ mod tests {
             "file://evil.test/share/payload",
             "--gpu-launcher=calc.exe",
             "javascript:alert(1)",
+            "linkunbound://open?url=file%3A%2F%2Fevil.test%2Fshare%2Fpayload",
             "",
         ] {
             assert!(
@@ -1898,6 +1909,33 @@ mod tests {
         let out = link_from(&args(&[&wrapped])).expect("should unwrap");
         assert!(out.starts_with("https://github.com/"));
         assert!(out.len() > 5000);
+    }
+
+    #[test]
+    fn a_link_sent_through_our_own_scheme_arrives_unwrapped() {
+        assert_eq!(
+            link_from(&args(&[
+                "linkunbound://open?url=https%3A%2F%2Fgithub.com%2Fa%3Fb%3D1"
+            ]))
+            .as_deref(),
+            Some("https://github.com/a?b=1")
+        );
+    }
+
+    #[test]
+    fn a_refused_own_scheme_link_is_not_mistaken_for_someone_opening_the_app() {
+        for refused in [
+            "linkunbound://open?url=javascript%3Aalert(1)",
+            "linkunbound://x",
+            "linkunbound://open?url=",
+        ] {
+            let said = args(&[refused]);
+            let incoming = link_from(&said);
+            assert!(incoming.is_none(), "«{refused}» was read");
+            assert!(wants_no_window(&said, incoming.as_deref()), "«{refused}»");
+        }
+        assert!(!wants_no_window(&args(&[]), None));
+        assert!(wants_no_window(&args(&["--hushed"]), None));
     }
 
     #[test]

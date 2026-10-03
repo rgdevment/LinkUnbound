@@ -29,10 +29,11 @@ This is a personal open source project, not a company product. Security here is 
 
 LinkUnbound answers for its own scheme, `linkunbound://open?url=<link>`, so an application can send it a link without LinkUnbound being the default browser. Any program on the machine, and any web page that gets the browser to follow it, can open that address, so it is treated as untrusted input:
 
-- **One shape only** — the host must be `open`, with exactly one `url` parameter and no fragment. Any other spelling is dropped.
+- **One shape only** — the host must be `open` (in any case), with exactly one `url` parameter and no fragment. Any other spelling is dropped quietly: no window opens for it.
+- **No hidden characters** — a link carrying tabs, line breaks, control characters or surrounding spaces is refused instead of cleaned up, and the one handed on is the link as the URL parser reads it, not the text that was sent.
 - **Web links only** — the link inside must be `http` or `https` with a host. `file:`, UNC paths, `javascript:`, `data:`, settings pages, other schemes and a `linkunbound://` nested inside another are refused before anything is shown or launched.
-- **Same guards as a click** — past that check the link goes through the same validation every link does: nothing that a browser would read as a command-line switch reaches it, SafeLinks are unwrapped only when Microsoft serves them, and the URL is redacted in the log.
-- **Nothing new is trusted** — a link that arrives this way decides nothing on its own. Your rules or the picker decide where it opens, as they would for a click.
+- **Same guards as a click** — past that check the link goes through the same validation every link does: nothing that a browser would read as a command-line switch reaches it, and SafeLinks are unwrapped only when Microsoft serves them.
+- **Nothing new is trusted** — a link that arrives this way decides nothing on its own. Your rules or the picker decide where it opens, as they would for a click. That cuts both ways: a page you allowed to open `linkunbound://` links can choose a link that one of your rules sends to another browser, profile or private window without asking. The browser asks before the first one, so only allow it for sites you trust.
 
 The scheme is registered with the rest of the browser registration and removed with it: uninstalling removes it everywhere, and on Windows so does **Unregister** under Maintenance.
 

@@ -234,6 +234,17 @@ impl Registration {
             .ok()
     }
 
+    #[must_use]
+    pub fn own_scheme_command(&self) -> Option<String> {
+        Self::hkcu()
+            .open_subkey(format!(
+                r"{}\{OWN_SCHEME}\shell\open\command",
+                self.classes()
+            ))
+            .and_then(|k| k.get_value::<String, _>(""))
+            .ok()
+    }
+
     pub fn is_registered_as(&self, exe: &str) -> bool {
         Self::hkcu()
             .open_subkey(format!(r"{}\{PROG_ID}\shell\open\command", self.classes()))
@@ -407,8 +418,10 @@ mod tests {
                 .expect("the command"),
             r#""C:\Program Files\LinkUnbound\linkunbound-shell.exe" "%1""#
         );
+        assert_eq!(reg.own_scheme_command(), reg.registered_command());
 
         reg.unregister().unwrap();
+        assert_eq!(reg.own_scheme_command(), None);
         assert!(
             hkcu.open_subkey(format!(r"{root}\Classes\{OWN_SCHEME}"))
                 .is_err()

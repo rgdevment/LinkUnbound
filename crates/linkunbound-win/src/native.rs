@@ -15,11 +15,16 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, GetObjectW, HBITMAP, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
     MonitorFromPoint, ReleaseDC,
 };
-use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
-use windows::Win32::Security::{GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser};
+use windows::Win32::Security::Authorization::{
+    ConvertSidToStringSidW, GetSecurityInfo, SE_KERNEL_OBJECT,
+};
+use windows::Win32::Security::{
+    GetTokenInformation, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, TOKEN_QUERY,
+    TOKEN_USER, TokenUser,
+};
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_SHARE_NONE, FlushFileBuffers, OPEN_EXISTING, SECURITY_IDENTIFICATION,
-    SECURITY_SQOS_PRESENT, WriteFile,
+    CreateFileW, FILE_SHARE_NONE, FlushFileBuffers, OPEN_EXISTING, READ_CONTROL,
+    SECURITY_IDENTIFICATION, SECURITY_SQOS_PRESENT, WriteFile,
 };
 use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows::Win32::System::DataExchange::{
@@ -28,9 +33,11 @@ use windows::Win32::System::DataExchange::{
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 use windows::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPipeW};
+use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 use windows::Win32::System::Threading::{
-    AttachThreadInput, GetCurrentProcess, GetCurrentThreadId, OpenProcess, OpenProcessToken,
-    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    AttachThreadInput, GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, OpenProcess,
+    OpenProcessToken, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, SetFocus, VK_SHIFT, VkKeyScanW};
 use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
@@ -201,7 +208,8 @@ pub fn current_user_sid() -> Option<String> {
     unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token) }.ok()?;
     let mut needed = 0u32;
     let _ = unsafe { GetTokenInformation(token, TokenUser, None, 0, &raw mut needed) };
-    let mut buffer = vec![0u8; needed as usize];
+    // u64 words, not bytes: TOKEN_USER holds a pointer and has to be read at its alignment.
+    let mut buffer = vec![0u64; (needed as usize).div_ceil(8)];
     let read = unsafe {
         GetTokenInformation(
             token,
@@ -217,13 +225,52 @@ pub fn current_user_sid() -> Option<String> {
     read.ok()?;
     // SAFETY: Windows filled the buffer with a TOKEN_USER of the size it asked for.
     let user = unsafe { &*buffer.as_ptr().cast::<TOKEN_USER>() };
-    let mut spelled = windows::core::PWSTR::null();
-    unsafe { ConvertSidToStringSidW(user.User.Sid, &raw mut spelled) }.ok()?;
-    let sid = unsafe { spelled.to_string() }.ok();
+    spelled(user.User.Sid)
+}
+
+fn spelled(sid: PSID) -> Option<String> {
+    let mut text = windows::core::PWSTR::null();
+    unsafe { ConvertSidToStringSidW(sid, &raw mut text) }.ok()?;
+    let sid = unsafe { text.to_string() }.ok();
     unsafe {
-        let _ = LocalFree(Some(HLOCAL(spelled.0.cast())));
+        let _ = LocalFree(Some(HLOCAL(text.0.cast())));
     }
     sid
+}
+
+/// No other non-admin account can name this user as owner, so a pipe somebody else took first
+/// under our name is told apart before the link is written.
+fn owned_by_this_user(pipe: HANDLE) -> bool {
+    let mut owner = PSID::default();
+    let mut descriptor = PSECURITY_DESCRIPTOR::default();
+    let status = unsafe {
+        GetSecurityInfo(
+            pipe,
+            SE_KERNEL_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            Some(&raw mut owner),
+            None,
+            None,
+            None,
+            Some(&raw mut descriptor),
+        )
+    };
+    if status.is_err() {
+        return false;
+    }
+    let theirs = spelled(owner);
+    unsafe {
+        let _ = LocalFree(Some(HLOCAL(descriptor.0)));
+    }
+    theirs.is_some() && theirs == current_user_sid()
+}
+
+/// The Remote Desktop session this process runs in: one account signed in twice keeps two.
+#[must_use]
+pub fn current_session() -> Option<u32> {
+    let mut session = 0u32;
+    unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &raw mut session) }.ok()?;
+    Some(session)
 }
 
 /// One line down a named pipe, opened for identification only: a server squatting the name
@@ -239,7 +286,7 @@ pub fn write_line_to_pipe(path: &str, line: &str) -> bool {
     let open = || unsafe {
         CreateFileW(
             windows::core::PCWSTR(wide.as_ptr()),
-            GENERIC_WRITE.0,
+            GENERIC_WRITE.0 | READ_CONTROL.0,
             FILE_SHARE_NONE,
             None,
             OPEN_EXISTING,
@@ -260,6 +307,12 @@ pub fn write_line_to_pipe(path: &str, line: &str) -> bool {
         }
         Err(_) => return false,
     };
+    if !owned_by_this_user(handle) {
+        unsafe {
+            let _ = CloseHandle(handle);
+        }
+        return false;
+    }
     let mut resident = 0u32;
     if unsafe { GetNamedPipeServerProcessId(handle, &raw mut resident) }.is_ok() {
         let _ = unsafe { AllowSetForegroundWindow(resident) };
@@ -613,6 +666,11 @@ mod tests {
     fn the_account_this_runs_as_can_be_named() {
         let sid = super::current_user_sid().expect("a token to read");
         assert!(sid.starts_with("S-1-5-"), "{sid}");
+    }
+
+    #[test]
+    fn the_session_this_runs_in_can_be_named() {
+        assert!(super::current_session().is_some());
     }
 
     #[test]
