@@ -248,13 +248,13 @@ impl RuleSet {
         before != self.rules.len()
     }
 
-    /// `Reverse` on the index keeps the first of equally specific rules: the list
-    /// the user ordered is the list that decides, and `max_by_key` would take the last.
-    #[must_use]
+    #[cfg(test)]
     pub fn resolve(&self, url: &str, host: &str, source_app: Option<&str>) -> Option<&Rule> {
         self.resolve_from(url, host, source_app.map(Origin::named).as_ref())
     }
 
+    /// `Reverse` on the index keeps the first of equally specific rules, the one saved earlier:
+    /// `max_by_key` alone would take the last.
     #[must_use]
     pub fn resolve_from(&self, url: &str, host: &str, origin: Option<&Origin>) -> Option<&Rule> {
         self.rules

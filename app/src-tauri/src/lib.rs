@@ -745,7 +745,14 @@ fn maintenance_report() -> Result<String, String> {
     let words = Language::chosen(prefs.locale).strings();
     let mut rules = store.rules().unwrap_or_default();
     for rule in &mut rules.rules {
-        rule.source_app = rule.source_app.as_deref().map(shown_origin);
+        // The name a person reads, with the key the rule matches by when they differ.
+        rule.source_app = rule
+            .source_app
+            .as_deref()
+            .map(|saved| match shown_origin(saved) {
+                name if same_name(&name, saved) => name,
+                name => format!("{name} ({saved})"),
+            });
     }
     let body =
         linkunbound_core::diagnostics(env!("CARGO_PKG_VERSION"), &facts, &rules, &prefs, &words);
