@@ -78,11 +78,14 @@ mod platform {
         let Some(handler) = handler() else {
             return Health::NotRegistered;
         };
-        verdict(
-            registration.registered_command().as_deref(),
-            &handler,
-            handler.exists(),
-        )
+        let command = registration.registered_command();
+        let health = verdict(command.as_deref(), &handler, handler.exists());
+        // Links from other apps arrive through the scheme key, which can be missing or point
+        // elsewhere while the browser registration looks right.
+        if health == Health::Fine && registration.own_scheme_command() != command {
+            return Health::Stale;
+        }
+        health
     }
 
     /// Whether the resident is there is handed in rather than read here, so the verdict stays a

@@ -9,11 +9,26 @@ use interprocess::local_socket::traits::Listener;
 use interprocess::local_socket::traits::Stream as StreamTrait;
 use interprocess::local_socket::{ListenerOptions, Name};
 
-/// One socket per user session, so two people on one machine never cross links.
+/// Pipe names are machine-wide: a user name collides across domain and local accounts and
+/// across two sign-ins of one account, the SID and the session do not.
 #[cfg(windows)]
 fn address() -> String {
-    let session = std::env::var("USERNAME").unwrap_or_else(|_| "default".to_owned());
-    format!("linkunbound-{session}.sock")
+    pipe_name(
+        linkunbound_win::current_user_sid().as_deref(),
+        linkunbound_win::current_session(),
+    )
+}
+
+#[cfg(windows)]
+fn pipe_name(sid: Option<&str>, session: Option<u32>) -> String {
+    let user = sid.map_or_else(
+        || std::env::var("USERNAME").unwrap_or_else(|_| "default".to_owned()),
+        str::to_owned,
+    );
+    match session {
+        Some(session) => format!("linkunbound-{user}-{session}.sock"),
+        None => format!("linkunbound-{user}.sock"),
+    }
 }
 
 /// `sun_path` holds this many bytes and not one more. A long enough user name
@@ -124,6 +139,12 @@ fn hold(socket: &str) -> Option<Holding> {
 }
 
 #[cfg(not(windows))]
+fn owner_only(mode: u32) -> std::fs::Permissions {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::Permissions::from_mode(mode)
+}
+
+#[cfg(not(windows))]
 fn clear(socket: &str) {
     let path = std::path::Path::new(socket);
     if !path.exists() {
@@ -135,11 +156,34 @@ fn clear(socket: &str) {
     let _ = std::fs::remove_file(path);
 }
 
+/// A directory another account owns lets that account swap the socket and take every link.
+/// Ownership is what decides: a link to a folder of this user's elsewhere is fine, and a
+/// file system without Unix modes cannot be closed further, so the chmod is only a best effort.
+#[cfg(not(windows))]
+fn closed_to_others(dir: &std::path::Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let _ = std::fs::create_dir_all(dir);
+    static PROBES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let nth = PROBES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let probe = dir.join(format!(".owner-{}-{nth}", std::process::id()));
+    let Ok(made) = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .and_then(|f| f.metadata())
+    else {
+        return false;
+    };
+    let _ = std::fs::remove_file(&probe);
+    let ours = std::fs::metadata(dir).is_ok_and(|m| m.is_dir() && m.uid() == made.uid());
+    if ours {
+        let _ = std::fs::set_permissions(dir, owner_only(0o700));
+    }
+    ours
+}
+
 #[cfg(not(windows))]
 fn make_room(socket: &str) -> Option<Holding> {
-    if let Some(parent) = std::path::Path::new(socket).parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
     // Without the lock nothing may be taken away: binding over whatever is
     // there is safe, clearing somebody else's socket is not.
     let held = hold(socket)?;
@@ -176,12 +220,14 @@ fn hand_over_at(socket: &str, url: &str) -> bool {
 }
 
 /// This user and the system, nobody else: the pipe's default descriptor lets every account on
-/// the machine read it. Labelled low so a sandboxed browser can still hand a link across.
+/// the machine read it. Labelled low so a sandboxed browser can still hand a link across. Owned
+/// by the user even when elevated, whose default owner is Administrators: the client checks it.
 #[cfg(windows)]
 fn guarded<'a>(options: ListenerOptions<'a>, sid: Option<String>) -> Option<ListenerOptions<'a>> {
     use interprocess::os::windows::local_socket::ListenerOptionsExt;
     use interprocess::os::windows::security_descriptor::SecurityDescriptor;
-    let sddl = format!("D:(A;;GA;;;SY)(A;;GA;;;{})S:(ML;;NW;;;LW)", sid?);
+    let sid = sid?;
+    let sddl = format!("O:{sid}D:(A;;GA;;;SY)(A;;GA;;;{sid})S:(ML;;NW;;;LW)");
     let wide = widestring::U16CString::from_str(&sddl).ok()?;
     let descriptor = SecurityDescriptor::deserialize(&wide).ok()?;
     Some(options.security_descriptor(descriptor))
@@ -226,11 +272,20 @@ fn claim_at(
 ) -> Option<std::thread::JoinHandle<()>> {
     let arrived = std::sync::Arc::new(arrived);
     #[cfg(not(windows))]
-    let _room = make_room(socket);
+    let _room = {
+        let parent = std::path::Path::new(socket).parent()?;
+        if !closed_to_others(parent) {
+            return None;
+        }
+        make_room(socket)
+    };
     let name = named(socket)?;
     let listener = only_this_user(ListenerOptions::new().name(name))?
         .create_sync()
         .ok()?;
+    // The socket file takes its mode from the umask; a permissive one lets other accounts write.
+    #[cfg(not(windows))]
+    let _ = std::fs::set_permissions(socket, owner_only(0o600));
 
     Some(std::thread::spawn(move || {
         let mut refused = 0u32;
@@ -276,15 +331,61 @@ mod tests {
         format!("linkunbound-test-{name}-{}.sock", std::process::id())
     }
 
+    /// A directory of the tests' own: claiming closes the socket's parent to other accounts.
     #[cfg(not(windows))]
     fn scratch(name: &str) -> String {
-        std::env::temp_dir()
-            .join(format!(
-                "linkunbound-test-{name}-{}.sock",
-                std::process::id()
-            ))
+        let dir = std::env::temp_dir().join(format!("linkunbound-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        dir.join(format!("{name}.sock"))
             .to_string_lossy()
             .into_owned()
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn the_pipe_is_named_after_the_account_and_the_session_not_the_user_name() {
+        assert_eq!(
+            super::pipe_name(Some("S-1-5-21-1-2-3-1001"), Some(2)),
+            "linkunbound-S-1-5-21-1-2-3-1001-2.sock"
+        );
+        assert_ne!(
+            super::pipe_name(Some("S-1-5-21-1-2-3-1001"), Some(1)),
+            super::pipe_name(Some("S-1-5-21-1-2-3-1001"), Some(2)),
+            "one account signed in twice keeps two residents apart"
+        );
+        assert!(super::address().starts_with("linkunbound-S-1-"));
+    }
+
+    /// Another account can take the name before the resident does. Its pipe answers, but the
+    /// link must not be written to it: a pipe this user does not own reads as nobody there.
+    #[test]
+    #[cfg(windows)]
+    fn a_pipe_this_user_does_not_own_is_not_handed_the_link() {
+        use interprocess::local_socket::{GenericNamespaced, ListenerOptions, ToNsName};
+        use interprocess::os::windows::local_socket::ListenerOptionsExt;
+        use interprocess::os::windows::security_descriptor::SecurityDescriptor;
+
+        let name = scratch("squatted");
+        let wide = widestring::U16CString::from_str("O:BAD:(A;;GA;;;WD)").expect("sddl");
+        let descriptor = SecurityDescriptor::deserialize(&wide).expect("descriptor");
+        let Ok(_squatter) = ListenerOptions::new()
+            .name(
+                name.as_str()
+                    .to_ns_name::<GenericNamespaced>()
+                    .expect("a name"),
+            )
+            .security_descriptor(descriptor)
+            .create_sync()
+        else {
+            // Administrators can only own what an elevated token creates.
+            assert!(
+                std::env::var_os("GITHUB_ACTIONS").is_none(),
+                "CI runs elevated, so the squatter must be created there"
+            );
+            eprintln!("skipped: not elevated, no pipe owned by another account");
+            return;
+        };
+        assert!(!hand_over_at(&name, "https://example.test/"));
     }
 
     #[test]
@@ -447,6 +548,52 @@ mod tests {
         assert_eq!(mode & 0o777, 0o700, "{mode:o}");
         assert!(fallback.ends_with("shell.sock"));
         assert!(super::fits(&fallback));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn the_socket_and_its_directory_are_closed_to_other_accounts() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir =
+            std::env::temp_dir().join(format!("linkunbound-test-mode-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).expect("open dir");
+        let socket = dir.join("shell.sock").to_string_lossy().into_owned();
+
+        let _server = claim_at(&socket, |_| {}).expect("the socket can be claimed");
+
+        let mode = |p: &str| std::fs::metadata(p).expect("there").permissions().mode() & 0o777;
+        assert_eq!(mode(&socket), 0o600, "socket {:o}", mode(&socket));
+        assert_eq!(mode(&dir.to_string_lossy()), 0o700);
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A data folder moved elsewhere and linked back is still this user's, and must keep working.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_socket_directory_linked_to_a_folder_of_this_user_is_used() {
+        let base = std::path::PathBuf::from(scratch("elsewhere")).with_extension("");
+        let real = base.with_extension("real");
+        let link = base.with_extension("link");
+        let _ = std::fs::create_dir_all(&real);
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&real, &link).expect("a link");
+        let socket = link.join("shell.sock").to_string_lossy().into_owned();
+
+        let server = claim_at(&socket, |_| {});
+        assert!(server.is_some());
+        drop(server);
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&link);
+        let _ = std::fs::remove_dir_all(&real);
+    }
+
+    /// A directory owned by another account, here root's `/`, is refused rather than used.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_socket_directory_this_user_cannot_own_is_not_used() {
+        assert!(!super::closed_to_others(std::path::Path::new("/")));
     }
 
     #[test]

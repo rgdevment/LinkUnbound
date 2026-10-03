@@ -37,7 +37,7 @@ pub use rule::{Rule, RuleSet, Scope, Target, site_of};
 pub use star::{Asking, asking};
 pub use store::{Store, StoreError, data_dir, unmarked};
 pub use url::{
-    OWN_SCHEME, host_of, is_launchable, local_file_parts, local_web_file,
+    OWN_SCHEME, host_of, is_launchable, is_own_scheme, local_file_parts, local_web_file,
     local_web_file_extensions, looks_unresolved, normalise, unwrap_edge_protocol,
     unwrap_own_scheme, unwrap_safe_link,
 };

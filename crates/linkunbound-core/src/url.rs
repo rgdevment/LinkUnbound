@@ -46,7 +46,9 @@ pub fn unwrap_own_scheme(raw: &str) -> String {
     if url.scheme() != OWN_SCHEME {
         return raw.to_owned();
     }
-    let addressed_to_open = url.host_str() == Some("open")
+    let addressed_to_open = url
+        .host_str()
+        .is_some_and(|h| h.eq_ignore_ascii_case("open"))
         && matches!(url.path(), "" | "/")
         && url.fragment().is_none();
     if !addressed_to_open {
@@ -56,12 +58,28 @@ pub fn unwrap_own_scheme(raw: &str) -> String {
     let (Some((_, inner)), None) = (targets.next(), targets.next()) else {
         return raw.to_owned();
     };
+    // Url::parse would quietly strip these (`ht%09tps:` reads as https): refused, not cleaned.
+    if hides_characters(&inner) {
+        return raw.to_owned();
+    }
     match Url::parse(&inner) {
         Ok(target) if LAUNCHABLE_SCHEMES.contains(&target.scheme()) && target.has_host() => {
-            inner.into_owned()
+            target.into()
         }
         _ => raw.to_owned(),
     }
+}
+
+fn hides_characters(said: &str) -> bool {
+    said.chars().any(char::is_control) || said.trim() != said
+}
+
+/// Whether the command line was aimed at our own scheme, accepted or not.
+#[must_use]
+pub fn is_own_scheme(raw: &str) -> bool {
+    raw.trim_start()
+        .get(..OWN_SCHEME.len() + 1)
+        .is_some_and(|head| head.eq_ignore_ascii_case(&format!("{OWN_SCHEME}:")))
 }
 
 fn parsed(raw: &str) -> Option<Url> {
@@ -116,9 +134,12 @@ pub fn unwrap_safe_link(raw: &str) -> String {
     let Some((_, inner)) = url.query_pairs().find(|(k, _)| k == "url") else {
         return raw.to_owned();
     };
+    if hides_characters(&inner) {
+        return raw.to_owned();
+    }
     match Url::parse(&inner) {
         Ok(target) if LAUNCHABLE_SCHEMES.contains(&target.scheme()) && target.has_host() => {
-            inner.into_owned()
+            target.into()
         }
         _ => raw.to_owned(),
     }
@@ -386,11 +407,78 @@ mod tests {
         }
     }
 
+    #[test]
+    fn what_our_own_scheme_carries_survives_the_way_encodeuricomponent_writes_it() {
+        for (inner, arrives) in [
+            (
+                "https://a.test/s?q=a+b&c=1#top",
+                "https://a.test/s?q=a+b&c=1#top",
+            ),
+            ("https://a.test/s?q=100%25", "https://a.test/s?q=100%25"),
+            (
+                "https://a.test/ñandú?q=café",
+                "https://a.test/%C3%B1and%C3%BA?q=caf%C3%A9",
+            ),
+            ("https://café.test/", "https://xn--caf-dma.test/"),
+            ("https://[::1]:8080/x", "https://[::1]:8080/x"),
+            ("HTTPS://A.test/x", "https://a.test/x"),
+            ("https://a.test/a b", "https://a.test/a%20b"),
+        ] {
+            let sent = format!("linkunbound://open?url={}", percent(inner));
+            assert_eq!(normalise(&sent).as_deref(), Some(arrives), "«{inner}»");
+        }
+        assert_eq!(
+            normalise("linkunbound://open?url=https%3A%2F%2Fa.test%2Fs%3Fq%3Da+b").as_deref(),
+            Some("https://a.test/s?q=a%20b"),
+            "a bare + is a space in a query string, which is why the + has to be encoded"
+        );
+    }
+
+    #[test]
+    fn our_own_scheme_reads_its_host_the_way_the_system_routes_its_name() {
+        assert_eq!(
+            normalise("LINKUNBOUND://OPEN?url=https%3A%2F%2Fa.test").as_deref(),
+            Some("https://a.test/")
+        );
+    }
+
+    #[test]
+    fn a_link_with_hidden_whitespace_is_refused_rather_than_cleaned_up() {
+        for inner in [
+            "ht\ttps://a.test/",
+            "https://a.test/\nx",
+            " https://a.test/",
+            "https://a.test/ ",
+            "https://a.test/\0",
+        ] {
+            let sent = format!("linkunbound://open?url={}", percent(inner));
+            assert_eq!(normalise(&sent), None, "«{inner:?}» got through");
+        }
+    }
+
+    #[test]
+    fn a_wrapped_link_with_hidden_whitespace_stays_wrapped() {
+        let wrapped =
+            "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fa.test%2F%09x";
+        assert_eq!(unwrap_safe_link(wrapped), wrapped);
+    }
+
+    #[test]
+    fn a_command_line_aimed_at_our_scheme_is_recognised_whatever_it_carries() {
+        assert!(is_own_scheme("linkunbound://open?url=x"));
+        assert!(is_own_scheme("LinkUnbound:anything"));
+        assert!(!is_own_scheme("https://linkunbound.test"));
+        assert!(!is_own_scheme("linkunboundx://open"));
+        assert!(!is_own_scheme("ñ"));
+    }
+
     fn percent(said: &str) -> String {
-        said.chars()
-            .map(|c| match c {
-                'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
-                _ => format!("%{:02X}", c as u32),
+        said.bytes()
+            .map(|b| match b {
+                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    char::from(b).to_string()
+                }
+                _ => format!("%{b:02X}"),
             })
             .collect()
     }
@@ -420,7 +508,7 @@ mod tests {
         let old = "https://statics.teams.cdn.office.net/evergreen-assets/safelinks/2/atp.html?url=https%3A%2F%2Fgithub.com";
         let renamed = "https://teams.public.onecdn.static.microsoft/evergreen-assets/safelinks/2/atp.html?url=https%3A%2F%2Fgithub.com";
         for wrapped in [old, renamed] {
-            assert_eq!(unwrap_safe_link(wrapped), "https://github.com");
+            assert_eq!(unwrap_safe_link(wrapped), "https://github.com/");
         }
     }
 
