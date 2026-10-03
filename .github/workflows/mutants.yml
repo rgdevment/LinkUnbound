@@ -269,7 +269,11 @@ jobs:
       - name: A mutant that lives in a file this branch wrote
         if: steps.touched.outputs.list != ''
         working-directory: app
-        run: npx stryker run --mutate "${{ steps.touched.outputs.list }}"
+        # Through the environment, never pasted into the script: the list is file names a pull
+        # request chose, and a name with a quote or a `$(...)` in it would run as shell.
+        env:
+          TOUCHED: ${{ steps.touched.outputs.list }}
+        run: npx stryker run --mutate "$TOUCHED"
 
       - uses: actions/upload-artifact@v7
         if: always() && steps.touched.outputs.list != ''

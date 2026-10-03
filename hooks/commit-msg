@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)" || exit 0
+
+# Blank and comment lines are stripped only after this runs, so the subject is the first other one.
+said=$(grep -v -m1 -E '^(#|[[:space:]]*$)' "$1")
+[ -n "$said" ] || exit 0
+
+case $said in
+  Merge\ * | fixup!\ * | squash!\ * | amend!\ *) exit 0 ;;
+esac
+
+exec bash scripts/commits.sh --subject "$said"
