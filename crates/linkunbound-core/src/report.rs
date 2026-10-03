@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn a_path_written_with_backslashes_is_cut_like_any_other() {
-        let out = redact(r"https://intranet.corp\informes\sueldos", GONE);
+        let out = redact(r"https://intranet.corp\reports\salaries", GONE);
         assert_eq!(out, "https://intranet.corp/…");
         assert_eq!(
             redact("https://intranet.corp:8443/x", GONE),

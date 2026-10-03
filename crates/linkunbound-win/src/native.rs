@@ -465,7 +465,25 @@ pub fn foreground_process_path() -> Option<String> {
 /// Rules key off a stable name, not a full path that changes with every update.
 #[must_use]
 pub fn source_app() -> Option<linkunbound_core::Origin> {
-    origin_of(&foreground_process_path()?).map(|stem| linkunbound_core::Origin::named(&stem))
+    let stem = remembered(origin_of(&foreground_process_path()?), &LAST_SEEN);
+    stem.map(|stem| linkunbound_core::Origin::named(&stem))
+}
+
+static LAST_SEEN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// A link that queues behind the picker finds the picker in front, which is never the origin:
+/// the app that was in front before it stands in, as on a Mac.
+fn remembered(found: Option<String>, last: &std::sync::Mutex<Option<String>>) -> Option<String> {
+    let Ok(mut last) = last.lock() else {
+        return found;
+    };
+    match found {
+        Some(stem) => {
+            *last = Some(stem.clone());
+            Some(stem)
+        }
+        None => last.clone(),
+    }
 }
 
 /// The picker or settings in front is not where the link came from, and a rule bound to them
@@ -663,6 +681,17 @@ mod tests {
             assert!(!app.key.ends_with(".exe"));
             assert_eq!(app.key, app.key.to_ascii_lowercase());
         }
+    }
+
+    #[test]
+    fn behind_our_own_window_the_app_in_front_before_it_is_the_origin() {
+        let last = std::sync::Mutex::new(None);
+        assert_eq!(remembered(None, &last), None);
+        assert_eq!(
+            remembered(Some("outlook".to_owned()), &last).as_deref(),
+            Some("outlook")
+        );
+        assert_eq!(remembered(None, &last).as_deref(), Some("outlook"));
     }
 
     #[test]

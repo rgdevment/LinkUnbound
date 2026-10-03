@@ -14,7 +14,7 @@ This is a personal open source project, not a company product. Security here is 
 
 - **100% Local** — Your browser list, domain rules, and configuration never leave your machine. No cloud, no sync, no servers.
 - **No Tracking** — No telemetry, no analytics, no usage data collection of any kind.
-- **No Data Collection** — LinkUnbound stores only what it needs to work: browser paths, domain rules, and a navigation log. Nothing else.
+- **No Data Collection** — LinkUnbound stores only what it needs to work: browser paths, rules and preferences. Nothing else, and no log of the links it handles.
 
 ### Security Practices
 

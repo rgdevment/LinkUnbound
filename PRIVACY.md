@@ -72,8 +72,10 @@ What this means in practice:
   opened from a file on the desktop reports `explorer`, and whether that is
   worth a rule is yours to decide, not ours. The picker names the rule that
   decided every time one does.
-- **It is read at the moment a link arrives**, not continuously. LinkUnbound
-  does not watch which applications you use.
+- **It is read at the moment a link arrives.** On macOS the resident also notes which
+  application was last brought to the front, in memory only, so a link that arrives while
+  nothing is in front still has an origin; on Windows it remembers the origin of the last
+  link for the same reason. Neither is written anywhere or kept past the session.
 - **It reaches the disk only if you ask it to.** The name is used in memory to
   match rules and to label the picker. It is written to `rules.json` only when
   you tick "always open" on a link whose origin is known.
@@ -100,6 +102,11 @@ it is routed and is written to disk only as part of a rule you asked it to remem
 
 Browser icons are extracted locally from installed browser executables and stored as image files. These are visual assets only.
 
+### Left by 1.x
+
+An upgrade from 1.x can leave `navigate.log` and `startup_crash.log` in the same folder. 2.x
+never writes or reads them; delete them whenever you like.
+
 ---
 
 ## Where Is Everything Stored?
@@ -113,7 +120,10 @@ All data is stored locally under your user profile.
 | Browsers | `%LOCALAPPDATA%\LinkUnbound\browsers.json`       |
 | Rules    | `%LOCALAPPDATA%\LinkUnbound\rules.json`          |
 | Settings | `%LOCALAPPDATA%\LinkUnbound\preferences.json`    |
-| Last update check | `%LOCALAPPDATA%\LinkUnbound\update.json` |
+| Last update check | `%LOCALAPPDATA%\LinkUnbound\update.json` (and `updating.json` while one installs) |
+| Global shortcut held | `%LOCALAPPDATA%\LinkUnbound\shortcut` |
+| Lock files | `rules.lock`, `browsers.lock`, `preferences.lock`, empty |
+| Kept aside | `rules.1x.json`, `browsers.1x.json` (the 1.x files, kept once when upgrading), `preferences.unread.json` (a preferences file that could not be read) |
 | Icons    | `%LOCALAPPDATA%\LinkUnbound\icons\`              |
 
 **macOS** — `~/Library/Application Support/LinkUnbound/`:
@@ -123,7 +133,11 @@ All data is stored locally under your user profile.
 | Browsers | `~/Library/Application Support/LinkUnbound/browsers.json`        |
 | Rules    | `~/Library/Application Support/LinkUnbound/rules.json`           |
 | Settings | `~/Library/Application Support/LinkUnbound/preferences.json`     |
-| Last update check | `~/Library/Application Support/LinkUnbound/update.json`  |
+| Last update check | `~/Library/Application Support/LinkUnbound/update.json` (and `updating.json` while one installs) |
+| Global shortcut held | `~/Library/Application Support/LinkUnbound/shortcut` |
+| Resident's socket | `~/Library/Application Support/LinkUnbound/shell.sock` |
+| Lock files | `rules.lock`, `browsers.lock`, `preferences.lock`, empty |
+| Kept aside | `rules.1x.json`, `browsers.1x.json` (the 1.x files, kept once when upgrading), `preferences.unread.json` (a preferences file that could not be read) |
 | Icons    | `~/Library/Application Support/LinkUnbound/icons/`               |
 | Previous default browser | `~/Library/Preferences/dev.rgdevment.linkunbound.plist` |
 
@@ -250,8 +264,9 @@ It is a single Markdown file named `linkunbound-diagnostico.md`. On Windows it i
 ### What the report does not contain
 
 - **The addresses you open.** It carries your rules, not your browsing. A rule for one exact
-  address is written as its scheme and host only (`https://mail.google.com/…`).
-- **Passwords, tokens or anything from a URL's authority** — those never reach a file at all.
+  address is written as its scheme, host and port only (`https://mail.google.com/…`).
+- **Passwords, tokens or anything from a URL's authority** — the report drops them. The
+  rules file itself does not: a rule for one exact address keeps the whole address.
 - **Icons, executables or the contents of any browser profile.**
 
 **Worth knowing before you share one:** the rules section names the sites you

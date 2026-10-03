@@ -82,9 +82,22 @@ pub fn is_own_scheme(raw: &str) -> bool {
         .is_some_and(|head| head.eq_ignore_ascii_case(&format!("{OWN_SCHEME}:")))
 }
 
+/// `github.com.` is the same site to the browser: every reading of a host agrees on it without
+/// the closing dot, or one rule holds for an address another rule misses.
 fn parsed(raw: &str) -> Option<Url> {
-    let url = Url::parse(raw).ok()?;
-    url.has_host().then_some(url)
+    let mut url = Url::parse(raw).ok()?;
+    if !url.has_host() {
+        return None;
+    }
+    if let Some(bare) = url
+        .host_str()
+        .and_then(|h| h.strip_suffix('.'))
+        .map(str::to_owned)
+        && !bare.is_empty()
+    {
+        let _ = url.set_host(Some(&bare));
+    }
+    Some(url)
 }
 
 /// Two spellings of one address, as a browser would read them: the scheme and host case-folded,
@@ -92,8 +105,8 @@ fn parsed(raw: &str) -> Option<Url> {
 /// host never matched the link that arrived otherwise.
 #[must_use]
 pub fn same_address(a: &str, b: &str) -> bool {
-    match (Url::parse(a), Url::parse(b)) {
-        (Ok(a), Ok(b)) => a == b,
+    match (parsed(a), parsed(b)) {
+        (Some(a), Some(b)) => a == b,
         _ => a == b,
     }
 }
@@ -103,12 +116,7 @@ pub fn same_address(a: &str, b: &str) -> bool {
 /// else routes a link by one host while the browser opens another.
 #[must_use]
 pub fn host_of(raw: &str) -> Option<String> {
-    let host = parsed(raw)?.host_str()?.to_owned();
-    // `github.com.` is the same site to the browser, and a rule for github.com must hold there too.
-    Some(match host.strip_suffix('.') {
-        Some(bare) if !bare.is_empty() => bare.to_owned(),
-        _ => host,
-    })
+    Some(parsed(raw)?.host_str()?.to_owned())
 }
 
 fn is_microsoft_wrapper(url: &Url) -> bool {
@@ -535,6 +543,13 @@ mod tests {
             host_of("https://github.com./x").as_deref(),
             Some("github.com")
         );
+        assert!(same_address(
+            "https://github.com./a",
+            "https://github.com/a"
+        ));
+        assert!(looks_unresolved(
+            "https://eur01.safelinks.protection.outlook.com./?url=x"
+        ));
         assert_eq!(
             host_of("https://user:pw@example.com:8443/x").as_deref(),
             Some("example.com")

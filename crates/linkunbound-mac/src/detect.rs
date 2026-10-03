@@ -5,7 +5,7 @@ use linkunbound_core::{
 };
 use objc2::Message;
 use objc2_app_kit::NSWorkspace;
-use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSString, NSURL};
+use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSLocale, NSString, NSURL};
 
 /// Asked of a link rather than of a scheme: `LSCopyAllHandlersForURLScheme` is
 /// the deprecated half of this pair and answers the same question.
@@ -142,7 +142,32 @@ pub fn app_named(bundle_id: &str) -> Option<String> {
     let url = preferred(bundle_id)?;
     let path = text(url.path())?;
     let bundle = NSBundle::bundleWithURL(&url)?;
-    name_of(&bundle, Path::new(&path)).map(|name| linkunbound_core::visible(&name))
+    let name = spoken_name(&bundle).or_else(|| name_of(&bundle, Path::new(&path)))?;
+    Some(linkunbound_core::visible(&name))
+}
+
+/// In the person's language, not in this process's: Settings ships in English only, and asked
+/// plainly the system answers «Notes» where the picker, reading the running app, says «Notas».
+fn spoken_name(bundle: &NSBundle) -> Option<String> {
+    let wanted = NSBundle::preferredLocalizationsFromArray_forPreferences(
+        &bundle.localizations(),
+        Some(&NSLocale::preferredLanguages()),
+    );
+    let table = NSString::from_str("InfoPlist");
+    ["CFBundleDisplayName", "CFBundleName"]
+        .into_iter()
+        .find_map(|key| {
+            let asked = NSString::from_str(key);
+            let said = bundle
+                .localizedStringForKey_value_table_localizations(
+                    &asked,
+                    None,
+                    Some(&table),
+                    &wanted,
+                )
+                .to_string();
+            (!said.is_empty() && said != key).then_some(said)
+        })
 }
 
 fn read_bundle(found: &NSURL) -> Option<Browser> {
@@ -262,8 +287,6 @@ mod tests {
         ));
     }
 
-    /// Dropping a browser over a plist this could not parse takes somebody's browser out of
-    /// the picker; Launch Services already answered that it opens links.
     #[test]
     fn a_bundle_id_is_shown_by_the_name_of_its_app() {
         assert_eq!(
@@ -271,6 +294,12 @@ mod tests {
             Some("Safari")
         );
         assert_eq!(super::app_named("test.linkunbound.nothing-installed"), None);
+        if let Some(notes) = super::app_named("com.apple.Notes") {
+            let spanish = objc2_foundation::NSLocale::preferredLanguages()
+                .firstObject()
+                .is_some_and(|first| first.to_string().starts_with("es"));
+            assert_eq!(notes, if spanish { "Notas" } else { "Notes" });
+        }
         if let Some(whatsapp) = super::app_named("net.whatsapp.WhatsApp") {
             assert_eq!(
                 whatsapp, "WhatsApp",
@@ -279,6 +308,8 @@ mod tests {
         }
     }
 
+    /// Dropping a browser over a plist this could not parse takes somebody's browser out of
+    /// the picker; Launch Services already answered that it opens links.
     #[test]
     fn a_bundle_that_declares_nothing_readable_is_left_to_launch_services() {
         assert!(is_destination("com.example.browser", &[]));

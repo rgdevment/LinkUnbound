@@ -11,7 +11,7 @@ pub fn is_address(host: &str) -> bool {
 
 /// The app a link came from. `key` is what a rule saves and stays put, a Mac bundle id or a
 /// Windows executable; `label` is what the person reads, and on a Mac follows the language.
-/// A rule answers to either, so rules saved by name before keys existed keep holding.
+/// A rule answers to either, so one saved by the name the person reads still holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Origin {
     pub key: String,
@@ -80,8 +80,11 @@ impl Scope {
         match self {
             Self::Any => true,
             Self::Url(u) => crate::url::same_address(url, u),
-            Self::Host(h) => host == h,
-            Self::Site(d) => host == d || host.strip_suffix(d).is_some_and(|p| p.ends_with('.')),
+            Self::Host(h) => host == h.trim_end_matches('.'),
+            Self::Site(d) => {
+                let d = d.trim_end_matches('.');
+                host == d || host.strip_suffix(d).is_some_and(|p| p.ends_with('.'))
+            }
         }
     }
 
@@ -190,9 +193,9 @@ impl RuleSet {
         self.upsert_from(rule, None);
     }
 
-    /// The same, knowing the app the link came from: a rule saved for it by name, before keys
-    /// existed, is that app too, and would otherwise keep winning over the one saved now. Every
-    /// such rule gives way to the new one, which takes the first one's place.
+    /// The same, knowing the app the link came from: a rule saved for it by name is that app
+    /// too, and would otherwise keep winning over the one saved now by key. Every such rule
+    /// gives way to the new one, which takes the first one's place.
     pub fn upsert_from(&mut self, mut rule: Rule, origin: Option<&Origin>) {
         rule.id = rule.identity();
         let same: Vec<usize> = self
@@ -271,8 +274,8 @@ mod tests {
         assert_eq!(super::visible("café ñandú"), "café ñandú");
     }
 
-    /// A Mac rule saved by name before keys existed and the one the picker saves now by bundle
-    /// id are the same app: choosing again has to replace it, not sit behind it unheard.
+    /// A Mac rule saved by name and one saved by bundle id are the same app: choosing again has
+    /// to replace it, not sit behind it unheard.
     #[test]
     fn choosing_again_for_an_app_replaces_its_rule_however_it_was_saved() {
         let slack = super::Origin {
@@ -349,8 +352,8 @@ mod tests {
         }
     }
 
-    /// 1.x saved the Mac origin as a bundle id and 2.x by the name the app shows, which changes
-    /// with the system language. Either one has to keep finding the app.
+    /// A Mac origin can be saved as a bundle id or by the name the app shows, which changes with
+    /// the system language. Either one has to keep finding the app.
     #[test]
     fn an_app_rule_holds_whether_it_was_saved_by_bundle_id_or_by_name() {
         let slack = super::Origin {
@@ -379,6 +382,10 @@ mod tests {
         let host = crate::host_of("https://gist.github.com./x").expect("a host");
         assert!(Scope::Site("github.com".into()).matches("https://gist.github.com./x", &host));
         assert!(Scope::Host("gist.github.com".into()).matches("https://gist.github.com./x", &host));
+        assert!(
+            Scope::Host("gist.github.com.".into()).matches("https://gist.github.com/x", &host),
+            "a rule saved with the dot still holds"
+        );
     }
 
     /// Which rule answers is this arithmetic and nothing else, and the bands have to stay apart:

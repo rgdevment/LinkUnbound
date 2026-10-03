@@ -148,7 +148,7 @@ pub fn reaches(
             words.reach_subdomain,
             words.remember_subdomain,
             true,
-            wrapped || host == site || host.is_empty(),
+            wrapped || host.is_empty() || (host == site && !is_public_suffix(site)),
         ),
         Said::new(
             words.reach_site,
@@ -340,7 +340,8 @@ pub fn split(url: &str) -> (String, String) {
     let Some(rest) = url.split_once("://").map(|(_, r)| r) else {
         return (url.to_owned(), String::new());
     };
-    match rest.find(['/', '?', '#']) {
+    // `\\` too: a browser reads it as a separator, so `evil.test\\@good.test` opens evil.test.
+    match rest.find(['/', '\\', '?', '#']) {
         Some(at) if rest[at..] != *"/" => (rest[..at].to_owned(), rest[at..].to_owned()),
         _ => (rest.trim_end_matches('/').to_owned(), String::new()),
     }
@@ -1081,6 +1082,13 @@ mod tests {
     /// `netlify.app` has no registrable domain, so the site would be the suffix itself and the
     /// rule would answer for every site anyone hosts there.
     #[test]
+    fn the_header_shows_the_host_the_browser_will_open() {
+        let (host, trail) = split(r"https://evil.test\@accounts.google.com/");
+        assert_eq!(host, "evil.test");
+        assert_eq!(trail, r"\@accounts.google.com/");
+    }
+
+    #[test]
     fn the_site_reach_is_dead_when_the_site_would_be_an_ending_many_share() {
         let shared = reaches(
             &SPOKEN,
@@ -1090,6 +1098,10 @@ mod tests {
             None,
         );
         assert!(shared[3].dead);
+        assert!(
+            !shared[2].dead,
+            "the host itself is still a host to remember"
+        );
         let own = reaches(&SPOKEN, PLAIN, "me.netlify.app", "me.netlify.app", None);
         assert!(!own[3].dead);
     }

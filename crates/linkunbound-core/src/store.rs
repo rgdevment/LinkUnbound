@@ -39,12 +39,12 @@ fn save_atomically(path: &Path, body: &str) -> Result<(), StoreError> {
     // truncating what the other was still writing, and the loser renamed the
     // mixture over the real one.
     let staging = path.with_extension(format!("{}.tmp", std::process::id()));
-    written_through(&staging, body).map_err(fail)?;
-    let renamed = renamed_with_patience(&staging, path).map_err(fail);
-    if renamed.is_err() {
+    let saved =
+        written_through(&staging, body).and_then(|()| renamed_with_patience(&staging, path));
+    if saved.is_err() {
         let _ = fs::remove_file(&staging);
     }
-    renamed
+    saved.map_err(fail)
 }
 
 /// On disk before the rename, not in the cache: after a power cut a renamed file whose
@@ -53,7 +53,10 @@ fn written_through(path: &Path, body: &str) -> std::io::Result<()> {
     use std::io::Write;
     let mut file = fs::File::create(path)?;
     file.write_all(body.as_bytes())?;
-    file.sync_all()
+    // A Mac network home (SMB, WebDAV) refuses F_FULLFSYNC, which is what this is there; the
+    // file is still whole, only less sure to outlive a power cut, and the save goes on.
+    let _ = file.sync_all();
+    Ok(())
 }
 
 /// An antivirus or the search indexer opening the file a moment refuses the rename on Windows,
@@ -79,92 +82,53 @@ fn held_open(why: &std::io::Error) -> bool {
         && (why.kind() == std::io::ErrorKind::PermissionDenied || why.raw_os_error() == Some(32))
 }
 
-const HELD_FOR_LONG_ENOUGH: Duration = Duration::from_secs(5);
+/// Past this the other process is not letting go, and giving up is the safe answer: going ahead
+/// unguarded is what corrupts.
+const WAITED_FOR_THE_LOCK: Duration = Duration::from_secs(2);
 
 /// Holds the whole read-modify-write, not just the write. Both binaries edit the
 /// same set, and an atomic save alone still loses whichever change was read
 /// before the other process saved.
 ///
-/// The guard is a file created exclusively: the filesystem decides the winner.
-/// One left behind by a process that died is taken over once it goes stale,
-/// because a lock nobody can release is worse than the race it prevents.
-/// Releases on every exit, a panic inside the edit included. Without this the
-/// file stayed behind and locked the set out until it went stale.
-struct Holding(PathBuf);
-
-impl Drop for Holding {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
-    }
-}
-
-fn abandoned(held: Duration) -> bool {
-    held > HELD_FOR_LONG_ENOUGH
-}
-
-fn stale(lock: &Path) -> bool {
-    fs::metadata(lock)
-        .and_then(|m| m.modified())
-        .is_ok_and(|held| abandoned(held.elapsed().unwrap_or_default()))
-}
-
-/// Between reading the lock as stale and removing it, its owner can let go and another process
-/// take a fresh one at the same name. The lock is moved aside first, which only one process
-/// wins, and one that turns out fresh is put back where nobody has taken it since.
-fn take_over(lock: &Path) {
-    static ASIDE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    let nth = ASIDE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let aside = lock.with_extension(format!("lock.{}.{nth}", std::process::id()));
-    if fs::rename(lock, &aside).is_err() {
-        return;
-    }
-    if !stale(&aside) {
-        match fs::hard_link(&aside, lock) {
-            Err(why) if why.kind() != std::io::ErrorKind::AlreadyExists && !lock.exists() => {
-                // exFAT and many network shares have no hard links; a rename still puts it back.
-                let _ = fs::rename(&aside, lock);
-            }
-            _ => {}
-        }
-    }
-    let _ = fs::remove_file(&aside);
-}
-
+/// The system's own file lock, not a file's presence: it goes with the process that held it,
+/// so one that died never locks the set out, and nothing has to guess from a date when a lock
+/// was abandoned.
 fn guarded<T>(path: &Path, work: impl FnOnce() -> Result<T, StoreError>) -> Result<T, StoreError> {
     let lock = path.with_extension("lock");
+    let fail = |source| StoreError::Write {
+        path: lock.clone(),
+        source,
+    };
     if let Some(parent) = lock.parent() {
         let _ = fs::create_dir_all(parent);
     }
-
-    for _ in 0..400 {
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock)
-        {
-            Ok(_) => {
-                let _holding = Holding(lock);
-                return work();
-            }
-            Err(_) => {
-                // Only steal one we can see and that is plainly old. A failed
-                // `metadata` means the owner just released it, and treating
-                // that as stale deleted a lock somebody else had already taken.
-                if stale(&lock) {
-                    take_over(&lock);
-                }
+    let held = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock)
+        .map_err(fail)?;
+    let deadline = std::time::Instant::now() + WAITED_FOR_THE_LOCK;
+    loop {
+        match held.try_lock() {
+            Ok(()) => return work(),
+            Err(fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(5));
             }
+            Err(fs::TryLockError::WouldBlock) => {
+                return Err(fail(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "another process is holding the file",
+                )));
+            }
+            // A share that knows no locks cannot be guarded at all; refusing would leave
+            // the person unable to save anything there.
+            Err(fs::TryLockError::Error(why)) if why.kind() == std::io::ErrorKind::Unsupported => {
+                return work();
+            }
+            Err(fs::TryLockError::Error(why)) => return Err(fail(why)),
         }
     }
-    // Giving up is the safe answer: going ahead unguarded is what corrupts.
-    Err(StoreError::Write {
-        path: lock,
-        source: std::io::Error::new(
-            std::io::ErrorKind::TimedOut,
-            "another process is holding the file",
-        ),
-    })
 }
 
 /// `serde_json` refuses the mark Windows editors prepend, which would discard a
@@ -403,36 +367,32 @@ mod tests {
         dir
     }
 
+    /// A lock file is what a process that died leaves behind; with nobody holding it, the next
+    /// save goes ahead at once instead of waiting for it to look old.
     #[test]
-    fn a_lock_somebody_just_took_survives_being_mistaken_for_an_old_one() {
-        let lock = place("fresh-lock").join("rules.lock");
-        fs::write(&lock, b"").expect("a lock just taken");
+    fn a_lock_file_nobody_holds_does_not_stand_in_the_way() {
+        let dir = place("leftover-lock");
+        fs::write(dir.join("rules.lock"), b"").expect("a lock left behind");
+        let started = std::time::Instant::now();
 
-        take_over(&lock);
+        let done = guarded(&dir.join("rules.json"), || Ok(()));
 
-        assert!(lock.exists(), "a fresh lock is put back, not removed");
-        let _ = fs::remove_dir_all(lock.parent().expect("a dir"));
+        assert!(done.is_ok());
+        assert!(started.elapsed() < Duration::from_millis(500));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn a_lock_left_long_ago_is_taken_over_and_nothing_is_left_beside_it() {
-        let dir = place("old-lock");
-        let lock = dir.join("rules.lock");
-        fs::write(&lock, b"").expect("a lock left behind");
-        fs::File::options()
-            .write(true)
-            .open(&lock)
-            .and_then(|f| f.set_modified(std::time::SystemTime::now() - Duration::from_secs(60)))
-            .expect("an old lock");
+    fn a_lock_somebody_holds_is_waited_for_and_then_refused() {
+        let dir = place("held-lock");
+        let held = fs::File::create(dir.join("rules.lock")).expect("a lock");
+        held.lock().expect("held");
 
-        take_over(&lock);
+        let refused = guarded(&dir.join("rules.json"), || Ok(()));
 
-        assert!(!lock.exists());
-        assert_eq!(
-            fs::read_dir(&dir).expect("listed").count(),
-            0,
-            "nothing set aside remains"
-        );
+        assert!(matches!(refused, Err(StoreError::Write { .. })));
+        drop(held);
+        assert!(guarded(&dir.join("rules.json"), || Ok(())).is_ok());
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -523,22 +483,6 @@ mod tests {
         let nowhere = under(None);
         assert!(nowhere.is_absolute(), "{nowhere:?}");
         assert!(nowhere.ends_with("LinkUnbound"));
-    }
-
-    /// Stealing a lock is destructive: the other process is mid-write and loses what it was
-    /// saving. On the mark it is still somebody's, and only past it is it plainly nobody's.
-    #[test]
-    fn a_lock_is_taken_over_only_once_it_is_plainly_abandoned() {
-        assert!(!abandoned(Duration::ZERO), "just taken");
-        assert!(
-            !abandoned(HELD_FOR_LONG_ENOUGH),
-            "on the mark it is still somebody's"
-        );
-        assert!(abandoned(HELD_FOR_LONG_ENOUGH + Duration::from_millis(1)));
-        assert!(
-            abandoned(Duration::from_secs(3600)),
-            "an hour old is nobody's, or the next save waits for ever"
-        );
     }
 
     /// Only a file that is not there is a first run. Anything else that stops the read is a

@@ -158,7 +158,7 @@ const ES = {
   rescanCounts: "{} nuevos, {} que ya no están",
   rescanGo: "Buscar",
   rescanBody:
-    "Se vuelve a leer el registro y lo que hayas ocultado se mostrará de nuevo. Se conservan los nombres, argumentos, iconos y el orden que les diste, y los navegadores que añadiste a mano.",
+    "Se vuelve a leer el registro y los navegadores detectados que hayas ocultado se mostrarán de nuevo. Se conservan los nombres, argumentos, iconos y el orden que les diste, y los navegadores que añadiste a mano.",
   careScratch: "Empezar de cero",
   resetTitle: "Restablecer la configuración",
   resetNote: "Borra todas las reglas y todos los navegadores",
@@ -427,7 +427,7 @@ const EN: Record<Key, string> = {
   rescanCounts: "{} new, {} no longer there",
   rescanGo: "Look",
   rescanBody:
-    "The registry is read again and whatever you hid will show up again. The names, arguments, icons and order you gave them are kept, and so are the browsers you added by hand.",
+    "The registry is read again and the detected browsers you hid will show up again. The names, arguments, icons and order you gave them are kept, and so are the browsers you added by hand.",
   careScratch: "Start from scratch",
   resetTitle: "Reset the configuration",
   resetNote: "Deletes every rule and every browser",
@@ -552,7 +552,7 @@ const MAC_ES: Partial<Record<Key, string>> = {
   browsersNone: "macOS no reporta ningún navegador instalado.",
   startupWindows: "Desactivado desde Ajustes del Sistema > General > Ítems de inicio",
   rescanBody:
-    "Se vuelve a preguntar al sistema y lo que hayas ocultado se mostrará de nuevo. Se conservan los nombres, argumentos, iconos y el orden que les diste, y los navegadores que añadiste a mano.",
+    "Se vuelve a preguntar al sistema y los navegadores detectados que hayas ocultado se mostrarán de nuevo. Se conservan los nombres, argumentos, iconos y el orden que les diste, y los navegadores que añadiste a mano.",
   unregisterTitle: "Dejar de ser el navegador predeterminado",
   unregisterNote: "Los enlaces vuelven al navegador que los abría antes",
   unregisterBody:
@@ -572,7 +572,7 @@ const MAC_EN: Partial<Record<Key, string>> = {
   browsersNone: "macOS reports no installed browser.",
   startupWindows: "Turned off in System Settings > General > Login Items",
   rescanBody:
-    "The system is asked again and whatever you hid will show up again. The names, arguments, icons and order you gave them are kept, and so are the browsers you added by hand.",
+    "The system is asked again and the detected browsers you hid will show up again. The names, arguments, icons and order you gave them are kept, and so are the browsers you added by hand.",
   unregisterTitle: "Stop being the default browser",
   unregisterNote: "Links go back to the browser that opened them before",
   unregisterBody:

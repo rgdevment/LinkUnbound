@@ -546,7 +546,12 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
         dress(picker, words, &url, label, &listed);
         picker.set_alarming(false);
         picker.set_problem(words.no_browsers.into());
-        shown.borrow_mut().url = Some(url);
+        {
+            let mut held = shown.borrow_mut();
+            held.url = Some(url);
+            held.rows = listed;
+            held.source = source;
+        }
         beside_the_pointer(picker);
         let _ = picker.show();
         if let Some(handle) = native_handle(picker.window()) {
