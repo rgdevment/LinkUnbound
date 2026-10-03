@@ -142,7 +142,7 @@ pub fn app_named(bundle_id: &str) -> Option<String> {
     let url = preferred(bundle_id)?;
     let path = text(url.path())?;
     let bundle = NSBundle::bundleWithURL(&url)?;
-    name_of(&bundle, Path::new(&path))
+    name_of(&bundle, Path::new(&path)).map(|name| linkunbound_core::visible(&name))
 }
 
 fn read_bundle(found: &NSURL) -> Option<Browser> {
@@ -271,6 +271,12 @@ mod tests {
             Some("Safari")
         );
         assert_eq!(super::app_named("test.linkunbound.nothing-installed"), None);
+        if let Some(whatsapp) = super::app_named("net.whatsapp.WhatsApp") {
+            assert_eq!(
+                whatsapp, "WhatsApp",
+                "the direction mark it ships with is not shown"
+            );
+        }
     }
 
     #[test]

@@ -5,7 +5,7 @@ mod update;
 
 use linkunbound_core::{
     Asking, Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of,
-    is_public_suffix, merge, normalise, site_of,
+    is_public_suffix, merge, normalise, site_of, visible,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -91,7 +91,7 @@ fn named_alike(rules: &[Rule], rule: &Rule) -> bool {
         r.scope == rule.scope
             && r.source_app
                 .as_deref()
-                .is_some_and(|saved| shown_origin(saved).eq_ignore_ascii_case(typed))
+                .is_some_and(|saved| shown_origin(saved).eq_ignore_ascii_case(&visible(typed)))
     })
 }
 

@@ -29,8 +29,21 @@ impl Origin {
 
     #[must_use]
     pub fn answers_to(&self, said: &str) -> bool {
-        said.eq_ignore_ascii_case(&self.key) || said.eq_ignore_ascii_case(&self.label)
+        let said = visible(said);
+        said.eq_ignore_ascii_case(&visible(&self.key))
+            || said.eq_ignore_ascii_case(&visible(&self.label))
     }
+}
+
+/// Some apps name themselves with an invisible direction mark in front (WhatsApp is
+/// `\u{200E}WhatsApp`); a person typing the name never types it, and a rule must still match.
+#[must_use]
+pub fn visible(name: &str) -> String {
+    name.chars()
+        .filter(|c| {
+            !matches!(c, '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}')
+        })
+        .collect()
 }
 
 /// An ending shared by many owners, like `co.uk` or `github.io`: a site rule for it would cover
@@ -246,6 +259,18 @@ impl RuleSet {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_app_whose_name_carries_an_invisible_mark_answers_to_its_plain_name() {
+        let whatsapp = super::Origin {
+            key: "net.whatsapp.WhatsApp".to_owned(),
+            label: "\u{200E}whatsapp".to_owned(),
+        };
+        assert!(whatsapp.answers_to("whatsapp"));
+        assert!(whatsapp.answers_to("WhatsApp"));
+        assert_eq!(super::visible("\u{200E}WhatsApp\u{FEFF}"), "WhatsApp");
+        assert_eq!(super::visible("café ñandú"), "café ñandú");
+    }
+
     /// A Mac rule saved by name before keys existed and the one the picker saves now by bundle
     /// id are the same app: choosing again has to replace it, not sit behind it unheard.
     #[test]

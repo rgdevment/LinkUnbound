@@ -33,7 +33,7 @@ pub use launch::{LaunchError, open as launch, spawn_and_forget};
 pub use prefs::{Locale, PickerStyle, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
-pub use rule::{Origin, Rule, RuleSet, Scope, Target, is_public_suffix, site_of};
+pub use rule::{Origin, Rule, RuleSet, Scope, Target, is_public_suffix, site_of, visible};
 pub use star::{Asking, asking};
 pub use store::{Store, StoreError, data_dir, unmarked};
 pub use url::{

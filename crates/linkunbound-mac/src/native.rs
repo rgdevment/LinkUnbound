@@ -270,7 +270,7 @@ fn named_unless_ours(app: &NSRunningApplication) -> Option<Origin> {
     if crate::is_one_of_ours(&bundle_id) {
         return None;
     }
-    let name = app.localizedName()?.to_string().to_lowercase();
+    let name = linkunbound_core::visible(&app.localizedName()?.to_string()).to_lowercase();
     (!name.is_empty()).then_some(Origin {
         key: bundle_id,
         label: name,
