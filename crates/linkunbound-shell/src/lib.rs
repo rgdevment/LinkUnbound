@@ -10,7 +10,9 @@ pub mod tray;
 use std::rc::Rc;
 
 use linkunbound_core::update::{Looked, Progress};
-use linkunbound_core::{Browser, Scope, Strings, local_file_parts, looks_unresolved, site_of};
+use linkunbound_core::{
+    Browser, Scope, Strings, host_of, is_public_suffix, local_file_parts, looks_unresolved, site_of,
+};
 
 /// Both windows read the same palette, so the choice is applied once per window
 /// rather than threaded through every component that draws.
@@ -148,7 +150,12 @@ pub fn reaches(
             true,
             wrapped || host == site || host.is_empty(),
         ),
-        Said::new(words.reach_site, words.remember_site, true, wrapped),
+        Said::new(
+            words.reach_site,
+            words.remember_site,
+            true,
+            wrapped || is_public_suffix(site),
+        ),
     ];
     // Left out rather than greyed when there is no origin: a dead label would cost the live
     // ones their space.
@@ -347,7 +354,10 @@ fn image_for(path: Option<&str>) -> slint::Image {
 pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, rows: &[Listed]) {
     window.set_icon_side(f32::from(u16::try_from(ICON_SIDE).unwrap_or(24)));
     let (host, trail) = split(url);
-    let site = site_of(&host);
+    // The header shows the address as written; the reaches judge the host a rule would match,
+    // without the port, the user or a closing dot.
+    let matched = host_of(url).unwrap_or_else(|| host.clone());
+    let site = site_of(&matched);
 
     window.set_host(host.clone().into());
     window.set_trail(trail.into());
@@ -394,7 +404,7 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
         .collect();
     window.set_rows(Rc::new(slint::VecModel::from(listed)).into());
 
-    let said = reaches(words, url, &host, &site, source);
+    let said = reaches(words, url, &matched, &site, source);
     let all: Vec<Reach> = said
         .into_iter()
         .enumerate()
@@ -1066,6 +1076,22 @@ mod tests {
         assert!(same[2].dead);
         let sub = reaches(&SPOKEN, PLAIN, "docs.google.com", "google.com", None);
         assert!(!sub[2].dead);
+    }
+
+    /// `netlify.app` has no registrable domain, so the site would be the suffix itself and the
+    /// rule would answer for every site anyone hosts there.
+    #[test]
+    fn the_site_reach_is_dead_when_the_site_would_be_an_ending_many_share() {
+        let shared = reaches(
+            &SPOKEN,
+            "https://netlify.app/",
+            "netlify.app",
+            "netlify.app",
+            None,
+        );
+        assert!(shared[3].dead);
+        let own = reaches(&SPOKEN, PLAIN, "me.netlify.app", "me.netlify.app", None);
+        assert!(!own[3].dead);
     }
 
     /// A wrapper nobody could unwrap leaves three reaches dead; the arrows used to land on them

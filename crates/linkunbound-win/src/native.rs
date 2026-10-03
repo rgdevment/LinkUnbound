@@ -464,10 +464,15 @@ pub fn foreground_process_path() -> Option<String> {
 
 /// Rules key off a stable name, not a full path that changes with every update.
 #[must_use]
-pub fn source_app() -> Option<String> {
-    let path = foreground_process_path()?;
-    let stem = Path::new(&path).file_stem()?.to_str()?.to_ascii_lowercase();
-    (!stem.is_empty()).then_some(stem)
+pub fn source_app() -> Option<linkunbound_core::Origin> {
+    origin_of(&foreground_process_path()?).map(|stem| linkunbound_core::Origin::named(&stem))
+}
+
+/// The picker or settings in front is not where the link came from, and a rule bound to them
+/// would never fire again.
+fn origin_of(path: &str) -> Option<String> {
+    let stem = Path::new(path).file_stem()?.to_str()?.to_ascii_lowercase();
+    (!stem.is_empty() && !stem.starts_with("linkunbound")).then_some(stem)
 }
 
 /// The pixels behind a bitmap, as RGBA. Windows hands them back bottom-up and
@@ -653,11 +658,27 @@ mod tests {
     #[test]
     fn the_foreground_process_is_named_by_its_stem() {
         if let Some(app) = source_app() {
-            assert!(!app.is_empty());
-            assert!(!app.contains('\\'));
-            assert!(!app.ends_with(".exe"));
-            assert_eq!(app, app.to_ascii_lowercase());
+            assert!(!app.key.is_empty());
+            assert!(!app.key.contains('\\'));
+            assert!(!app.key.ends_with(".exe"));
+            assert_eq!(app.key, app.key.to_ascii_lowercase());
         }
+    }
+
+    #[test]
+    fn our_own_windows_are_never_where_a_link_came_from() {
+        assert_eq!(
+            origin_of(r"C:\Program Files\Slack\Slack.exe").as_deref(),
+            Some("slack")
+        );
+        assert_eq!(
+            origin_of(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe"),
+            None
+        );
+        assert_eq!(
+            origin_of(r"C:\Program Files\LinkUnbound\LinkUnbound-Settings.exe"),
+            None
+        );
     }
 
     /// The pipe's descriptor names this account by SID; an account that cannot be named leaves

@@ -103,7 +103,12 @@ pub fn same_address(a: &str, b: &str) -> bool {
 /// else routes a link by one host while the browser opens another.
 #[must_use]
 pub fn host_of(raw: &str) -> Option<String> {
-    Some(parsed(raw)?.host_str()?.to_owned())
+    let host = parsed(raw)?.host_str()?.to_owned();
+    // `github.com.` is the same site to the browser, and a rule for github.com must hold there too.
+    Some(match host.strip_suffix('.') {
+        Some(bare) if !bare.is_empty() => bare.to_owned(),
+        _ => host,
+    })
 }
 
 fn is_microsoft_wrapper(url: &Url) -> bool {
@@ -526,6 +531,10 @@ mod tests {
             Some("good.test")
         );
         assert_eq!(host_of("https://[::1]:8080/x").as_deref(), Some("[::1]"));
+        assert_eq!(
+            host_of("https://github.com./x").as_deref(),
+            Some("github.com")
+        );
         assert_eq!(
             host_of("https://user:pw@example.com:8443/x").as_deref(),
             Some("example.com")

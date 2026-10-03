@@ -6,7 +6,7 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use linkunbound_core::{
-    Language, Rule, Store, Strings, Target, data_dir, host_of, is_own_scheme, normalise,
+    Language, Origin, Rule, Store, Strings, Target, data_dir, host_of, is_own_scheme, normalise,
 };
 use linkunbound_shell::hotkey::Hotkey;
 use linkunbound_shell::tray::{Asked, Tray};
@@ -48,7 +48,7 @@ mod host {
             .map(|p| p.to_string_lossy().into_owned())
     }
 
-    pub fn clicked_in() -> Option<String> {
+    pub fn clicked_in() -> Option<linkunbound_core::Origin> {
         linkunbound_win::source_app()
     }
 
@@ -127,7 +127,7 @@ mod host {
             .map(|p| p.to_string_lossy().into_owned())
     }
 
-    pub fn clicked_in() -> Option<String> {
+    pub fn clicked_in() -> Option<linkunbound_core::Origin> {
         linkunbound_mac::source_app()
     }
 
@@ -206,7 +206,7 @@ mod host {
         None
     }
 
-    pub fn clicked_in() -> Option<String> {
+    pub fn clicked_in() -> Option<linkunbound_core::Origin> {
         None
     }
 
@@ -310,10 +310,10 @@ struct Fired {
 }
 
 /// A rule that cannot be honoured falls through to the picker, never elsewhere.
-fn answered_by_rule(url: &str, source: Option<&str>) -> Option<Fired> {
+fn answered_by_rule(url: &str, source: Option<&Origin>) -> Option<Fired> {
     let rules = store().rules().ok()?;
     let host = host_of(url)?;
-    let rule = rules.resolve(url, &host, source)?;
+    let rule = rules.resolve_from(url, &host, source)?;
     let browsers = catalogue();
     host::let_whoever_opens_next_come_forward();
     linkunbound_core::launch(
@@ -405,14 +405,15 @@ fn remember(
     chosen: &Listed,
     private: bool,
     reach: Reaches,
-    source_app: Option<String>,
+    source: Option<Origin>,
 ) -> bool {
-    let Some(rule) = rule_for(url, chosen, private, reach, source_app) else {
+    let key = source.as_ref().map(|origin| origin.key.clone());
+    let Some(rule) = rule_for(url, chosen, private, reach, key) else {
         return true;
     };
     store()
         .edit_rules(|rules| {
-            rules.upsert(rule.clone());
+            rules.upsert_from(rule.clone(), source.as_ref());
             true
         })
         .is_ok()
@@ -479,11 +480,18 @@ struct Shown {
     rows: Vec<Listed>,
     /// Read when the link arrived, not when the user picks: by then the picker
     /// itself is the foreground window, and the rule would bind to us.
-    source: Option<String>,
+    source: Option<Origin>,
     /// Links that arrived while one was on screen and being answered. Redressing
     /// the window under the user would open the wrong one, and dropping them
-    /// would lose a click they already made.
-    waiting: std::collections::VecDeque<String>,
+    /// would lose a click they already made. Each keeps the app it came from: read when
+    /// it is finally shown, the front is whatever the previous answer just opened.
+    waiting: std::collections::VecDeque<Arrival>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Arrival {
+    url: String,
+    source: Option<Origin>,
 }
 
 /// A link that arrives while one is on screen and attended waits its turn. Redressing the
@@ -494,21 +502,24 @@ struct Shown {
 /// is how a dozen clicks came to show nothing at all.
 ///
 /// Kept apart from the window so the decision can be checked without one.
-fn claims_the_window(shown: &mut Shown, url: String, attended: bool) -> Option<String> {
+fn claims_the_window(shown: &mut Shown, arrival: Arrival, attended: bool) -> Option<Arrival> {
     if attended {
         // A program that retries the same link every second fills the queue with one click; a
         // link already waiting, or the one on screen, is that click.
-        let already = shown.url.as_deref() == Some(url.as_str())
-            || shown.waiting.iter().any(|waiting| *waiting == url);
+        let already = shown.url.as_deref() == Some(arrival.url.as_str())
+            || shown
+                .waiting
+                .iter()
+                .any(|waiting| waiting.url == arrival.url);
         if !already {
-            shown.waiting.push_back(url);
+            shown.waiting.push_back(arrival);
             if shown.waiting.len() > WAITING_ROOM {
                 shown.waiting.pop_front();
             }
         }
         return None;
     }
-    Some(url)
+    Some(arrival)
 }
 
 /// Past this many, the oldest goes: nobody clicks that many links while a picker is up.
@@ -521,15 +532,18 @@ fn attended(picker: &Picker) -> bool {
 }
 
 /// Whether the link went on screen, rather than behind one already being answered.
-fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: String) -> bool {
-    let Some(url) = claims_the_window(&mut shown.borrow_mut(), url, attended(picker)) else {
+fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival: Arrival) -> bool {
+    let Some(Arrival { url, source }) =
+        claims_the_window(&mut shown.borrow_mut(), arrival, attended(picker))
+    else {
         return false;
     };
+    let label = source.as_ref().map(|origin| origin.label.as_str());
     let listed = rows(physical_icon_side(picker));
     if listed.is_empty() {
         // Opening settings and dropping the link loses the click: the address is
         // still on screen here, and settings is one press away.
-        dress(picker, words, &url, host::clicked_in().as_deref(), &listed);
+        dress(picker, words, &url, label, &listed);
         picker.set_alarming(false);
         picker.set_problem(words.no_browsers.into());
         shown.borrow_mut().url = Some(url);
@@ -541,8 +555,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
         }
         return true;
     }
-    let source = host::clicked_in();
-    dress(picker, words, &url, source.as_deref(), &listed);
+    dress(picker, words, &url, label, &listed);
     {
         let mut held = shown.borrow_mut();
         held.url = Some(url);
@@ -568,7 +581,8 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, url: St
         let redrawn = rows(drawn_at);
         let held = shown.borrow();
         if let Some(url) = held.url.as_deref() {
-            dress(picker, words, url, held.source.as_deref(), &redrawn);
+            let label = held.source.as_ref().map(|origin| origin.label.as_str());
+            dress(picker, words, url, label, &redrawn);
         }
         drop(held);
         shown.borrow_mut().rows = redrawn;
@@ -594,8 +608,8 @@ fn native_handle(window: &slint::Window) -> Option<isize> {
 /// clicked is silently dropped.
 fn next_in_line(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>) {
     let queued = shown.borrow_mut().waiting.pop_front();
-    if let Some(url) = queued
-        && present(picker, words, shown, url)
+    if let Some(arrival) = queued
+        && present(picker, words, shown, arrival)
         && let Some(ui) = ui()
     {
         // The next link needs its own settle: carrying the previous one's
@@ -987,7 +1001,8 @@ fn arrived(raw: String) {
     let Some(url) = normalise(&raw) else { return };
     ui.catch_up();
 
-    if let Some(fired) = answered_by_rule(&url, host::clicked_in().as_deref()) {
+    let source = host::clicked_in();
+    if let Some(fired) = answered_by_rule(&url, source.as_ref()) {
         if store().prefs().notify_on_rule {
             ui.firing.replace(Some(fired.rule_id.clone()));
             flash(&ui.notice, &ui.words.get(), &fired);
@@ -1003,7 +1018,12 @@ fn arrived(raw: String) {
     }
     // A link that only queued leaves the picker's settle alone: restarting it would have the
     // picker take the front back from wherever the person had just gone.
-    if present(&ui.picker, &ui.words.get(), &ui.shown, url) {
+    if present(
+        &ui.picker,
+        &ui.words.get(),
+        &ui.shown,
+        Arrival { url, source },
+    ) {
         ui.watch_focus();
     }
 }
@@ -1432,9 +1452,9 @@ fn main() -> Result<(), slint::PlatformError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        FRONT_SETTLES_WITHIN, Listed, Shown, UI, Ui, WAITING_ROOM, claims_the_window, host,
-        link_from, next_in_line, physical, present, rule_for, still_settling, wants_no_window,
-        with_icons,
+        Arrival, FRONT_SETTLES_WITHIN, Listed, Shown, UI, Ui, WAITING_ROOM, claims_the_window,
+        host, link_from, next_in_line, physical, present, rule_for, still_settling,
+        wants_no_window, with_icons,
     };
     use linkunbound_core::Scope;
     use linkunbound_core::{Language, normalise};
@@ -1578,7 +1598,7 @@ mod tests {
             &ui.picker,
             &words,
             &ui.shown,
-            "https://one.test/".to_owned()
+            arrive("https://one.test/")
         ));
         ui.watch_focus();
         assert!(ui.picker.window().is_visible());
@@ -1589,7 +1609,7 @@ mod tests {
             &ui.picker,
             &words,
             &ui.shown,
-            "https://two.test/".to_owned()
+            arrive("https://two.test/")
         ));
         assert_eq!(ui.shown.borrow().url.as_deref(), Some("https://two.test/"));
         assert!(ui.shown.borrow().waiting.is_empty());
@@ -1598,7 +1618,7 @@ mod tests {
         ui.shown
             .borrow_mut()
             .waiting
-            .push_back("https://three.test/".to_owned());
+            .push_back(arrive("https://three.test/"));
         next_in_line(&ui.picker, &words, &ui.shown);
         assert!(ui.picker.window().is_visible());
         assert_eq!(
@@ -1732,15 +1752,18 @@ mod tests {
             url: Some("https://behind.test/".to_owned()),
             ..Shown::default()
         };
-        let next = claims_the_window(&mut shown, "https://next.test/".to_owned(), false);
-        assert_eq!(next.as_deref(), Some("https://next.test/"));
+        let next = claims_the_window(&mut shown, arrive("https://next.test/"), false);
+        assert_eq!(next.map(|a| a.url).as_deref(), Some("https://next.test/"));
         assert!(
             shown.waiting.is_empty(),
             "nothing queues behind an unanswered picker"
         );
 
-        let again = claims_the_window(&mut shown, "https://behind.test/".to_owned(), false);
-        assert_eq!(again.as_deref(), Some("https://behind.test/"));
+        let again = claims_the_window(&mut shown, arrive("https://behind.test/"), false);
+        assert_eq!(
+            again.map(|a| a.url).as_deref(),
+            Some("https://behind.test/")
+        );
     }
 
     /// A link arriving while one is on screen and attended must not redress the
@@ -1750,21 +1773,21 @@ mod tests {
     fn a_link_arriving_over_a_shown_one_waits_instead_of_replacing_it() {
         let mut shown = Shown::default();
 
-        let first = claims_the_window(&mut shown, "https://first.test/a".to_owned(), false);
+        let first = claims_the_window(&mut shown, arrive("https://first.test/a"), false);
         assert_eq!(
-            first.as_deref(),
+            first.map(|a| a.url).as_deref(),
             Some("https://first.test/a"),
             "with no window up, the link is dressed straight away"
         );
         assert!(shown.waiting.is_empty());
 
-        let second = claims_the_window(&mut shown, "https://second.test/b".to_owned(), true);
+        let second = claims_the_window(&mut shown, arrive("https://second.test/b"), true);
         assert!(second.is_none(), "it must not take a window already in use");
-        let third = claims_the_window(&mut shown, "https://third.test/c".to_owned(), true);
+        let third = claims_the_window(&mut shown, arrive("https://third.test/c"), true);
         assert!(third.is_none());
 
         assert_eq!(
-            shown.waiting.pop_front().as_deref(),
+            shown.waiting.pop_front().map(|a| a.url).as_deref(),
             Some("https://second.test/b"),
             "queued links are answered in the order they were clicked"
         );
@@ -1780,12 +1803,10 @@ mod tests {
             ..Shown::default()
         };
         for _ in 0..5 {
-            assert!(
-                claims_the_window(&mut shown, "https://again.test/".to_owned(), true).is_none()
-            );
+            assert!(claims_the_window(&mut shown, arrive("https://again.test/"), true).is_none());
         }
         assert_eq!(shown.waiting.len(), 1);
-        assert!(claims_the_window(&mut shown, "https://shown.test/".to_owned(), true).is_none());
+        assert!(claims_the_window(&mut shown, arrive("https://shown.test/"), true).is_none());
         assert_eq!(
             shown.waiting.len(),
             1,
@@ -1793,13 +1814,36 @@ mod tests {
         );
 
         for n in 0..(WAITING_ROOM * 2) {
-            let _ = claims_the_window(&mut shown, format!("https://many.test/{n}"), true);
+            let _ = claims_the_window(&mut shown, arrive(&format!("https://many.test/{n}")), true);
         }
         assert_eq!(shown.waiting.len(), WAITING_ROOM);
         assert!(
-            !shown.waiting.contains(&"https://again.test/".to_owned()),
+            !shown.waiting.iter().any(|a| a.url == "https://again.test/"),
             "the oldest is what goes"
         );
+    }
+
+    fn arrive(url: &str) -> Arrival {
+        Arrival {
+            url: url.to_owned(),
+            source: None,
+        }
+    }
+
+    /// Read when it finally reaches the screen, a queued link's origin was whatever the previous
+    /// answer had just opened, and "always from this app" bound the rule to the browser.
+    #[test]
+    fn a_queued_link_keeps_the_app_it_came_from() {
+        let mut shown = Shown {
+            url: Some("https://shown.test/".to_owned()),
+            ..Shown::default()
+        };
+        let from_slack = Arrival {
+            url: "https://queued.test/".to_owned(),
+            source: Some(linkunbound_core::Origin::named("slack")),
+        };
+        assert!(claims_the_window(&mut shown, from_slack.clone(), true).is_none());
+        assert_eq!(shown.waiting.pop_front(), Some(from_slack));
     }
 
     fn chosen() -> Listed {

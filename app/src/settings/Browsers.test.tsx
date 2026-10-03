@@ -267,10 +267,13 @@ describe("browsers", () => {
     expect(invoke).not.toHaveBeenCalledWith("maintenance_reset", expect.anything());
   });
 
-  it("explains that a rescan keeps what the user added by hand", async () => {
+  it("explains that a rescan keeps what the user set and shows what was hidden", async () => {
     render(<Browsers />);
     await userEvent.click(await screen.findByRole("button", { name: "Buscar" }));
-    expect(await screen.findByText(/añadiste a mano se conservan/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Se conservan los nombres, argumentos, iconos/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/añadiste a mano/)).toBeInTheDocument();
   });
 
   /// «Done» alone reads the same whether a browser appeared or nothing changed.

@@ -49,9 +49,238 @@ pub fn profiles_in(local_state: &str) -> Vec<Profile> {
     profiles
 }
 
+/// Where each Chromium build keeps `Local State`, below Application Support on a Mac and below
+/// `%LOCALAPPDATA%` on Windows. Every channel keeps its own: reading stable's for a Beta offers
+/// profiles it does not have, and launching one creates it empty. Most specific first.
+struct Chromium {
+    bundle: &'static str,
+    mac: &'static str,
+    windows: Option<&'static str>,
+}
+
+const CHROMIUM: [Chromium; 19] = [
+    Chromium {
+        bundle: "google chrome canary",
+        mac: "Google/Chrome Canary",
+        windows: Some(r"Google\Chrome SxS"),
+    },
+    Chromium {
+        bundle: "google chrome beta",
+        mac: "Google/Chrome Beta",
+        windows: Some(r"Google\Chrome Beta"),
+    },
+    Chromium {
+        bundle: "google chrome dev",
+        mac: "Google/Chrome Dev",
+        windows: Some(r"Google\Chrome Dev"),
+    },
+    Chromium {
+        bundle: "google chrome for testing",
+        mac: "Google/Chrome for Testing",
+        windows: None,
+    },
+    Chromium {
+        bundle: "google chrome",
+        mac: "Google/Chrome",
+        windows: Some(r"Google\Chrome"),
+    },
+    Chromium {
+        bundle: "chromium",
+        mac: "Chromium",
+        windows: Some("Chromium"),
+    },
+    Chromium {
+        bundle: "chrome",
+        mac: "Google/Chrome",
+        windows: None,
+    },
+    Chromium {
+        bundle: "microsoft edge canary",
+        mac: "Microsoft Edge Canary",
+        windows: Some(r"Microsoft\Edge SxS"),
+    },
+    Chromium {
+        bundle: "microsoft edge beta",
+        mac: "Microsoft Edge Beta",
+        windows: Some(r"Microsoft\Edge Beta"),
+    },
+    Chromium {
+        bundle: "microsoft edge dev",
+        mac: "Microsoft Edge Dev",
+        windows: Some(r"Microsoft\Edge Dev"),
+    },
+    Chromium {
+        bundle: "microsoft edge",
+        mac: "Microsoft Edge",
+        windows: Some(r"Microsoft\Edge"),
+    },
+    Chromium {
+        bundle: "brave browser nightly",
+        mac: "BraveSoftware/Brave-Browser-Nightly",
+        windows: Some(r"BraveSoftware\Brave-Browser-Nightly"),
+    },
+    Chromium {
+        bundle: "brave browser dev",
+        mac: "BraveSoftware/Brave-Browser-Dev",
+        windows: Some(r"BraveSoftware\Brave-Browser-Dev"),
+    },
+    Chromium {
+        bundle: "brave browser beta",
+        mac: "BraveSoftware/Brave-Browser-Beta",
+        windows: Some(r"BraveSoftware\Brave-Browser-Beta"),
+    },
+    Chromium {
+        bundle: "brave browser",
+        mac: "BraveSoftware/Brave-Browser",
+        windows: Some(r"BraveSoftware\Brave-Browser"),
+    },
+    Chromium {
+        bundle: "vivaldi",
+        mac: "Vivaldi",
+        windows: Some("Vivaldi"),
+    },
+    Chromium {
+        bundle: "arc",
+        mac: "Arc/User Data",
+        windows: None,
+    },
+    Chromium {
+        bundle: "opera gx",
+        mac: "com.operasoftware.OperaGX",
+        windows: None,
+    },
+    Chromium {
+        bundle: "opera",
+        mac: "com.operasoftware.Opera",
+        windows: None,
+    },
+];
+
+/// Below Application Support, for a bundle named this. Matched on the bundle's name, never on
+/// the folder it sits in: a browser under `/Users/marc/Applications` is not Arc.
+#[must_use]
+pub fn chromium_home_on_mac(bundle_name: &str) -> Option<&'static str> {
+    let name = bundle_name.to_ascii_lowercase();
+    let name = name.strip_suffix(".app").unwrap_or(&name);
+    CHROMIUM
+        .iter()
+        .find(|c| {
+            if c.bundle == "arc" {
+                name == "arc"
+            } else {
+                name.contains(c.bundle)
+            }
+        })
+        .map(|c| c.mac)
+}
+
+/// Below `%LOCALAPPDATA%`, with `User Data` still to add, for a browser installed at `exe`.
+/// Chromium installs into `<vendor>\<channel>\Application`, whichever root it went under.
+#[must_use]
+pub fn chromium_home_on_windows(exe: &str) -> Option<&'static str> {
+    let exe = exe.replace('/', "\\").to_ascii_lowercase();
+    CHROMIUM.iter().find_map(|c| {
+        let home = c.windows?;
+        exe.contains(&format!("\\{}\\application\\", home.to_ascii_lowercase()))
+            .then_some(home)
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{id_for, profiles_in};
+    use super::{chromium_home_on_mac, chromium_home_on_windows, id_for, profiles_in};
+
+    #[test]
+    fn every_chromium_channel_on_windows_reads_its_own_profiles() {
+        for (exe, home) in [
+            (
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                Some(r"Google\Chrome"),
+            ),
+            (
+                r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe",
+                Some(r"Google\Chrome Beta"),
+            ),
+            (
+                r"C:\Program Files\Google\Chrome Dev\Application\chrome.exe",
+                Some(r"Google\Chrome Dev"),
+            ),
+            (
+                r"C:\Users\a\AppData\Local\Google\Chrome SxS\Application\chrome.exe",
+                Some(r"Google\Chrome SxS"),
+            ),
+            (
+                r"C:\Users\a\AppData\Local\Chromium\Application\chrome.exe",
+                Some("Chromium"),
+            ),
+            (
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                Some(r"Microsoft\Edge"),
+            ),
+            (
+                r"C:\Program Files (x86)\Microsoft\Edge Beta\Application\msedge.exe",
+                Some(r"Microsoft\Edge Beta"),
+            ),
+            (
+                r"C:\Program Files (x86)\Microsoft\Edge Dev\Application\msedge.exe",
+                Some(r"Microsoft\Edge Dev"),
+            ),
+            (
+                r"C:\Users\a\AppData\Local\Microsoft\Edge SxS\Application\msedge.exe",
+                Some(r"Microsoft\Edge SxS"),
+            ),
+            (
+                r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                Some(r"BraveSoftware\Brave-Browser"),
+            ),
+            (
+                r"C:\Program Files\BraveSoftware\Brave-Browser-Beta\Application\brave.exe",
+                Some(r"BraveSoftware\Brave-Browser-Beta"),
+            ),
+            (
+                r"C:\Users\a\AppData\Local\Vivaldi\Application\vivaldi.exe",
+                Some("Vivaldi"),
+            ),
+            (r"C:\Program Files\Mozilla Firefox\firefox.exe", None),
+            (r"D:\Portable\chrome\chrome.exe", None),
+        ] {
+            assert_eq!(chromium_home_on_windows(exe), home, "{exe}");
+        }
+    }
+
+    #[test]
+    fn every_chromium_channel_on_a_mac_reads_its_own_profiles() {
+        for (bundle, home) in [
+            ("Google Chrome.app", Some("Google/Chrome")),
+            ("Google Chrome Canary.app", Some("Google/Chrome Canary")),
+            ("Microsoft Edge Beta.app", Some("Microsoft Edge Beta")),
+            ("Microsoft Edge Dev.app", Some("Microsoft Edge Dev")),
+            ("Microsoft Edge Canary.app", Some("Microsoft Edge Canary")),
+            (
+                "Brave Browser Beta.app",
+                Some("BraveSoftware/Brave-Browser-Beta"),
+            ),
+            (
+                "Brave Browser Nightly.app",
+                Some("BraveSoftware/Brave-Browser-Nightly"),
+            ),
+            (
+                "Brave Browser Dev.app",
+                Some("BraveSoftware/Brave-Browser-Dev"),
+            ),
+            (
+                "Google Chrome for Testing.app",
+                Some("Google/Chrome for Testing"),
+            ),
+            ("Chrome.app", Some("Google/Chrome")),
+            ("Chromium.app", Some("Chromium")),
+            ("Arc.app", Some("Arc/User Data")),
+            ("Archive Utility.app", None),
+            ("Firefox.app", None),
+        ] {
+            assert_eq!(chromium_home_on_mac(bundle), home, "{bundle}");
+        }
+    }
 
     /// The directory name is what the browser is launched with; the name in `Local State` is
     /// only what the person reads. A profile whose name was never set has an empty one there,

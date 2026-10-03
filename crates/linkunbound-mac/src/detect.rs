@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use linkunbound_core::{Browser, Profile, id_for, private_flag_for, profiles_in};
+use linkunbound_core::{
+    Browser, Profile, chromium_home_on_mac, id_for, private_flag_for, profiles_in,
+};
 use objc2::Message;
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{NSArray, NSBundle, NSDictionary, NSString, NSURL};
@@ -93,37 +95,8 @@ fn web_ranks(bundle: &NSBundle) -> Vec<String> {
 
 /// Chromium keeps its profiles beside the browser's own support directory, with
 /// no `User Data` level in between as on Windows.
-/// Matched on the bundle's own name, never on the path it sits in: a browser
-/// under `/Users/marc/Applications` is not Arc, and one under a folder called
-/// `operations` is not Opera.
 fn family_of(app: &Path) -> Option<&'static str> {
-    let name = app.file_name()?.to_string_lossy().to_ascii_lowercase();
-    let suffix = if name.contains("microsoft edge") {
-        "Microsoft Edge"
-    } else if name.contains("brave") {
-        "BraveSoftware/Brave-Browser"
-    } else if name.contains("vivaldi") {
-        "Vivaldi"
-    } else if name.contains("chrome canary") {
-        "Google/Chrome Canary"
-    } else if name.contains("chrome beta") {
-        "Google/Chrome Beta"
-    } else if name.contains("chrome dev") {
-        "Google/Chrome Dev"
-    } else if name.contains("chrome") {
-        "Google/Chrome"
-    } else if name.contains("chromium") {
-        "Chromium"
-    } else if name == "arc.app" {
-        "Arc/User Data"
-    } else if name.contains("opera gx") {
-        "com.operasoftware.OperaGX"
-    } else if name.contains("opera") {
-        "com.operasoftware.Opera"
-    } else {
-        return None;
-    };
-    Some(suffix)
+    chromium_home_on_mac(&app.file_name()?.to_string_lossy())
 }
 
 fn user_data_dir_under(app: &Path, home: &Path) -> Option<PathBuf> {
@@ -161,6 +134,15 @@ fn bundle_name(app: &Path) -> String {
 fn preferred(bundle_id: &str) -> Option<objc2::rc::Retained<NSURL>> {
     NSWorkspace::sharedWorkspace()
         .URLForApplicationWithBundleIdentifier(&NSString::from_str(bundle_id))
+}
+
+/// The name an app goes by, for an origin a rule saved as its bundle id.
+#[must_use]
+pub fn app_named(bundle_id: &str) -> Option<String> {
+    let url = preferred(bundle_id)?;
+    let path = text(url.path())?;
+    let bundle = NSBundle::bundleWithURL(&url)?;
+    name_of(&bundle, Path::new(&path))
 }
 
 fn read_bundle(found: &NSURL) -> Option<Browser> {
@@ -282,6 +264,15 @@ mod tests {
 
     /// Dropping a browser over a plist this could not parse takes somebody's browser out of
     /// the picker; Launch Services already answered that it opens links.
+    #[test]
+    fn a_bundle_id_is_shown_by_the_name_of_its_app() {
+        assert_eq!(
+            super::app_named("com.apple.Safari").as_deref(),
+            Some("Safari")
+        );
+        assert_eq!(super::app_named("test.linkunbound.nothing-installed"), None);
+    }
+
     #[test]
     fn a_bundle_that_declares_nothing_readable_is_left_to_launch_services() {
         assert!(is_destination("com.example.browser", &[]));

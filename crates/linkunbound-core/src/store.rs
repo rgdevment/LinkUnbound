@@ -39,12 +39,44 @@ fn save_atomically(path: &Path, body: &str) -> Result<(), StoreError> {
     // truncating what the other was still writing, and the loser renamed the
     // mixture over the real one.
     let staging = path.with_extension(format!("{}.tmp", std::process::id()));
-    fs::write(&staging, body).map_err(fail)?;
-    let renamed = fs::rename(&staging, path).map_err(fail);
+    written_through(&staging, body).map_err(fail)?;
+    let renamed = renamed_with_patience(&staging, path).map_err(fail);
     if renamed.is_err() {
         let _ = fs::remove_file(&staging);
     }
     renamed
+}
+
+/// On disk before the rename, not in the cache: after a power cut a renamed file whose
+/// contents never landed comes back empty, and an empty rules file reads as no rules at all.
+fn written_through(path: &Path, body: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut file = fs::File::create(path)?;
+    file.write_all(body.as_bytes())?;
+    file.sync_all()
+}
+
+/// An antivirus or the search indexer opening the file a moment refuses the rename on Windows,
+/// and the choice the person just made would not be remembered.
+fn renamed_with_patience(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut tries = 0;
+    loop {
+        match fs::rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(why) if tries < 20 && held_open(&why) => {
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(why) => return Err(why),
+        }
+    }
+}
+
+/// Access denied or a sharing violation: what a handle someone else holds looks like. Anything
+/// else will not clear by waiting, and the person would wait half a second to be told so.
+fn held_open(why: &std::io::Error) -> bool {
+    cfg!(windows)
+        && (why.kind() == std::io::ErrorKind::PermissionDenied || why.raw_os_error() == Some(32))
 }
 
 const HELD_FOR_LONG_ENOUGH: Duration = Duration::from_secs(5);
@@ -70,6 +102,34 @@ fn abandoned(held: Duration) -> bool {
     held > HELD_FOR_LONG_ENOUGH
 }
 
+fn stale(lock: &Path) -> bool {
+    fs::metadata(lock)
+        .and_then(|m| m.modified())
+        .is_ok_and(|held| abandoned(held.elapsed().unwrap_or_default()))
+}
+
+/// Between reading the lock as stale and removing it, its owner can let go and another process
+/// take a fresh one at the same name. The lock is moved aside first, which only one process
+/// wins, and one that turns out fresh is put back where nobody has taken it since.
+fn take_over(lock: &Path) {
+    static ASIDE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let nth = ASIDE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let aside = lock.with_extension(format!("lock.{}.{nth}", std::process::id()));
+    if fs::rename(lock, &aside).is_err() {
+        return;
+    }
+    if !stale(&aside) {
+        match fs::hard_link(&aside, lock) {
+            Err(why) if why.kind() != std::io::ErrorKind::AlreadyExists && !lock.exists() => {
+                // exFAT and many network shares have no hard links; a rename still puts it back.
+                let _ = fs::rename(&aside, lock);
+            }
+            _ => {}
+        }
+    }
+    let _ = fs::remove_file(&aside);
+}
+
 fn guarded<T>(path: &Path, work: impl FnOnce() -> Result<T, StoreError>) -> Result<T, StoreError> {
     let lock = path.with_extension("lock");
     if let Some(parent) = lock.parent() {
@@ -90,11 +150,8 @@ fn guarded<T>(path: &Path, work: impl FnOnce() -> Result<T, StoreError>) -> Resu
                 // Only steal one we can see and that is plainly old. A failed
                 // `metadata` means the owner just released it, and treating
                 // that as stale deleted a lock somebody else had already taken.
-                if fs::metadata(&lock)
-                    .and_then(|m| m.modified())
-                    .is_ok_and(|held| abandoned(held.elapsed().unwrap_or_default()))
-                {
-                    let _ = fs::remove_file(&lock);
+                if stale(&lock) {
+                    take_over(&lock);
                 }
                 std::thread::sleep(Duration::from_millis(5));
             }
@@ -338,6 +395,58 @@ impl Store {
 mod tests {
     use super::*;
     use crate::config::SCHEMA_VERSION;
+
+    fn place(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("lu-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("a place to write");
+        dir
+    }
+
+    #[test]
+    fn a_lock_somebody_just_took_survives_being_mistaken_for_an_old_one() {
+        let lock = place("fresh-lock").join("rules.lock");
+        fs::write(&lock, b"").expect("a lock just taken");
+
+        take_over(&lock);
+
+        assert!(lock.exists(), "a fresh lock is put back, not removed");
+        let _ = fs::remove_dir_all(lock.parent().expect("a dir"));
+    }
+
+    #[test]
+    fn a_lock_left_long_ago_is_taken_over_and_nothing_is_left_beside_it() {
+        let dir = place("old-lock");
+        let lock = dir.join("rules.lock");
+        fs::write(&lock, b"").expect("a lock left behind");
+        fs::File::options()
+            .write(true)
+            .open(&lock)
+            .and_then(|f| f.set_modified(std::time::SystemTime::now() - Duration::from_secs(60)))
+            .expect("an old lock");
+
+        take_over(&lock);
+
+        assert!(!lock.exists());
+        assert_eq!(
+            fs::read_dir(&dir).expect("listed").count(),
+            0,
+            "nothing set aside remains"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_save_leaves_the_whole_file_and_no_staging_copy() {
+        let dir = place("save-whole");
+        let path = dir.join("rules.json");
+        save_atomically(&path, "{\"a\":1}").expect("saved");
+        save_atomically(&path, "{\"a\":2}").expect("saved over");
+
+        assert_eq!(fs::read_to_string(&path).expect("read"), "{\"a\":2}");
+        assert_eq!(fs::read_dir(&dir).expect("listed").count(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_field_the_window_never_sends_back_survives_a_save() {

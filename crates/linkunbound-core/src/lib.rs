@@ -25,7 +25,7 @@ pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,
 };
-pub use detect::{id_for, profiles_in};
+pub use detect::{chromium_home_on_mac, chromium_home_on_windows, id_for, profiles_in};
 pub use hostile::{as_file_name, disarm, is_remote};
 pub use i18n::{Language, Strings};
 pub use icons::{cached_icon, prune as prune_icons};
@@ -33,7 +33,7 @@ pub use launch::{LaunchError, open as launch, spawn_and_forget};
 pub use prefs::{Locale, PickerStyle, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
-pub use rule::{Rule, RuleSet, Scope, Target, site_of};
+pub use rule::{Origin, Rule, RuleSet, Scope, Target, is_public_suffix, site_of};
 pub use star::{Asking, asking};
 pub use store::{Store, StoreError, data_dir, unmarked};
 pub use url::{

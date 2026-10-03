@@ -158,7 +158,7 @@ const ES = {
   rescanCounts: "{} nuevos, {} que ya no están",
   rescanGo: "Buscar",
   rescanBody:
-    "Se olvida lo detectado y se vuelve a leer del registro. Los navegadores que añadiste a mano se conservan; lo que hayas ocultado se mostrará de nuevo.",
+    "Se vuelve a leer el registro y lo que hayas ocultado se mostrará de nuevo. Se conservan los nombres, argumentos, iconos y el orden que les diste, y los navegadores que añadiste a mano.",
   careScratch: "Empezar de cero",
   resetTitle: "Restablecer la configuración",
   resetNote: "Borra todas las reglas y todos los navegadores",
@@ -200,6 +200,8 @@ const ES = {
   ruleValueEmpty: "Escribe a qué se aplica la regla",
   ruleValueNotUrl: "Eso no es una dirección completa; empieza por https://",
   ruleValueNotHost: "Eso no es un dominio; prueba con algo como docs.google.com",
+  ruleValueIsSuffix:
+    "Esa terminación la comparten muchos sitios; escribe uno concreto, como bbc.co.uk",
   ruleKindUnknown: "Ese tipo de regla no existe",
   rulePrivateImpossible: "Ese navegador no abre ventanas privadas; quita «En ventana privada»",
   ruleExists: "Ya hay una regla para eso; cámbiala en la lista en lugar de añadir otra",
@@ -425,7 +427,7 @@ const EN: Record<Key, string> = {
   rescanCounts: "{} new, {} no longer there",
   rescanGo: "Look",
   rescanBody:
-    "What was detected is forgotten and read from the registry again. The browsers you added by hand are kept; whatever you hid will show up again.",
+    "The registry is read again and whatever you hid will show up again. The names, arguments, icons and order you gave them are kept, and so are the browsers you added by hand.",
   careScratch: "Start from scratch",
   resetTitle: "Reset the configuration",
   resetNote: "Deletes every rule and every browser",
@@ -467,6 +469,7 @@ const EN: Record<Key, string> = {
   ruleValueEmpty: "Say what the rule applies to",
   ruleValueNotUrl: "That is not a full address; start with https://",
   ruleValueNotHost: "That is not a domain; try something like docs.google.com",
+  ruleValueIsSuffix: "Many sites share that ending; name one of them, like bbc.co.uk",
   ruleKindUnknown: "That kind of rule does not exist",
   rulePrivateImpossible: "That browser has no private window; untick «In a private window»",
   ruleExists: "There is a rule for that already; change it in the list rather than adding another",
@@ -549,7 +552,7 @@ const MAC_ES: Partial<Record<Key, string>> = {
   browsersNone: "macOS no reporta ningún navegador instalado.",
   startupWindows: "Desactivado desde Ajustes del Sistema > General > Ítems de inicio",
   rescanBody:
-    "Se olvida lo detectado y se vuelve a preguntar al sistema. Los navegadores que añadiste a mano se conservan; lo que hayas ocultado se mostrará de nuevo.",
+    "Se vuelve a preguntar al sistema y lo que hayas ocultado se mostrará de nuevo. Se conservan los nombres, argumentos, iconos y el orden que les diste, y los navegadores que añadiste a mano.",
   unregisterTitle: "Dejar de ser el navegador predeterminado",
   unregisterNote: "Los enlaces vuelven al navegador que los abría antes",
   unregisterBody:
@@ -569,7 +572,7 @@ const MAC_EN: Partial<Record<Key, string>> = {
   browsersNone: "macOS reports no installed browser.",
   startupWindows: "Turned off in System Settings > General > Login Items",
   rescanBody:
-    "What was detected is forgotten and the system is asked again. The browsers you added by hand are kept; whatever you hid will show up again.",
+    "The system is asked again and whatever you hid will show up again. The names, arguments, icons and order you gave them are kept, and so are the browsers you added by hand.",
   unregisterTitle: "Stop being the default browser",
   unregisterNote: "Links go back to the browser that opened them before",
   unregisterBody:

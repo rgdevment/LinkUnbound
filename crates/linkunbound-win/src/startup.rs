@@ -65,10 +65,30 @@ pub fn state() -> Option<Startup> {
                 && state != StartupTaskState::DisabledByPolicy,
         });
     }
+    let approved = approved_by(approval().as_deref());
     Some(Startup {
-        enabled: listed(),
-        ours_to_change: true,
+        enabled: listed() && approved,
+        ours_to_change: approved,
     })
+}
+
+const APPROVED: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+/// Where Task Manager and Settings › Startup record turning an entry off, beside the Run value
+/// rather than in it: the value stays listed and starts nothing.
+fn approval() -> Option<Vec<u8>> {
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(APPROVED, KEY_READ)
+        .and_then(|approved| approved.get_raw_value(RUN_NAME))
+        .ok()
+        .map(|value| value.bytes.to_vec())
+}
+
+/// The first byte is odd when the entry was turned off; no record at all means never touched.
+fn approved_by(record: Option<&[u8]>) -> bool {
+    record
+        .and_then(|bytes| bytes.first())
+        .is_none_or(|first| first & 1 == 0)
 }
 
 pub fn set(enabled: bool) -> Option<Startup> {
@@ -150,6 +170,19 @@ fn list(enabled: bool) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn an_entry_turned_off_in_task_manager_reads_as_off_and_not_ours_to_turn_on() {
+        assert!(super::approved_by(None), "never touched");
+        assert!(super::approved_by(Some(&[
+            0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ])));
+        assert!(super::approved_by(Some(&[0x06, 0, 0, 0])));
+        assert!(!super::approved_by(Some(&[0x03, 0x8a, 0x1f, 0x00])));
+        assert!(!super::approved_by(Some(&[0x07])));
+        assert!(super::approved_by(Some(&[])));
+    }
+
     use super::*;
 
     /// A `cargo test` binary is never a packaged MSIX identity, so there is no startup task to

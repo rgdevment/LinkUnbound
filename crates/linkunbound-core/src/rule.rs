@@ -9,6 +9,40 @@ pub fn is_address(host: &str) -> bool {
     host.starts_with('[') || host.parse::<std::net::IpAddr>().is_ok()
 }
 
+/// The app a link came from. `key` is what a rule saves and stays put, a Mac bundle id or a
+/// Windows executable; `label` is what the person reads, and on a Mac follows the language.
+/// A rule answers to either, so rules saved by name before keys existed keep holding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Origin {
+    pub key: String,
+    pub label: String,
+}
+
+impl Origin {
+    #[must_use]
+    pub fn named(name: &str) -> Self {
+        Self {
+            key: name.to_owned(),
+            label: name.to_owned(),
+        }
+    }
+
+    #[must_use]
+    pub fn answers_to(&self, said: &str) -> bool {
+        said.eq_ignore_ascii_case(&self.key) || said.eq_ignore_ascii_case(&self.label)
+    }
+}
+
+/// An ending shared by many owners, like `co.uk` or `github.io`: a site rule for it would cover
+/// every site under it. Only listed suffixes count; an intranet name is nobody's suffix.
+#[must_use]
+pub fn is_public_suffix(host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    !is_address(&host)
+        && psl::suffix(host.as_bytes())
+            .is_some_and(|suffix| suffix.is_known() && suffix.as_bytes().len() == host.len())
+}
+
 /// Registrable domain; an unknown suffix keeps the host, which matches less rather than more.
 #[must_use]
 pub fn site_of(host: &str) -> String {
@@ -46,6 +80,23 @@ impl Scope {
             Self::Host(h) => 100_000 + h.len() as u64,
             Self::Url(u) => 10_000_000 + u.len() as u64,
         }
+    }
+}
+
+fn replaces(existing: &Rule, rule: &Rule, origin: Option<&Origin>) -> bool {
+    if existing.scope != rule.scope {
+        return false;
+    }
+    if same_origin(existing.source_app.as_deref(), rule.source_app.as_deref()) {
+        return true;
+    }
+    match (
+        rule.source_app.as_ref(),
+        existing.source_app.as_deref(),
+        origin,
+    ) {
+        (Some(_), Some(saved), Some(origin)) => origin.answers_to(saved),
+        _ => false,
     }
 }
 
@@ -100,13 +151,13 @@ impl Rule {
         origin + self.scope.specificity()
     }
 
-    fn applies(&self, url: &str, host: &str, source_app: Option<&str>) -> bool {
+    fn applies(&self, url: &str, host: &str, origin: Option<&Origin>) -> bool {
         if !self.scope.matches(url, host) {
             return false;
         }
-        match (&self.source_app, source_app) {
+        match (&self.source_app, origin) {
             (None, _) => true,
-            (Some(want), Some(got)) => want.eq_ignore_ascii_case(got),
+            (Some(want), Some(got)) => got.answers_to(want),
             (Some(_), None) => false,
         }
     }
@@ -122,14 +173,29 @@ impl RuleSet {
     /// Replaces the rule covering the same scope and origin instead of appending.
     /// Without this, choosing "always here" a second time for the same site adds
     /// a rule that never wins and the app appears to ignore the request.
-    pub fn upsert(&mut self, mut rule: Rule) {
+    pub fn upsert(&mut self, rule: Rule) {
+        self.upsert_from(rule, None);
+    }
+
+    /// The same, knowing the app the link came from: a rule saved for it by name, before keys
+    /// existed, is that app too, and would otherwise keep winning over the one saved now. Every
+    /// such rule gives way to the new one, which takes the first one's place.
+    pub fn upsert_from(&mut self, mut rule: Rule, origin: Option<&Origin>) {
         rule.id = rule.identity();
-        match self.rules.iter_mut().find(|r| {
-            r.scope == rule.scope
-                && same_origin(r.source_app.as_deref(), rule.source_app.as_deref())
-        }) {
-            Some(existing) => *existing = rule,
-            None => self.rules.push(rule),
+        let same: Vec<usize> = self
+            .rules
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| replaces(r, &rule, origin))
+            .map(|(at, _)| at)
+            .collect();
+        let Some((&first, rest)) = same.split_first() else {
+            self.rules.push(rule);
+            return;
+        };
+        self.rules[first] = rule;
+        for &at in rest.iter().rev() {
+            self.rules.remove(at);
         }
     }
 
@@ -143,8 +209,6 @@ impl RuleSet {
         })
     }
 
-    /// The order the user sees is the order that decides, so moving a rule is
-    /// how a tie gets broken.
     /// Points an existing rule at another browser without touching its reach or
     /// its place in the order: the user is correcting where it opens, not
     /// rewriting what it covers.
@@ -162,29 +226,19 @@ impl RuleSet {
         before != self.rules.len()
     }
 
-    /// Kept for the file's own order, not as a way to decide anything: which
-    /// rule answers is settled by specificity, and two rules precise in the
-    /// same way cannot both exist — `upsert` collapses them.
-    #[cfg(test)]
-    pub fn reorder(&mut self, ids: &[String]) {
-        let mut moved: Vec<Rule> = Vec::with_capacity(self.rules.len());
-        for id in ids {
-            if let Some(at) = self.rules.iter().position(|r| &r.id == id) {
-                moved.push(self.rules.remove(at));
-            }
-        }
-        moved.append(&mut self.rules);
-        self.rules = moved;
-    }
-
     /// `Reverse` on the index keeps the first of equally specific rules: the list
     /// the user ordered is the list that decides, and `max_by_key` would take the last.
     #[must_use]
     pub fn resolve(&self, url: &str, host: &str, source_app: Option<&str>) -> Option<&Rule> {
+        self.resolve_from(url, host, source_app.map(Origin::named).as_ref())
+    }
+
+    #[must_use]
+    pub fn resolve_from(&self, url: &str, host: &str, origin: Option<&Origin>) -> Option<&Rule> {
         self.rules
             .iter()
             .enumerate()
-            .filter(|(_, r)| r.applies(url, host, source_app))
+            .filter(|(_, r)| r.applies(url, host, origin))
             .max_by_key(|(i, r)| (r.specificity(), Reverse(*i)))
             .map(|(_, r)| r)
     }
@@ -192,6 +246,115 @@ impl RuleSet {
 
 #[cfg(test)]
 mod tests {
+    /// A Mac rule saved by name before keys existed and the one the picker saves now by bundle
+    /// id are the same app: choosing again has to replace it, not sit behind it unheard.
+    #[test]
+    fn choosing_again_for_an_app_replaces_its_rule_however_it_was_saved() {
+        let slack = super::Origin {
+            key: "com.tinyspeck.slackmacgap".to_owned(),
+            label: "slack".to_owned(),
+        };
+        let mut set = RuleSet {
+            schema_version: 2,
+            rules: vec![
+                rule("by-name", Scope::Any, Some("slack"), "chrome"),
+                rule("site", Scope::Site("github.com".to_owned()), None, "safari"),
+                rule(
+                    "by-id",
+                    Scope::Any,
+                    Some("com.tinyspeck.slackmacgap"),
+                    "edge",
+                ),
+            ],
+        };
+
+        set.upsert_from(
+            rule("", Scope::Any, Some("com.tinyspeck.slackmacgap"), "firefox"),
+            Some(&slack),
+        );
+
+        let browsers: Vec<&str> = set
+            .rules
+            .iter()
+            .map(|r| r.target.browser_id.as_str())
+            .collect();
+        assert_eq!(
+            browsers,
+            ["firefox", "safari"],
+            "one rule for the app, in the first one's place"
+        );
+        let fired = set
+            .resolve_from("https://a.test/", "a.test", Some(&slack))
+            .expect("a rule");
+        assert_eq!(fired.target.browser_id, "firefox");
+    }
+
+    #[test]
+    fn a_rule_for_every_app_is_never_taken_for_one_app() {
+        let slack = super::Origin::named("slack");
+        let mut set = RuleSet {
+            schema_version: 2,
+            rules: vec![rule(
+                "app",
+                Scope::Site("github.com".to_owned()),
+                Some("slack"),
+                "chrome",
+            )],
+        };
+        set.upsert_from(
+            rule("", Scope::Site("github.com".to_owned()), None, "firefox"),
+            Some(&slack),
+        );
+        assert_eq!(set.rules.len(), 2);
+    }
+
+    #[test]
+    fn an_ending_many_sites_share_is_told_apart_from_a_site() {
+        for suffix in ["co.uk", "github.io", "com", "CO.UK"] {
+            assert!(super::is_public_suffix(suffix), "{suffix}");
+        }
+        for site in [
+            "bbc.co.uk",
+            "me.github.io",
+            "intranet",
+            "192.168.1.5",
+            "[::1]",
+        ] {
+            assert!(!super::is_public_suffix(site), "{site}");
+        }
+    }
+
+    /// 1.x saved the Mac origin as a bundle id and 2.x by the name the app shows, which changes
+    /// with the system language. Either one has to keep finding the app.
+    #[test]
+    fn an_app_rule_holds_whether_it_was_saved_by_bundle_id_or_by_name() {
+        let slack = super::Origin {
+            key: "com.tinyspeck.slackmacgap".to_owned(),
+            label: "slack".to_owned(),
+        };
+        for saved in ["com.tinyspeck.slackmacgap", "Slack"] {
+            let set = RuleSet {
+                schema_version: 2,
+                rules: vec![rule("r", Scope::Any, Some(saved), "brave")],
+            };
+            assert!(
+                set.resolve_from("https://a.test/", "a.test", Some(&slack))
+                    .is_some(),
+                "{saved}"
+            );
+            assert!(
+                set.resolve_from("https://a.test/", "a.test", None)
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn a_host_written_with_its_closing_dot_is_held_to_the_same_rules() {
+        let host = crate::host_of("https://gist.github.com./x").expect("a host");
+        assert!(Scope::Site("github.com".into()).matches("https://gist.github.com./x", &host));
+        assert!(Scope::Host("gist.github.com".into()).matches("https://gist.github.com./x", &host));
+    }
 
     /// Which rule answers is this arithmetic and nothing else, and the bands have to stay apart:
     /// any URL beats any subdomain, any subdomain beats any site, and a longer match inside a
@@ -553,8 +716,6 @@ mod tests {
         assert_eq!(set.rules.len(), 1);
     }
 
-    /// Between equally specific rules the first wins, so reordering is the only
-    /// way the user can change which one answers.
     /// The 1.x settings screen let a rule be pointed elsewhere without being
     /// deleted and made again, which would lose its place in the order.
     #[test]
@@ -612,41 +773,6 @@ mod tests {
                 profile_id: None,
             }
         ));
-    }
-
-    #[test]
-    fn reordering_decides_which_of_two_equal_rules_answers() {
-        let mut set = RuleSet::default();
-        set.upsert(rule(
-            "a",
-            Scope::Host("github.com".to_owned()),
-            None,
-            "firefox",
-        ));
-        set.upsert(rule(
-            "b",
-            Scope::Host("github.com".to_owned()),
-            Some("slack"),
-            "chrome",
-        ));
-        let ids: Vec<String> = set.rules.iter().rev().map(|r| r.id.clone()).collect();
-        set.reorder(&ids);
-        assert_eq!(set.rules[0].target.browser_id, "chrome");
-    }
-
-    /// An id the caller no longer has must not drop the rule it names.
-    #[test]
-    fn reordering_with_a_stale_id_keeps_every_rule() {
-        let mut set = RuleSet::default();
-        set.upsert(rule(
-            "a",
-            Scope::Site("github.com".to_owned()),
-            None,
-            "chrome",
-        ));
-        set.upsert(rule("b", Scope::Url(URL.to_owned()), None, "firefox"));
-        set.reorder(&["site:github.com".to_owned(), "gone".to_owned()]);
-        assert_eq!(set.rules.len(), 2);
     }
 
     #[test]
