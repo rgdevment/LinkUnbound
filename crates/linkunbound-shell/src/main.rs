@@ -630,6 +630,9 @@ fn next_in_line(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>) {
         if present(picker, words, shown, arrival)
             && let Some(ui) = ui()
         {
+            // The person just answered the one before: the key they press next is meant for
+            // this one, not a stray press from another window.
+            ui.appeared.set(None);
             // The next link needs its own settle: carrying the previous one's
             // state would dismiss it on the tick after it appeared.
             ui.watch_focus();
@@ -983,11 +986,11 @@ impl Ui {
                     if host::front_is_ours() {
                         return;
                     }
-                    // The browser the last link went to is arriving: the picker queued behind it
-                    // is asked for again, once, rather than read as walked away from.
+                    // A browser just sent a link is arriving, by a choice or by a rule: the picker
+                    // queued behind it is asked for again rather than read as walked away from.
                     if ui
                         .launched_at
-                        .take()
+                        .get()
                         .is_some_and(|at| at.elapsed() < BROWSER_ARRIVES_WITHIN)
                     {
                         host::take_the_keyboard(ours);
@@ -1022,9 +1025,8 @@ impl Ui {
     }
 }
 
-/// One link, start to finish, on the UI thread. Called the instant the socket
-/// reads it: waiting for a poll turned four milliseconds of work into sixty.
 fn announce(ui: &Rc<Ui>, fired: &Fired) {
+    ui.launched_at.set(Some(std::time::Instant::now()));
     if !store().prefs().notify_on_rule {
         return;
     }
@@ -1039,6 +1041,8 @@ fn announce(ui: &Rc<Ui>, fired: &Fired) {
     }
 }
 
+/// One link, start to finish, on the UI thread. Called the instant the socket
+/// reads it: waiting for a poll turned four milliseconds of work into sixty.
 fn arrived(raw: String) {
     let Some(ui) = ui() else {
         hold_for_the_loop(raw);

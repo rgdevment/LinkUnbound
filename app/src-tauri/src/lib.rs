@@ -224,7 +224,7 @@ fn rule_from(
     let site_named = || -> Result<String, &'static str> {
         let site = site_of(&host_named()?);
         if !site.contains('.') && !site.starts_with('[') {
-            return Err("ruleValueNotHost");
+            return Err("ruleValueNotSite");
         }
         if is_public_suffix(&site) {
             return Err("ruleValueIsSuffix");
@@ -251,7 +251,9 @@ fn rule_from(
     })
 }
 
-#[tauri::command]
+// Async so it runs off the main thread: on a Mac an app typed by name may be looked for among
+// every installed one.
+#[tauri::command(async)]
 fn rules_add(
     kind: String,
     value: String,
@@ -605,8 +607,12 @@ fn rescanned(detected: Vec<Browser>, saved: &[Browser]) -> Found {
         browser.hidden = false;
         // Detection owns whether a known browser opens privately, and the form hides the field
         // once it has a value: a wrong one could otherwise only be cleared by resetting everything.
-        if let Some(found) = detected.iter().find(|d| d.id == browser.id) {
-            browser.private_flag.clone_from(&found.private_flag);
+        if let Some(known) = detected
+            .iter()
+            .find(|d| d.id == browser.id)
+            .and_then(|d| d.private_flag.clone())
+        {
+            browser.private_flag = Some(known);
         }
     }
     Found {
@@ -1660,7 +1666,7 @@ mod tests {
         for said in ["np", "github", "intranet"] {
             assert_eq!(
                 rule_from("site", said, chrome(), false, &all),
-                Err("ruleValueNotHost"),
+                Err("ruleValueNotSite"),
                 "{said}"
             );
         }
@@ -2000,6 +2006,17 @@ mod tests {
         assert_eq!(
             fixed.browsers[0].private_flag.as_deref(),
             Some("--incognito")
+        );
+
+        let mut unknown = detected("comet");
+        unknown.private_flag = None;
+        let mut mine = detected("comet");
+        mine.private_flag = Some("--incognito".to_owned());
+        let kept = rescanned(vec![unknown], &[mine]);
+        assert_eq!(
+            kept.browsers[0].private_flag.as_deref(),
+            Some("--incognito"),
+            "what detection does not know stays as the person typed it"
         );
     }
 

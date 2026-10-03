@@ -200,6 +200,8 @@ const ES = {
   ruleValueEmpty: "Escribe a qué se aplica la regla",
   ruleValueNotUrl: "Eso no es una dirección completa; empieza por https://",
   ruleValueNotHost: "Eso no es un dominio; prueba con algo como docs.google.com",
+  ruleValueNotSite:
+    "Un nombre suelto no es un sitio; elige «Subdominio» o escribe un dominio como docs.google.com",
   ruleValueIsSuffix:
     "Esa terminación la comparten muchos sitios; escribe uno concreto, como bbc.co.uk",
   ruleKindUnknown: "Ese tipo de regla no existe",
@@ -469,6 +471,8 @@ const EN: Record<Key, string> = {
   ruleValueEmpty: "Say what the rule applies to",
   ruleValueNotUrl: "That is not a full address; start with https://",
   ruleValueNotHost: "That is not a domain; try something like docs.google.com",
+  ruleValueNotSite:
+    "A lone name is not a site; pick «Subdomain» or type a domain like docs.google.com",
   ruleValueIsSuffix: "Many sites share that ending; name one of them, like bbc.co.uk",
   ruleKindUnknown: "That kind of rule does not exist",
   rulePrivateImpossible: "That browser has no private window; untick «In a private window»",

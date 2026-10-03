@@ -1079,8 +1079,6 @@ mod tests {
         assert!(!sub[2].dead);
     }
 
-    /// `netlify.app` has no registrable domain, so the site would be the suffix itself and the
-    /// rule would answer for every site anyone hosts there.
     #[test]
     fn the_header_shows_the_host_the_browser_will_open() {
         let (host, trail) = split(r"https://evil.test\@accounts.google.com/");
@@ -1088,6 +1086,8 @@ mod tests {
         assert_eq!(trail, r"\@accounts.google.com/");
     }
 
+    /// `netlify.app` has no registrable domain, so the site would be the suffix itself and the
+    /// rule would answer for every site anyone hosts there.
     #[test]
     fn the_site_reach_is_dead_when_the_site_would_be_an_ending_many_share() {
         let shared = reaches(

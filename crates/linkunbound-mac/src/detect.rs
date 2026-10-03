@@ -158,9 +158,11 @@ pub fn bundle_id_named(name: &str) -> Option<String> {
             .flatten()
     });
     by_running.or_else(|| {
-        installed_apps()
-            .into_iter()
-            .find_map(|app| named_as(&app, name))
+        objc2::rc::autoreleasepool(|_| {
+            installed_apps()
+                .into_iter()
+                .find_map(|app| named_as(&app, name))
+        })
     })
 }
 

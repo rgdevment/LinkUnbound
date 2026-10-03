@@ -53,10 +53,19 @@ pub(crate) fn written_through(path: &Path, body: &str) -> std::io::Result<()> {
     use std::io::Write;
     let mut file = fs::File::create(path)?;
     file.write_all(body.as_bytes())?;
-    // A Mac network home (SMB, WebDAV) refuses F_FULLFSYNC, which is what this is there; the
-    // file is still whole, only less sure to outlive a power cut, and the save goes on.
-    let _ = file.sync_all();
-    Ok(())
+    match file.sync_all() {
+        Err(why) if !cannot_sync(&why) => Err(why),
+        _ => Ok(()),
+    }
+}
+
+/// A Mac network home (SMB, WebDAV) refuses F_FULLFSYNC, which is what `sync_all` is there; the
+/// file is still whole, only less sure to outlive a power cut. A disk failing to write is not that.
+fn cannot_sync(why: &std::io::Error) -> bool {
+    const ENOTTY: i32 = 25;
+    const EINVAL: i32 = 22;
+    why.kind() == std::io::ErrorKind::Unsupported
+        || matches!(why.raw_os_error(), Some(ENOTTY | EINVAL))
 }
 
 /// An antivirus or the search indexer opening the file a moment refuses the rename on Windows,

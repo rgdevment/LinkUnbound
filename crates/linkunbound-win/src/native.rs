@@ -465,15 +465,29 @@ pub fn foreground_process_path() -> Option<String> {
 /// Rules key off a stable name, not a full path that changes with every update.
 #[must_use]
 pub fn source_app() -> Option<linkunbound_core::Origin> {
-    let stem = remembered(origin_of(&foreground_process_path()?), &LAST_SEEN);
+    let front = foreground_process_path()?;
+    let stem = remembered(origin_of(&front), is_the_picker(&front), &LAST_SEEN);
     stem.map(|stem| linkunbound_core::Origin::named(&stem))
+}
+
+/// Only the picker stands between a queued link and the app it came from. A link clicked in
+/// Settings comes from Settings, which is no origin at all, not from whoever came before.
+fn is_the_picker(path: &str) -> bool {
+    Path::new(path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .is_some_and(|stem| stem.eq_ignore_ascii_case("linkunbound-shell"))
 }
 
 static LAST_SEEN: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 /// A link that queues behind the picker finds the picker in front, which is never the origin:
 /// the app that was in front before it stands in, as on a Mac.
-fn remembered(found: Option<String>, last: &std::sync::Mutex<Option<String>>) -> Option<String> {
+fn remembered(
+    found: Option<String>,
+    behind_the_picker: bool,
+    last: &std::sync::Mutex<Option<String>>,
+) -> Option<String> {
     let Ok(mut last) = last.lock() else {
         return found;
     };
@@ -482,7 +496,8 @@ fn remembered(found: Option<String>, last: &std::sync::Mutex<Option<String>>) ->
             *last = Some(stem.clone());
             Some(stem)
         }
-        None => last.clone(),
+        None if behind_the_picker => last.clone(),
+        None => None,
     }
 }
 
@@ -686,12 +701,21 @@ mod tests {
     #[test]
     fn behind_our_own_window_the_app_in_front_before_it_is_the_origin() {
         let last = std::sync::Mutex::new(None);
-        assert_eq!(remembered(None, &last), None);
+        assert_eq!(remembered(None, true, &last), None);
         assert_eq!(
-            remembered(Some("outlook".to_owned()), &last).as_deref(),
+            remembered(Some("outlook".to_owned()), false, &last).as_deref(),
             Some("outlook")
         );
-        assert_eq!(remembered(None, &last).as_deref(), Some("outlook"));
+        assert_eq!(remembered(None, true, &last).as_deref(), Some("outlook"));
+        assert_eq!(
+            remembered(None, false, &last),
+            None,
+            "Settings in front is no origin"
+        );
+        assert!(is_the_picker(r"C:\Apps\LinkUnbound\linkunbound-shell.exe"));
+        assert!(!is_the_picker(
+            r"C:\Apps\LinkUnbound\LinkUnbound-Settings.exe"
+        ));
     }
 
     #[test]
