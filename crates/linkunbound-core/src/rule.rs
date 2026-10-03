@@ -29,9 +29,7 @@ impl Origin {
 
     #[must_use]
     pub fn answers_to(&self, said: &str) -> bool {
-        let said = visible(said);
-        said.eq_ignore_ascii_case(&visible(&self.key))
-            || said.eq_ignore_ascii_case(&visible(&self.label))
+        same_name(said, &self.key) || same_name(said, &self.label)
     }
 }
 
@@ -119,9 +117,17 @@ fn replaces(existing: &Rule, rule: &Rule, origin: Option<&Origin>) -> bool {
 fn same_origin(a: Option<&str>, b: Option<&str>) -> bool {
     match (a, b) {
         (None, None) => true,
-        (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+        (Some(a), Some(b)) => same_name(a, b),
         _ => false,
     }
+}
+
+/// How two names for an app are compared everywhere: without the invisible marks some apps
+/// carry, and without case in any alphabet, «Übersicht» being «übersicht» as much as «Slack» is
+/// «slack».
+#[must_use]
+pub fn same_name(a: &str, b: &str) -> bool {
+    visible(a).to_lowercase() == visible(b).to_lowercase()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -262,6 +268,14 @@ impl RuleSet {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_app_name_is_the_same_name_in_any_case_and_any_alphabet() {
+        assert!(super::same_name("Übersicht", "übersicht"));
+        assert!(super::same_name("Почта", "почта"));
+        assert!(super::same_name("\u{200E}WhatsApp", "whatsapp"));
+        assert!(!super::same_name("slack", "teams"));
+    }
+
     #[test]
     fn an_app_whose_name_carries_an_invisible_mark_answers_to_its_plain_name() {
         let whatsapp = super::Origin {

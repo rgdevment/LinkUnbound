@@ -573,6 +573,9 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
     beside_the_pointer(picker);
     let asked_at = physical_icon_side(picker);
     let _ = picker.show();
+    if let Some(ui) = ui() {
+        ui.appeared.set(Some(std::time::Instant::now()));
+    }
     if let Some(handle) = native_handle(picker.window()) {
         host::keep_off_the_taskbar(handle, corner_of(picker));
         host::take_the_keyboard(handle);
@@ -612,14 +615,26 @@ fn native_handle(window: &slint::Window) -> Option<isize> {
 /// Shows whatever queued up behind the link just dealt with, so nothing a user
 /// clicked is silently dropped.
 fn next_in_line(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>) {
-    let queued = shown.borrow_mut().waiting.pop_front();
-    if let Some(arrival) = queued
-        && present(picker, words, shown, arrival)
-        && let Some(ui) = ui()
-    {
-        // The next link needs its own settle: carrying the previous one's
-        // state would dismiss it on the tick after it appeared.
-        ui.watch_focus();
+    loop {
+        let Some(arrival) = shown.borrow_mut().waiting.pop_front() else {
+            return;
+        };
+        // The answer just given may have been «always here»: the links behind it are asked
+        // again, as a link arriving now would be, before any of them is put on screen.
+        if let Some(fired) = answered_by_rule(&arrival.url, arrival.source.as_ref()) {
+            if let Some(ui) = ui() {
+                announce(&ui, &fired);
+            }
+            continue;
+        }
+        if present(picker, words, shown, arrival)
+            && let Some(ui) = ui()
+        {
+            // The next link needs its own settle: carrying the previous one's
+            // state would dismiss it on the tick after it appeared.
+            ui.watch_focus();
+        }
+        return;
     }
 }
 
@@ -701,6 +716,9 @@ struct Ui {
     shown_over: Cell<Option<isize>>,
     hotkey: RefCell<Option<Hotkey>>,
     put_up: Cell<Option<std::time::Instant>>,
+    /// When the picker last came up: input in the moment after is aimed at whatever was under the
+    /// pointer before it, not at the row that just appeared there.
+    appeared: Cell<Option<std::time::Instant>>,
     #[cfg(target_os = "macos")]
     launch_decided: Cell<bool>,
 }
@@ -712,6 +730,16 @@ const FRONT_SETTLES_WITHIN: Duration = Duration::from_millis(500);
 
 fn still_settling(put_up: Option<std::time::Instant>) -> bool {
     put_up.is_some_and(|at| at.elapsed() < FRONT_SETTLES_WITHIN)
+}
+
+/// Shorter than any deliberate choice: reading the row and moving to it takes longer than this.
+const INPUT_SETTLES_WITHIN: Duration = Duration::from_millis(350);
+
+/// A link that came from no click of the person's, or a click finishing elsewhere, puts the
+/// picker under a pointer that is still working, and a press meant for another window landed
+/// on the row beneath it and opened a browser nobody chose.
+fn too_soon(appeared: Option<std::time::Instant>) -> bool {
+    appeared.is_some_and(|at| at.elapsed() < INPUT_SETTLES_WITHIN)
 }
 
 thread_local! {
@@ -996,6 +1024,21 @@ impl Ui {
 
 /// One link, start to finish, on the UI thread. Called the instant the socket
 /// reads it: waiting for a poll turned four milliseconds of work into sixty.
+fn announce(ui: &Rc<Ui>, fired: &Fired) {
+    if !store().prefs().notify_on_rule {
+        return;
+    }
+    ui.firing.replace(Some(fired.rule_id.clone()));
+    flash(&ui.notice, &ui.words.get(), fired);
+    ui.count_down();
+    // Shown over an open picker, the notice must not take the digits being typed.
+    if ui.picker.window().is_visible()
+        && let Some(handle) = native_handle(ui.picker.window())
+    {
+        host::take_the_keyboard(handle);
+    }
+}
+
 fn arrived(raw: String) {
     let Some(ui) = ui() else {
         hold_for_the_loop(raw);
@@ -1008,17 +1051,7 @@ fn arrived(raw: String) {
 
     let source = host::clicked_in();
     if let Some(fired) = answered_by_rule(&url, source.as_ref()) {
-        if store().prefs().notify_on_rule {
-            ui.firing.replace(Some(fired.rule_id.clone()));
-            flash(&ui.notice, &ui.words.get(), &fired);
-            ui.count_down();
-            // Shown over an open picker, the notice must not take the digits being typed.
-            if ui.picker.window().is_visible()
-                && let Some(handle) = native_handle(ui.picker.window())
-            {
-                host::take_the_keyboard(handle);
-            }
-        }
+        announce(&ui, &fired);
         return;
     }
     // A link that only queued leaves the picker's settle alone: restarting it would have the
@@ -1267,6 +1300,9 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(window) = handle.upgrade() else {
                 return;
             };
+            if ui().is_some_and(|ui| too_soon(ui.appeared.get())) {
+                return;
+            }
             // A reach the keys landed on while it was dead is no reach at all.
             let at = window.get_reach_index();
             let dead = usize::try_from(at)
@@ -1386,6 +1422,7 @@ fn main() -> Result<(), slint::PlatformError> {
         taskbar_seen: Cell::new(light_taskbar),
         shown_over: Cell::new(None),
         put_up: Cell::new(None),
+        appeared: Cell::new(None),
         hotkey: RefCell::new(Hotkey::new()),
         #[cfg(target_os = "macos")]
         launch_decided: Cell::new(false),
@@ -1457,9 +1494,9 @@ fn main() -> Result<(), slint::PlatformError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Arrival, FRONT_SETTLES_WITHIN, Listed, Shown, UI, Ui, WAITING_ROOM, claims_the_window,
-        host, link_from, next_in_line, physical, present, rule_for, still_settling,
-        wants_no_window, with_icons,
+        Arrival, FRONT_SETTLES_WITHIN, INPUT_SETTLES_WITHIN, Listed, Shown, UI, Ui, WAITING_ROOM,
+        claims_the_window, host, link_from, next_in_line, physical, present, rule_for,
+        still_settling, too_soon, wants_no_window, with_icons,
     };
     use linkunbound_core::Scope;
     use linkunbound_core::{Language, normalise};
@@ -1561,6 +1598,7 @@ mod tests {
             taskbar_seen: Cell::new(false),
             shown_over: Cell::new(None),
             put_up: Cell::new(None),
+            appeared: Cell::new(None),
             hotkey: RefCell::new(None),
             #[cfg(target_os = "macos")]
             launch_decided: Cell::new(false),
@@ -1631,6 +1669,16 @@ mod tests {
             Some("https://three.test/")
         );
         assert!(ui.shown.borrow().waiting.is_empty());
+    }
+
+    #[test]
+    fn a_choice_in_the_instant_the_picker_appears_is_not_taken() {
+        let now = std::time::Instant::now();
+        assert!(too_soon(Some(now)));
+        assert!(!too_soon(None));
+        let earlier = now.checked_sub(INPUT_SETTLES_WITHIN * 2);
+        assert!(!too_soon(earlier));
+        assert!(INPUT_SETTLES_WITHIN < FRONT_SETTLES_WITHIN);
     }
 
     #[test]

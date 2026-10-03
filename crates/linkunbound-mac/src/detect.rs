@@ -146,6 +146,53 @@ pub fn app_named(bundle_id: &str) -> Option<String> {
     Some(linkunbound_core::visible(&name))
 }
 
+/// The bundle id of the app that goes by this name, among the running ones and the folders
+/// apps are installed in: a rule saved by name would stop matching when the language changes.
+#[must_use]
+pub fn bundle_id_named(name: &str) -> Option<String> {
+    let running = NSWorkspace::sharedWorkspace().runningApplications();
+    let by_running = running.iter().find_map(|app| {
+        let shown = app.localizedName()?.to_string();
+        linkunbound_core::same_name(&shown, name)
+            .then(|| app.bundleIdentifier().map(|id| id.to_string()))
+            .flatten()
+    });
+    by_running.or_else(|| {
+        installed_apps()
+            .into_iter()
+            .find_map(|app| named_as(&app, name))
+    })
+}
+
+fn installed_apps() -> Vec<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let folders = [
+        Some(PathBuf::from("/Applications")),
+        Some(PathBuf::from("/Applications/Utilities")),
+        Some(PathBuf::from("/System/Applications")),
+        Some(PathBuf::from("/System/Applications/Utilities")),
+        home.map(|home| home.join("Applications")),
+    ];
+    folders
+        .into_iter()
+        .flatten()
+        .filter_map(|folder| std::fs::read_dir(folder).ok())
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "app"))
+        .collect()
+}
+
+fn named_as(app: &Path, name: &str) -> Option<String> {
+    let url = NSURL::fileURLWithPath(&NSString::from_str(&app.to_string_lossy()));
+    let bundle = NSBundle::bundleWithURL(&url)?;
+    let shown = spoken_name(&bundle).or_else(|| name_of(&bundle, app))?;
+    linkunbound_core::same_name(&shown, name)
+        .then(|| text(bundle.bundleIdentifier()))
+        .flatten()
+}
+
 /// In the person's language, not in this process's: Settings ships in English only, and asked
 /// plainly the system answers «Notes» where the picker, reading the running app, says «Notas».
 fn spoken_name(bundle: &NSBundle) -> Option<String> {
@@ -294,6 +341,11 @@ mod tests {
             Some("Safari")
         );
         assert_eq!(super::app_named("test.linkunbound.nothing-installed"), None);
+        assert_eq!(
+            super::bundle_id_named("safari").as_deref(),
+            Some("com.apple.Safari")
+        );
+        assert_eq!(super::bundle_id_named("no app is called this"), None);
         if let Some(notes) = super::app_named("com.apple.Notes") {
             let spanish = objc2_foundation::NSLocale::preferredLanguages()
                 .firstObject()

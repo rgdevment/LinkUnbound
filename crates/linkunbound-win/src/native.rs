@@ -489,7 +489,7 @@ fn remembered(found: Option<String>, last: &std::sync::Mutex<Option<String>>) ->
 /// The picker or settings in front is not where the link came from, and a rule bound to them
 /// would never fire again.
 fn origin_of(path: &str) -> Option<String> {
-    let stem = Path::new(path).file_stem()?.to_str()?.to_ascii_lowercase();
+    let stem = Path::new(path).file_stem()?.to_str()?.to_lowercase();
     (!stem.is_empty() && !stem.starts_with("linkunbound")).then_some(stem)
 }
 
@@ -679,7 +679,7 @@ mod tests {
             assert!(!app.key.is_empty());
             assert!(!app.key.contains('\\'));
             assert!(!app.key.ends_with(".exe"));
-            assert_eq!(app.key, app.key.to_ascii_lowercase());
+            assert_eq!(app.key, app.key.to_lowercase());
         }
     }
 
@@ -707,6 +707,10 @@ mod tests {
         assert_eq!(
             origin_of(r"C:\Program Files\LinkUnbound\LinkUnbound-Settings.exe"),
             None
+        );
+        assert_eq!(
+            origin_of(r"C:\Programme\Übersicht\Übersicht.exe").as_deref(),
+            Some("übersicht")
         );
     }
 

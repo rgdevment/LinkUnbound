@@ -320,7 +320,11 @@ impl Drop for Watching {
     }
 }
 
-fn origin<T>(front: Option<T>, last_seen: Option<T>, menu_bar: Option<T>) -> Option<T> {
+fn origin(
+    front: Option<Origin>,
+    last_seen: Option<Origin>,
+    menu_bar: Option<Origin>,
+) -> Option<Origin> {
     front.or(last_seen).or(menu_bar)
 }
 
@@ -540,14 +544,14 @@ mod tests {
 
     #[test]
     fn the_origin_is_whoever_was_in_front_then_whoever_was_activated_last_then_the_menu_bar() {
-        let some = |s: &str| Some(s.to_owned());
+        let some = |s: &str| Some(Origin::named(s));
         assert_eq!(
             origin(some("slack"), some("finder"), some("orca")),
             some("slack")
         );
         assert_eq!(origin(None, some("finder"), some("orca")), some("finder"));
         assert_eq!(origin(None, None, some("orca")), some("orca"));
-        assert_eq!(origin::<String>(None, None, None), None);
+        assert_eq!(origin(None, None, None), None);
     }
 
     #[test]

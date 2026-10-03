@@ -56,7 +56,7 @@ type Chromium = (&'static str, &'static str, Option<&'static str>);
 /// for a Beta offers profiles it does not have, and launching one creates it empty. Most specific
 /// first.
 #[rustfmt::skip]
-const CHROMIUM: [Chromium; 19] = [
+const CHROMIUM: [Chromium; 23] = [
     ("google chrome canary", "Google/Chrome Canary", Some(r"Google\Chrome SxS")),
     ("google chrome beta", "Google/Chrome Beta", Some(r"Google\Chrome Beta")),
     ("google chrome dev", "Google/Chrome Dev", Some(r"Google\Chrome Dev")),
@@ -72,9 +72,13 @@ const CHROMIUM: [Chromium; 19] = [
     ("brave browser dev", "BraveSoftware/Brave-Browser-Dev", Some(r"BraveSoftware\Brave-Browser-Dev")),
     ("brave browser beta", "BraveSoftware/Brave-Browser-Beta", Some(r"BraveSoftware\Brave-Browser-Beta")),
     ("brave browser", "BraveSoftware/Brave-Browser", Some(r"BraveSoftware\Brave-Browser")),
+    ("vivaldi snapshot", "Vivaldi Snapshot", Some("Vivaldi Snapshot")),
     ("vivaldi", "Vivaldi", Some("Vivaldi")),
+    ("thorium", "Thorium", Some("Thorium")),
     ("arc", "Arc/User Data", None),
     ("opera gx", "com.operasoftware.OperaGX", None),
+    ("opera beta", "com.operasoftware.OperaNext", None),
+    ("opera developer", "com.operasoftware.OperaDeveloper", None),
     ("opera", "com.operasoftware.Opera", None),
 ];
 
@@ -128,6 +132,8 @@ mod tests {
             (r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe", Some(r"BraveSoftware\Brave-Browser")),
             (r"C:\Program Files\BraveSoftware\Brave-Browser-Beta\Application\brave.exe", Some(r"BraveSoftware\Brave-Browser-Beta")),
             (r"C:\Users\a\AppData\Local\Vivaldi\Application\vivaldi.exe", Some("Vivaldi")),
+            (r"C:\Users\a\AppData\Local\Vivaldi Snapshot\Application\vivaldi.exe", Some("Vivaldi Snapshot")),
+            (r"C:\Users\a\AppData\Local\Thorium\Application\thorium.exe", Some("Thorium")),
             (r"C:\Program Files\Mozilla Firefox\firefox.exe", None),
             (r"D:\Portable\chrome\chrome.exe", None),
         ] {
@@ -151,6 +157,10 @@ mod tests {
             ("Chrome.app", Some("Google/Chrome")),
             ("Chromium.app", Some("Chromium")),
             ("Arc.app", Some("Arc/User Data")),
+            ("Vivaldi Snapshot.app", Some("Vivaldi Snapshot")),
+            ("Thorium.app", Some("Thorium")),
+            ("Opera Beta.app", Some("com.operasoftware.OperaNext")),
+            ("Opera Developer.app", Some("com.operasoftware.OperaDeveloper")),
             ("Archive Utility.app", None),
             ("Firefox.app", None),
         ] {

@@ -49,7 +49,7 @@ fn save_atomically(path: &Path, body: &str) -> Result<(), StoreError> {
 
 /// On disk before the rename, not in the cache: after a power cut a renamed file whose
 /// contents never landed comes back empty, and an empty rules file reads as no rules at all.
-fn written_through(path: &Path, body: &str) -> std::io::Result<()> {
+pub(crate) fn written_through(path: &Path, body: &str) -> std::io::Result<()> {
     use std::io::Write;
     let mut file = fs::File::create(path)?;
     file.write_all(body.as_bytes())?;
@@ -61,7 +61,7 @@ fn written_through(path: &Path, body: &str) -> std::io::Result<()> {
 
 /// An antivirus or the search indexer opening the file a moment refuses the rename on Windows,
 /// and the choice the person just made would not be remembered.
-fn renamed_with_patience(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(crate) fn renamed_with_patience(from: &Path, to: &Path) -> std::io::Result<()> {
     let mut tries = 0;
     loop {
         match fs::rename(from, to) {
@@ -361,8 +361,7 @@ mod tests {
     use crate::config::SCHEMA_VERSION;
 
     fn place(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("lu-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
+        let dir = scratch(name);
         fs::create_dir_all(&dir).expect("a place to write");
         dir
     }

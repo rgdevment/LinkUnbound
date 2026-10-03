@@ -5,7 +5,7 @@ mod update;
 
 use linkunbound_core::{
     Asking, Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of,
-    is_public_suffix, merge, normalise, site_of, visible,
+    is_public_suffix, merge, normalise, same_name, site_of,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -88,20 +88,31 @@ fn is_scheme(said: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
 }
 
+/// What the picker would have saved for the app typed: on a Mac its bundle id when one is
+/// installed by that name, so the rule outlives a change of language; otherwise the name.
+fn app_key(said: &str) -> String {
+    #[cfg(target_os = "macos")]
+    if let Some(id) = linkunbound_mac::bundle_id_named(said) {
+        return id;
+    }
+    said.to_lowercase().trim_end_matches(".exe").to_owned()
+}
+
 /// An app typed by its name is the app a rule already saved by bundle id, when that id goes by
 /// the same name: the form would otherwise add a second rule the first one hides.
 fn named_alike(rules: &[Rule], rule: &Rule) -> bool {
     let Some(typed) = rule.source_app.as_deref() else {
         return false;
     };
-    let names =
-        |said: &str| [visible(said), shown_origin(said)].map(|name| visible(&name).to_lowercase());
+    let names = |said: &str| [said.to_owned(), shown_origin(said)];
     let wanted = names(typed);
     rules.iter().any(|r| {
         r.scope == rule.scope
-            && r.source_app
-                .as_deref()
-                .is_some_and(|saved| names(saved).iter().any(|name| wanted.contains(name)))
+            && r.source_app.as_deref().is_some_and(|saved| {
+                names(saved)
+                    .iter()
+                    .any(|name| wanted.iter().any(|typed| same_name(name, typed)))
+            })
     })
 }
 
@@ -227,12 +238,8 @@ fn rule_from(
         }
         "host" => (Scope::Host(host_named()?), None),
         "site" => (Scope::Site(site_named()?), None),
-        // Lowercased and without `.exe`, as the picker labels an origin: «Slack» and «Slack.exe»
-        // both mean the app somebody sees in «Desde …». A Mac rule typed here keeps the name.
-        "app" => (
-            Scope::Any,
-            Some(said.to_lowercase().trim_end_matches(".exe").to_owned()),
-        ),
+        // «Slack» and «Slack.exe» both mean the app somebody sees in «Desde …».
+        "app" => (Scope::Any, Some(app_key(said))),
         _ => return Err("ruleKindUnknown"),
     };
     Ok(Rule {
@@ -566,8 +573,10 @@ struct Rescanned {
 fn maintenance_rescan() -> Result<Rescanned, String> {
     let saved = store().browsers().map_err(|e| e.to_string())?.browsers;
     let found = rescanned(system::browsers(), &saved);
+    // What was just detected and saved is the list; reading the catalogue again would detect twice.
+    keep_in(&store(), found.browsers.clone())?;
     Ok(Rescanned {
-        browsers: keep(found.browsers)?,
+        browsers: found.browsers.iter().map(seen).collect(),
         added: found.added,
         removed: found.removed,
     })
