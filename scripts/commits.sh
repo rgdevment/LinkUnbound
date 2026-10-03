@@ -17,6 +17,10 @@ amiss() {
 weighed() {
   local who=$1 said=$2
   said=$(printf '%s' "$said" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  # The subject an undone commit gets by default keeps its own shape, as a merge does.
+  case $said in
+    Revert\ \"*) return ;;
+  esac
   if ! printf '%s' "$said" | grep -qE "$shape"; then
     amiss "$who does not follow conventional commits"
     printf '  %s\n' "$said"
