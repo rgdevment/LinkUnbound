@@ -49,111 +49,33 @@ pub fn profiles_in(local_state: &str) -> Vec<Profile> {
     profiles
 }
 
-/// Where each Chromium build keeps `Local State`, below Application Support on a Mac and below
-/// `%LOCALAPPDATA%` on Windows. Every channel keeps its own: reading stable's for a Beta offers
-/// profiles it does not have, and launching one creates it empty. Most specific first.
-struct Chromium {
-    bundle: &'static str,
-    mac: &'static str,
-    windows: Option<&'static str>,
-}
+/// Bundle name to match, home below Application Support, home below `%LOCALAPPDATA%`.
+type Chromium = (&'static str, &'static str, Option<&'static str>);
 
+/// Where each Chromium build keeps `Local State`. Every channel keeps its own: reading stable's
+/// for a Beta offers profiles it does not have, and launching one creates it empty. Most specific
+/// first.
+#[rustfmt::skip]
 const CHROMIUM: [Chromium; 19] = [
-    Chromium {
-        bundle: "google chrome canary",
-        mac: "Google/Chrome Canary",
-        windows: Some(r"Google\Chrome SxS"),
-    },
-    Chromium {
-        bundle: "google chrome beta",
-        mac: "Google/Chrome Beta",
-        windows: Some(r"Google\Chrome Beta"),
-    },
-    Chromium {
-        bundle: "google chrome dev",
-        mac: "Google/Chrome Dev",
-        windows: Some(r"Google\Chrome Dev"),
-    },
-    Chromium {
-        bundle: "google chrome for testing",
-        mac: "Google/Chrome for Testing",
-        windows: None,
-    },
-    Chromium {
-        bundle: "google chrome",
-        mac: "Google/Chrome",
-        windows: Some(r"Google\Chrome"),
-    },
-    Chromium {
-        bundle: "chromium",
-        mac: "Chromium",
-        windows: Some("Chromium"),
-    },
-    Chromium {
-        bundle: "chrome",
-        mac: "Google/Chrome",
-        windows: None,
-    },
-    Chromium {
-        bundle: "microsoft edge canary",
-        mac: "Microsoft Edge Canary",
-        windows: Some(r"Microsoft\Edge SxS"),
-    },
-    Chromium {
-        bundle: "microsoft edge beta",
-        mac: "Microsoft Edge Beta",
-        windows: Some(r"Microsoft\Edge Beta"),
-    },
-    Chromium {
-        bundle: "microsoft edge dev",
-        mac: "Microsoft Edge Dev",
-        windows: Some(r"Microsoft\Edge Dev"),
-    },
-    Chromium {
-        bundle: "microsoft edge",
-        mac: "Microsoft Edge",
-        windows: Some(r"Microsoft\Edge"),
-    },
-    Chromium {
-        bundle: "brave browser nightly",
-        mac: "BraveSoftware/Brave-Browser-Nightly",
-        windows: Some(r"BraveSoftware\Brave-Browser-Nightly"),
-    },
-    Chromium {
-        bundle: "brave browser dev",
-        mac: "BraveSoftware/Brave-Browser-Dev",
-        windows: Some(r"BraveSoftware\Brave-Browser-Dev"),
-    },
-    Chromium {
-        bundle: "brave browser beta",
-        mac: "BraveSoftware/Brave-Browser-Beta",
-        windows: Some(r"BraveSoftware\Brave-Browser-Beta"),
-    },
-    Chromium {
-        bundle: "brave browser",
-        mac: "BraveSoftware/Brave-Browser",
-        windows: Some(r"BraveSoftware\Brave-Browser"),
-    },
-    Chromium {
-        bundle: "vivaldi",
-        mac: "Vivaldi",
-        windows: Some("Vivaldi"),
-    },
-    Chromium {
-        bundle: "arc",
-        mac: "Arc/User Data",
-        windows: None,
-    },
-    Chromium {
-        bundle: "opera gx",
-        mac: "com.operasoftware.OperaGX",
-        windows: None,
-    },
-    Chromium {
-        bundle: "opera",
-        mac: "com.operasoftware.Opera",
-        windows: None,
-    },
+    ("google chrome canary", "Google/Chrome Canary", Some(r"Google\Chrome SxS")),
+    ("google chrome beta", "Google/Chrome Beta", Some(r"Google\Chrome Beta")),
+    ("google chrome dev", "Google/Chrome Dev", Some(r"Google\Chrome Dev")),
+    ("google chrome for testing", "Google/Chrome for Testing", None),
+    ("google chrome", "Google/Chrome", Some(r"Google\Chrome")),
+    ("chromium", "Chromium", Some("Chromium")),
+    ("chrome", "Google/Chrome", None),
+    ("microsoft edge canary", "Microsoft Edge Canary", Some(r"Microsoft\Edge SxS")),
+    ("microsoft edge beta", "Microsoft Edge Beta", Some(r"Microsoft\Edge Beta")),
+    ("microsoft edge dev", "Microsoft Edge Dev", Some(r"Microsoft\Edge Dev")),
+    ("microsoft edge", "Microsoft Edge", Some(r"Microsoft\Edge")),
+    ("brave browser nightly", "BraveSoftware/Brave-Browser-Nightly", Some(r"BraveSoftware\Brave-Browser-Nightly")),
+    ("brave browser dev", "BraveSoftware/Brave-Browser-Dev", Some(r"BraveSoftware\Brave-Browser-Dev")),
+    ("brave browser beta", "BraveSoftware/Brave-Browser-Beta", Some(r"BraveSoftware\Brave-Browser-Beta")),
+    ("brave browser", "BraveSoftware/Brave-Browser", Some(r"BraveSoftware\Brave-Browser")),
+    ("vivaldi", "Vivaldi", Some("Vivaldi")),
+    ("arc", "Arc/User Data", None),
+    ("opera gx", "com.operasoftware.OperaGX", None),
+    ("opera", "com.operasoftware.Opera", None),
 ];
 
 /// Below Application Support, for a bundle named this. Matched on the bundle's name, never on
@@ -165,13 +87,13 @@ pub fn chromium_home_on_mac(bundle_name: &str) -> Option<&'static str> {
     CHROMIUM
         .iter()
         .find(|c| {
-            if c.bundle == "arc" {
+            if c.0 == "arc" {
                 name == "arc"
             } else {
-                name.contains(c.bundle)
+                name.contains(c.0)
             }
         })
-        .map(|c| c.mac)
+        .map(|c| c.1)
 }
 
 /// Below `%LOCALAPPDATA%`, with `User Data` still to add, for a browser installed at `exe`.
@@ -180,7 +102,7 @@ pub fn chromium_home_on_mac(bundle_name: &str) -> Option<&'static str> {
 pub fn chromium_home_on_windows(exe: &str) -> Option<&'static str> {
     let exe = exe.replace('/', "\\").to_ascii_lowercase();
     CHROMIUM.iter().find_map(|c| {
-        let home = c.windows?;
+        let home = c.2?;
         exe.contains(&format!("\\{}\\application\\", home.to_ascii_lowercase()))
             .then_some(home)
     })
@@ -190,57 +112,22 @@ pub fn chromium_home_on_windows(exe: &str) -> Option<&'static str> {
 mod tests {
     use super::{chromium_home_on_mac, chromium_home_on_windows, id_for, profiles_in};
 
+    #[rustfmt::skip]
     #[test]
     fn every_chromium_channel_on_windows_reads_its_own_profiles() {
         for (exe, home) in [
-            (
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                Some(r"Google\Chrome"),
-            ),
-            (
-                r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe",
-                Some(r"Google\Chrome Beta"),
-            ),
-            (
-                r"C:\Program Files\Google\Chrome Dev\Application\chrome.exe",
-                Some(r"Google\Chrome Dev"),
-            ),
-            (
-                r"C:\Users\a\AppData\Local\Google\Chrome SxS\Application\chrome.exe",
-                Some(r"Google\Chrome SxS"),
-            ),
-            (
-                r"C:\Users\a\AppData\Local\Chromium\Application\chrome.exe",
-                Some("Chromium"),
-            ),
-            (
-                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                Some(r"Microsoft\Edge"),
-            ),
-            (
-                r"C:\Program Files (x86)\Microsoft\Edge Beta\Application\msedge.exe",
-                Some(r"Microsoft\Edge Beta"),
-            ),
-            (
-                r"C:\Program Files (x86)\Microsoft\Edge Dev\Application\msedge.exe",
-                Some(r"Microsoft\Edge Dev"),
-            ),
-            (
-                r"C:\Users\a\AppData\Local\Microsoft\Edge SxS\Application\msedge.exe",
-                Some(r"Microsoft\Edge SxS"),
-            ),
-            (
-                r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-                Some(r"BraveSoftware\Brave-Browser"),
-            ),
-            (
-                r"C:\Program Files\BraveSoftware\Brave-Browser-Beta\Application\brave.exe",
-                Some(r"BraveSoftware\Brave-Browser-Beta"),
-            ),
-            (
-                r"C:\Users\a\AppData\Local\Vivaldi\Application\vivaldi.exe",
-                Some("Vivaldi"),
-            ),
+            (r"C:\Program Files\Google\Chrome\Application\chrome.exe", Some(r"Google\Chrome")),
+            (r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe", Some(r"Google\Chrome Beta")),
+            (r"C:\Program Files\Google\Chrome Dev\Application\chrome.exe", Some(r"Google\Chrome Dev")),
+            (r"C:\Users\a\AppData\Local\Google\Chrome SxS\Application\chrome.exe", Some(r"Google\Chrome SxS")),
+            (r"C:\Users\a\AppData\Local\Chromium\Application\chrome.exe", Some("Chromium")),
+            (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", Some(r"Microsoft\Edge")),
+            (r"C:\Program Files (x86)\Microsoft\Edge Beta\Application\msedge.exe", Some(r"Microsoft\Edge Beta")),
+            (r"C:\Program Files (x86)\Microsoft\Edge Dev\Application\msedge.exe", Some(r"Microsoft\Edge Dev")),
+            (r"C:\Users\a\AppData\Local\Microsoft\Edge SxS\Application\msedge.exe", Some(r"Microsoft\Edge SxS")),
+            (r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe", Some(r"BraveSoftware\Brave-Browser")),
+            (r"C:\Program Files\BraveSoftware\Brave-Browser-Beta\Application\brave.exe", Some(r"BraveSoftware\Brave-Browser-Beta")),
+            (r"C:\Users\a\AppData\Local\Vivaldi\Application\vivaldi.exe", Some("Vivaldi")),
             (r"C:\Program Files\Mozilla Firefox\firefox.exe", None),
             (r"D:\Portable\chrome\chrome.exe", None),
         ] {
@@ -248,6 +135,7 @@ mod tests {
         }
     }
 
+    #[rustfmt::skip]
     #[test]
     fn every_chromium_channel_on_a_mac_reads_its_own_profiles() {
         for (bundle, home) in [
@@ -256,22 +144,10 @@ mod tests {
             ("Microsoft Edge Beta.app", Some("Microsoft Edge Beta")),
             ("Microsoft Edge Dev.app", Some("Microsoft Edge Dev")),
             ("Microsoft Edge Canary.app", Some("Microsoft Edge Canary")),
-            (
-                "Brave Browser Beta.app",
-                Some("BraveSoftware/Brave-Browser-Beta"),
-            ),
-            (
-                "Brave Browser Nightly.app",
-                Some("BraveSoftware/Brave-Browser-Nightly"),
-            ),
-            (
-                "Brave Browser Dev.app",
-                Some("BraveSoftware/Brave-Browser-Dev"),
-            ),
-            (
-                "Google Chrome for Testing.app",
-                Some("Google/Chrome for Testing"),
-            ),
+            ("Brave Browser Beta.app", Some("BraveSoftware/Brave-Browser-Beta")),
+            ("Brave Browser Nightly.app", Some("BraveSoftware/Brave-Browser-Nightly")),
+            ("Brave Browser Dev.app", Some("BraveSoftware/Brave-Browser-Dev")),
+            ("Google Chrome for Testing.app", Some("Google/Chrome for Testing")),
             ("Chrome.app", Some("Google/Chrome")),
             ("Chromium.app", Some("Chromium")),
             ("Arc.app", Some("Arc/User Data")),

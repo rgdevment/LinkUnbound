@@ -87,7 +87,7 @@ fn approval() -> Option<Vec<u8>> {
 /// The first byte is odd when the entry was turned off; no record at all means never touched.
 fn approved_by(record: Option<&[u8]>) -> bool {
     record
-        .and_then(|bytes| bytes.first())
+        .and_then(<[u8]>::first)
         .is_none_or(|first| first & 1 == 0)
 }
 
