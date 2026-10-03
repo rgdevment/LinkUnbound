@@ -51,78 +51,20 @@ jobs:
           done
           exit $status
 
-      - name: The core produces no terminal output
-        run: |
-          if grep -rn 'println!\|eprintln!\|print!' crates/linkunbound-core/src --include='*.rs'; then
-            echo "::error::linkunbound-core must not print: the picker inherits it as garbage"
-            exit 1
-          fi
+      # One implementation for the conventions a person can break in a second: the hook runs
+      # the same file, so local and CI can never drift into saying different things.
+      - name: The conventions the script keeps
+        run: bash scripts/rules.sh
 
-      - name: The core stays free of platform and UI dependencies
+      # Nothing else looks at a subject that reached main without a pull request.
+      - name: The subject that landed
+        if: github.event_name == 'push'
         run: |
-          if grep -rn 'use tauri\|use windows\|use winreg\|use objc2' crates/linkunbound-core/src --include='*.rs'; then
-            echo "::error::the core is pure logic; platform code belongs in its own crate"
-            exit 1
-          fi
-
-      - name: No Spanish identifiers
-        run: |
-          if grep -rnE '\b(regla|reglas|navegador|perfil|dominio|origen|ventana) *:' \
-               crates/*/src app/src-tauri/src --include='*.rs' | grep -v '"'; then
-            echo "::error::identifiers are English; user-facing strings live in locales"
-            exit 1
-          fi
-
-      - name: No prose blocks in the code
-        run: |
-          found=$(find crates/*/src app/src-tauri/src -name '*.rs' -print0 \
-            | xargs -0 awk '
-                /^[[:space:]]*\/\/\// { run = 0; next }
-                /^[[:space:]]*\/\// && !/\/\/!|TODO|FIXME|SAFETY|noqa|https?:\/\// { run++; if (run == 4) print FILENAME ":" FNR; next }
-                { run = 0 }')
-          if [ -n "$found" ]; then
-            echo "$found"
-            echo "::error::four lines of comment is prose; that belongs in the planning notes"
-            exit 1
-          fi
-
-      - name: Unsafe stays where it was audited
-        run: |
-          # native.rs is the Win32 surface the picker needs; shop.rs talks to the Store and
-          # reaches unsafe only to hand it a window handle and to join the process apartment.
-          # The Mac crate reaches it for framework statics, blocks, a class of its own and the
-          # window behind a raw handle; its own audit test lists the same files. The one test
-          # that owns the main thread makes a real window and delivers a raw Apple event.
-          audited="app/src-tauri/src/shop.rs
-          crates/linkunbound-mac/src/events.rs
-          crates/linkunbound-mac/src/icons.rs
-          crates/linkunbound-mac/src/native.rs
-          crates/linkunbound-mac/src/registration.rs
-          crates/linkunbound-mac/src/startup.rs
-          crates/linkunbound-mac/tests/main_thread.rs
-          crates/linkunbound-win/src/native.rs"
-          found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs' | sort)
-          if [ "$found" != "$(echo "$audited" | sed 's/^ *//' | sort)" ]; then
-            echo "$found"
-            echo "::error::unsafe is allowed somewhere new; audit it and update this list"
-            exit 1
-          fi
-
-      - name: No voseo in the Spanish anywhere
-        run: |
-          if grep -rniE '\b(vos|tenés|querés|podés|andá|mirá|hacé|che)\b' \
-             --include='*.md' --include='*.ts' --include='*.tsx' . 2>/dev/null | grep -v node_modules; then
-            echo "::error::Spanish is neutral: no voseo"
-            exit 1
-          fi
-
-      - name: No peninsular Spanish in what a person reads
-        run: |
-          if grep -rniE '\b(fichero|ficheros|ordenador|pulsa|pulsar|pulsando)\b' \
-             --include='*.md' --include='*.ts' --include='*.tsx' . 2>/dev/null | grep -v node_modules; then
-            echo "::error::use archivo, equipo, presionar"
-            exit 1
-          fi
+          said=$(git log -1 --format=%s)
+          case "$said" in
+            Merge\ * | Revert\ *) echo "a merge keeps its own shape" ;;
+            *) bash scripts/commits.sh --subject "$said" ;;
+          esac
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2

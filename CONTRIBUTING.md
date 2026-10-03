@@ -187,6 +187,35 @@ application and dies with the console it was started from.
 - **English everywhere** in code, identifiers and comments.
 - **KISS** — keep it simple.
 
+### Commits and the checks that run before them
+
+Subjects follow [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat:`, `fix:`, `docs:`, `ci:`…), under 90 characters: CI refuses a longer one,
+and a squash keeps only the pull request's title, number included, so that is
+held to the same shape.
+
+`scripts/rules.sh` holds the conventions a person can break in a second: four
+lines of comment in a row, a file grown past what anybody reads through, Spanish
+where the code should be English or Spanish that is not neutral, the core
+printing to a terminal the picker inherits or panicking where it should answer,
+and unsafe outside the files audited for it. `scripts/commits.sh` holds the
+shape and the length of a subject. Run either whenever you like, and if you want
+them run for you:
+
+```sh
+git config core.hooksPath hooks
+```
+
+That gives you three. `pre-commit` runs the conventions, `cargo fmt --all
+--check` and biome, in about two seconds. `commit-msg` weighs the subject while
+the fix is still an `--amend` rather than a rebase. `pre-push` runs the
+conventions again and the subjects of everything you are about to send. Nothing
+slower goes in any of them: the suite, clippy and the build belong to CI.
+
+`.github/oversized.txt` holds every file already past the 1500-line ceiling, and
+what is above it only shrinks. `.github/not-this-spanish.txt` holds the words the
+Spanish a person reads may not use.
+
 ---
 
 ## Adding a Translation
