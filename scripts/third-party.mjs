@@ -117,6 +117,7 @@ const crates = () => {
       "cargo",
       [
         "tree",
+        "--locked",
         "--workspace",
         "--edges",
         "normal,no-proc-macro",
@@ -133,8 +134,9 @@ const crates = () => {
       const one = /^(\S+) v(\S+)(?: \((.+?)\))?\|(.*?)(?: \(\*\))?$/.exec(line);
       if (!one) continue;
       const [, name, version, from, licence] = one;
-      if ((from && existsSync(from)) || seen.has(name)) continue;
-      seen.set(name, { version, licence: licence || "see the crate" });
+      const key = `${name}@${version}`;
+      if ((from && existsSync(from)) || seen.has(key)) continue;
+      seen.set(key, { name, version, licence: licence || "see the crate" });
     }
   }
   return seen;
@@ -143,7 +145,7 @@ const crates = () => {
 const listed = (seen) =>
   [...seen.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, one]) => `| \`${name}\` | ${one.version} | ${one.licence} |`)
+    .map(([key, one]) => `| \`${one.name ?? key}\` | ${one.version} | ${one.licence} |`)
     .join("\n");
 
 const js = shipped();
