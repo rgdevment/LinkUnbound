@@ -109,6 +109,24 @@ jobs:
       - name: npm advisories in the picker
         working-directory: app
         run: npm audit --package-lock-only --audit-level=moderate
+      - name: npm advisories in the repository tooling
+        env:
+          # braces has no patched release; it reaches markdownlint-cli2 through globby, dev tooling only.
+          KNOWN: GHSA-vfj7-8cjw-p6xm
+        run: |
+          npm audit --package-lock-only --json > "$RUNNER_TEMP/audit.json" || true
+          jq -e '.vulnerabilities' "$RUNNER_TEMP/audit.json" > /dev/null
+          found=$(jq -r '[.vulnerabilities[].via[] | objects
+            | select(.severity != "low" and .severity != "info") | .url] | unique[]' "$RUNNER_TEMP/audit.json")
+          left=$(grep -v "/$KNOWN\$" <<< "$found" || true)
+          if [ -n "$left" ]; then
+            echo "::error::npm advisories at moderate or above:"
+            echo "$left"
+            exit 1
+          fi
+          if ! grep -q "/$KNOWN\$" <<< "$found"; then
+            echo "::warning::$KNOWN no longer shows up; drop it from this step"
+          fi
 
   coverage:
     name: coverage
