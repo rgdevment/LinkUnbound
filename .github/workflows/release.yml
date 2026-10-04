@@ -42,10 +42,11 @@ jobs:
           npm ci
           npm run lint
       # About links to the copy on main, so that copy is the one people read, and it trails every bump.
-      - name: The toolchain rust-toolchain.toml names
+      - name: The stable toolchain, brought up to date
         shell: bash
-        run: rustup toolchain install --no-self-update
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - name: The notices on main name what this build ships
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           npm run notices
           if ! git diff --exit-code THIRD-PARTY-BUNDLED.md; then
@@ -161,7 +162,6 @@ jobs:
             missing=""
             want() { [ "$2" = "true" ] || missing="$missing $1"; }
             want TAURI_SIGNING_PRIVATE_KEY "$HAS_UPDATER_KEY"
-            want TAURI_SIGNING_PRIVATE_KEY_PASSWORD "$HAS_UPDATER_PASSWORD"
             want PFX_BASE64 "$HAS_PFX"
             want PFX_PASSWORD "$HAS_PFX_PASSWORD"
             if [ "$BUILD_MACOS" = "true" ]; then
@@ -175,9 +175,9 @@ jobs:
             fi
             # A switch turned on is a promise to publish there; only a stable version goes.
             if [[ "$GITHUB_REF" != *-* ]]; then
-              want MSIX_IDENTITY "$HAS_MSIX_IDENTITY"
-              want MSIX_PUBLISHER "$HAS_MSIX_PUBLISHER"
               if [ "$STORE_PUBLISH" = "true" ]; then
+                want MSIX_IDENTITY "$HAS_MSIX_IDENTITY"
+                want MSIX_PUBLISHER "$HAS_MSIX_PUBLISHER"
                 want STORE_APP_ID "$HAS_STORE_APP_ID"
                 want STORE_TENANT_ID "$HAS_STORE_TENANT"
                 want STORE_SELLER_ID "$HAS_STORE_SELLER"
@@ -814,8 +814,7 @@ jobs:
       && (needs.bundle-msix.result == 'success' || needs.bundle-msix.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # One tag at a time: every tag rewrites the same manifest branch and the Latest flag. A third
-    # tag cancels the one waiting, which then has to be re-run by hand.
+    # Global: one manifest branch and one Latest flag; a third tag cancels the waiting one, re-run it by hand.
     concurrency:
       group: release-publish
       cancel-in-progress: false
@@ -946,7 +945,8 @@ jobs:
           tag="$GITHUB_REF_NAME"
           printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
 
-          if ! gh release view "$tag" > /dev/null 2>&1; then
+          tags=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name')
+          if ! grep -qxF "$tag" <<< "$tags"; then
             gh release create "$tag" --draft --verify-tag --title "$tag" \
               --prerelease="$PRERELEASE" --generate-notes --notes-file "$RUNNER_TEMP/notes.md"
           fi
@@ -1201,9 +1201,8 @@ jobs:
       && needs.version.outputs.prerelease == 'false'
     runs-on: windows-latest
     timeout-minutes: 20
-    # One submission at a time: the Store holds a single pending one per app.
     concurrency:
-      group: release-msstore
+      group: release-msstore-${{ github.ref }}
       cancel-in-progress: false
     env:
       STORE_PUBLISH: ${{ vars.STORE_PUBLISH }}
@@ -1294,9 +1293,9 @@ jobs:
       && needs.version.outputs.macos == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # One tag at a time: the stable and the beta cask live in the same tap.
+    # Per tag: a global group cancels a pending tag, and the push loop already rebases over another.
     concurrency:
-      group: release-homebrew
+      group: release-homebrew-${{ github.ref }}
       cancel-in-progress: false
     env:
       GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
@@ -1431,9 +1430,8 @@ jobs:
       && needs.version.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # One at a time: every version goes out through the same fork of winget-pkgs.
     concurrency:
-      group: release-winget
+      group: release-winget-${{ github.ref }}
       cancel-in-progress: false
     env:
       WINGET_PUBLISH: ${{ vars.WINGET_PUBLISH }}

@@ -20,8 +20,7 @@ weighed() {
   said=$(printf '%s' "$said" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   if [ -z "$strict" ]; then
     case $said in
-      "Merge branch '"* | "Merge pull request #"* | "Merge remote-tracking branch '"* | \
-        "Merge commit '"* | "Merge tag '"* | 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*)
+      "Merge "* | 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*)
         return
         ;;
     esac

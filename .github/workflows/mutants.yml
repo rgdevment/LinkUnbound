@@ -60,10 +60,10 @@ jobs:
           git diff "$from" -- crates/linkunbound-core crates/linkunbound-shell > branch.diff
           if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
 
-      - name: The toolchain rust-toolchain.toml names
+      - name: The stable toolchain, brought up to date
         if: steps.touched.outputs.any == 'yes'
         shell: bash
-        run: rustup toolchain install --no-self-update
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
@@ -128,10 +128,10 @@ jobs:
           git diff "$from" -- crates > branch.diff
           if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
 
-      - name: The toolchain rust-toolchain.toml names
+      - name: The stable toolchain, brought up to date
         if: steps.touched.outputs.any == 'yes'
         shell: bash
-        run: rustup toolchain install --no-self-update
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
@@ -190,10 +190,10 @@ jobs:
           git diff "$from" -- app/src-tauri/src > branch.diff
           if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
 
-      - name: The toolchain rust-toolchain.toml names
+      - name: The stable toolchain, brought up to date
         if: steps.touched.outputs.any == 'yes'
         shell: bash
-        run: rustup toolchain install --no-self-update
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace

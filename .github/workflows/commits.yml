@@ -12,9 +12,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Dependabot's group titles run past the length a title may reach main with, and it cannot be
-  # told to write shorter ones. An edit made with this token starts no new run, so the check
-  # below reads the title from here rather than from the event.
+  # An edit made with this token starts no new run, so the check below reads the cut title from here.
   retitle:
     name: A title Dependabot wrote, cut to fit
     if: github.event.pull_request.user.login == 'dependabot[bot]'
@@ -46,7 +44,7 @@ jobs:
     name: Conventional commit messages
     needs: retitle
     # Skipped for everyone but Dependabot, and a failed cut leaves the long title to fail below.
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

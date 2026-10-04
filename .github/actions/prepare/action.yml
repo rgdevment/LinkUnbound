@@ -12,11 +12,11 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: The toolchain rust-toolchain.toml names
+    - name: The stable toolchain, brought up to date
       shell: bash
       env:
         TARGETS: ${{ inputs.targets }}
-      run: rustup toolchain install --no-self-update && rustup target add ${TARGETS//,/ }
+      run: rustup toolchain install stable --no-self-update --component rustfmt,clippy && rustup target add ${TARGETS//,/ }
 
     - name: Stamp the version
       shell: bash

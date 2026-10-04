@@ -33,8 +33,7 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
 
-      # A workflow that will not parse fails in no time at all, with no job and no line number, and
-      # the one that matters is the release: it is only ever run when a tag is already pushed.
+      # A workflow that will not parse fails with no job and no line, and the release only runs on a pushed tag.
       - name: The workflows parse
         run: |
           status=0
@@ -78,8 +77,7 @@ jobs:
             bash scripts/commits.sh --title "$(git log -1 --format=%s)"
           fi
 
-  # One turn of the suite is what CI already runs on every push and pull request, so this job
-  # only earns its toolchain when it runs the twenty that say whether a test is deterministic.
+  # CI runs every test in its own process; twenty in-process turns here catch tests that share state.
   determinism:
     name: Tests are deterministic
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -89,9 +87,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The toolchain rust-toolchain.toml names
+      - name: The stable toolchain, brought up to date
         shell: bash
-        run: rustup toolchain install --no-self-update
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
@@ -102,3 +100,29 @@ jobs:
           for _ in $(seq 1 20); do
             cargo test -p linkunbound-core --quiet || exit 1
           done
+
+  # The release refuses notices behind the lockfiles; this says so the morning after, not on the tag.
+  notices:
+    name: The notices name what ships
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: The stable toolchain, brought up to date
+        shell: bash
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - name: Regenerated, they match the copy on main
+        run: |
+          (cd app && npm ci)
+          npm run notices
+          if ! git diff --exit-code THIRD-PARTY-BUNDLED.md; then
+            echo "::error::THIRD-PARTY-BUNDLED.md is behind the lockfiles; run npm run notices and land it before the next tag"
+            exit 1
+          fi

@@ -159,8 +159,7 @@ crates/linkunbound-win/src/native.rs"
   fi
 }
 
-# A line in column zero ends whatever run block it lands in, which a YAML parser accepts and GitHub
-# refuses to load with no job and no line: what a continuation leaves when an edit drops the backslash.
+# Valid YAML GitHub will not load: a column-zero line, left when an edit drops a continuation backslash.
 workflows_github_will_load() {
   local found
   found=$(grep -nE '^[^[:space:]#]' .github/workflows/*.yml .github/actions/*/action.yml \
