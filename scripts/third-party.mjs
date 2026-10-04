@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "THIRD-PARTY-BUNDLED.md");
+const texts = join(root, "THIRD-PARTY-LICENSES.md");
 
 const shipped = () => {
   const lock = JSON.parse(readFileSync(join(root, "app", "package-lock.json"), "utf8"));
@@ -65,7 +67,38 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.`;
 
+const BSD3 = (who) => `BSD 3-Clause License
+
+Copyright (c) ${who}
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.`;
+
 const STANDARD = { MIT, ISC };
+const HELD = { MIT, ISC, "BSD-3-Clause": BSD3 };
+const CANONICAL = ["Apache-2.0", "BSL-1.0", "MPL-2.0"];
 
 const authored = (pkg) => {
   const who = typeof pkg.author === "string" ? pkg.author : pkg.author?.name;
@@ -142,6 +175,102 @@ const crates = () => {
   return seen;
 };
 
+const canonical = (licence) =>
+  readFileSync(join(root, "scripts", "licences", `${licence}.txt`), "utf8");
+
+const offered = (expression) =>
+  expression
+    .split(/\s+OR\s+|\//)
+    .map((one) => one.replace(/[()]/g, "").trim())
+    .filter(Boolean);
+
+const declared = (pkg) => {
+  const choices = offered(pkg.license ?? "");
+  const pick = CANONICAL.find((one) => choices.includes(one)) ?? choices.find((one) => one in HELD);
+  if (!pick) return null;
+  if (CANONICAL.includes(pick)) return canonical(pick);
+  const who = pkg.authors?.length
+    ? pkg.authors.map((one) => one.replace(/\s*<[^>]*>\s*/g, "").trim()).join(", ")
+    : `the ${pkg.name} authors (${pkg.repository ?? `https://crates.io/crates/${pkg.name}`})`;
+  return HELD[pick](who);
+};
+
+const carried = (pkg) => {
+  const at = dirname(pkg.manifest_path);
+  const files = new Set();
+  for (const one of readdirSync(at)) {
+    if (/^(licen[cs]e|copying|notice)/i.test(one) && statSync(join(at, one)).isFile()) {
+      files.add(join(at, one));
+    }
+  }
+  const reuse = join(at, "LICENSES");
+  if (existsSync(reuse) && statSync(reuse).isDirectory()) {
+    for (const one of readdirSync(reuse)) {
+      if (statSync(join(reuse, one)).isFile()) files.add(join(reuse, one));
+    }
+  }
+  if (pkg.license_file && existsSync(join(at, pkg.license_file))) {
+    files.add(join(at, pkg.license_file));
+  }
+  return [...files].sort().map((one) => readFileSync(one, "utf8"));
+};
+
+const written = (rs) => {
+  execFileSync("cargo", ["fetch", "--locked"], { cwd: root, stdio: "ignore" });
+  const meta = JSON.parse(
+    execFileSync("cargo", ["metadata", "--locked", "--format-version", "1"], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 128 * 1024 * 1024,
+    }),
+  );
+  const packages = new Map(meta.packages.map((one) => [`${one.name}@${one.version}`, one]));
+  const byText = new Map();
+  const silent = [];
+  for (const [key, crate] of rs) {
+    const pkg = packages.get(key);
+    const found = pkg ? carried(pkg) : [];
+    if (found.length === 0) {
+      const drafted = pkg && declared(pkg);
+      if (!drafted) {
+        silent.push(`${key} (${crate.licence})`);
+        continue;
+      }
+      found.push(drafted);
+    }
+    for (const text of found) {
+      const said = text.replace(/\r\n/g, "\n").trim();
+      const sum = createHash("sha256").update(said).digest("hex");
+      if (!byText.has(sum)) byText.set(sum, { said, crates: [] });
+      byText.get(sum).crates.push(crate);
+    }
+  }
+  if (silent.length > 0) {
+    throw new Error(`no licence text for ${silent.length} crates:\n${silent.join("\n")}`);
+  }
+  return [...byText.values()]
+    .map((one) => ({
+      ...one,
+      crates: one.crates.sort((a, b) => `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`)),
+    }))
+    .sort((a, b) =>
+      `${a.crates[0].name}@${a.crates[0].version}`.localeCompare(
+        `${b.crates[0].name}@${b.crates[0].version}`,
+      ) || Number(a.said > b.said) - Number(a.said < b.said),
+    );
+};
+
+const fenced = (said) => {
+  const longest = Math.max(0, ...(said.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  return `${fence}text\n${said}\n${fence}`;
+};
+
+const section = (one, at) => {
+  const who = one.crates.map((crate) => `\`${crate.name}\` ${crate.version}`).join(", ");
+  return `## Text ${at + 1}\n\n${who}\n\n${fenced(one.said)}`;
+};
+
 const listed = (seen) =>
   [...seen.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -150,6 +279,7 @@ const listed = (seen) =>
 
 const js = shipped();
 const rs = crates();
+const licences = written(rs);
 
 const kept = [...js.entries()]
   .filter(([, one]) => one.notice)
@@ -166,7 +296,9 @@ writeFileSync(
 <!-- Written by \`npm run notices\`. Do not edit by hand. -->
 
 LinkUnbound is GPL-3.0-only. The binary carries the work below, each under its own
-licence. Nothing of it was copied into LinkUnbound's own source.
+licence. Nothing of it was copied into LinkUnbound's own source. The licence text
+of every crate is in [THIRD-PARTY-LICENSES.md](https://github.com/rgdevment/LinkUnbound/blob/main/THIRD-PARTY-LICENSES.md),
+also under About → Licence texts.
 
 ## In the window (${js.size} packages)
 
@@ -186,4 +318,19 @@ ${kept}
 `),
 );
 
+writeFileSync(
+  texts,
+  asWritten(`# Licence texts — what the crates inside LinkUnbound carry
+
+<!-- Written by \`npm run notices\`. Do not edit by hand. -->
+
+Every crate in [THIRD-PARTY-BUNDLED.md](https://github.com/rgdevment/LinkUnbound/blob/main/THIRD-PARTY-BUNDLED.md)
+comes with the licence text it ships, or, when it ships none, the text of the licence it declares.
+Each text appears once, under the crates that carry it: ${licences.length} texts for ${rs.size} crates.
+
+${licences.map(section).join("\n\n")}
+`),
+);
+
 console.log(`${js.size} packages, ${rs.size} crates -> ${out}`);
+console.log(`${licences.length} licence texts -> ${texts}`);

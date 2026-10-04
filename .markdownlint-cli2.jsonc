@@ -1,5 +1,5 @@
 {
-  "globs": ["**/*.md", "!node_modules", "!target", "!app/node_modules", "!THIRD-PARTY-BUNDLED.md"],
+  "globs": ["**/*.md", "!node_modules", "!target", "!app/node_modules", "!THIRD-PARTY-BUNDLED.md", "!THIRD-PARTY-LICENSES.md"],
   "config": {
     "default": true,
     "MD013": false,

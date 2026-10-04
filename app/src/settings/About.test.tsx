@@ -75,9 +75,9 @@ function showAsking() {
   render(<Host from={null} step={null} starring />);
 }
 
-function answers(overrides: Record<string, () => Promise<unknown>> = {}) {
-  invoke.mockImplementation((cmd: string) => {
-    if (cmd in overrides) return overrides[cmd]();
+function answers(overrides: Record<string, (args?: unknown) => Promise<unknown>> = {}) {
+  invoke.mockImplementation((cmd: string, args?: unknown) => {
+    if (cmd in overrides) return overrides[cmd](args);
     if (cmd === "about") return Promise.resolve(BUILD);
     return Promise.resolve(null);
   });
@@ -484,5 +484,68 @@ describe("third-party notices", () => {
     expect(alert).toHaveTextContent("No se pudieron leer los avisos de terceros");
     expect(alert.previousElementSibling).toHaveClass("links");
     expect(screen.queryByRole("region", { name: "Avisos de terceros" })).not.toBeInTheDocument();
+  });
+});
+
+describe("licence texts", () => {
+  beforeEach(() => {
+    opened.length = 0;
+    invoke.mockReset();
+  });
+
+  function shelvesSay(fail = false) {
+    answers({
+      notices: (args) => {
+        if ((args as { licences: boolean }).licences) {
+          return fail ? Promise.reject(new Error("no")) : Promise.resolve("Apache License 2.0");
+        }
+        return Promise.resolve("MIT License");
+      },
+    });
+  }
+
+  it("are asked for on their own button, and only when it is pressed", async () => {
+    shelvesSay();
+    show();
+
+    const texts = await screen.findByRole("button", { name: "Textos de las licencias" });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "notices")).toBe(false);
+
+    await userEvent.click(texts);
+    const shelf = await screen.findByRole("region", { name: "Textos de las licencias" });
+    expect(shelf).toHaveTextContent("Apache License 2.0");
+    expect(invoke).toHaveBeenCalledWith("notices", { licences: true });
+    expect(texts).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Avisos de terceros" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("give way to the notices when those are opened instead", async () => {
+    shelvesSay();
+    show();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Textos de las licencias" }));
+    await screen.findByRole("region", { name: "Textos de las licencias" });
+    await userEvent.click(screen.getByRole("button", { name: "Avisos de terceros" }));
+
+    const shelf = await screen.findByRole("region", { name: "Avisos de terceros" });
+    expect(shelf).toHaveTextContent("MIT License");
+    expect(invoke).toHaveBeenCalledWith("notices", { licences: false });
+    expect(
+      screen.queryByRole("region", { name: "Textos de las licencias" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("say so when they cannot be read", async () => {
+    shelvesSay(true);
+    show();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Textos de las licencias" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudieron leer los textos de las licencias",
+    );
   });
 });

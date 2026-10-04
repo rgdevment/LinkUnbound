@@ -41,14 +41,14 @@ jobs:
         run: |
           npm ci
           npm run lint
-      # About links to the copy on main, so that copy is the one people read, and it trails every bump.
+      # About carries both files inside the binary, so the tag ships whatever the tree holds.
       - uses: ./.github/actions/toolchain
       - name: The notices on main name what this build ships
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           npm run notices
-          if ! git diff --exit-code THIRD-PARTY-BUNDLED.md; then
-            echo "::error::THIRD-PARTY-BUNDLED.md is behind the lockfiles; run npm run notices and land it before tagging"
+          if ! git diff --exit-code THIRD-PARTY-BUNDLED.md THIRD-PARTY-LICENSES.md; then
+            echo "::error::THIRD-PARTY-BUNDLED.md or THIRD-PARTY-LICENSES.md is behind the lockfiles; run npm run notices and land them before tagging"
             exit 1
           fi
 
