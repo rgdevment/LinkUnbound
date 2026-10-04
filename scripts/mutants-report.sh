@@ -33,7 +33,11 @@ unviable=$(count "$out/unviable.txt")
 } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
 case "$code" in
-  0 | 2 | 3)
+  0)
+    exit 0
+    ;;
+  2 | 3)
+    echo "::notice::$missed survived and $timed timed out; this check reports them and does not fail on them"
     exit 0
     ;;
   4)

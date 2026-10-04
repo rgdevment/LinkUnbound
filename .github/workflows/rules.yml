@@ -19,39 +19,44 @@ jobs:
   conventions:
     name: Project conventions
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
 
+      # A workflow that will not parse fails with no job and no line, and the release only runs on a pushed tag.
       - name: The workflows parse
         run: |
-          # A workflow that does not parse fails in zero seconds with no job, no line and no
-          # diagnosis — and release only ever runs once the tag is already pushed.
           status=0
           for one in .github/workflows/*.yml .github/actions/*/action.yml; do
-            if ! npx --no-install js-yaml "$one" >/dev/null; then
+            if ! npx --no-install js-yaml "$one" > /dev/null; then
               echo "::error file=$one::this file is not valid YAML"
-              status=1
-            fi
-            # A line in column zero ends whatever run block it lands in, which a YAML parser
-            # accepts and GitHub refuses to load — with no job, no line and no diagnosis. It is
-            # what a line continuation leaves behind when an edit does not carry the backslash.
-            if grep -nE '^[^[:space:]#]' "$one" |
-               grep -vE '^[0-9]+:(name|on|permissions|jobs|env|concurrency|defaults|run-name|description|inputs|outputs|runs):'; then
-              echo "::error file=$one::a line starts in column zero that is not a top-level key"
               status=1
             fi
           done
           exit $status
+
+      # Parsing says nothing of a needs that names a job that is gone, or of input expanded into a shell.
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
+        with:
+          tool: zizmor@1.30.1
+      - name: The workflows mean what they say
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHELLCHECK_OPTS: --severity=warning
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint"
+          zizmor --min-severity medium .github
 
       # One implementation for the conventions a person can break in a second: the hook runs
       # the same file, so local and CI can never drift into saying different things.
@@ -67,23 +72,57 @@ jobs:
           AFTER: ${{ github.sha }}
         run: |
           if git cat-file -e "$BEFORE^{commit}" 2> /dev/null; then
-            bash scripts/commits.sh "$BEFORE..$AFTER"
+            bash scripts/commits.sh --landed "$BEFORE..$AFTER"
           else
-            bash scripts/commits.sh --subject "$(git log -1 --format=%s)"
+            bash scripts/commits.sh --title "$(git log -1 --format=%s)"
           fi
 
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+  # CI runs every test in its own process; twenty in-process turns here catch tests that share state.
+  determinism:
+    name: Tests are deterministic
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The stable toolchain, brought up to date
+        shell: bash
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Tests are deterministic
+      - name: Twenty turns of the suite
         run: |
-          turns=1
-          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] || [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            turns=20
-          fi
-          for i in $(seq 1 "$turns"); do
+          for _ in $(seq 1 20); do
             cargo test -p linkunbound-core --quiet || exit 1
           done
+
+  # The release refuses notices behind the lockfiles; this says so the morning after, not on the tag.
+  notices:
+    name: The notices name what ships
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: The stable toolchain, brought up to date
+        shell: bash
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - name: Regenerated, they match the copy on main
+        run: |
+          (cd app && npm ci)
+          npm run notices
+          if ! git diff --exit-code THIRD-PARTY-BUNDLED.md; then
+            echo "::error::THIRD-PARTY-BUNDLED.md is behind the lockfiles; run npm run notices and land it before the next tag"
+            exit 1
+          fi

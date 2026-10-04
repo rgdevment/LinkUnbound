@@ -4,7 +4,19 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 0
 status=0
 
-bash scripts/rules.sh || status=1
+# What is about to be committed, not what the working tree happens to hold beside it.
+staged=$(mktemp -d) || {
+  echo "x  no temporary directory could be made, so nothing was looked at"
+  exit 1
+}
+trap 'rm -rf "$staged"' EXIT
+git checkout-index --all --ignore-skip-worktree-bits --prefix="$staged/" || {
+  echo "x  the staged tree could not be written out, so nothing was looked at"
+  exit 1
+}
+biome="$PWD/app/node_modules/.bin/biome"
+
+bash "$staged/scripts/rules.sh" < /dev/null || status=1
 
 quietly() {
   local said
@@ -16,16 +28,16 @@ quietly() {
 }
 
 if command -v cargo > /dev/null; then
-  quietly "cargo fmt --all --check" "cargo fmt --all would change files"
+  quietly 'cd "$staged" && cargo fmt --all --check' "cargo fmt --all would change files"
 else
-  echo "x  cargo is not here, so the formatting was not looked at"
+  echo "!  cargo is not here, so the formatting was not looked at"
 fi
 
-if [ -x app/node_modules/.bin/biome ]; then
-  quietly "cd app && ./node_modules/.bin/biome check src" \
+if [ -x "$biome" ]; then
+  quietly 'cd "$staged/app" && "$biome" check src' \
     "biome would change files; it is the first thing CI runs on the window"
 else
-  echo "x  app/node_modules is not here, so biome did not look at the window"
+  echo "!  app/node_modules is not here, so biome did not look at the window"
 fi
 
 exit $status

@@ -159,6 +159,19 @@ crates/linkunbound-win/src/native.rs"
   fi
 }
 
+# Valid YAML GitHub will not load: a column-zero line, left when an edit drops a continuation backslash.
+workflows_github_will_load() {
+  local found
+  found=$(grep -nE '^[^[:space:]#]' .github/workflows/*.yml .github/actions/*/action.yml \
+    | grep -vE ':[0-9]+:(name|on|permissions|jobs|env|concurrency|defaults|run-name|description|inputs|outputs|runs):')
+  if [ -n "$found" ]; then
+    printf '%s\n' "$found"
+    amiss "a line starts in column zero that is not a top-level key, and GitHub will not load that workflow"
+  else
+    went_well "every workflow keeps its lines inside their keys"
+  fi
+}
+
 cd "$(dirname "$0")/.." || exit 2
 no_prose_blocks
 nothing_past_what_a_person_holds
@@ -168,4 +181,5 @@ nothing_the_core_prints
 nothing_the_core_knows_of_a_platform
 nothing_that_takes_the_picker_down
 unsafe_stays_where_it_was_audited
+workflows_github_will_load
 exit $status

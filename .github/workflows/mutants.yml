@@ -22,9 +22,10 @@ jobs:
     outputs:
       mutable: ${{ steps.look.outputs.mutable }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - id: look
         env:
@@ -45,9 +46,10 @@ jobs:
     if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: What the branch changed in the crates
         id: touched
@@ -58,17 +60,23 @@ jobs:
           git diff "$from" -- crates/linkunbound-core crates/linkunbound-shell > branch.diff
           if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
 
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: The stable toolchain, brought up to date
         if: steps.touched.outputs.any == 'yes'
+        shell: bash
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
           save-if: false
         if: steps.touched.outputs.any == 'yes'
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         if: steps.touched.outputs.any == 'yes'
-      - uses: taiki-e/install-action@cargo-mutants
+        with:
+          tool: nextest
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         if: steps.touched.outputs.any == 'yes'
+        with:
+          tool: cargo-mutants
 
       - name: What a desktop is not needed to build
         if: steps.touched.outputs.any == 'yes'
@@ -92,7 +100,7 @@ jobs:
           TITLE: The lines this branch changed
         run: bash scripts/mutants-report.sh
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && steps.touched.outputs.any == 'yes'
         with:
           name: mutants-branch-crates
@@ -106,9 +114,10 @@ jobs:
     if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: What the branch changed in the crates, read with a Mac's eyes
         id: touched
@@ -119,17 +128,23 @@ jobs:
           git diff "$from" -- crates > branch.diff
           if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
 
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: The stable toolchain, brought up to date
         if: steps.touched.outputs.any == 'yes'
+        shell: bash
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
           save-if: false
         if: steps.touched.outputs.any == 'yes'
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         if: steps.touched.outputs.any == 'yes'
-      - uses: taiki-e/install-action@cargo-mutants
+        with:
+          tool: nextest
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         if: steps.touched.outputs.any == 'yes'
+        with:
+          tool: cargo-mutants
 
       - name: A mutant that lives on a line this branch wrote
         id: run
@@ -147,7 +162,7 @@ jobs:
           TITLE: The lines this branch changed, on a Mac
         run: bash scripts/mutants-report.sh
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && steps.touched.outputs.any == 'yes'
         with:
           name: mutants-branch-mac
@@ -161,9 +176,10 @@ jobs:
     if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: What the branch changed in the settings backend
         id: touched
@@ -174,17 +190,23 @@ jobs:
           git diff "$from" -- app/src-tauri/src > branch.diff
           if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
 
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: The stable toolchain, brought up to date
         if: steps.touched.outputs.any == 'yes'
+        shell: bash
+        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
           save-if: false
         if: steps.touched.outputs.any == 'yes'
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         if: steps.touched.outputs.any == 'yes'
-      - uses: taiki-e/install-action@cargo-mutants
+        with:
+          tool: nextest
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         if: steps.touched.outputs.any == 'yes'
+        with:
+          tool: cargo-mutants
 
       - name: What a desktop is not needed to build
         if: steps.touched.outputs.any == 'yes'
@@ -212,7 +234,7 @@ jobs:
           TITLE: The lines this branch changed in settings
         run: bash scripts/mutants-report.sh
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && steps.touched.outputs.any == 'yes'
         with:
           name: mutants-branch-settings
@@ -226,9 +248,10 @@ jobs:
     if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: What the branch changed in the window
         id: touched
@@ -255,7 +278,7 @@ jobs:
             | paste -sd, -)
           echo "list=$list" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: steps.touched.outputs.list != ''
         with:
           node-version: 22
@@ -273,9 +296,11 @@ jobs:
         # request chose, and a name with a quote or a `$(...)` in it would run as shell.
         env:
           TOUCHED: ${{ steps.touched.outputs.list }}
-        run: npx stryker run --mutate "$TOUCHED"
+        run: |
+          npx stryker run --mutate "$TOUCHED"
+          echo "::notice::survivors are in the report above and the artifact; this check does not fail on them"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && steps.touched.outputs.list != ''
         with:
           name: mutants-branch-window
