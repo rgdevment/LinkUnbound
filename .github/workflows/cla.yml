@@ -29,11 +29,12 @@ jobs:
     with:
       project: linkunbound
       document-url: https://github.com/rgdevment/LinkUnbound/blob/main/CLA.md
+      allowlist: rgdevment,dependabot[bot],github-actions[bot]
       not-signed-message: >-
         Thanks for the pull request. LinkUnbound is released under the GPL-3.0 and offered under
         separate commercial terms, which requires a signature from whoever opened it and every
         author and co-author of its commits before it can be merged. You keep the copyright on
-        your work — see [CLA.md](https://github.com/rgdevment/LinkUnbound/blob/main/CLA.md).
+        your work.
         To sign, post a comment on this pull request with:
     secrets:
       signatures-token: ${{ secrets.CLA_SIGNATURES_TOKEN }}

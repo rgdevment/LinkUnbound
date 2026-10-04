@@ -63,6 +63,7 @@ updates:
 
   - package-ecosystem: npm
     directory: /app
+    # package.json overrides qs under typed-rest-client 2.3.x (GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g); drop it once Stryker reaches typed-rest-client >= 3.1.1.
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
