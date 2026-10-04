@@ -76,10 +76,10 @@ embedded systems, nor a product that exposes Slint's API to its own users;
 those need Slint's commercial licence, bought from SixtyFPS, not from this
 project.
 
-**MPL-2.0** covers a few crates in the build (`cssparser`, `cssparser-macros`, `selectors`,
-`dtoa-short`, `option-ext`). The MPL is copyleft per file: the source of those
-files, and of any change made to them, stays available under the MPL, and the
-rest of the product is untouched. LinkUnbound ships them unmodified.
+**MPL-2.0** covers one crate in the binaries, `option-ext`, which Tauri
+reaches through `dirs`. The MPL is copyleft per file: the source of that crate,
+and of any change made to it, stays available under the MPL, and the rest of
+the product is untouched. LinkUnbound ships it unmodified.
 
 ## Store distribution
 
