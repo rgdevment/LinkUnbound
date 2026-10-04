@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type Key, useSpoken, useWords } from "../i18n";
+import { composed } from "../markdown";
 import { offerMoved, saidPlainly } from "../refusal";
 import { CloudOff, Code, Gift, Key as KeyIcon } from "./Icons";
 import { Card, Line, Switch } from "./parts";
@@ -39,6 +40,26 @@ function External({ href, children }: { href: string; children: string }) {
       {children}
     </button>
   );
+}
+
+function Notices({ text, label }: { text: string; label: string }) {
+  const box = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const holder = box.current;
+    if (!holder) return;
+    holder.innerHTML = composed(text);
+    const clicked = (event: Event) => {
+      const link = (event.target as HTMLElement).closest("a");
+      if (!link) return;
+      event.preventDefault();
+      void openUrl(link.href).catch(noop);
+    };
+    holder.addEventListener("click", clicked);
+    return () => holder.removeEventListener("click", clicked);
+  }, [text]);
+
+  return <section ref={box} className="notices" aria-label={label} />;
 }
 
 function Rule({ said }: { said: string }) {
@@ -276,6 +297,15 @@ export default function About({
   const [trouble, setTrouble] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [notices, setNotices] = useState<string | null>(null);
+
+  const toggleNotices = () => {
+    if (notices !== null) return setNotices(null);
+    setProblem(null);
+    invoke<string>("notices")
+      .then(setNotices)
+      .catch(() => setProblem(t("noticesRefused")));
+  };
 
   const report = () => {
     setProblem(null);
@@ -452,8 +482,11 @@ export default function About({
         <External href={build?.repository ?? REPO}>{t("aboutRepo")}</External>
         <External href={ALTERNATIVETO}>AlternativeTo</External>
         <External href={`${REPO}/blob/main/PRIVACY.md`}>{t("aboutPrivacyLink")}</External>
-        <External href={`${REPO}/blob/main/THIRD-PARTY-BUNDLED.md`}>{t("aboutNotices")}</External>
+        <button type="button" aria-expanded={notices !== null} onClick={toggleNotices}>
+          {t("aboutNotices")}
+        </button>
       </div>
+      {notices !== null && <Notices text={notices} label={t("aboutNotices")} />}
     </>
   );
 }

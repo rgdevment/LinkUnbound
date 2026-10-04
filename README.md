@@ -340,7 +340,9 @@ work.
 
 What ships inside the binaries, each under its own licence, is listed in
 [THIRD-PARTY-BUNDLED.md](THIRD-PARTY-BUNDLED.md); `npm run notices` writes it
-from the lockfiles.
+from the lockfiles. The application carries it inside its own binary, under
+**About → Third-party notices**, wherever it was installed from and with no
+network.
 
 ---
 

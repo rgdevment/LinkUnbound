@@ -1,2 +1,2 @@
-2157 app/src-tauri/src/lib.rs
+2134 app/src-tauri/src/lib.rs
 2065 crates/linkunbound-shell/src/main.rs

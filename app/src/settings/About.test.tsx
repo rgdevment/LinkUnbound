@@ -379,3 +379,90 @@ describe("about", () => {
     expect(await screen.findByText(/folder refused/)).toBeInTheDocument();
   });
 });
+
+describe("third-party notices", () => {
+  beforeEach(() => {
+    opened.length = 0;
+    invoke.mockReset();
+    answers();
+  });
+
+  function noticesSay(text: () => Promise<string>) {
+    answers({ notices: text });
+  }
+
+  function asked() {
+    return invoke.mock.calls.filter(([cmd]) => cmd === "notices").length;
+  }
+
+  it("are read from the binary only when opened, and close again", async () => {
+    noticesSay(() => Promise.resolve("MIT License\n\nCopyright (c) someone"));
+    show();
+
+    const button = await screen.findByRole("button", { name: "Avisos de terceros" });
+    expect(asked()).toBe(0);
+    expect(button).toHaveAttribute("aria-expanded", "false");
+
+    await userEvent.click(button);
+    expect(await screen.findByText(/Copyright \(c\) someone/)).toBeInTheDocument();
+    expect(asked()).toBe(1);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.click(button);
+    expect(screen.queryByText(/Copyright \(c\) someone/)).not.toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(opened).toEqual([]);
+  });
+
+  it("are drawn as text and tables, not as the markdown they are written in", async () => {
+    noticesSay(() =>
+      Promise.resolve(
+        "# Notices\n\n<!-- Written by `npm run notices`. Do not edit by hand. -->\n\n## In the window\n\n| Package | Licence |\n| --- | --- |\n| react | MIT |",
+      ),
+    );
+    show();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Avisos de terceros" }));
+
+    const cell = await screen.findByRole("cell", { name: "react" });
+    expect(cell.closest("table")).not.toBeNull();
+    expect(screen.queryByText(/\| --- \|/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^## /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Do not edit by hand/)).not.toBeInTheDocument();
+  });
+
+  it("never run what they carry written as html", async () => {
+    noticesSay(() => Promise.resolve("<img src=x onerror=alert(1)> and nothing else"));
+    show();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Avisos de terceros" }));
+
+    const section = await screen.findByRole("region", { name: "Avisos de terceros" });
+    expect(section).toHaveTextContent("and nothing else");
+    expect(section.querySelector("img")).toBeNull();
+  });
+
+  it("open a link inside them in the system browser, not in the window", async () => {
+    noticesSay(() => Promise.resolve("See https://crates.io/crates/slint"));
+    show();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Avisos de terceros" }));
+    await userEvent.click(
+      await screen.findByRole("link", { name: "https://crates.io/crates/slint" }),
+    );
+
+    expect(opened).toEqual(["https://crates.io/crates/slint"]);
+  });
+
+  it("say so when they cannot be read", async () => {
+    noticesSay(() => Promise.reject(new Error("no")));
+    show();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Avisos de terceros" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudieron leer los avisos de terceros",
+    );
+    expect(screen.queryByRole("region", { name: "Avisos de terceros" })).not.toBeInTheDocument();
+  });
+});
