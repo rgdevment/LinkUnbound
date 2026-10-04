@@ -12,14 +12,48 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Dependabot's group titles run past the length a title may reach main with, and it cannot be
+  # told to write shorter ones. An edit made with this token starts no new run, so the check
+  # below reads the title from here rather than from the event.
+  retitle:
+    name: A title Dependabot wrote, cut to fit
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    outputs:
+      title: ${{ steps.cut.outputs.title }}
+    steps:
+      - id: cut
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          fits() { [ "$(printf '%s (#%s)' "$1" "$NUMBER" | wc -m)" -le 90 ]; }
+          short=$(printf '%s' "$TITLE" | sed -E 's/ across [0-9]+ director(y|ies)//')
+          fits "$short" || short=$(printf '%s' "$short" | sed -E 's/ from [^ ]+ to [^ ]+//')
+          fits "$short" || short=$(printf '%s' "$short" | sed -E 's/^([a-z]+: bump) .* in the ([^ ]+) group.*/\1 the \2 group/')
+          if [ "$short" != "$TITLE" ]; then
+            gh pr edit "$NUMBER" --title "$short"
+            echo "«$TITLE» is now «$short»"
+          fi
+          echo "title=$short" >> "$GITHUB_OUTPUT"
+
   conventional:
     name: Conventional commit messages
+    needs: retitle
+    # Skipped for everyone but Dependabot, and a failed cut leaves the long title to fail below.
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Check subjects
         env:
@@ -31,6 +65,6 @@ jobs:
       # is the only one that reaches main. GitHub appends the number, and it counts.
       - name: Check the subject the squash will keep
         env:
-          TITLE: ${{ github.event.pull_request.title }}
+          TITLE: ${{ needs.retitle.outputs.title || github.event.pull_request.title }}
           NUMBER: ${{ github.event.pull_request.number }}
-        run: bash scripts/commits.sh --subject "$TITLE (#$NUMBER)"
+        run: bash scripts/commits.sh --title "$TITLE (#$NUMBER)"

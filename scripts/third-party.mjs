@@ -107,25 +107,25 @@ const noticed = (at) => {
   return drafted(pkg, told(pkg));
 };
 
+// What ships is the union of every build, so the list is the same whichever machine writes it.
+const SHIPPED = ["x86_64-pc-windows-msvc", "aarch64-apple-darwin", "x86_64-apple-darwin"];
+
 const crates = () => {
-  const said = execFileSync(
-    "cargo",
-    ["metadata", "--format-version", "1", "--filter-platform", process.env.TARGET ?? hostTriple()],
-    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-  );
-  const meta = JSON.parse(said);
-  const ours = new Set(meta.workspace_members);
   const seen = new Map();
-  for (const one of meta.packages) {
-    if (ours.has(one.id) || seen.has(one.name)) continue;
-    seen.set(one.name, { version: one.version, licence: one.license ?? "see the crate" });
+  for (const triple of SHIPPED) {
+    const said = execFileSync(
+      "cargo",
+      ["metadata", "--format-version", "1", "--filter-platform", triple],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    const meta = JSON.parse(said);
+    const ours = new Set(meta.workspace_members);
+    for (const one of meta.packages) {
+      if (ours.has(one.id) || seen.has(one.name)) continue;
+      seen.set(one.name, { version: one.version, licence: one.license ?? "see the crate" });
+    }
   }
   return seen;
-};
-
-const hostTriple = () => {
-  const said = execFileSync("rustc", ["-vV"], { encoding: "utf8" });
-  return /host: (.+)/.exec(said)?.[1]?.trim() ?? "";
 };
 
 const listed = (seen) =>

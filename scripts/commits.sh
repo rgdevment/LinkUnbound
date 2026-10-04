@@ -14,20 +14,33 @@ amiss() {
   status=1
 }
 
+# Strict is for a title, which reaches main: only a revert keeps its shape there, and it is measured.
 weighed() {
-  local who=$1 said=$2
+  local who=$1 said=$2 strict=${3:-}
   said=$(printf '%s' "$said" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-  # The subject an undone commit gets by default keeps its own shape, as a merge does.
-  case $said in
-    Revert\ \"*) return ;;
-  esac
-  if ! printf '%s' "$said" | grep -qE "$shape"; then
-    amiss "$who does not follow conventional commits"
-    printf '  %s\n' "$said"
-    return
+  if [ -z "$strict" ]; then
+    case $said in
+      "Merge branch '"* | "Merge pull request #"* | "Merge remote-tracking branch '"* | \
+        "Merge commit '"* | "Merge tag '"* | 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*)
+        return
+        ;;
+    esac
   fi
-  if [ "${#said}" -gt "$most" ]; then
-    amiss "$who is ${#said} characters, keep it under $most"
+  case $said in
+    'Revert "'*) ;;
+    *)
+      if ! printf '%s' "$said" | grep -qE "$shape"; then
+        amiss "$who does not follow conventional commits"
+        printf '  %s\n' "$said"
+        return
+      fi
+      ;;
+  esac
+  # Bytes minus UTF-8 continuation bytes: ${#said} counts bytes when a GUI client spawns git without a locale.
+  local long
+  long=$(printf '%s' "$said" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
+  if [ "$long" -gt "$most" ]; then
+    amiss "$who is $long characters, keep it under $most"
     printf '  %s\n' "$said"
   fi
 }
@@ -42,15 +55,20 @@ said_so() {
   exit $status
 }
 
-if [ "${1:-}" = "--subject" ]; then
-  [ -n "${2:-}" ] || { echo "usage: commits.sh --subject <text>"; exit 2; }
-  weighed "the subject" "$2"
+if [ "${1:-}" = "--subject" ] || [ "${1:-}" = "--title" ]; then
+  [ -n "${2:-}" ] || { echo "usage: commits.sh --subject|--title <text>"; exit 2; }
+  weighed "the subject" "$2" "$([ "$1" = "--title" ] && echo strict)"
   [ "$status" -eq 0 ] && [ -z "${GITHUB_ACTIONS:-}" ] && printf 'ok the subject is well formed\n'
   said_so
 fi
 
+strict=
+if [ "${1:-}" = "--landed" ]; then
+  strict=strict
+  shift
+fi
 range=${1:-}
-[ -n "$range" ] || { echo "usage: commits.sh <range> | --subject <text>"; exit 2; }
+[ -n "$range" ] || { echo "usage: commits.sh [--landed] <range> | --subject <text> | --title <text>"; exit 2; }
 
 listed=$(git rev-list --no-merges "$range" 2>&1) || {
   printf '%s\n' "$listed"
@@ -62,7 +80,7 @@ seen=0
 while read -r sha; do
   [ -n "$sha" ] || continue
   seen=$((seen + 1))
-  weighed "${sha:0:8}" "$(git log -1 --format=%s "$sha")"
+  weighed "${sha:0:8}" "$(git log -1 --format=%s "$sha")" "$strict"
 done <<< "$listed"
 
 [ "$status" -eq 0 ] && [ -z "${GITHUB_ACTIONS:-}" ] && printf 'ok %s commit subject(s) well formed\n' "$seen"

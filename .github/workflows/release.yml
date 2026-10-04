@@ -27,14 +27,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            app/package-lock.json
+          package-manager-cache: false
       - run: npm ci
       - run: npm run lint:md
       - name: Frontend style
@@ -42,11 +41,23 @@ jobs:
         run: |
           npm ci
           npm run lint
+      # About links to the copy on main, so that copy is the one people read, and it trails every bump.
+      - name: The toolchain rust-toolchain.toml names
+        shell: bash
+        run: rustup toolchain install --no-self-update
+      - name: The notices on main name what this build ships
+        run: |
+          npm run notices
+          if ! git diff --exit-code THIRD-PARTY-BUNDLED.md; then
+            echo "::error::THIRD-PARTY-BUNDLED.md is behind the lockfiles; run npm run notices and land it before tagging"
+            exit 1
+          fi
 
   tested:
     name: Tested when it landed
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Past the longest chain CI can take: coverage's forty minutes, then Sonar's fifteen.
+    timeout-minutes: 65
     permissions:
       contents: read
       actions: read
@@ -58,7 +69,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for attempt in $(seq 1 80); do
+          for attempt in $(seq 1 120); do
             if ! said=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --event push \
               --limit 1 --json status,conclusion \
               --jq 'if length == 0 then "" else .[0] | "\(.status) \(.conclusion)" end' \
@@ -77,16 +88,16 @@ jobs:
                 exit 1
                 ;;
               "")
-                echo "no CI run for ${GITHUB_SHA:0:8} yet (${attempt}/80)"
+                echo "no CI run for ${GITHUB_SHA:0:8} yet (${attempt}/120)"
                 sleep 30
                 ;;
               *)
-                echo "CI on ${GITHUB_SHA:0:8} is still running (${attempt}/80)"
+                echo "CI on ${GITHUB_SHA:0:8} is still running (${attempt}/120)"
                 sleep 30
                 ;;
             esac
           done
-          echo "::error::forty minutes and CI on ${GITHUB_SHA:0:8} has not finished, or never \
+          echo "::error::an hour and CI on ${GITHUB_SHA:0:8} has not finished, or never \
             ran: a tag belongs on a commit that reached main and was tested there"
           exit 1
 
@@ -97,14 +108,12 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          shared-key: workspace
-          save-if: false
+          persist-credentials: false
+      - name: The toolchain rust-toolchain.toml names
+        shell: bash
+        run: rustup toolchain install --no-self-update
       - uses: ./.github/actions/sidecar
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets
@@ -129,6 +138,17 @@ jobs:
       HAS_UPDATER_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD != '' }}
       HAS_PFX: ${{ secrets.PFX_BASE64 != '' }}
       HAS_PFX_PASSWORD: ${{ secrets.PFX_PASSWORD != '' }}
+      HAS_GIST: ${{ secrets.GIST_TOKEN != '' }}
+      STORE_PUBLISH: ${{ vars.STORE_PUBLISH }}
+      HAS_STORE_APP_ID: ${{ vars.STORE_APP_ID != '' }}
+      HAS_STORE_TENANT: ${{ secrets.STORE_TENANT_ID != '' }}
+      HAS_STORE_SELLER: ${{ secrets.STORE_SELLER_ID != '' }}
+      HAS_STORE_CLIENT: ${{ secrets.STORE_CLIENT_ID != '' }}
+      HAS_STORE_SECRET: ${{ secrets.STORE_CLIENT_SECRET != '' }}
+      WINGET_PUBLISH: ${{ vars.WINGET_PUBLISH }}
+      HAS_WINGET: ${{ secrets.WINGET_TOKEN != '' }}
+      HAS_MSIX_IDENTITY: ${{ vars.MSIX_IDENTITY != '' }}
+      HAS_MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER != '' }}
     steps:
       - name: Signing secrets come in pairs
         run: |
@@ -158,6 +178,7 @@ jobs:
             missing=""
             want() { [ "$2" = "true" ] || missing="$missing $1"; }
             want TAURI_SIGNING_PRIVATE_KEY "$HAS_UPDATER_KEY"
+            want TAURI_SIGNING_PRIVATE_KEY_PASSWORD "$HAS_UPDATER_PASSWORD"
             want PFX_BASE64 "$HAS_PFX"
             want PFX_PASSWORD "$HAS_PFX_PASSWORD"
             if [ "$BUILD_MACOS" = "true" ]; then
@@ -167,6 +188,22 @@ jobs:
               want APPLE_ID "$HAS_APPLE_ID"
               want APPLE_APP_PASSWORD "$HAS_APPLE_APP_PASSWORD"
               want APPLE_TEAM_ID "$HAS_APPLE_TEAM_ID"
+              want GIST_TOKEN "$HAS_GIST"
+            fi
+            # A switch turned on is a promise to publish there; only a stable version goes.
+            if [[ "$GITHUB_REF" != *-* ]]; then
+              want MSIX_IDENTITY "$HAS_MSIX_IDENTITY"
+              want MSIX_PUBLISHER "$HAS_MSIX_PUBLISHER"
+              if [ "$STORE_PUBLISH" = "true" ]; then
+                want STORE_APP_ID "$HAS_STORE_APP_ID"
+                want STORE_TENANT_ID "$HAS_STORE_TENANT"
+                want STORE_SELLER_ID "$HAS_STORE_SELLER"
+                want STORE_CLIENT_ID "$HAS_STORE_CLIENT"
+                want STORE_CLIENT_SECRET "$HAS_STORE_SECRET"
+              fi
+              if [ "$WINGET_PUBLISH" = "true" ]; then
+                want WINGET_TOKEN "$HAS_WINGET"
+              fi
             fi
             [ -z "$missing" ] || fail "this tag would be released without:$missing"
           fi
@@ -219,18 +256,19 @@ jobs:
       HAS_PFX: ${{ secrets.PFX_BASE64 != '' }}
       HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/prepare
         with:
           version: ${{ needs.version.outputs.version }}
           targets: ${{ env.TARGET }}
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: app/package-lock.json
+          package-manager-cache: false
 
       - name: Frontend
         working-directory: app
@@ -372,7 +410,7 @@ jobs:
         run: |
           echo "sha=$(cat stage/linkunbound-settings.exe stage/linkunbound-shell.exe | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: stage-windows
           path: stage
@@ -433,7 +471,7 @@ jobs:
           npm run tauri -- signer sign "$exe"
           test -s "$exe.sig" || { echo "::error::no updater signature was written"; exit 1; }
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bundle-windows
           path: dist/*
@@ -470,19 +508,19 @@ jobs:
       HAS_APPLE_ID: ${{ secrets.APPLE_ID != '' }}
       HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/prepare
         with:
           version: ${{ needs.version.outputs.version }}
           targets: ${{ matrix.target }}
-          cache-key: ${{ matrix.target }}
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: app/package-lock.json
+          package-manager-cache: false
 
       - name: Frontend
         working-directory: app
@@ -652,7 +690,7 @@ jobs:
           cp "$dmg" "dist/linkunbound-installer-$v-macos-$ARCH.dmg"
           ls -l dist
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bundle-macos-${{ matrix.arch }}
           path: dist/*
@@ -687,10 +725,12 @@ jobs:
             echo "go=yes" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.gate.outputs.go == 'yes'
+        with:
+          persist-credentials: false
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         if: steps.gate.outputs.go == 'yes'
         with:
           name: stage-windows
@@ -771,7 +811,7 @@ jobs:
             Write-Host "::error::the package launches $exe, which is not what the shell runs for a link"; exit 1
           }
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.gate.outputs.go == 'yes'
         with:
           name: bundle-msix
@@ -791,19 +831,21 @@ jobs:
       && (needs.bundle-msix.result == 'success' || needs.bundle-msix.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The manifest branch and «Latest» are one per repository: a stable and an rc publish in turn.
     concurrency:
-      group: release-publish-${{ github.ref }}
+      group: release-publish
       cancel-in-progress: false
     permissions:
       contents: write
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: true # zizmor: ignore[artipacked] it pushes the manifest branch
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: bundle-*
           path: dist
@@ -1083,7 +1125,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Take the update the way an installed copy would
         run: |
@@ -1197,13 +1241,13 @@ jobs:
             echo "go=no" >> "$GITHUB_OUTPUT"
           elif [ -z "$STORE_APP_ID" ] || [ -z "$STORE_TENANT_ID" ] || [ -z "$STORE_SELLER_ID" ] \
             || [ -z "$STORE_CLIENT_ID" ] || [ -z "$STORE_CLIENT_SECRET" ]; then
-            echo "::notice::the Store credentials are not all here; nothing to submit"
-            echo "go=no" >> "$GITHUB_OUTPUT"
+            echo "::error::STORE_PUBLISH is true but a Store credential is empty"
+            exit 1
           else
             echo "go=yes" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         if: steps.gate.outputs.go == 'yes'
         with:
           name: bundle-msix
@@ -1266,14 +1310,14 @@ jobs:
       && needs.version.outputs.macos == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # One tag at a time: the stable and the beta cask live in the same tap.
     concurrency:
-      group: release-homebrew-${{ github.ref }}
+      group: release-homebrew
       cancel-in-progress: false
     env:
       GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
     steps:
       - name: Update the tap
-        if: env.GIST_TOKEN != ''
         run: |
           set -euo pipefail
 
@@ -1301,8 +1345,8 @@ jobs:
             return 1
           }
           if ! fetch "$DMG_ARM" || ! fetch "$DMG_INTEL"; then
-            echo "::warning::a disk image is missing for ${VERSION}; leaving the cask as it is"
-            exit 0
+            echo "::error::a disk image is missing for ${VERSION}, so the cask stays where it was"
+            exit 1
           fi
           ARM_SHA=$(sha256sum "/tmp/$DMG_ARM" | awk '{print $1}')
           INTEL_SHA=$(sha256sum "/tmp/$DMG_INTEL" | awk '{print $1}')
@@ -1418,8 +1462,8 @@ jobs:
             echo "::notice::WINGET_PUBLISH is not true; winget-pkgs gets nothing until it is"
             echo "go=no" >> "$GITHUB_OUTPUT"
           elif [ -z "$WINGET_TOKEN" ]; then
-            echo "::notice::no winget token; skipping"
-            echo "go=no" >> "$GITHUB_OUTPUT"
+            echo "::error::WINGET_PUBLISH is true but WINGET_TOKEN is empty"
+            exit 1
           else
             echo "go=yes" >> "$GITHUB_OUTPUT"
           fi

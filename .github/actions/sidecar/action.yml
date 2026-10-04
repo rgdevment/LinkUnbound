@@ -18,4 +18,7 @@ runs:
   using: composite
   steps:
     - shell: bash
-      run: bash scripts/sidecar.sh "${{ inputs.profile }}" "${{ inputs.target }}"
+      env:
+        PROFILE: ${{ inputs.profile }}
+        SIDECAR_TARGET: ${{ inputs.target }}
+      run: bash scripts/sidecar.sh "$PROFILE" "$SIDECAR_TARGET"

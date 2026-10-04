@@ -9,6 +9,8 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
     groups:
@@ -29,14 +31,19 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
+    # slint pulls muda 0.19, and a second muda breaks the macOS LTO link on its duplicated Objective-C class.
+    # windows-future's types cross into the windows crate's Store API, so it moves only when windows does.
     ignore:
       - dependency-name: muda
       - dependency-name: tray-icon
       - dependency-name: windows-future
         update-types:
           - version-update:semver-major
+          - version-update:semver-minor
       - dependency-name: "tauri*"
         update-types:
           - version-update:semver-minor
@@ -59,12 +66,21 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
+    # @stryker-mutator/vitest-runner 10 kills no mutant under vitest 5, so the mutation score reads 0.
     ignore:
       - dependency-name: "@tauri-apps/*"
         update-types:
           - version-update:semver-minor
+          - version-update:semver-major
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "@vitest/coverage-v8"
+        update-types:
           - version-update:semver-major
     groups:
       picker:
@@ -84,5 +100,7 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 1
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
