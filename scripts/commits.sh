@@ -18,6 +18,13 @@ amiss() {
 weighed() {
   local who=$1 said=$2 strict=${3:-}
   said=$(printf '%s' "$said" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  case $said in
+    *$'\n'*)
+      amiss "$who runs over more than one line"
+      printf '  %s\n' "$said"
+      return
+      ;;
+  esac
   if [ -z "$strict" ]; then
     case $said in
       "Merge "* | 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*)

@@ -39,6 +39,8 @@
   },
   "license": "GPL-3.0-only",
   "overrides": {
-    "qs": "^6.16.0"
+    "typed-rest-client": {
+      "qs": "^6.16.0"
+    }
   }
 }

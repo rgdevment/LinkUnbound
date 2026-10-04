@@ -29,9 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - uses: ./.github/actions/toolchain
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
@@ -60,9 +58,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - uses: ./.github/actions/toolchain
       - run: cargo fmt --all --check
 
   picker:
@@ -110,6 +106,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+      - name: npm advisories in the picker
+        working-directory: app
+        run: npm audit --package-lock-only --audit-level=moderate
 
   coverage:
     name: coverage
@@ -120,18 +119,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy && rustup component add llvm-tools-preview
+      - uses: ./.github/actions/toolchain
+        with:
+          components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
-          tool: cargo-llvm-cov
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
-        with:
-          tool: nextest
+          tool: cargo-llvm-cov,nextest
 
       - name: What a desktop is not needed to build
         run: |
@@ -177,18 +173,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy && rustup component add llvm-tools-preview
+      - uses: ./.github/actions/toolchain
+        with:
+          components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
-          tool: cargo-llvm-cov
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
-        with:
-          tool: nextest
+          tool: cargo-llvm-cov,nextest
       - name: The Mac crate, and the Mac branches of the core and the picker
         run: cargo llvm-cov nextest -p linkunbound-mac -p linkunbound-core -p linkunbound-shell --lcov --output-path lcov-mac.info
       - name: Every path is relative to the repository, which is what Sonar reads
