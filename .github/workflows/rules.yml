@@ -132,12 +132,12 @@ jobs:
           package-manager-cache: false
       - if: steps.look.outputs.touched == 'true'
         uses: ./.github/actions/toolchain
-      - name: Regenerated, they match the copy on main
+      - name: Regenerated, they match the copy in the tree
         if: steps.look.outputs.touched == 'true'
         run: |
           (cd app && npm ci)
           npm run notices
           if ! git diff --exit-code THIRD-PARTY-BUNDLED.md; then
-            echo "::error::THIRD-PARTY-BUNDLED.md is behind the lockfiles; run npm run notices and land it before the next tag"
+            echo "::error::THIRD-PARTY-BUNDLED.md is behind the lockfiles; run npm run notices and commit it"
             exit 1
           fi
