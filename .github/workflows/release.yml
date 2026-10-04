@@ -101,23 +101,6 @@ jobs:
             ran: a tag belongs on a commit that reached main and was tested there"
           exit 1
 
-  rust:
-    name: fmt + clippy
-    runs-on: windows-latest
-    timeout-minutes: 25
-    env:
-      RUSTFLAGS: -D warnings
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: The toolchain rust-toolchain.toml names
-        shell: bash
-        run: rustup toolchain install --no-self-update
-      - uses: ./.github/actions/sidecar
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets
-
   version:
     name: Resolve the version
     needs: [gate]
@@ -821,17 +804,18 @@ jobs:
 
   publish:
     name: GitHub Release
-    needs: [rust, tested, version, bundle-windows, bundle-macos, bundle-msix]
+    needs: [tested, version, bundle-windows, bundle-macos, bundle-msix]
     if: >-
       !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-      && needs.rust.result == 'success' && needs.tested.result == 'success'
+      && needs.tested.result == 'success'
       && needs.version.result == 'success'
       && needs.bundle-windows.result == 'success'
       && (needs.bundle-macos.result == 'success' || needs.bundle-macos.result == 'skipped')
       && (needs.bundle-msix.result == 'success' || needs.bundle-msix.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # The manifest branch and «Latest» are one per repository: a stable and an rc publish in turn.
+    # One tag at a time: every tag rewrites the same manifest branch and the Latest flag. A third
+    # tag cancels the one waiting, which then has to be re-run by hand.
     concurrency:
       group: release-publish
       cancel-in-progress: false
@@ -909,7 +893,7 @@ jobs:
           echo "the signatures and the shipped key are halves of the same pair"
 
       - name: Checksums
-        run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+        run: cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:

@@ -296,7 +296,9 @@ jobs:
         # request chose, and a name with a quote or a `$(...)` in it would run as shell.
         env:
           TOUCHED: ${{ steps.touched.outputs.list }}
-        run: npx stryker run --mutate "$TOUCHED"
+        run: |
+          npx stryker run --mutate "$TOUCHED"
+          echo "::notice::survivors are in the report above and the artifact; this check does not fail on them"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && steps.touched.outputs.list != ''

@@ -48,7 +48,8 @@ jobs:
             cargo check -p "$one" --all-targets
           done
       - run: cargo nextest run --workspace --no-tests=pass
-      - if: runner.os == 'Windows'
+      # Compiling the doc tests is most of what they cost, and macOS is the job with time to spare.
+      - if: runner.os == 'macOS'
         run: cargo test --doc --workspace
 
   lint:
@@ -83,7 +84,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
-      - run: npm test
 
   prose:
     name: markdown

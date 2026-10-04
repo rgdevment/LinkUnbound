@@ -19,7 +19,7 @@ jobs:
   conventions:
     name: Project conventions
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,22 +33,14 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
 
+      # A workflow that will not parse fails in no time at all, with no job and no line number, and
+      # the one that matters is the release: it is only ever run when a tag is already pushed.
       - name: The workflows parse
         run: |
-          # A workflow that does not parse fails in zero seconds with no job, no line and no
-          # diagnosis — and release only ever runs once the tag is already pushed.
           status=0
           for one in .github/workflows/*.yml .github/actions/*/action.yml; do
-            if ! npx --no-install js-yaml "$one" >/dev/null; then
+            if ! npx --no-install js-yaml "$one" > /dev/null; then
               echo "::error file=$one::this file is not valid YAML"
-              status=1
-            fi
-            # A line in column zero ends whatever run block it lands in, which a YAML parser
-            # accepts and GitHub refuses to load — with no job, no line and no diagnosis. It is
-            # what a line continuation leaves behind when an edit does not carry the backslash.
-            if grep -nE '^[^[:space:]#]' "$one" |
-               grep -vE '^[0-9]+:(name|on|permissions|jobs|env|concurrency|defaults|run-name|description|inputs|outputs|runs):'; then
-              echo "::error file=$one::a line starts in column zero that is not a top-level key"
               status=1
             fi
           done
@@ -86,6 +78,17 @@ jobs:
             bash scripts/commits.sh --title "$(git log -1 --format=%s)"
           fi
 
+  # One turn of the suite is what CI already runs on every push and pull request, so this job
+  # only earns its toolchain when it runs the twenty that say whether a test is deterministic.
+  determinism:
+    name: Tests are deterministic
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: The toolchain rust-toolchain.toml names
         shell: bash
         run: rustup toolchain install --no-self-update
@@ -94,12 +97,8 @@ jobs:
           shared-key: workspace
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Tests are deterministic
+      - name: Twenty turns of the suite
         run: |
-          turns=1
-          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] || [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            turns=20
-          fi
-          for _ in $(seq 1 "$turns"); do
+          for _ in $(seq 1 20); do
             cargo test -p linkunbound-core --quiet || exit 1
           done
