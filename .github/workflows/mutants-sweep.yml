@@ -291,7 +291,8 @@ jobs:
 
   score:
     name: what the whole sweep came to
-    if: always() && !cancelled()
+    # A dispatch from another branch would write its numbers into the score main is read by.
+    if: always() && !cancelled() && github.ref == 'refs/heads/main'
     needs: [core, shell, settings, mac, window]
     runs-on: ubuntu-latest
     timeout-minutes: 15

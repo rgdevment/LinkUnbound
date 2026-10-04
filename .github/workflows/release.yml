@@ -946,8 +946,7 @@ jobs:
           tag="$GITHUB_REF_NAME"
           printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
 
-          tags=$(gh release list --limit 200 --json tagName --jq '.[].tagName')
-          if ! grep -qx "$tag" <<< "$tags"; then
+          if ! gh release view "$tag" > /dev/null 2>&1; then
             gh release create "$tag" --draft --verify-tag --title "$tag" \
               --prerelease="$PRERELEASE" --generate-notes --notes-file "$RUNNER_TEMP/notes.md"
           fi
@@ -1202,8 +1201,9 @@ jobs:
       && needs.version.outputs.prerelease == 'false'
     runs-on: windows-latest
     timeout-minutes: 20
+    # One submission at a time: the Store holds a single pending one per app.
     concurrency:
-      group: release-msstore-${{ github.ref }}
+      group: release-msstore
       cancel-in-progress: false
     env:
       STORE_PUBLISH: ${{ vars.STORE_PUBLISH }}
@@ -1431,8 +1431,9 @@ jobs:
       && needs.version.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # One at a time: every version goes out through the same fork of winget-pkgs.
     concurrency:
-      group: release-winget-${{ github.ref }}
+      group: release-winget
       cancel-in-progress: false
     env:
       WINGET_PUBLISH: ${{ vars.WINGET_PUBLISH }}
