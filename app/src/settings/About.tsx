@@ -42,6 +42,8 @@ function External({ href, children }: { href: string; children: string }) {
   );
 }
 
+type Shelf = "notices" | "licences";
+
 function Notices({ text, label }: { text: string; label: string }) {
   const box = useRef<HTMLElement>(null);
 
@@ -297,19 +299,19 @@ export default function About({
   const [trouble, setTrouble] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
-  const [notices, setNotices] = useState<string | null>(null);
-  const [readingNotices, setReadingNotices] = useState(false);
-  const [noticesRefused, setNoticesRefused] = useState(false);
+  const [shown, setShown] = useState<{ which: Shelf; text: string } | null>(null);
+  const [reading, setReading] = useState(false);
+  const [refused, setRefused] = useState<Shelf | null>(null);
 
-  const toggleNotices = () => {
-    if (readingNotices) return;
-    if (notices !== null) return setNotices(null);
-    setNoticesRefused(false);
-    setReadingNotices(true);
-    invoke<string>("notices")
-      .then(setNotices)
-      .catch(() => setNoticesRefused(true))
-      .finally(() => setReadingNotices(false));
+  const toggle = (which: Shelf) => {
+    if (reading) return;
+    if (shown?.which === which) return setShown(null);
+    setRefused(null);
+    setReading(true);
+    invoke<string>("notices", { licences: which === "licences" })
+      .then((text) => setShown({ which, text }))
+      .catch(() => setRefused(which))
+      .finally(() => setReading(false));
   };
 
   const report = () => {
@@ -487,16 +489,32 @@ export default function About({
         <External href={build?.repository ?? REPO}>{t("aboutRepo")}</External>
         <External href={ALTERNATIVETO}>AlternativeTo</External>
         <External href={`${REPO}/blob/main/PRIVACY.md`}>{t("aboutPrivacyLink")}</External>
-        <button type="button" aria-expanded={notices !== null} onClick={toggleNotices}>
+        <button
+          type="button"
+          aria-expanded={shown?.which === "notices"}
+          onClick={() => toggle("notices")}
+        >
           {t("aboutNotices")}
         </button>
+        <button
+          type="button"
+          aria-expanded={shown?.which === "licences"}
+          onClick={() => toggle("licences")}
+        >
+          {t("aboutLicences")}
+        </button>
       </div>
-      {noticesRefused && (
+      {refused && (
         <p role="alert" className="alarm">
-          {t("noticesRefused")}
+          {t(refused === "licences" ? "licencesRefused" : "noticesRefused")}
         </p>
       )}
-      {notices !== null && <Notices text={notices} label={t("aboutNotices")} />}
+      {shown && (
+        <Notices
+          text={shown.text}
+          label={t(shown.which === "licences" ? "aboutLicences" : "aboutNotices")}
+        />
+      )}
     </>
   );
 }

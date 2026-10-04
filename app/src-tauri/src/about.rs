@@ -3,6 +3,7 @@ use serde::Serialize;
 use crate::{HERE, store, update};
 
 const NOTICES: &str = include_str!("../../../THIRD-PARTY-BUNDLED.md");
+const LICENCES: &str = include_str!("../../../THIRD-PARTY-LICENSES.md");
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,6 @@ pub fn about() -> Build {
 }
 
 #[tauri::command]
-pub fn notices() -> &'static str {
-    NOTICES
+pub fn notices(licences: bool) -> &'static str {
+    if licences { LICENCES } else { NOTICES }
 }

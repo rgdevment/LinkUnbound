@@ -256,6 +256,8 @@ const ES = {
   aboutPrivacyLink: "Privacidad",
   aboutNotices: "Avisos de terceros",
   noticesRefused: "No se pudieron leer los avisos de terceros",
+  aboutLicences: "Textos de las licencias",
+  licencesRefused: "No se pudieron leer los textos de las licencias",
   aboutIssueNote: "Errores, ideas y navegadores que no detecta",
   aboutSponsor: "Invítame un café",
   aboutSponsorNote:
@@ -527,6 +529,8 @@ const EN: Record<Key, string> = {
   aboutPrivacyLink: "Privacy",
   aboutNotices: "Third-party notices",
   noticesRefused: "The third-party notices could not be read",
+  aboutLicences: "Licence texts",
+  licencesRefused: "The licence texts could not be read",
   aboutIssueNote: "Bugs, ideas and browsers it fails to detect",
   aboutSponsor: "Buy me a coffee",
   aboutSponsorNote:
