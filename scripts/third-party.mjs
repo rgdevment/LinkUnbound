@@ -185,6 +185,7 @@ const offered = (expression) =>
     .filter(Boolean);
 
 const declared = (pkg) => {
+  if (/\s(AND|WITH)\s/.test(pkg.license ?? "")) return null;
   const choices = offered(pkg.license ?? "");
   const pick = CANONICAL.find((one) => choices.includes(one)) ?? choices.find((one) => one in HELD);
   if (!pick) return null;
