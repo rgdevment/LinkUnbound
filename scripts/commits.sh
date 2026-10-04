@@ -2,7 +2,7 @@
 set -uo pipefail
 
 shape='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .+'
-most=90
+most=100
 status=0
 
 amiss() {

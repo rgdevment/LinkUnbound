@@ -190,7 +190,7 @@ application and dies with the console it was started from.
 ### Commits and the checks that run before them
 
 Subjects follow [Conventional Commits](https://www.conventionalcommits.org/)
-(`feat:`, `fix:`, `docs:`, `ci:`…), under 90 characters: CI refuses a longer one,
+(`feat:`, `fix:`, `docs:`, `ci:`…), under 100 characters: CI refuses a longer one,
 and a squash keeps only the pull request's title, number included, so that is
 held to the same shape.
 
