@@ -350,6 +350,16 @@ I built LinkUnbound because I was tired of my OS not letting me choose which bro
 
 ---
 
+## Acknowledgements
+
+The picker is drawn with [Slint](https://slint.dev), and the settings window runs on [Tauri](https://tauri.app).
+
+<a href="https://slint.dev">
+  <img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png" alt="Made with Slint" height="60"/>
+</a>
+
+---
+
 ## Project health
 
 <p>

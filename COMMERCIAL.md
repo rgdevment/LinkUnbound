@@ -32,7 +32,7 @@ licence: it does not. Internal use is not distribution.
 - Ship LinkUnbound, or code derived from it, inside a **product you distribute
   to others**, without licensing that product under the GPL.
 - Redistribute it under **your own brand** without the GPL's source disclosure
-  and licence-notice requirements.
+  requirements.
 - Bundle it with hardware or preinstall it on machines you sell.
 - Satisfy a policy or contract that **forbids copyleft** dependencies in what
   you ship.
@@ -48,9 +48,38 @@ fine, carry on".
   license your own product under the GPL.
 - Written permission you can hand to your legal or procurement team.
 
+It covers LinkUnbound's own code and nothing else. The components it is built
+on keep their own licences, and the notices those licences ask for still go
+with every copy: see [Third-party components](#third-party-components).
+
 Terms, scope, and price are agreed per case rather than published, because a
 single-seat integration and an OEM redistribution are not the same deal.
 Contact <github@apirest.cl> with what you want to do and the scale of it.
+
+## Third-party components
+
+LinkUnbound is built on work it does not own, and no licence from this project
+can relicense it. Everything that ships inside the binaries is listed, with its
+version and licence, in [THIRD-PARTY-BUNDLED.md](THIRD-PARTY-BUNDLED.md). Most
+of it is MIT, Apache-2.0, BSD or ISC: free to redistribute inside a closed
+product, as long as its notices travel with it. Two need a closer look.
+
+**Slint** draws the picker. SixtyFPS GmbH offers it under the GPL-3.0, under
+the Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0, or
+under a paid commercial licence. A product that takes LinkUnbound under a
+commercial licence uses Slint under the Royalty-free licence: no charge, on
+condition that the product shows Slint's `AboutSlint` widget in its About
+screen, or the
+[#MadeWithSlint badge](https://github.com/slint-ui/slint/tree/master/logo) on
+the public page its binaries are downloaded from. That licence does not cover
+embedded systems, nor a product that exposes Slint's API to its own users;
+those need Slint's commercial licence, bought from SixtyFPS, not from this
+project.
+
+**MPL-2.0** covers one crate in the binaries, `option-ext`, which Tauri
+reaches through `dirs`. The MPL is copyleft per file: the source of that crate,
+and of any change made to it, stays available under the MPL, and the rest of
+the product is untouched. LinkUnbound ships it unmodified.
 
 ## Store distribution
 
@@ -58,7 +87,10 @@ The GPL's section 10 forbids imposing further restrictions on recipients,
 which conflicts with the terms of some application stores — Apple's App Store
 being the well-known case. That conflict binds **licensees**, not the
 copyright holder: a third party cannot publish LinkUnbound there, and the
-project itself can, under separate terms it grants to itself.
+project itself can, under separate terms it grants to itself. It holds that
+right over its own code only. For Slint the project is a licensee like anyone
+else, so a build for such a store has to take Slint under its Royalty-free
+licence instead of the GPL, with the attribution that licence asks for.
 
 In practice today: macOS builds are distributed as a signed and notarised DMG
 under the GPL, and the Microsoft Store build is unaffected, since Microsoft's

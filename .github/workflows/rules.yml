@@ -99,26 +99,45 @@ jobs:
             cargo test -p linkunbound-core --quiet || exit 1
           done
 
-  # The release refuses notices behind the lockfiles; this says so the morning after, not on the tag.
+  # The release refuses notices behind the lockfiles; this says so on the pull request that moves them, not on the tag.
   notices:
     name: The notices name what ships
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - id: look
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -z "$BASE" ]; then
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          watched='^(scripts/third-party\.mjs|THIRD-PARTY-BUNDLED\.md|Cargo\.(lock|toml)|.*/Cargo\.toml|app/package(-lock)?\.json|\.github/workflows/rules\.yml)$'
+          from=$(git merge-base "$BASE" HEAD)
+          if git diff --name-only --diff-filter=d "$from" HEAD | grep -qE "$watched"; then
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "touched=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.look.outputs.touched == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           package-manager-cache: false
-      - uses: ./.github/actions/toolchain
-      - name: Regenerated, they match the copy on main
+      - if: steps.look.outputs.touched == 'true'
+        uses: ./.github/actions/toolchain
+      - name: Regenerated, they match the copy in the tree
+        if: steps.look.outputs.touched == 'true'
         run: |
           (cd app && npm ci)
           npm run notices
           if ! git diff --exit-code THIRD-PARTY-BUNDLED.md; then
-            echo "::error::THIRD-PARTY-BUNDLED.md is behind the lockfiles; run npm run notices and land it before the next tag"
+            echo "::error::THIRD-PARTY-BUNDLED.md is behind the lockfiles; run npm run notices and commit it"
             exit 1
           fi
