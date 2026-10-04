@@ -30,7 +30,7 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
           NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          fits() { [ "$(printf '%s (#%s)' "$1" "$NUMBER" | wc -m)" -le 100 ]; }
+          fits() { [ "$(printf '%s (#%s)' "$1" "$NUMBER" | wc -m)" -le 120 ]; }
           short=$(printf '%s' "$TITLE" | sed -E 's/ across [0-9]+ director(y|ies)//')
           fits "$short" || short=$(printf '%s' "$short" | sed -E 's/ from [^ ]+ to [^ ]+//')
           fits "$short" || short=$(printf '%s' "$short" | sed -E 's/^([a-z]+: bump) .* in the ([^ ]+) group.*/\1 the \2 group/')

@@ -1,5 +1,5 @@
 use winreg::RegKey;
-use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
+use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
 
 use linkunbound_core::OWN_SCHEME;
 
@@ -325,11 +325,16 @@ pub fn sweep_legacy_edge_capture() {
 #[must_use]
 pub fn is_default_browser() -> bool {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let classes = RegKey::predef(HKEY_CLASSES_ROOT);
     USER_CHOICE_PATHS.iter().take(2).all(|path| {
         hkcu.open_subkey(path)
             .and_then(|k| k.get_value::<String, _>("ProgId"))
-            .is_ok_and(|id| prog_id_is_ours(&id))
+            .is_ok_and(|id| still_held(&classes, &id))
     })
+}
+
+fn still_held(classes: &RegKey, prog_id: &str) -> bool {
+    prog_id_is_ours(prog_id) && classes.open_subkey(prog_id).is_ok()
 }
 
 /// Which associations the app holds and which another application took, so the
@@ -337,13 +342,14 @@ pub fn is_default_browser() -> bool {
 #[must_use]
 pub fn association_report() -> Vec<(String, bool)> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let classes = RegKey::predef(HKEY_CLASSES_ROOT);
     USER_CHOICE_PATHS
         .iter()
         .map(|path| {
             let held = hkcu
                 .open_subkey(path)
                 .and_then(|k| k.get_value::<String, _>("ProgId"))
-                .is_ok_and(|id| prog_id_is_ours(&id));
+                .is_ok_and(|id| still_held(&classes, &id));
             let name = path.rsplit('\\').nth(1).unwrap_or(path).to_owned();
             (name, held)
         })
@@ -693,5 +699,23 @@ mod tests {
         assert!(prog_id_is_ours("linkunboundurl"));
         assert!(!prog_id_is_ours("NotLinkUnboundURL"));
         assert!(!prog_id_is_ours("LinkUnboundURLPro"));
+    }
+
+    #[test]
+    fn a_user_choice_naming_a_class_that_is_gone_is_not_held() {
+        let root = scratch("dangling-prog-id");
+        scrub(&root);
+        let reg = Registration::under(&root);
+        reg.register(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe")
+            .expect("the registration is written");
+        let classes = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(format!(r"{root}\Classes"))
+            .expect("the classes key");
+        assert!(still_held(&classes, PROG_ID));
+
+        reg.unregister().unwrap();
+        assert!(!still_held(&classes, PROG_ID));
+        assert!(!still_held(&classes, "ChromeHTML"));
+        scrub(&root);
     }
 }
