@@ -1,3 +1,4 @@
+mod about;
 mod shell;
 mod shop;
 mod system;
@@ -810,34 +811,9 @@ fn system_set_startup(enabled: bool) -> Result<system::SystemState, String> {
 
 const HERE: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Build {
-    version: &'static str,
-    license: &'static str,
-    repository: &'static str,
-    candidates: bool,
-    candidates_apply: bool,
-    kept_by_the_store: bool,
-}
-
 #[tauri::command]
 fn settings_painted(window: tauri::WebviewWindow) {
     shell::reveal(&window);
-}
-
-#[tauri::command]
-fn about() -> Build {
-    let kept = update::looked(store().dir());
-    let store_copy = update::route().route == update::Route::Store;
-    Build {
-        version: HERE,
-        license: "GPL-3.0-only",
-        repository: "https://github.com/rgdevment/LinkUnbound",
-        candidates: update::tracking(HERE, kept.candidates),
-        candidates_apply: !store_copy,
-        kept_by_the_store: store_copy,
-    }
 }
 
 fn now_in_seconds() -> Option<u64> {
@@ -1381,7 +1357,8 @@ pub fn run() {
             system_repair,
             system_register_anyway,
             system_open_elsewhere,
-            about,
+            about::about,
+            about::notices,
             settings_painted,
             update_ready,
             update_install,
