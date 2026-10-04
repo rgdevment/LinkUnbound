@@ -42,9 +42,7 @@ jobs:
           npm ci
           npm run lint
       # About links to the copy on main, so that copy is the one people read, and it trails every bump.
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - uses: ./.github/actions/toolchain
       - name: The notices on main name what this build ships
         if: startsWith(github.ref, 'refs/tags/v')
         run: |

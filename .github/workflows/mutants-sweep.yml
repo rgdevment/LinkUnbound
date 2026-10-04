@@ -25,19 +25,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - uses: ./.github/actions/toolchain
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
           save-if: false
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
-          tool: nextest
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
-        with:
-          tool: cargo-mutants
+          tool: nextest,cargo-mutants
 
       - name: Every mutant the core carries
         id: run
@@ -72,19 +67,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - uses: ./.github/actions/toolchain
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
           save-if: false
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
-          tool: nextest
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
-        with:
-          tool: cargo-mutants
+          tool: nextest,cargo-mutants
 
       - name: What a desktop is not needed to build
         run: |
@@ -125,19 +115,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - uses: ./.github/actions/toolchain
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: workspace
           save-if: false
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
-          tool: nextest
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
-        with:
-          tool: cargo-mutants
+          tool: nextest,cargo-mutants
 
       - name: What a desktop is not needed to build
         run: |
@@ -181,18 +166,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The stable toolchain, brought up to date
-        shell: bash
-        run: rustup toolchain install stable --no-self-update --component rustfmt,clippy
+      - uses: ./.github/actions/toolchain
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
-          tool: nextest
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
-        with:
-          tool: cargo-mutants
+          tool: nextest,cargo-mutants
 
       - name: One half of every mutant the Mac crate carries, and what only a Mac compiles elsewhere
         id: run
