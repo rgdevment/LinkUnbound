@@ -298,13 +298,18 @@ export default function About({
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [notices, setNotices] = useState<string | null>(null);
+  const [readingNotices, setReadingNotices] = useState(false);
+  const [noticesRefused, setNoticesRefused] = useState(false);
 
   const toggleNotices = () => {
+    if (readingNotices) return;
     if (notices !== null) return setNotices(null);
-    setProblem(null);
+    setNoticesRefused(false);
+    setReadingNotices(true);
     invoke<string>("notices")
       .then(setNotices)
-      .catch(() => setProblem(t("noticesRefused")));
+      .catch(() => setNoticesRefused(true))
+      .finally(() => setReadingNotices(false));
   };
 
   const report = () => {
@@ -486,6 +491,11 @@ export default function About({
           {t("aboutNotices")}
         </button>
       </div>
+      {noticesRefused && (
+        <p role="alert" className="alarm">
+          {t("noticesRefused")}
+        </p>
+      )}
       {notices !== null && <Notices text={notices} label={t("aboutNotices")} />}
     </>
   );

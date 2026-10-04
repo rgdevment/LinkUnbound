@@ -454,15 +454,35 @@ describe("third-party notices", () => {
     expect(opened).toEqual(["https://crates.io/crates/slint"]);
   });
 
+  it("are asked for once while the first answer is still on its way", async () => {
+    let answer: (text: string) => void = () => {};
+    noticesSay(
+      () =>
+        new Promise<string>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    show();
+
+    const button = await screen.findByRole("button", { name: "Avisos de terceros" });
+    await userEvent.click(button);
+    await userEvent.click(button);
+    expect(asked()).toBe(1);
+
+    answer("MIT License");
+    expect(await screen.findByText("MIT License")).toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("say so when they cannot be read", async () => {
     noticesSay(() => Promise.reject(new Error("no")));
     show();
 
     await userEvent.click(await screen.findByRole("button", { name: "Avisos de terceros" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "No se pudieron leer los avisos de terceros",
-    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("No se pudieron leer los avisos de terceros");
+    expect(alert.previousElementSibling).toHaveClass("links");
     expect(screen.queryByRole("region", { name: "Avisos de terceros" })).not.toBeInTheDocument();
   });
 });
