@@ -24,7 +24,7 @@ env:
 jobs:
   gate:
     name: Style and prose
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,7 +54,7 @@ jobs:
 
   tested:
     name: Tested when it landed
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Past the longest chain CI can take: coverage's forty minutes, then Sonar's fifteen.
     timeout-minutes: 65
     permissions:
@@ -103,7 +103,7 @@ jobs:
   version:
     name: Resolve the version
     needs: [gate]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       version: ${{ steps.resolve.outputs.version }}
@@ -810,7 +810,7 @@ jobs:
       && needs.bundle-windows.result == 'success'
       && (needs.bundle-macos.result == 'success' || needs.bundle-macos.result == 'skipped')
       && (needs.bundle-msix.result == 'success' || needs.bundle-msix.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     # Global: one manifest branch and one Latest flag; a third tag cancels the waiting one, re-run it by hand.
     concurrency:
@@ -1103,7 +1103,7 @@ jobs:
     if: >-
       !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
       && needs.version.result == 'success' && needs.publish.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1289,7 +1289,7 @@ jobs:
       && needs.version.result == 'success' && needs.publish.result == 'success'
       && needs.verify.result == 'success'
       && needs.version.outputs.macos == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Per tag: a global group cancels a pending tag, and the push loop already rebases over another.
     concurrency:
@@ -1428,7 +1428,7 @@ jobs:
       && needs.verify.result == 'success'
       && needs.version.outputs.prerelease == 'false'
       && vars.WINGET_PUBLISH == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:
       group: release-winget-${{ github.ref }}

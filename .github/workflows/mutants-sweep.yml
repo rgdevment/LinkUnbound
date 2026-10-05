@@ -19,7 +19,7 @@ env:
 jobs:
   core:
     name: core / every mutant
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,7 +57,7 @@ jobs:
 
   shell:
     name: shell / shard ${{ matrix.shard }} of 4
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 330
     strategy:
       fail-fast: false
@@ -105,7 +105,7 @@ jobs:
 
   settings:
     name: settings / shard ${{ matrix.shard }} of 2
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 330
     strategy:
       fail-fast: false
@@ -217,7 +217,7 @@ jobs:
 
   window:
     name: window / shard ${{ matrix.shard }} of 4
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -274,7 +274,7 @@ jobs:
     # A dispatch from another branch would write its numbers into the score main is read by.
     if: always() && !cancelled() && github.ref == 'refs/heads/main'
     needs: [core, shell, settings, mac, window]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
