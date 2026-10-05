@@ -6,6 +6,7 @@ use crate::report::redact;
 pub const JOURNAL: &str = "errors.log";
 const KEPT: usize = 200;
 const GONE: &str = "[…]";
+const BOUNDS: &str = "\\/\"':(),;";
 
 pub fn note(dir: &Path, area: &'static str, what: &str) {
     let homes: Vec<String> = ["USERPROFILE", "HOME"]
@@ -91,9 +92,10 @@ fn owner_hidden(text: &str, marker: &str) -> String {
     while let Some(found) = lower[at..].find(marker) {
         let after = at + found + marker.len();
         out.push_str(&text[at..after]);
-        let owner = text[after..]
-            .find(|c: char| "\\/\"'".contains(c))
+        let end = text[after..]
+            .find(|c: char| BOUNDS.contains(c))
             .map_or(text.len(), |end| after + end);
+        let owner = after + text[after..end].trim_end().len();
         if owner > after {
             out.push('…');
         }
@@ -109,9 +111,14 @@ fn replaced_ignoring_case(text: &str, what: &str, with: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut at = 0;
     while let Some(found) = lower[at..].find(&wanted) {
+        let end = at + found + wanted.len();
+        let whole = text[end..]
+            .chars()
+            .next()
+            .is_none_or(|c| c.is_whitespace() || BOUNDS.contains(c));
         out.push_str(&text[at..at + found]);
-        out.push_str(with);
-        at += found + wanted.len();
+        out.push_str(if whole { with } else { &text[at + found..end] });
+        at = end;
     }
     out.push_str(&text[at..]);
     out
@@ -190,6 +197,11 @@ mod tests {
             ("/home/bea/.config/x", "/home/…/.config/x"),
             (r"D:\Users\Ana Maria\rules.json", r"D:\Users\…\rules.json"),
             (r#""C:\Users\Ana Maria" missing"#, r#""C:\Users\…" missing"#),
+            (
+                r"cannot create C:\Users\Bea (os error 5)",
+                r"cannot create C:\Users\… (os error 5)",
+            ),
+            (r"C:\Users\Bea: access denied", r"C:\Users\…: access denied"),
         ] {
             assert_eq!(scrubbed(path, &[]), kept);
         }
@@ -208,6 +220,15 @@ mod tests {
             scrubbed(r"firefox: the browser would not start (C:\x)", &[]),
             r"firefox: the browser would not start (C:\x)"
         );
+    }
+
+    #[test]
+    fn another_account_that_starts_like_the_home_is_not_taken_for_it() {
+        assert_eq!(
+            scrubbed(r"C:\Users\Anabel\rules.json unreadable", &ana()),
+            r"C:\Users\…\rules.json unreadable"
+        );
+        assert_eq!(scrubbed(r"C:\Users\Ana unreadable", &ana()), "~ unreadable");
     }
 
     #[test]
