@@ -8,7 +8,7 @@ const KEPT: usize = 200;
 const GONE: &str = "[…]";
 
 pub fn note(dir: &Path, area: &'static str, what: &str) {
-    let homes: Vec<String> = ["USERPROFILE", "HOME", "LOCALAPPDATA", "APPDATA"]
+    let homes: Vec<String> = ["USERPROFILE", "HOME"]
         .iter()
         .filter_map(|key| std::env::var(key).ok())
         .collect();
@@ -92,7 +92,7 @@ fn owner_hidden(text: &str, marker: &str) -> String {
         let after = at + found + marker.len();
         out.push_str(&text[at..after]);
         let owner = text[after..]
-            .find(|c: char| "\\/ ".contains(c))
+            .find(|c: char| "\\/\"'".contains(c))
             .map_or(text.len(), |end| after + end);
         if owner > after {
             out.push('…');
@@ -188,6 +188,8 @@ mod tests {
             (r"C:\Users\BEA~1\rules.json", r"C:\Users\…\rules.json"),
             ("/Users/bea/Library/x", "/Users/…/Library/x"),
             ("/home/bea/.config/x", "/home/…/.config/x"),
+            (r"D:\Users\Ana Maria\rules.json", r"D:\Users\…\rules.json"),
+            (r#""C:\Users\Ana Maria" missing"#, r#""C:\Users\…" missing"#),
         ] {
             assert_eq!(scrubbed(path, &[]), kept);
         }
@@ -206,6 +208,12 @@ mod tests {
             scrubbed(r"firefox: the browser would not start (C:\x)", &[]),
             r"firefox: the browser would not start (C:\x)"
         );
+    }
+
+    #[test]
+    fn the_tilde_stands_for_the_home_folder_and_nothing_else() {
+        let said = scrubbed(r"C:\Users\Ana\AppData\Local\LinkUnbound\rules.json", &ana());
+        assert_eq!(said, r"~\AppData\Local\LinkUnbound\rules.json");
     }
 
     #[test]
