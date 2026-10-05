@@ -37,6 +37,11 @@ pub fn troubled(area: &'static str, what: &str, said: impl FnOnce(&Strings) -> (
     ui.firing.replace(None);
     flash(&ui.notice, headline, reason, None);
     ui.count_down();
+    if ui.picker.window().is_visible()
+        && let Some(handle) = native_handle(ui.picker.window())
+    {
+        host::take_the_keyboard(handle);
+    }
 }
 
 /// The corner of the screen the click happened on, where a notice is looked for; left to the
