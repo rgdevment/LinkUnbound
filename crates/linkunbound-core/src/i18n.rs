@@ -57,6 +57,9 @@ catalogue! {
     notice_opened: "Abierto en {}" | "Opened in {}",
     notice_by_rule: "Una regla decidió por {}" | "A rule decided for {}",
     notice_undo: "Deshacer" | "Undo",
+    notice_rule_failed: "La regla no pudo abrir {}" | "The rule could not open {}",
+    notice_rules_unreadable: "No se pudieron leer tus reglas" | "Your rules could not be read",
+    notice_pick_instead: "Elige un navegador esta vez" | "Pick a browser this time",
     fail_not_remembered: "No se pudo guardar la regla" | "The rule could not be saved",
     fail_unknown_browser: "Ese navegador ya no está configurado" | "That browser is no longer configured",
     fail_profile_gone: "El perfil {} ya no existe" | "The profile {} is no longer there",
@@ -77,6 +80,7 @@ catalogue! {
     report_from: " desde {}" | " from {}",
     report_private: " en privado" | " privately",
     report_redacted: "[redactado]" | "[redacted]",
+    report_errors: "Errores recientes" | "Recent errors",
     report_file: "linkunbound-diagnostico" | "linkunbound-diagnostics",
 }
 

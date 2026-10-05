@@ -714,72 +714,6 @@ fn system_open_elsewhere(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn maintenance_report() -> Result<String, String> {
-    let state = system::state();
-    let facts = vec![
-        ("versión".to_owned(), env!("CARGO_PKG_VERSION").to_owned()),
-        ("sistema".to_owned(), std::env::consts::OS.to_owned()),
-        ("registrado".to_owned(), state.registered.to_string()),
-        ("predeterminado".to_owned(), state.is_default.to_string()),
-        ("diagnóstico".to_owned(), format!("{:?}", state.health)),
-        (
-            "asociaciones".to_owned(),
-            format!(
-                "{} de {}",
-                state.associations.iter().filter(|a| a.held).count(),
-                state.associations.len()
-            ),
-        ),
-        (
-            "arranca con el sistema".to_owned(),
-            state.starts_with_system.to_string(),
-        ),
-        (
-            "Edge instalado".to_owned(),
-            state.edge_installed.to_string(),
-        ),
-        (
-            "navegadores".to_owned(),
-            catalogue()
-                .iter()
-                .map(|b| b.name.clone())
-                .collect::<Vec<_>>()
-                .join(", "),
-        ),
-    ];
-    let store = store();
-    let prefs = store.prefs();
-    let words = Language::chosen(prefs.locale).strings();
-    let mut rules = store.rules().unwrap_or_default();
-    for rule in &mut rules.rules {
-        // The name a person reads, with the key the rule matches by when they differ.
-        rule.source_app = rule
-            .source_app
-            .as_deref()
-            .map(|saved| match shown_origin(saved) {
-                name if same_name(&name, saved) => name,
-                name => format!("{name} ({saved})"),
-            });
-    }
-    let body =
-        linkunbound_core::diagnostics(env!("CARGO_PKG_VERSION"), &facts, &rules, &prefs, &words);
-
-    let named = format!("{}.md", words.report_file);
-    let target = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
-        .join("Desktop")
-        .join(&named);
-    let target = if target.parent().is_some_and(std::path::Path::is_dir) {
-        target
-    } else {
-        std::env::temp_dir().join(&named)
-    };
-    std::fs::write(&target, body).map_err(|e| e.to_string())?;
-    Ok(target.to_string_lossy().into_owned())
-}
-
-#[tauri::command]
 fn system_state() -> system::SystemState {
     system::state()
 }
@@ -1344,7 +1278,7 @@ pub fn run() {
             browsers_reorder,
             maintenance_rescan,
             maintenance_reset,
-            maintenance_report,
+            about::maintenance_report,
             prefs_get,
             prefs_set,
             system_state,

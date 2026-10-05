@@ -109,7 +109,7 @@ The picker names the address and the application the link came from, and each br
 **Everything stays local.** LinkUnbound is built on a single, non-negotiable principle: your data never leaves your computer.
 
 - **Local-only storage** — browser list, rules and preferences stay on your machine
-- **No link log** — links are routed in memory and never logged
+- **No link history** — links are routed in memory and never kept; errors go to a local, redacted log you share only if you choose to
 - **No tracking** — no telemetry, no analytics, no hidden collection
 - **No accounts** — no sign-up, no login, no profiles
 - **Web links only from other apps** — `linkunbound://` accepts an `http` or `https` link and nothing else, and tells the sender nothing back

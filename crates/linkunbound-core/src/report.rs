@@ -43,6 +43,7 @@ pub fn diagnostics(
     rules: &RuleSet,
     prefs: &Preferences,
     words: &Strings,
+    errors: &[String],
 ) -> String {
     let mut out = format!("LinkUnbound {version}\n\n## {}\n", words.report_system);
     for (key, value) in system {
@@ -81,6 +82,20 @@ pub fn diagnostics(
             "- {}{origin} → {}{private}\n",
             describe(&rule.scope, words),
             rule.target.browser_id,
+        ));
+    }
+
+    out.push_str(&format!(
+        "
+## {} ({})
+",
+        words.report_errors,
+        errors.len()
+    ));
+    for line in errors {
+        out.push_str(&format!(
+            "- {line}
+"
         ));
     }
     out
@@ -149,6 +164,7 @@ mod tests {
             &rules,
             &Preferences::default(),
             &Language::Spanish.strings(),
+            &[],
         );
         assert!(out.contains("mail.corp"));
         assert!(!out.contains("token=abc"));
@@ -178,6 +194,7 @@ mod tests {
             &rules,
             &Preferences::default(),
             &Language::English.strings(),
+            &[],
         );
         assert!(out.contains("## System"), "{out}");
         assert!(out.contains("## Preferences"));
@@ -197,9 +214,33 @@ mod tests {
             &RuleSet::default(),
             &Preferences::default(),
             &Language::Spanish.strings(),
+            &[],
         );
         assert!(out.contains("LinkUnbound 2.0.0"));
         assert!(out.contains("- navegador predeterminado: no"));
         assert!(out.contains("## Reglas (0)"));
+        assert!(out.contains("## Errores recientes (0)"));
+    }
+
+    #[test]
+    fn the_report_ends_with_the_errors_the_journal_kept() {
+        let errors =
+            vec!["2026-10-04T23:00:00Z [launch] firefox: the browser would not start".to_owned()];
+        let out = diagnostics(
+            "2.0.0",
+            &[],
+            &RuleSet::default(),
+            &Preferences::default(),
+            &Language::English.strings(),
+            &errors,
+        );
+        assert!(
+            out.ends_with(
+                "## Recent errors (1)
+- 2026-10-04T23:00:00Z [launch] firefox: the browser would not start
+"
+            ),
+            "{out}"
+        );
     }
 }

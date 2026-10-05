@@ -1100,6 +1100,7 @@ export component Notice inherits Window {
     in property <string> headline;
     in property <string> reason;
     in property <string> undo-label;
+    in property <bool> undoable: true;
     in-out property <int> left: 6;
 
     callback undo();
@@ -1144,7 +1145,7 @@ export component Notice inherits Window {
                 }
             }
 
-            Rectangle {
+            if root.undoable: Rectangle {
                 width: 76px;
                 height: 28px;
                 y: (parent.height - self.height) / 2;

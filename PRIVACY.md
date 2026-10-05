@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** October 2, 2026
+**Last updated:** October 4, 2026
 
 ---
 
@@ -93,10 +93,21 @@ browser. Such a link is treated exactly like one you clicked:
 - **Only web links are accepted.** A file, a script or anything else is dropped
   before it is shown or opened.
 
-### No Log
+### No History, an Error Log
 
-LinkUnbound keeps no log of the links it handles. An address you open is held in memory while
+LinkUnbound keeps no history of the links it handles. An address you open is held in memory while
 it is routed and is written to disk only as part of a rule you asked it to remember.
+
+When something goes wrong — the rules file cannot be read, a browser will not start, a rule cannot
+be saved — it writes one line to `errors.log` in its data folder: the time in UTC, what failed and
+why. Before a line is written, an address with `://` is cut to its scheme, host and port; one
+without, such as `mailto:` or `www.`, is dropped whole; your user folder is written as `~`; and
+the account name in any other `Users` or `home` path is replaced by `…`. Only the latest 200 lines
+are kept.
+
+The log is never sent anywhere. It leaves your computer only if you share it yourself: it is
+included, already redacted, at the end of the diagnostic report (Settings → **About** → *Save
+report*), and you can read or delete `errors.log` whenever you like.
 
 ### Extracted Icons
 
@@ -122,6 +133,7 @@ All data is stored locally under your user profile.
 | Settings | `%LOCALAPPDATA%\LinkUnbound\preferences.json`    |
 | Last update check | `%LOCALAPPDATA%\LinkUnbound\update.json` (and `updating.json` while one installs) |
 | Global shortcut held | `%LOCALAPPDATA%\LinkUnbound\shortcut` |
+| Error log | `%LOCALAPPDATA%\LinkUnbound\errors.log` (latest 200 lines, redacted) |
 | Lock files | `rules.lock`, `browsers.lock`, `preferences.lock`, empty |
 | Kept aside | `rules.1x.json`, `browsers.1x.json` (the 1.x files, kept once when upgrading), `preferences.unread.json` (a preferences file that could not be read) |
 | Icons    | `%LOCALAPPDATA%\LinkUnbound\icons\`              |
@@ -135,6 +147,7 @@ All data is stored locally under your user profile.
 | Settings | `~/Library/Application Support/LinkUnbound/preferences.json`     |
 | Last update check | `~/Library/Application Support/LinkUnbound/update.json` (and `updating.json` while one installs) |
 | Global shortcut held | `~/Library/Application Support/LinkUnbound/shortcut` |
+| Error log | `~/Library/Application Support/LinkUnbound/errors.log` (latest 200 lines, redacted) |
 | Resident's socket | `~/Library/Application Support/LinkUnbound/shell.sock` |
 | Lock files | `rules.lock`, `browsers.lock`, `preferences.lock`, empty |
 | Kept aside | `rules.1x.json`, `browsers.1x.json` (the 1.x files, kept once when upgrading), `preferences.unread.json` (a preferences file that could not be read) |
@@ -260,6 +273,7 @@ It is a single Markdown file named `linkunbound-diagnostico.md`. On Windows it i
 | `Sistema` | Operating system, whether LinkUnbound is registered and default, the health check, how many associations it holds, whether it starts with the system, whether Edge is installed, and the names of the browsers it detected |
 | `Preferencias` | Theme, language, the global shortcut, and whether a rule announces itself when it decides |
 | `Reglas` | Every rule you have: what it matches, the application it is tied to when it has one, the browser it opens in, and whether it opens privately |
+| `Errores recientes` | The lines of `errors.log`: when, what failed and why, with addresses cut to their host and your user folder written as `~` |
 
 ### What the report does not contain
 
