@@ -23,8 +23,8 @@ pub use native::{
 };
 #[cfg(windows)]
 pub use registration::{
-    Registration, association_report, is_build_tree, is_default_browser, sweep_legacy_edge_capture,
-    taskbar_is_light, windows_are_light,
+    Registration, association_report, default_apps_page, is_build_tree, is_default_browser,
+    sweep_legacy_edge_capture, taskbar_is_light, windows_are_light,
 };
 #[cfg(windows)]
 pub use startup::{

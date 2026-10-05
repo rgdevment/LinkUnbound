@@ -91,7 +91,7 @@ The picker names the address and the application the link came from, and each br
 - **Shows a floating picker** near your cursor, in two looks: a classic list or a mosaic of tiles. Pick with the mouse or the keys `1`–`9`; hold **Shift** for a private window; `Ctrl+C` copies the address; `Esc` puts it away
 - **Remembers the choice at the reach you pick** — this URL, this subdomain, the whole site, or everything a given app sends
 - **Rules from Settings too** — a rule for a site you have not visited yet, or for an app, without waiting for the picker
-- **Unwraps Microsoft SafeLinks** and the Edge-only scheme Teams and Outlook wrap links in, so rules see the real destination
+- **Unwraps Microsoft SafeLinks**, so rules see the real destination
 - **Takes links from your other apps** — an application can send a link to `linkunbound://open?url=…` and it goes through your rules, even when LinkUnbound is not the default browser
 - **Tells you when a rule decided** — a small notice with an Undo, six seconds, no focus taken
 - **Opens local documents** when you choose it for them — `.html`, `.pdf` and the rest on Windows, `.html` and `.xhtml` on macOS

@@ -15,6 +15,9 @@ use linkunbound_shell::{
 };
 use slint::{ComponentHandle, Model};
 
+mod detected;
+use detected::catalogue;
+
 fn store() -> Store {
     Store::at(data_dir())
 }
@@ -261,11 +264,6 @@ mod host {
     pub fn digit_behind(typed: char) -> Option<u32> {
         typed.to_digit(10).filter(|d| (1..=9).contains(d))
     }
-}
-
-fn catalogue() -> Vec<linkunbound_core::Browser> {
-    let saved = store().browsers().map(|c| c.browsers).unwrap_or_default();
-    linkunbound_core::merge(host::browsers(), &saved)
 }
 
 fn with_icons(
