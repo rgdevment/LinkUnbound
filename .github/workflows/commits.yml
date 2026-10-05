@@ -16,7 +16,7 @@ jobs:
   retitle:
     name: A title Dependabot wrote, cut to fit
     if: github.event.pull_request.user.login == 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       pull-requests: write
@@ -45,7 +45,7 @@ jobs:
     needs: retitle
     # Skipped for everyone but Dependabot, and a failed cut leaves the long title to fail below.
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

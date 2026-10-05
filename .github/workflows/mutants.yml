@@ -17,7 +17,7 @@ jobs:
   # `paths` on the trigger leaves a required check unreported for good; a skipped job counts as met.
   changes:
     name: what the branch touched
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       mutable: ${{ steps.look.outputs.mutable }}
@@ -41,7 +41,7 @@ jobs:
 
   crates-on-the-branch:
     name: crates / the lines this branch changed
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: changes
     if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 90
@@ -159,7 +159,7 @@ jobs:
 
   settings-on-the-branch:
     name: settings / the lines this branch changed
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: changes
     if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 90
@@ -225,7 +225,7 @@ jobs:
 
   window-on-the-branch:
     name: window / the lines this branch changed
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: changes
     if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
     timeout-minutes: 60
