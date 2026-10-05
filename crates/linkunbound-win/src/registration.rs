@@ -7,6 +7,7 @@ use crate::RegistrationError;
 
 pub const PROG_ID: &str = "LinkUnboundURL";
 const APP_NAME: &str = "LinkUnbound";
+const PACKAGED_APP_ID: &str = "LinkUnbound";
 const APP_DESCRIPTION: &str = "Browser picker for Windows";
 
 const URL_SCHEMES: [&str; 2] = ["http", "https"];
@@ -284,17 +285,36 @@ pub fn prog_id_is_ours(prog_id: &str) -> bool {
     prog_id.eq_ignore_ascii_case(PROG_ID) || names_this_package(prog_id)
 }
 
+fn package_family() -> Option<String> {
+    windows::ApplicationModel::Package::Current()
+        .and_then(|package| package.Id())
+        .and_then(|id| id.FamilyName())
+        .ok()
+        .map(|family| family.to_string())
+}
+
+#[must_use]
+pub fn default_apps_page() -> String {
+    default_apps_page_for(package_family().as_deref())
+}
+
+fn default_apps_page_for(family: Option<&str>) -> String {
+    match family {
+        Some(family) => {
+            format!("ms-settings:defaultapps?registeredAUMID={family}!{PACKAGED_APP_ID}")
+        }
+        None => format!("ms-settings:defaultapps?registeredAppUser={APP_NAME}"),
+    }
+}
+
 /// Inside a package Windows writes a ProgId of its own, `AppX<hash>`, that carries nothing of
 /// the name; the class it registers names the package through its AppUserModelID, which starts
 /// with the package family. Only a packaged copy can answer for one.
 fn names_this_package(prog_id: &str) -> bool {
-    let Ok(family) = windows::ApplicationModel::Package::Current()
-        .and_then(|package| package.Id())
-        .and_then(|id| id.FamilyName())
-    else {
+    let Some(family) = package_family() else {
         return false;
     };
-    let mine = format!("{}!", family.to_string().to_ascii_lowercase());
+    let mine = format!("{}!", family.to_ascii_lowercase());
     RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey(format!(r"Software\Classes\{prog_id}\Application"))
         .and_then(|key| key.get_value::<String, _>("AppUserModelID"))
@@ -334,7 +354,28 @@ pub fn is_default_browser() -> bool {
 }
 
 fn still_held(classes: &RegKey, prog_id: &str) -> bool {
-    prog_id_is_ours(prog_id) && classes.open_subkey(prog_id).is_ok()
+    if !prog_id_is_ours(prog_id) {
+        return false;
+    }
+    let Ok(class) = classes.open_subkey(prog_id) else {
+        return false;
+    };
+    class
+        .open_subkey(r"shell\open\command")
+        .and_then(|key| key.get_value::<String, _>(""))
+        .map_or(true, |command| {
+            command_target(&command).is_some_and(|exe| std::path::Path::new(&exe).is_file())
+        })
+}
+
+fn command_target(command: &str) -> Option<String> {
+    let command = command.trim();
+    match command.strip_prefix('"') {
+        Some(quoted) => quoted.split('"').next(),
+        None => command.split_whitespace().next(),
+    }
+    .filter(|exe| !exe.is_empty())
+    .map(str::to_owned)
 }
 
 /// Which associations the app holds and which another application took, so the
@@ -388,6 +429,24 @@ mod tests {
             )),
             "hooks.nsh leaves the {OWN_SCHEME}: scheme behind"
         );
+    }
+
+    #[test]
+    fn the_default_apps_page_names_whichever_copy_is_asking() {
+        assert_eq!(
+            default_apps_page_for(None),
+            "ms-settings:defaultapps?registeredAppUser=LinkUnbound"
+        );
+        assert_eq!(
+            default_apps_page_for(Some("rgdevment.LinkUnbound-BrowserPicker_kdjgfdc2rb3gc")),
+            "ms-settings:defaultapps?registeredAUMID=rgdevment.LinkUnbound-BrowserPicker_kdjgfdc2rb3gc!LinkUnbound"
+        );
+        let manifest = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../app/src-tauri/msix/AppxManifest.xml.in"),
+        )
+        .expect("the package manifest");
+        assert!(manifest.contains(&format!(r#"<Application Id="{PACKAGED_APP_ID}""#)));
     }
 
     #[test]
@@ -706,7 +765,8 @@ mod tests {
         let root = scratch("dangling-prog-id");
         scrub(&root);
         let reg = Registration::under(&root);
-        reg.register(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe")
+        let here = std::env::current_exe().expect("the test binary");
+        reg.register_wherever(&here.to_string_lossy())
             .expect("the registration is written");
         let classes = RegKey::predef(HKEY_CURRENT_USER)
             .open_subkey(format!(r"{root}\Classes"))
@@ -717,5 +777,33 @@ mod tests {
         assert!(!still_held(&classes, PROG_ID));
         assert!(!still_held(&classes, "ChromeHTML"));
         scrub(&root);
+    }
+
+    #[test]
+    fn a_class_whose_command_runs_a_program_that_is_gone_is_not_held() {
+        let root = scratch("dangling-command");
+        scrub(&root);
+        let reg = Registration::under(&root);
+        reg.register_wherever(r"C:\Program Files\LinkUnbound-gone\linkunbound-shell.exe")
+            .expect("the registration is written");
+        let classes = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(format!(r"{root}\Classes"))
+            .expect("the classes key");
+        assert!(!still_held(&classes, PROG_ID));
+        scrub(&root);
+    }
+
+    #[test]
+    fn the_program_is_read_out_of_the_command_quoted_or_not() {
+        assert_eq!(
+            command_target(r#""C:\Program Files\LinkUnbound\linkunbound-shell.exe" "%1""#),
+            Some(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe".to_owned())
+        );
+        assert_eq!(
+            command_target(r"C:\Tools\picker.exe %1"),
+            Some(r"C:\Tools\picker.exe".to_owned())
+        );
+        assert_eq!(command_target(r#"  "" %1"#), None);
+        assert_eq!(command_target(""), None);
     }
 }

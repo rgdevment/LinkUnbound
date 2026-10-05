@@ -108,6 +108,20 @@ mod platform {
         }
     }
 
+    fn left_behind(
+        command: Option<&str>,
+        handler: &std::path::Path,
+        scheme_agrees: bool,
+        exists: impl Fn(&std::path::Path) -> bool,
+    ) -> bool {
+        match what_is_registered(command, handler) {
+            Registered::Absent => false,
+            Registered::Correct => !scheme_agrees,
+            Registered::WrongBinary(_) => true,
+            Registered::Elsewhere(path) => !exists(std::path::Path::new(&path)),
+        }
+    }
+
     /// The resident, never this process: settings cannot open a link, and
     /// registering it is the one mistake this whole check exists to catch.
     fn handler() -> Option<PathBuf> {
@@ -131,7 +145,10 @@ mod platform {
             return;
         }
         let registration = Registration::default();
-        if registration.is_registered() && registration.register(&handler.to_string_lossy()).is_ok()
+        let command = registration.registered_command();
+        let scheme_agrees = registration.own_scheme_command() == command;
+        if left_behind(command.as_deref(), &handler, scheme_agrees, |p| p.exists())
+            && registration.register(&handler.to_string_lossy()).is_ok()
         {
             notify_associations_changed();
         }
@@ -191,12 +208,7 @@ mod platform {
     /// leaves them to find us. The name is the one under `RegisteredApplications`.
     pub fn open_default_apps() -> Result<(), String> {
         std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "start",
-                "",
-                "ms-settings:defaultapps?registeredAppUser=LinkUnbound",
-            ])
+            .args(["/C", "start", "", &linkunbound_win::default_apps_page()])
             .spawn()
             .map(|_| ())
             .map_err(|e| e.to_string())
@@ -256,8 +268,40 @@ mod platform {
     #[cfg(test)]
     mod tests {
         use super::super::Health;
-        use super::verdict;
+        use super::{left_behind, verdict};
         use std::path::Path;
+
+        #[test]
+        fn only_a_registration_nobody_answers_for_is_taken_over() {
+            let here = Path::new(r"C:\Program Files\LinkUnbound\linkunbound-shell.exe");
+            let other = r#""D:\Portable\LinkUnbound\linkunbound-shell.exe" "%1""#;
+            let ours = r#""C:\Program Files\LinkUnbound\linkunbound-shell.exe" "%1""#;
+            let settings = r#""C:\Program Files\LinkUnbound\linkunbound-settings.exe" "%1""#;
+            let alive = |_: &Path| true;
+            let gone = |_: &Path| false;
+
+            assert!(
+                !left_behind(None, here, true, gone),
+                "taken away stays away"
+            );
+            assert!(
+                !left_behind(Some(other), here, true, alive),
+                "another copy keeps its own"
+            );
+            assert!(
+                left_behind(Some(other), here, true, gone),
+                "a moved install is followed"
+            );
+            assert!(!left_behind(Some(ours), here, true, gone), "ours and whole");
+            assert!(
+                left_behind(Some(ours), here, false, gone),
+                "ours but the scheme strayed"
+            );
+            assert!(
+                left_behind(Some(settings), here, true, alive),
+                "the wrong binary of ours"
+            );
+        }
 
         /// The screen's reaction to each verdict is tested with literals; this
         /// is the side that decides which verdict it gets.

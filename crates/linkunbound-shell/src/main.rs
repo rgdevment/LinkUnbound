@@ -15,6 +15,10 @@ use linkunbound_shell::{
 };
 use slint::{ComponentHandle, Model};
 
+mod detected;
+mod notice;
+use detected::catalogue;
+
 fn store() -> Store {
     Store::at(data_dir())
 }
@@ -263,11 +267,6 @@ mod host {
     }
 }
 
-fn catalogue() -> Vec<linkunbound_core::Browser> {
-    let saved = store().browsers().map(|c| c.browsers).unwrap_or_default();
-    linkunbound_core::merge(host::browsers(), &saved)
-}
-
 fn with_icons(
     mut listed: Vec<Listed>,
     browsers: &[linkunbound_core::Browser],
@@ -311,10 +310,24 @@ struct Fired {
 
 /// A rule that cannot be honoured falls through to the picker, never elsewhere.
 fn answered_by_rule(url: &str, source: Option<&Origin>) -> Option<Fired> {
-    let rules = store().rules().ok()?;
+    let rules = store()
+        .rules()
+        .map_err(|why| {
+            notice::troubled("rules", &why.to_string(), |words| {
+                (
+                    words.notice_rules_unreadable.into(),
+                    words.notice_pick_instead.into(),
+                )
+            });
+        })
+        .ok()?;
     let host = host_of(url)?;
     let rule = rules.resolve_from(url, &host, source)?;
     let browsers = catalogue();
+    let browser = browsers
+        .iter()
+        .find(|b| b.id == rule.target.browser_id)
+        .map_or_else(|| rule.target.browser_id.clone(), |b| b.name.clone());
     host::let_whoever_opens_next_come_forward();
     linkunbound_core::launch(
         &browsers,
@@ -323,68 +336,23 @@ fn answered_by_rule(url: &str, source: Option<&Origin>) -> Option<Fired> {
         rule.private,
         url,
     )
+    .map_err(|why| {
+        notice::troubled("launch", &format!("{browser}: {why}"), |words| {
+            (
+                Strings::fill(words.notice_rule_failed, &browser),
+                words.on_failure(&why),
+            )
+        });
+    })
     .ok()?;
     Some(Fired {
         rule_id: rule.id.clone(),
-        browser: browsers
-            .iter()
-            .find(|b| b.id == rule.target.browser_id)
-            .map_or_else(|| rule.target.browser_id.clone(), |b| b.name.clone()),
+        browser,
         host,
     })
 }
 
 const TICKS_BETWEEN_LOOKS: u32 = 8;
-
-const NOTICE_SECONDS: i32 = 6;
-
-/// Never focused: it must not take the keyboard from whatever is being done.
-fn flash(notice: &Notice, words: &Strings, fired: &Fired) {
-    notice.set_headline(Strings::fill(words.notice_opened, &fired.browser).into());
-    notice.set_reason(Strings::fill(words.notice_by_rule, &fired.host).into());
-    notice.set_undo_label(words.notice_undo.into());
-    notice.set_left(NOTICE_SECONDS);
-    let _ = notice.show();
-    if let Some(handle) = native_handle(notice.window()) {
-        host::keep_off_the_taskbar(handle, linkunbound_shell::CLASSIC_CORNER);
-        host::never_activates(handle);
-    }
-    in_the_corner(notice);
-    #[cfg(target_os = "macos")]
-    if !ui().is_some_and(|ui| ui.picker.window().is_visible()) {
-        host::let_whoever_opens_next_come_forward();
-    }
-}
-
-const NOTICE_MARGIN: f32 = 16.0;
-
-/// The corner of the screen the click happened on, where a notice is looked for; left to the
-/// window manager it opened wherever the last one did, usually another screen, and the six
-/// seconds passed unseen.
-fn in_the_corner(notice: &Notice) {
-    let Some((cx, cy)) = host::cursor() else {
-        return;
-    };
-    let Some((x, y, width, height)) = host::work_area_at(cx, cy) else {
-        return;
-    };
-    let scale = if cfg!(target_os = "macos") {
-        1.0
-    } else {
-        f64::from(notice.window().scale_factor())
-    };
-    let size = |logical: f32| physical(logical, scale);
-    let at_x = x + width - size(notice.get_wanted_width()) - size(NOTICE_MARGIN);
-    let at_y = y + height - size(notice.get_wanted_height()) - size(NOTICE_MARGIN);
-    #[cfg(target_os = "macos")]
-    notice
-        .window()
-        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
-    #[cfg(not(target_os = "macos"))]
-    notice
-        .window()
-        .set_position(slint::PhysicalPosition::new(at_x, at_y));
-}
 
 /// Settings runs in another process: the file is the only channel between them.
 fn prefs_touched_at() -> Option<std::time::SystemTime> {
@@ -394,7 +362,9 @@ fn prefs_touched_at() -> Option<std::time::SystemTime> {
 }
 
 fn forget(rule_id: &str) {
-    let _ = store().edit_rules(|rules| rules.remove(rule_id));
+    if let Err(why) = store().edit_rules(|rules| rules.remove(rule_id)) {
+        notice::noted("rules", &why.to_string());
+    }
 }
 
 /// Reports rather than swallows: the window says the choice was remembered, and
@@ -416,6 +386,7 @@ fn remember(
             rules.upsert_from(rule.clone(), source.as_ref());
             true
         })
+        .map_err(|why| notice::noted("rules", &why.to_string()))
         .is_ok()
 }
 
@@ -1031,7 +1002,13 @@ fn announce(ui: &Rc<Ui>, fired: &Fired) {
         return;
     }
     ui.firing.replace(Some(fired.rule_id.clone()));
-    flash(&ui.notice, &ui.words.get(), fired);
+    let words = ui.words.get();
+    notice::flash(
+        &ui.notice,
+        Strings::fill(words.notice_opened, &fired.browser),
+        Strings::fill(words.notice_by_rule, &fired.host),
+        Some(words.notice_undo),
+    );
     ui.count_down();
     // Shown over an open picker, the notice must not take the digits being typed.
     if ui.picker.window().is_visible()
@@ -1348,6 +1325,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
                 Err(why) => {
+                    notice::noted("launch", &format!("{}: {why}", chosen.browser_id));
                     if let Some(ui) = ui() {
                         window.set_alarming(true);
                         window.set_problem(ui.words.get().on_failure(&why).into());

@@ -6,6 +6,7 @@ mod detect;
 mod hostile;
 mod i18n;
 mod icons;
+mod journal;
 mod launch;
 mod prefs;
 mod private;
@@ -29,6 +30,7 @@ pub use detect::{chromium_home_on_mac, chromium_home_on_windows, id_for, profile
 pub use hostile::{as_file_name, disarm, is_remote};
 pub use i18n::{Language, Strings};
 pub use icons::{cached_icon, prune as prune_icons};
+pub use journal::{JOURNAL, journal, note, scrubbed};
 pub use launch::{LaunchError, open as launch, spawn_and_forget};
 pub use prefs::{Locale, PickerStyle, Preferences, Theme};
 pub use private::private_flag_for;

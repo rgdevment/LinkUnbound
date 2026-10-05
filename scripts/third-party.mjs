@@ -1,6 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,13 +17,50 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "THIRD-PARTY-BUNDLED.md");
 const texts = join(root, "THIRD-PARTY-LICENSES.md");
 
+const bundled = () => {
+  const away = mkdtempSync(join(tmpdir(), "linkunbound-notices-"));
+  try {
+    execFileSync(
+      process.execPath,
+      [
+        join(root, "app", "node_modules", "vite", "bin", "vite.js"),
+        "build",
+        "--sourcemap",
+        "--emptyOutDir",
+        "--logLevel",
+        "error",
+        "--outDir",
+        away,
+      ],
+      { cwd: join(root, "app"), stdio: ["ignore", "ignore", "inherit"] },
+    );
+    const names = new Set();
+    for (const one of readdirSync(join(away, "assets"))) {
+      if (!one.endsWith(".map")) continue;
+      const map = JSON.parse(readFileSync(join(away, "assets", one), "utf8"));
+      for (const source of map.sources ?? []) {
+        const where = source.replace(/\\/g, "/");
+        const at = where.split("node_modules/").at(-1);
+        if (at === where) continue;
+        const parts = at.split("/");
+        names.add(parts[0].startsWith("@") ? `${parts[0]}/${parts[1]}` : parts[0]);
+      }
+    }
+    if (names.size === 0) throw new Error("the window's bundle named no package");
+    return names;
+  } finally {
+    rmSync(away, { recursive: true, force: true });
+  }
+};
+
 const shipped = () => {
   const lock = JSON.parse(readFileSync(join(root, "app", "package-lock.json"), "utf8"));
+  const inside = bundled();
   const seen = new Map();
   for (const [at, one] of Object.entries(lock.packages ?? {})) {
     if (!at || one.dev || one.devOptional || one.extraneous) continue;
     const name = one.name ?? at.slice(at.lastIndexOf("node_modules/") + 13);
-    if (!name || seen.has(name)) continue;
+    if (!name || seen.has(name) || !inside.has(name)) continue;
     seen.set(name, {
       version: one.version ?? "?",
       licence: one.license ?? "see the package",

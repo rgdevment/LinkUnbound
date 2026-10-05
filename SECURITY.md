@@ -14,7 +14,7 @@ This is a personal open source project, not a company product. Security here is 
 
 - **100% Local** — Your browser list, domain rules, and configuration never leave your machine. No cloud, no sync, no servers.
 - **No Tracking** — No telemetry, no analytics, no usage data collection of any kind.
-- **No Data Collection** — LinkUnbound stores only what it needs to work: browser paths, rules and preferences. Nothing else, and no log of the links it handles.
+- **No Data Collection** — LinkUnbound stores only what it needs to work: browser paths, rules and preferences. Nothing else, and no history of the links it handles; its error log keeps no address beyond the host and stays on the machine.
 
 ### Security Practices
 
@@ -23,7 +23,7 @@ This is a personal open source project, not a company product. Security here is 
 - **Open Source** — Every line of code is public under GPLv3. You can inspect, audit, and verify everything.
 - **Dependency Updates** — Dependencies are regularly updated to patch known vulnerabilities.
 - **Code Reviews** — All contributions go through review before merging.
-- **No Link Log** — Links are routed in memory and never logged. The only addresses written to disk are the exact-address rules you ask it to remember, and the diagnostic report cuts those down to their host.
+- **No Link History** — Links are routed in memory and never kept. The only addresses written to disk are the exact-address rules you ask it to remember, and the diagnostic report cuts those down to their host. The local error log cuts any address down to its host, or drops it when it has none, and never leaves the machine on its own.
 
 ### Links From Other Applications
 
