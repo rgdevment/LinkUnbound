@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
+import bear from "../assets/linkunbound.svg";
 import { type Key, useSpoken, useWords } from "../i18n";
 import { composed } from "../markdown";
 import { offerMoved, saidPlainly } from "../refusal";
@@ -338,12 +339,16 @@ export default function About({
   return (
     <>
       <div className="brow">
-        <h1>LinkUnbound</h1>
-        <span className="line2">
-          <span>{build?.version ?? "—"}</span>
-          <i />
-          <span>{build?.license ?? "—"}</span>
-        </span>
+        <img src={bear} alt="" className="bear" />
+        <div className="min-w-0">
+          <h1>LinkUnbound</h1>
+          <p className="motto">{t("aboutMotto")}</p>
+          <span className="line2">
+            <span>{build?.version ?? "—"}</span>
+            <i />
+            <span>{build?.license ?? "—"}</span>
+          </span>
+        </div>
       </div>
 
       <div className="what-is">

@@ -225,6 +225,15 @@ jobs:
           echo "macos=${BUILD_MACOS}" >> "$GITHUB_OUTPUT"
           echo "version $version (pre-release: $prerelease)"
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The news window has something to say about this version
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: bash scripts/news.sh "$VERSION"
+
   bundle-windows:
     name: linkunbound-windows-installer
     needs: [version, tested]

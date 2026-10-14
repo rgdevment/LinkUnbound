@@ -209,8 +209,13 @@ git config core.hooksPath hooks
 That gives you three. `pre-commit` runs the conventions, `cargo fmt --all
 --check` and biome, in about two seconds. `commit-msg` weighs the subject while
 the fix is still an `--amend` rather than a rebase. `pre-push` runs the
-conventions again and the subjects of everything you are about to send. Nothing
-slower goes in any of them: the suite, clippy and the build belong to CI.
+conventions again and the subjects of everything you are about to send, and when
+what you send is a tag it asks `scripts/news.sh` whether `app/src/news.json` says
+what changed in that version: the window Settings opens with after an update is
+the only place the app says it. A candidate is exempt, and so is a patch whose
+minor release already has its entry, since the window tells that release's news
+again. Nothing slower goes in any of them: the suite, clippy and the build belong
+to CI.
 
 `.github/oversized.txt` holds every file already past the 1500-line ceiling, and
 what is above it only shrinks. `.github/not-this-spanish.txt` holds the words the

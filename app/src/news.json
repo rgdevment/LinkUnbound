@@ -1,0 +1,72 @@
+[
+  {
+    "version": "2.5.0",
+    "headline": {
+      "es": "Errores que se ven, avisos que se leen sin conexión",
+      "en": "Errors you can see, notices you can read offline"
+    },
+    "es": [
+      {
+        "title": "Ya no falla en silencio",
+        "said": "si una regla no puede abrir su navegador o el archivo de reglas no se puede leer, aparece un aviso breve y el selector se abre para que elijas."
+      },
+      {
+        "title": "Un registro que no sale de tu equipo",
+        "said": "los errores se anotan en un archivo pequeño, con las direcciones recortadas a su sitio y sin tu nombre de usuario. Solo viaja dentro del informe de diagnóstico, y solo si decides compartirlo."
+      },
+      {
+        "title": "Avisos y licencias dentro de la app",
+        "said": "Acerca de muestra los avisos de terceros y los textos completos de las licencias sin necesidad de internet."
+      },
+      {
+        "title": "Más rápido al hacer clic",
+        "said": "un enlace ya no vuelve a buscar todos los navegadores instalados, así que el selector aparece antes."
+      }
+    ],
+    "en": [
+      {
+        "title": "No more silent failures",
+        "said": "if a rule cannot open its browser or the rules file cannot be read, a short notice appears and the picker opens so you can choose."
+      },
+      {
+        "title": "A log that never leaves your computer",
+        "said": "errors are written to a small file, with web addresses cut down to their site and your user name left out. It only travels inside the diagnostic report, and only if you decide to share it."
+      },
+      {
+        "title": "Notices and licences inside the app",
+        "said": "About shows the third-party notices and the full licence texts with no internet connection needed."
+      },
+      {
+        "title": "Faster on click",
+        "said": "a link no longer looks up every installed browser again, so the picker appears sooner."
+      }
+    ]
+  },
+  {
+    "version": "2.6.0",
+    "headline": {
+      "es": "LinkUnbound estrena mascota",
+      "en": "LinkUnbound has a mascot"
+    },
+    "es": [
+      {
+        "title": "Un oso que cuida tus enlaces",
+        "said": "firme y tranquilo, ahora te recibe en Acerca de junto al lema de LinkUnbound: cada enlace, donde tú decides."
+      },
+      {
+        "title": "Lo nuevo, al actualizar",
+        "said": "después de cada actualización, Ajustes te cuenta una sola vez qué trae la versión. Si te saltaste alguna, también te cuenta lo que te perdiste."
+      }
+    ],
+    "en": [
+      {
+        "title": "A bear that looks after your links",
+        "said": "steady and calm, it now greets you in About next to LinkUnbound's motto: every link, where you decide."
+      },
+      {
+        "title": "What's new, after an update",
+        "said": "after each update, Settings tells you once what the version brings. If you skipped one, it tells you what you missed too."
+      }
+    ]
+  }
+]
