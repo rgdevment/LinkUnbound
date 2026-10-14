@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
+import copanda from "../assets/copanda.svg";
 import bear from "../assets/linkunbound.svg";
+import tisty from "../assets/tisty.svg";
 import { type Key, useSpoken, useWords } from "../i18n";
 import { composed } from "../markdown";
 import { offerMoved, saidPlainly } from "../refusal";
@@ -12,8 +14,8 @@ import type { Ready, Underway } from "./update";
 
 const REPO = "https://github.com/rgdevment/LinkUnbound";
 const COFFEE = "https://buymeacoffee.com/rgdevment";
-const COPYPASTE = "https://rgdevment.com/copypaste/";
-const TISTY = "https://rgdevment.com/tisty/";
+const COPANDA = "https://www.copanda.app/";
+const TISTY = "https://www.tisty.app/";
 const SPONSOR = "https://github.com/sponsors/rgdevment";
 const RATING = "ms-windows-store://review/?ProductId=9N9F7C8Q43KC";
 const ALTERNATIVETO = "https://alternativeto.net/software/linkunbound/";
@@ -104,26 +106,20 @@ function Gives({
   );
 }
 
-/// The mark is the app's own initial rather than a copied icon: the picture lives in the other
-/// project, and a missing file here would leave a broken image in a row that is only a pointer.
 function Tool({
-  mark,
-  hue,
+  icon,
   said,
   note,
   onPick,
 }: {
-  mark: string;
-  hue: string;
+  icon: string;
   said: string;
   note: string;
   onPick: () => void;
 }) {
   return (
     <button type="button" className="tool" onClick={onPick}>
-      <span className="ico" aria-hidden="true" style={{ background: hue }}>
-        {mark}
-      </span>
+      <img src={icon} alt="" className="ico" />
       <span className="min-w-0 flex-1">
         <b>{said}</b>
         <span>{note}</span>
@@ -458,18 +454,16 @@ export default function About({
 
       <Rule said={t("aboutOtherTools")} />
       <Tool
-        mark="T"
-        hue="#6f4bd8"
+        icon={tisty}
         said={t("aboutTisty")}
         note={t("aboutTistyNote")}
         onPick={() => void openUrl(TISTY).catch(noop)}
       />
       <Tool
-        mark="CP"
-        hue="#1e7a52"
-        said={t("aboutCopyPaste")}
-        note={t("aboutCopyPasteNote")}
-        onPick={() => void openUrl(COPYPASTE).catch(noop)}
+        icon={copanda}
+        said={t("aboutCoPanda")}
+        note={t("aboutCoPandaNote")}
+        onPick={() => void openUrl(COPANDA).catch(noop)}
       />
 
       <Rule said={t("troubleSection")} />

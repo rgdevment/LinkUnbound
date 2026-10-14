@@ -96,7 +96,7 @@ describe("about", () => {
     expect(await screen.findByText("GPL-3.0-only")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Invítame un café/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Patrocinar en GitHub/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /CopyPaste/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CoPanda/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Tisty/ })).toBeInTheDocument();
   });
 
@@ -123,7 +123,7 @@ describe("about", () => {
       "Patrocinar en GitHub",
       "Invítame un café",
       "Tisty",
-      "CopyPaste",
+      "CoPanda",
       "Abrir el repositorio",
       "Informar de un problema",
     ]) {
@@ -133,8 +133,8 @@ describe("about", () => {
     expect(opened).toEqual([
       "https://github.com/sponsors/rgdevment",
       "https://buymeacoffee.com/rgdevment",
-      "https://rgdevment.com/tisty/",
-      "https://rgdevment.com/copypaste/",
+      "https://www.tisty.app/",
+      "https://www.copanda.app/",
       "https://github.com/rgdevment/LinkUnbound",
       "https://github.com/rgdevment/LinkUnbound/issues",
     ]);

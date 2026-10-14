@@ -26,7 +26,7 @@
 </p>
 
 <p>
-  <img src="resources/assets/github-en/a-dark.png" alt="LinkUnbound: choose which browser opens every link. The picker sits next to the link, listing Google Chrome, Mozilla Firefox and Vivaldi with the profiles each one carries" width="92%"/>
+  <img src="resources/assets/social/en/a-dark.png" alt="LinkUnbound: choose which browser opens every link. The picker sits next to the link, listing Google Chrome, Mozilla Firefox and Vivaldi with the profiles each one carries" width="92%"/>
 </p>
 
 <h4>Download LinkUnbound</h4>
@@ -82,7 +82,7 @@ There is no company behind this. I am one developer who got tired of the operati
 ## What It Does
 
 <p align="center">
-  <img src="resources/assets/linkUnbound_2_picker.gif" alt="A link is clicked inside a desktop application; the picker opens beside the cursor naming the address and the application it came from, and the link opens in the browser chosen" width="700"/>
+  <img src="resources/assets/screenshots/picker.gif" alt="A link is clicked inside a desktop application; the picker opens beside the cursor naming the address and the application it came from, and the link opens in the browser chosen" width="700"/>
 </p>
 
 The picker names the address and the application the link came from, and each browser carries the profile it will open in. The settings window covers the rest: the rules and how they are matched, the browsers it found and the ones you add by hand, the diagnostic report, and what is kept on disk.
@@ -102,11 +102,26 @@ The picker names the address and the application the link came from, and each br
 - **Tells you when links are not arriving** — Settings explains why and offers the repair
 - **Two languages, three themes** — English and Spanish with automatic detection; light, dark or the system's
 
+<table>
+  <tr>
+    <td><img src="resources/assets/store/screenshots/en/02-tiles.png" alt="The picker in its two looks, a list and a sheet of tiles, both for a GitHub link that came from Slack"/></td>
+    <td><img src="resources/assets/store/screenshots/en/03-rules.png" alt="The Rules page: eight rules sending Teams, Slack and some sites to Vivaldi's work profile, others to Chrome or Firefox"/></td>
+  </tr>
+  <tr>
+    <td><img src="resources/assets/store/screenshots/en/04-browsers.png" alt="The Browsers page: Chrome, Firefox and Vivaldi detected with their profiles, and the form to add a browser by hand"/></td>
+    <td><img src="resources/assets/store/screenshots/en/05-settings.png" alt="The Application page: theme, language, picker look, start at sign-in, the global shortcut and background update checks"/></td>
+  </tr>
+</table>
+
 ---
 
 ## Privacy and Security
 
 **Everything stays local.** LinkUnbound is built on a single, non-negotiable principle: your data never leaves your computer.
+
+<p align="center">
+  <img src="resources/assets/store/screenshots/en/06-private.png" alt="LinkUnbound's bear: nothing leaves your computer, with no accounts, no subscriptions and no telemetry" width="92%"/>
+</p>
 
 - **Local-only storage** — browser list, rules and preferences stay on your machine
 - **No link history** — links are routed in memory and never kept; errors go to a local, redacted log you share only if you choose to
@@ -181,9 +196,9 @@ Since LinkUnbound is an independent open source project, the installer is signed
 **Two looks.** *Classic* is a list; *Mosaic* is a sheet of tiles that shows every profile at a glance. Choose under **Application** in Settings.
 
 <p align="center">
-  <img src="resources/assets/linkUnbound_2_0_picker_en.png" alt="The classic picker: a list of browsers with keys 1 to 3, the link's site and the app it came from"/>
+  <img src="resources/assets/screenshots/picker-classic-en.png" alt="The classic picker: a list of browsers with keys 1 to 3, the link's site and the app it came from"/>
   &nbsp;&nbsp;
-  <img src="resources/assets/linkUnbound_2_0_picker_mosaic_en.png" alt="The mosaic picker: tiles for every browser and profile, six of them here"/>
+  <img src="resources/assets/screenshots/picker-tiles-en.png" alt="The mosaic picker: tiles for every browser and profile, six of them here"/>
 </p>
 
 **Settings (tray):** double-click the tray icon or right-click → Settings. Six pages:
@@ -296,8 +311,20 @@ Every contribution helps keep these tools alive and maintained. But if you can't
 
 I build free, open source tools focused on privacy and productivity. If you like LinkUnbound, you might also find these useful:
 
-- **[Tisty](https://rgdevment.com/tisty/)** — Notes, documents and tasks kept as plain files on your own disk, readable without the application. Windows and macOS.
-- **[CopyPaste](https://rgdevment.com/copypaste/)** — A local-first clipboard manager that keeps a searchable history and ignores what comes from a password manager. Windows and macOS.
+<table>
+  <tr>
+    <td width="96" align="center">
+      <a href="https://www.tisty.app/"><img src="app/src/assets/tisty.svg" alt="Tisty the beaver" width="72"/></a>
+    </td>
+    <td><b><a href="https://www.tisty.app/">Tisty</a></b> — Notes, documents and tasks kept as plain files on your own disk, readable without the application. Windows and macOS.</td>
+  </tr>
+  <tr>
+    <td width="96" align="center">
+      <a href="https://www.copanda.app/"><img src="app/src/assets/copanda.svg" alt="CoPanda the panda" width="72"/></a>
+    </td>
+    <td><b><a href="https://www.copanda.app/">CoPanda</a></b>, formerly CopyPaste — A local-first clipboard manager that keeps a searchable history and ignores what comes from a password manager. Windows and macOS.</td>
+  </tr>
+</table>
 
 ---
 

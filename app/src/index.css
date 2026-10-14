@@ -269,15 +269,14 @@ body {
 }
 
 .tool .ico {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 700;
+  object-fit: contain;
+}
+
+.dark .tool .ico {
+  filter: drop-shadow(0 0 1px rgb(248 250 255 / 0.9));
 }
 
 .tool b {
