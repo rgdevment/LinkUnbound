@@ -41,13 +41,18 @@ describe("the news after an update", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("tells the newest version first under its own headline, with the bear above", async () => {
-    waiting(["2.6.0", "2.5.0"]);
+  it("tells the version under its own headline, with the bear above", async () => {
+    waiting(["2.6.0"]);
     render(<News />);
     const dialog = await screen.findByRole("dialog", { name: "LinkUnbound estrena mascota" });
     expect(dialog.querySelector("img")).toBeTruthy();
     expect(screen.getByText("Un oso que cuida tus enlaces")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "2.5.0" })).toBeInTheDocument();
+  });
+
+  it("skips a version it has no notes for and keeps the rest", async () => {
+    waiting(["9.9.9", "2.6.0"]);
+    render(<News />);
+    expect(await screen.findByText("Conexiones más seguras")).toBeInTheDocument();
   });
 
   it("speaks the language the window speaks", async () => {
