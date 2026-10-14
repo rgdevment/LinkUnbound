@@ -4,7 +4,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 
 version=${1:?a version is needed, without the leading v}
-news=app/src/news.json
+news=${NEWS:-app/src/news.json}
 
 amiss() {
   if [ -n "${GITHUB_ACTIONS:-}" ]; then

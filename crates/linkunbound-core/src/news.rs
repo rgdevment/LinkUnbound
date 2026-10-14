@@ -6,8 +6,8 @@ pub fn untold(fresh: bool, seen: Option<&str>, running: &str, told: &[String]) -
     let Ok(now) = Version::parse(running) else {
         return Vec::new();
     };
-    // A first install has nothing to compare with: what it runs is all it knows.
-    if fresh {
+    // A first install has nothing to compare with, and a candidate's notes are its release page.
+    if fresh || !now.pre.is_empty() {
         return Vec::new();
     }
     let since = seen.and_then(|one| Version::parse(one.trim()).ok());
@@ -98,6 +98,7 @@ mod tests {
     fn a_candidate_and_a_build_without_a_version_tell_nothing() {
         let all = told(&["2.6.0"]);
         assert!(untold(false, Some("2.5.0"), "2.6.0-rc.1", &all).is_empty());
+        assert!(untold(false, None, "2.6.0-rc.1", &told(&["2.5.0", "2.6.0"])).is_empty());
         assert!(untold(false, Some("2.5.0"), "dev", &all).is_empty());
     }
 

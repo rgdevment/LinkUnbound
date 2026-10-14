@@ -24,8 +24,10 @@ while read -r ref mine _ theirs; do
   # A tag is the last moment to notice the version it names has nothing to tell whoever installs it.
   case ${ref:-} in
     refs/tags/v*)
-      bash scripts/news.sh "${ref#refs/tags/v}" || status=1
-      continue
+      told=$(mktemp)
+      git show "$mine^{commit}:app/src/news.json" > "$told" 2> /dev/null
+      NEWS="$told" bash scripts/news.sh "${ref#refs/tags/v}" || status=1
+      rm -f "$told"
       ;;
   esac
   pushed "$mine" || status=1
