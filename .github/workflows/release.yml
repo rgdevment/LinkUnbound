@@ -1359,7 +1359,7 @@ jobs:
           	  url "${BASE}/linkunbound-installer-${VERSION}-macos-#{arch}.dmg"
           	  name "LinkUnbound"
           	  desc "Browser picker that asks which browser opens each link${SUFFIX}"
-          	  homepage "https://rgdevment.com/linkunbound/"
+          	  homepage "https://www.linkunbound.app"
 
           	  auto_updates true
 
@@ -1445,7 +1445,7 @@ jobs:
           fi
 
       - name: Open the pull request that adds this version
-        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
+        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
         with:
           identifier: rgdevment.LinkUnbound
           version: ${{ needs.version.outputs.version }}

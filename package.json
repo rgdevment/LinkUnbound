@@ -11,5 +11,8 @@
     "lint:md": "markdownlint-cli2",
     "format:md": "markdownlint-cli2 --fix",
     "notices": "node scripts/third-party.mjs"
+  },
+  "overrides": {
+    "smol-toml": "^1.9.1"
   }
 }
