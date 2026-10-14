@@ -1,5 +1,32 @@
 [
   {
+    "version": "2.6.1",
+    "headline": {
+      "es": "El oso tiene compañía",
+      "en": "The bear has company"
+    },
+    "es": [
+      {
+        "title": "Caras conocidas en Acerca de",
+        "said": "en Otras herramientas, Tisty aparece ahora con su castor y CoPanda con su panda, en vez de dos letras sueltas."
+      },
+      {
+        "title": "CopyPaste ahora es CoPanda",
+        "said": "cambió de nombre, y Tisty y CoPanda abren sus propios sitios: tisty.app y copanda.app."
+      }
+    ],
+    "en": [
+      {
+        "title": "Familiar faces in About",
+        "said": "under Other tools, Tisty now shows up with its beaver and CoPanda with its panda, instead of two plain letters."
+      },
+      {
+        "title": "CopyPaste is now CoPanda",
+        "said": "it has a new name, and Tisty and CoPanda open their own websites: tisty.app and copanda.app."
+      }
+    ]
+  },
+  {
     "version": "2.6.0",
     "headline": {
       "es": "LinkUnbound estrena mascota",
