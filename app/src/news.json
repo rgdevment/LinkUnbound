@@ -1,0 +1,37 @@
+[
+  {
+    "version": "2.6.0",
+    "headline": {
+      "es": "LinkUnbound estrena mascota",
+      "en": "LinkUnbound has a mascot"
+    },
+    "es": [
+      {
+        "title": "Un oso que cuida tus enlaces",
+        "said": "firme y tranquilo, ahora te recibe en Acerca de junto al lema de LinkUnbound: cada enlace, donde tú decides."
+      },
+      {
+        "title": "Lo nuevo, al actualizar",
+        "said": "desde ahora, después de cada actualización, Ajustes te cuenta una sola vez qué trae la versión. Si te saltas alguna, también te cuenta lo que te perdiste."
+      },
+      {
+        "title": "Conexiones más seguras",
+        "said": "las búsquedas de actualizaciones usan una versión corregida de la librería que cifra la conexión."
+      }
+    ],
+    "en": [
+      {
+        "title": "A bear that looks after your links",
+        "said": "steady and calm, it now greets you in About next to LinkUnbound's motto: every link, where you decide."
+      },
+      {
+        "title": "What's new, after an update",
+        "said": "from now on, after each update, Settings tells you once what the version brings. If you skip one, it tells you what you missed too."
+      },
+      {
+        "title": "Safer connections",
+        "said": "update checks use a fixed version of the library that encrypts the connection."
+      }
+    ]
+  }
+]

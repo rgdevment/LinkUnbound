@@ -23,7 +23,7 @@ also under About → Licence texts.
 | `scheduler` | 0.28.0 | MIT |
 | `uc.micro` | 3.0.0 | MIT |
 
-## In the core (367 crates)
+## In the core (366 crates)
 
 | Crate | Version | Licence |
 | --- | --- | --- |
@@ -110,7 +110,6 @@ also under About → Licence texts.
 | `futures-util` | 0.3.34 | MIT OR Apache-2.0 |
 | `getrandom` | 0.2.17 | MIT OR Apache-2.0 |
 | `getrandom` | 0.3.4 | MIT OR Apache-2.0 |
-| `getrandom` | 0.4.3 | MIT OR Apache-2.0 |
 | `gif` | 0.14.2 | MIT OR Apache-2.0 |
 | `glob` | 0.3.4 | MIT OR Apache-2.0 |
 | `global-hotkey` | 0.8.0 | Apache-2.0 OR MIT |
@@ -247,7 +246,7 @@ also under About → Licence texts.
 | `rustls-pki-types` | 1.15.1 | MIT OR Apache-2.0 |
 | `rustls-platform-verifier` | 0.7.0 | MIT OR Apache-2.0 |
 | `rustls-webpki` | 0.103.15 | ISC |
-| `rustls` | 0.23.45 | Apache-2.0 OR ISC OR MIT |
+| `rustls` | 0.23.46 | Apache-2.0 OR ISC OR MIT |
 | `ryu` | 1.0.23 | Apache-2.0 OR BSL-1.0 |
 | `same-file` | 1.0.6 | Unlicense/MIT |
 | `schannel` | 0.1.29 | MIT |

@@ -427,6 +427,7 @@ mod tests {
             .edit_prefs(|prefs| {
                 prefs.here_since = Some(1_700_000_000);
                 prefs.asked_for_a_star = true;
+                prefs.news_seen = Some("2.6.0".to_owned());
                 true
             })
             .expect("marked");
@@ -440,6 +441,7 @@ mod tests {
             .edit_prefs(|kept| {
                 settled.here_since = kept.here_since;
                 settled.asked_for_a_star = kept.asked_for_a_star;
+                settled.news_seen.clone_from(&kept.news_seen);
                 *kept = settled.clone();
                 true
             })
@@ -453,6 +455,11 @@ mod tests {
             "the mark it never saw"
         );
         assert!(read.asked_for_a_star, "and the answer it never saw");
+        assert_eq!(
+            read.news_seen.as_deref(),
+            Some("2.6.0"),
+            "and the news it told"
+        );
     }
 
     #[test]

@@ -7,6 +7,7 @@ import About from "./settings/About";
 import Application from "./settings/Application";
 import Browsers from "./settings/Browsers";
 import Maintenance from "./settings/Maintenance";
+import News from "./settings/News";
 import { Card, Line, Section, Switch } from "./settings/parts";
 import Rules from "./settings/Rules";
 import { useUpdate } from "./settings/update";
@@ -494,6 +495,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
           />
         )}
       </main>
+      <News />
     </div>
   );
 }

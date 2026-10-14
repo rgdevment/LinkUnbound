@@ -54,6 +54,8 @@ pub struct Preferences {
     pub here_since: Option<u64>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub asked_for_a_star: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub news_seen: Option<String>,
 }
 
 fn default_shortcut() -> Option<String> {
@@ -77,6 +79,7 @@ impl Default for Preferences {
             looks_for_updates: true,
             here_since: None,
             asked_for_a_star: false,
+            news_seen: None,
         }
     }
 }

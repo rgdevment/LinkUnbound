@@ -1,12 +1,14 @@
 mod about;
+mod news;
 mod shell;
 mod shop;
+mod star;
 mod system;
 mod update;
 
 use linkunbound_core::{
-    Asking, Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of,
-    is_public_suffix, merge, normalise, same_name, site_of,
+    Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of, is_public_suffix,
+    merge, normalise, same_name, site_of,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -669,6 +671,7 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
         .edit_prefs(|kept| {
             settled.here_since = kept.here_since;
             settled.asked_for_a_star = kept.asked_for_a_star;
+            settled.news_seen.clone_from(&kept.news_seen);
             *kept = settled.clone();
             true
         })
@@ -748,50 +751,6 @@ const HERE: &str = env!("CARGO_PKG_VERSION");
 #[tauri::command]
 fn settings_painted(window: tauri::WebviewWindow) {
     shell::reveal(&window);
-}
-
-fn now_in_seconds() -> Option<u64> {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()
-        .map(|since| since.as_secs())
-}
-
-#[tauri::command]
-fn star_due() -> Result<bool, String> {
-    let Some(now) = now_in_seconds() else {
-        return Ok(false);
-    };
-    let store = store();
-    let mut due = false;
-    store
-        .edit_prefs(|prefs| {
-            let counted = || store.rules().map(|set| set.rules.len()).unwrap_or_default();
-            match linkunbound_core::asking(prefs.asked_for_a_star, prefs.here_since, now, counted) {
-                Asking::Start => {
-                    prefs.here_since = Some(now);
-                    true
-                }
-                Asking::Wait => false,
-                Asking::Now => {
-                    due = true;
-                    false
-                }
-            }
-        })
-        .map_err(|e| e.to_string())?;
-    Ok(due)
-}
-
-#[tauri::command]
-fn star_done() -> Result<(), String> {
-    store()
-        .edit_prefs(|prefs| {
-            prefs.asked_for_a_star = true;
-            true
-        })
-        .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 #[cfg(windows)]
@@ -1293,12 +1252,14 @@ pub fn run() {
             system_open_elsewhere,
             about::about,
             about::notices,
+            news::news,
+            news::news_seen,
             settings_painted,
             update_ready,
             update_install,
             update_candidates,
-            star_due,
-            star_done
+            star::star_due,
+            star::star_done
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build());
@@ -1334,6 +1295,7 @@ pub fn run() {
             }
 
             system::reconcile();
+            news::raise(app.handle());
             #[cfg(target_os = "macos")]
             relay_links(app.handle().clone());
             shell::open_settings(app.handle(), store().prefs().theme);
