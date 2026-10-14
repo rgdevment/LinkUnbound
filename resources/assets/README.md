@@ -11,7 +11,7 @@ code that reads them, in `app/src-tauri/icons/` and `app/src/assets/`.
 | `store/logos/` | The square logos the Store asks for | The Store listing |
 | `promo/` | Box art, hero and poster | The Store listing and press |
 | `social/` | The repository's social preview, in two colours | GitHub settings and the top of the README |
-| `screenshots/` | Real captures of the picker and the settings window | The README and the wiki |
+| `screenshots/` | Real captures: the picker in motion and the settings window | The README and the wiki |
 
 ## Store screenshots
 

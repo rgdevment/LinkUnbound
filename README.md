@@ -1,12 +1,12 @@
-﻿<div align="center">
+<div align="center">
 
-<img src="app/src-tauri/icons/icon.png" alt="LinkUnbound icon" width="96" height="96"/>
+<img src="app/src-tauri/icons/icon.png" alt="LinkUnbound, free open source browser picker for Windows and macOS" width="96" height="96"/>
 
-# LinkUnbound
+# LinkUnbound — Free Open Source Browser Picker for Windows and macOS
 
-**A free, open source browser picker for Windows and macOS. Choose which browser opens every link.**
+**Choose which browser opens every link. Rules per site, per app and per browser profile, and a small picker beside your cursor for everything else.**
 
-**Open source. Local-first. Privacy-first. Zero telemetry.**
+**No accounts. No subscriptions. No telemetry. Everything stays on your computer.**
 
 <p>
   <a href="https://github.com/rgdevment/LinkUnbound/releases">
@@ -26,7 +26,7 @@
 </p>
 
 <p>
-  <img src="resources/assets/social/en/a-dark.png" alt="LinkUnbound: choose which browser opens every link. The picker sits next to the link, listing Google Chrome, Mozilla Firefox and Vivaldi with the profiles each one carries" width="92%"/>
+  <img src="resources/assets/store/screenshots/en/01-picker.png" alt="LinkUnbound browser picker: you choose which browser opens every link. A GitHub link clicked in Slack opens a picker beside the cursor listing Google Chrome, Mozilla Firefox and Vivaldi with their profiles" width="92%"/>
 </p>
 
 <h4>Download LinkUnbound</h4>
@@ -42,11 +42,11 @@
 </p>
 
 <p align="center">
-  <a href="https://www.linkunbound.app"><b>linkunbound.app</b></a>
+  <sub>Prefer a direct download? <a href="https://github.com/rgdevment/LinkUnbound/releases/latest">GitHub Releases</a> has standalone installers — Windows (.exe) · macOS (.dmg, one per chip)</sub>
 </p>
 
 <p align="center">
-  <sub>Prefer a direct download? <a href="https://github.com/rgdevment/LinkUnbound/releases/latest">GitHub Releases</a> has standalone installers — Windows (.exe) · macOS (.dmg, one per chip)</sub>
+  <sub>Site and docs: <a href="https://www.linkunbound.app"><b>www.linkunbound.app</b></a> · <a href="https://github.com/rgdevment/LinkUnbound/wiki">Wiki</a></sub>
 </p>
 
 </div>
@@ -57,86 +57,61 @@
 
 It is the missing piece for anyone who lives with more than one browser: work in one, personal life in another, a client's tools in a third profile. Instead of changing the system default every week, you set a **rule per site, per subdomain, per exact address or per app** — "everything from Slack in Brave", "docs.google.com in the work profile of Chrome" — and the rest goes through the picker.
 
-There is no company behind this. I am one developer who got tired of the operating system deciding which browser opens a link, built this for myself, and put it out for whoever has the same itch. That shapes everything about it: **no ads, no telemetry, no analytics, no accounts, no subscriptions, no cloud, no data collection** — the only thing it ever asks the network is whether a new version exists, and you can turn that off. Your rules live in a small JSON file on your own disk, and you can read every line of the code that touches them.
+**Why people choose LinkUnbound over other browser pickers:**
+
+- **Windows and macOS, one app** — the same rules, the same picker and the same settings on both systems
+- **Rules by the app a link came from** — not only by its address: everything Teams sends can open in your work browser
+- **Browser profiles, found on their own** — every Chromium profile becomes its own choice, with private windows for every browser
+- **Truly free** — no premium tier, no trial, no feature held back. GPL-3.0
+- **Private by design** — no account, no telemetry, no cloud. Your rules are a small JSON file on your own disk
+- **Signed automatic updates** — or through the Microsoft Store and Homebrew, if that is where you got it
 
 ---
 
 ## Table of Contents
 
+- [Why I Built This](#why-i-built-this)
+- [Who Is This For?](#who-is-this-for)
+- [Getting Started](#getting-started)
 - [What It Does](#what-it-does)
 - [Privacy and Security](#privacy-and-security)
-- [Getting Started](#getting-started)
 - [How It Works](#how-it-works)
-- [Domain Rules](#domain-rules)
-- [Architecture](#architecture)
 - [FAQ](#faq)
-- [Localization](#localization)
-- [Want to Help?](#want-to-help)
-- [Support the Project](#support-the-project)
-- [Other Tools](#other-tools)
 - [Alternatives](#alternatives)
+- [Localization](#localization)
+- [Other Tools by the Same Author](#other-tools-by-the-same-author)
+- [Support the Project](#support-the-project)
+- [Want to Help?](#want-to-help)
 - [License](#license)
 
 ---
 
-## What It Does
+## Why I Built This
 
-<p align="center">
-  <img src="resources/assets/screenshots/picker.gif" alt="A link is clicked inside a desktop application; the picker opens beside the cursor naming the address and the application it came from, and the link opens in the browser chosen" width="700"/>
-</p>
+There is no company behind this. I am one developer who got tired of the operating system deciding which browser opens a link. Work lived in one browser, personal life in another, and every link clicked in a chat or an email landed in whichever one the system had been told was the default.
 
-The picker names the address and the application the link came from, and each browser carries the profile it will open in. The settings window covers the rest: the rules and how they are matched, the browsers it found and the ones you add by hand, the diagnostic report, and what is kept on disk.
-
-- **Registers as default browser** — intercepts every link click system-wide on Windows and macOS
-- **Shows a floating picker** near your cursor, in two looks: a classic list or a mosaic of tiles. Pick with the mouse or the keys `1`–`9`; hold **Shift** for a private window; `Ctrl+C` copies the address; `Esc` puts it away
-- **Remembers the choice at the reach you pick** — this URL, this subdomain, the whole site, or everything a given app sends
-- **Rules from Settings too** — a rule for a site you have not visited yet, or for an app, without waiting for the picker
-- **Unwraps Microsoft SafeLinks**, so rules see the real destination
-- **Takes links from your other apps** — an application can send a link to `linkunbound://open?url=…` and it goes through your rules, even when LinkUnbound is not the default browser
-- **Tells you when a rule decided** — a small notice with an Undo, six seconds, no focus taken
-- **Opens local documents** when you choose it for them — `.html`, `.pdf` and the rest on Windows, `.html` and `.xhtml` on macOS
-- **Runs silently** in the system tray (or menu bar on macOS) — starts at sign-in, stays out of the way
-- **Detects installed browsers** and their Chromium profiles — or add custom ones manually
-- **Opens in a private window** using the switch each browser family expects
-- **Updates itself** — looks at the release feed in the background, says so in the picker and in Settings, and one press installs it; a Microsoft Store copy updates through the Store
-- **Tells you when links are not arriving** — Settings explains why and offers the repair
-- **Two languages, three themes** — English and Spanish with automatic detection; light, dark or the system's
-
-<table>
-  <tr>
-    <td><img src="resources/assets/store/screenshots/en/02-tiles.png" alt="The picker in its two looks, a list and a sheet of tiles, both for a GitHub link that came from Slack"/></td>
-    <td><img src="resources/assets/store/screenshots/en/03-rules.png" alt="The Rules page: eight rules sending Teams, Slack and some sites to Vivaldi's work profile, others to Chrome or Firefox"/></td>
-  </tr>
-  <tr>
-    <td><img src="resources/assets/store/screenshots/en/04-browsers.png" alt="The Browsers page: Chrome, Firefox and Vivaldi detected with their profiles, and the form to add a browser by hand"/></td>
-    <td><img src="resources/assets/store/screenshots/en/05-settings.png" alt="The Application page: theme, language, picker look, start at sign-in, the global shortcut and background update checks"/></td>
-  </tr>
-</table>
+So I built the browser selector I wanted, for myself, and put it out for whoever has the same itch. That shapes everything about it: **no ads, no telemetry, no analytics, no accounts, no subscriptions, no cloud, no data collection** — the only thing it ever asks the network is whether a new version exists, and you can turn that off. Your rules live in a small JSON file on your own disk, and you can read every line of the code that touches them.
 
 ---
 
-## Privacy and Security
+## Who Is This For?
 
-**Everything stays local.** LinkUnbound is built on a single, non-negotiable principle: your data never leaves your computer.
+Anyone who keeps **more than one browser or more than one browser profile** and wants every link to land in the right one without thinking about it:
 
-<p align="center">
-  <img src="resources/assets/store/screenshots/en/06-private.png" alt="LinkUnbound's bear: nothing leaves your computer, with no accounts, no subscriptions and no telemetry" width="92%"/>
-</p>
+- People who keep **work and personal browsing apart**, with a browser or a Chrome profile for each
+- Developers who test in several browsers and keep their daily one clean
+- Consultants and freelancers with **a browser profile per client**
+- Anyone whose links arrive from **Teams, Outlook, Slack or Discord** and should not all open in the same place
 
-- **Local-only storage** — browser list, rules and preferences stay on your machine
-- **No link history** — links are routed in memory and never kept; errors go to a local, redacted log you share only if you choose to
-- **No tracking** — no telemetry, no analytics, no hidden collection
-- **No accounts** — no sign-up, no login, no profiles
-- **Web links only from other apps** — `linkunbound://` accepts an `http` or `https` link and nothing else, and tells the sender nothing back
-- **One network request** — a read-only check of the release feed the project publishes on GitHub for updates (no user data sent, works offline)
-
-**By design, LinkUnbound will never have:** accounts, subscriptions, ads, cloud sync, or data collection of any kind.
-
-For responsible disclosure and security contact info, see [SECURITY.md](SECURITY.md). Full privacy details in [PRIVACY.md](PRIVACY.md).
+If you only ever use one browser, LinkUnbound has nothing to choose between, and that is a fair reason to walk away.
 
 ---
 
 ## Getting Started
+
+<p align="center">
+  <img src="resources/assets/store/screenshots/en/07-closing.png" alt="LinkUnbound, free and open source browser picker for Windows and macOS, available from the Microsoft Store, Homebrew and GitHub Releases" width="92%"/>
+</p>
 
 ### Requirements
 
@@ -185,6 +160,74 @@ Since LinkUnbound is an independent open source project, the installer is signed
 3. macOS asks you to confirm the change → **Use "LinkUnbound"**
 4. Done — every link now goes through LinkUnbound. Local `.html` and `.xhtml` files go through it too; `.svg` only if you choose it for them
 
+**Coming from 1.x?** Remove it before installing 2.0 — the Windows installer offers to — so the two do not fight over the same registration. The details are under [How It Works](#coming-from-1x).
+
+---
+
+## What It Does
+
+<p align="center">
+  <img src="resources/assets/screenshots/picker.gif" alt="A link is clicked inside a desktop application; the browser picker opens beside the cursor naming the address and the application it came from, and the link opens in the browser chosen" width="700"/>
+</p>
+
+**It becomes your default browser and asks.** LinkUnbound registers as the default browser on Windows and macOS, so every link clicked anywhere on the system reaches it first. The picker names the address and the application the link came from, and each browser carries the profile it will open in. It waits in the system tray (or the menu bar on macOS), starts at sign-in and stays out of the way.
+
+### A browser picker in two looks
+
+**Choose with the mouse or the keys `1`–`9`.** The picker opens beside your cursor as a classic list or as a mosaic of tiles that shows every profile at a glance. Hold **Shift** for a private window, `Ctrl+C` copies the address, `Esc` puts it away. Links clicked while it is open wait their turn.
+
+![The browser picker in its two looks, a list and a mosaic of tiles, for a GitHub link that came from Slack: press 1, 2 or 3, hold Shift for a private window, and remember the choice for one time, a site or an app](resources/assets/store/screenshots/en/02-tiles.png)
+
+### Rules per site, per app and per browser profile
+
+**Set it once and never choose twice.** The picker remembers your choice at the reach you pick — this exact URL, this subdomain, the whole site, or everything a given app sends — and the **Rules** page lets you write one for a site you have not visited yet. When a rule decides, a small notice says which one, with an **Undo** for six seconds; it never takes the keyboard.
+
+![Browser rules in LinkUnbound: Microsoft Teams, Slack, atlassian.net and figma.com open in Vivaldi's work profile, github.com and Google Sheets in Chrome's personal profile, and Proton Mail and YouTube in Firefox](resources/assets/store/screenshots/en/03-rules.png)
+
+A rule covers one of four reaches: an exact address, a host (`mail.google.com`), a whole site (`google.com`, which covers `mail.google.com`, `drive.google.com` and the rest), or everything a given application sends. The narrowest reach that matches wins, and a rule scoped to an app wins over any domain rule — naming the origin is a deliberate statement, and a generic domain rule should not override it silently. Between two rules of the same reach, the one higher in the Rules page answers. A rule can also ask for a private window, if the browser has one.
+
+**Microsoft SafeLinks are unwrapped** before any rule looks at them, so rules see the real destination, and the picker names it rather than the wrapper.
+
+### Every browser, every profile
+
+**Nothing to configure.** LinkUnbound finds the browsers installed on your system and reads the profiles of every Chromium-based browser — Chrome, Edge, Brave, Vivaldi and the rest — so each profile is its own choice. Each one opens a private window with the switch its browser family expects. Anything it does not find, you add by hand with its path and its arguments.
+
+![The Browsers page in LinkUnbound: Google Chrome with two profiles, Mozilla Firefox and Vivaldi detected automatically, each able to open a private window, and a form to add any other browser by hand](resources/assets/store/screenshots/en/04-browsers.png)
+
+### Light, dark, English or Spanish
+
+**It looks like it belongs.** Light, dark or the system's theme; English or Spanish, detected on its own; the classic list or the mosaic; start at sign-in; a global shortcut to open Settings; and update checks in the background, which you can turn off.
+
+![LinkUnbound settings: light and dark theme, English and Spanish, classic or tiles picker, launch at system startup, a global shortcut and quiet automatic updates](resources/assets/store/screenshots/en/05-settings.png)
+
+### And the rest
+
+- **Takes links from your other apps** — an application can send a link to `linkunbound://open?url=…` and it goes through your rules, even when LinkUnbound is not the default browser
+- **Opens local documents** when you choose it for them — `.html`, `.pdf` and the rest on Windows, `.html` and `.xhtml` on macOS
+- **Updates itself** — looks at the release feed in the background, says so in the picker and in Settings, and one press installs it; a Microsoft Store copy updates through the Store
+- **Tells you when links are not arriving** — Settings explains why and offers the repair
+
+---
+
+## Privacy and Security
+
+**Everything stays local.** LinkUnbound is built on a single, non-negotiable principle: your data never leaves your computer.
+
+<p align="center">
+  <img src="resources/assets/store/screenshots/en/06-private.png" alt="LinkUnbound's bear, private by design: nothing leaves your computer. No accounts, no subscriptions, no telemetry, no ads, no server, GPL-3.0, and rules and links stay local" width="92%"/>
+</p>
+
+- **Local-only storage** — browser list, rules and preferences stay on your machine
+- **No link history** — links are routed in memory and never kept; errors go to a local, redacted log you share only if you choose to
+- **No tracking** — no telemetry, no analytics, no hidden collection
+- **No accounts** — no sign-up, no login, no profiles
+- **Web links only from other apps** — `linkunbound://` accepts an `http` or `https` link and nothing else, and tells the sender nothing back
+- **One network request** — a read-only check of the release feed the project publishes on GitHub for updates (no user data sent, works offline)
+
+**By design, LinkUnbound will never have:** accounts, subscriptions, ads, cloud sync, or data collection of any kind.
+
+For responsible disclosure and security contact info, see [SECURITY.md](SECURITY.md). Full privacy details in [PRIVACY.md](PRIVACY.md).
+
 ---
 
 ## How It Works
@@ -192,14 +235,6 @@ Since LinkUnbound is an independent open source project, the installer is signed
 **Link click with a rule:** the browser opens at once, and a small notice in the corner says which rule decided, with an **Undo** for six seconds. The notice never takes the keyboard.
 
 **Link click without a rule:** a picker appears near your cursor, showing where the link comes from and the app it was clicked in. Pick a browser with the mouse or `1`–`9`. Hold **Shift** (or pin it with the *Private* pill) to open a private window. To remember the choice, pick a reach first — *this URL*, *this subdomain*, *the whole site* or *from this app* — with the arrows or the pills, then pick the browser. `Ctrl+C` copies the address; `Esc` puts the picker away. Links clicked while it is open wait their turn.
-
-**Two looks.** *Classic* is a list; *Mosaic* is a sheet of tiles that shows every profile at a glance. Choose under **Application** in Settings.
-
-<p align="center">
-  <img src="resources/assets/screenshots/picker-classic-en.png" alt="The classic picker: a list of browsers with keys 1 to 3, the link's site and the app it came from"/>
-  &nbsp;&nbsp;
-  <img src="resources/assets/screenshots/picker-tiles-en.png" alt="The mosaic picker: tiles for every browser and profile, six of them here"/>
-</p>
 
 **Settings (tray):** double-click the tray icon or right-click → Settings. Six pages:
 
@@ -214,21 +249,11 @@ Since LinkUnbound is an independent open source project, the installer is signed
 
 **From another app.** An application can send a link to LinkUnbound even when it is not the default browser: open `linkunbound://open?url=` followed by the whole link encoded as one component — what `encodeURIComponent` does, or `utf8_percent_encode(url, NON_ALPHANUMERIC)` in Rust — `linkunbound://open?url=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1`. Every `:`, `/`, `?`, `&`, `=`, `#`, `%` and `+` has to be encoded: an unencoded `&` or `#` cuts the link and an unencoded `+` arrives as a space. It goes through the same rules and picker as a click. Only `http` and `https` links are accepted; anything else is dropped. Ask the system whether the scheme exists before using it, and open the plain link when nothing answers: on Windows ask `AssocQueryStringW(ASSOCF_IS_PROTOCOL, …, L"linkunbound", L"open", …)` twice: `ASSOCSTR_EXECUTABLE` answers for the downloaded copy, and `ASSOCSTR_APPID` for the Microsoft Store one, which has no executable to name. Treat `OpenWith.exe` as no answer: that is Windows offering to choose an app; on macOS `NSWorkspace.urlForApplication(toOpen: URL(string: "linkunbound:")!)` is not `nil` while the app is installed.
 
----
+**Architecture.** Two binaries, one package: a resident that receives the links and draws the picker, and a settings window opened on demand. How they talk to each other on each system is in [CONTRIBUTING.md](CONTRIBUTING.md#architecture).
 
-## Domain Rules
+### Coming from 1.x
 
-A rule covers one of four reaches: an exact address, a host (`mail.google.com`), a whole site (`google.com`, which covers `mail.google.com`, `drive.google.com` and the rest), or everything a given application sends. The narrowest reach that matches wins, and a rule scoped to an app wins over any domain rule — naming the origin is a deliberate statement, and a generic domain rule should not override it silently. Between two rules of the same reach, the one higher in the Rules page answers.
-
-Rules are written from the picker — pick the reach, then the browser — or from the **Rules** page, where the same rule is typed in. A rule can also ask for a private window, if the browser has one.
-
----
-
-## Architecture
-
-Two binaries, one package: a resident that receives the links and draws the picker, and a settings window opened on demand. How they talk to each other on each system is in [CONTRIBUTING.md](CONTRIBUTING.md#architecture).
-
-**Coming from 1.x.** 2.0 is not compatible with the settings of the 1.x line, and does not promise to carry them over: it starts from what it can read and keeps the rest out of the way. On Windows it reads the rules and browsers of a standalone 1.x install where they are, and keeps a copy of the originals as `rules.1x.json` and `browsers.1x.json` before writing its own format; a copy installed from the Microsoft Store kept its files inside its package and they are not read. Going back to 1.x means restoring those copies over `rules.json` and `browsers.json`. Remove 1.x before installing 2.0 — the installer offers to — or the two fight over the same registration; a Store copy of 1.x has to be uninstalled by hand. On macOS 2.0 ships under the bundle identifier `dev.rgdevment.linkunbound`; 1.x was `com.rgdevment.linkunbound`, kept its files under that name, and nothing of it is read. macOS treats them as two applications: quit 1.x, remove it, then open Settings and set LinkUnbound as the default once more, and remove the old entry under System Settings → General → Login Items if one is left behind.
+2.0 is not compatible with the settings of the 1.x line, and does not promise to carry them over: it starts from what it can read and keeps the rest out of the way. On Windows it reads the rules and browsers of a standalone 1.x install where they are, and keeps a copy of the originals as `rules.1x.json` and `browsers.1x.json` before writing its own format; a copy installed from the Microsoft Store kept its files inside its package and they are not read. Going back to 1.x means restoring those copies over `rules.json` and `browsers.json`. Remove 1.x before installing 2.0 — the installer offers to — or the two fight over the same registration; a Store copy of 1.x has to be uninstalled by hand. On macOS 2.0 ships under the bundle identifier `dev.rgdevment.linkunbound`; 1.x was `com.rgdevment.linkunbound`, kept its files under that name, and nothing of it is read. macOS treats them as two applications: quit 1.x, remove it, then open Settings and set LinkUnbound as the default once more, and remove the old entry under System Settings → General → Login Items if one is left behind.
 
 ---
 
@@ -265,6 +290,26 @@ Yes: `1`–`9` open a row, `Shift` holds a private window, `Ctrl+P` pins it, the
 
 ---
 
+## Alternatives
+
+Other browser pickers, so you can pick the one that fits. Platform and licence checked against each project in September 2026; everything else changes, so go and look.
+
+| Project | Platform | Licence |
+| :-- | :-- | :-- |
+| [Finicky](https://github.com/johnste/finicky) | macOS | MIT |
+| [Browserino](https://github.com/AlexStrNik/Browserino) | macOS | GPL-3.0 |
+| [Browserosaurus](https://github.com/will-stone/browserosaurus) | macOS | GPL-3.0, no longer maintained |
+| [BrowserPicker](https://github.com/mortenn/BrowserPicker) | Windows | MIT |
+| [Browser Tamer](https://github.com/aloneguid/bt) | Windows, Linux | Apache-2.0 |
+| [Junction](https://github.com/sonnyp/Junction) | Linux | GPL-3.0 |
+| [Switchbar](https://switchbar.app/) | Windows, macOS | Freemium, closed source |
+| [Choosy](https://choosy.app/) | macOS | Paid |
+| [Velja](https://sindresorhus.com/velja) | macOS | Free, closed source |
+
+What LinkUnbound does that most of these do not: **one build for Windows and macOS**, rules that match **the app a link came from** and not only its address, **browser profiles** detected on their own, and signed automatic updates. Finicky is configured in a file and is macOS only; Junction is Linux only; Browserosaurus now points its own readers at Browserino, which is macOS only too.
+
+---
+
 ## Localization
 
 LinkUnbound supports English and Spanish with automatic language detection. You can override the language in Settings.
@@ -278,14 +323,24 @@ Want to add your language? See the [translation guide](CONTRIBUTING.md#adding-a-
 
 ---
 
-## Want to Help?
+## Other Tools by the Same Author
 
-Contributions are always appreciated:
+Same idea, same terms: free, open source, no ads, no telemetry, everything local. If you like LinkUnbound, you might also find these useful:
 
-- **Write Code** — Fix bugs or add features. See [CONTRIBUTING.md](CONTRIBUTING.md).
-- **Translate** — Add your language.
-- **Report Bugs** — [Open an issue](https://github.com/rgdevment/LinkUnbound/issues/new).
-- **Share Ideas** — Tell me what you wish this browser picker could do.
+<table>
+  <tr>
+    <td width="96" align="center">
+      <a href="https://www.tisty.app/"><img src="app/src/assets/tisty.svg" alt="Tisty the beaver, mascot of Tisty, free open source notes, documents and tasks" width="72"/></a>
+    </td>
+    <td><b><a href="https://www.tisty.app/">Tisty</a></b> — Notes, documents and tasks kept as plain files on your own disk, readable without the application. Windows and macOS.</td>
+  </tr>
+  <tr>
+    <td width="96" align="center">
+      <a href="https://www.copanda.app/"><img src="app/src/assets/copanda.svg" alt="CoPanda the panda, mascot of CoPanda, free open source clipboard manager" width="72"/></a>
+    </td>
+    <td><b><a href="https://www.copanda.app/">CoPanda</a></b>, formerly CopyPaste — A local-first clipboard manager that keeps a searchable history and ignores what comes from a password manager. Windows and macOS.</td>
+  </tr>
+</table>
 
 ---
 
@@ -307,44 +362,14 @@ Every contribution helps keep these tools alive and maintained. But if you can't
 
 ---
 
-## Other Tools
+## Want to Help?
 
-I build free, open source tools focused on privacy and productivity. If you like LinkUnbound, you might also find these useful:
+Contributions are always appreciated:
 
-<table>
-  <tr>
-    <td width="96" align="center">
-      <a href="https://www.tisty.app/"><img src="app/src/assets/tisty.svg" alt="Tisty the beaver" width="72"/></a>
-    </td>
-    <td><b><a href="https://www.tisty.app/">Tisty</a></b> — Notes, documents and tasks kept as plain files on your own disk, readable without the application. Windows and macOS.</td>
-  </tr>
-  <tr>
-    <td width="96" align="center">
-      <a href="https://www.copanda.app/"><img src="app/src/assets/copanda.svg" alt="CoPanda the panda" width="72"/></a>
-    </td>
-    <td><b><a href="https://www.copanda.app/">CoPanda</a></b>, formerly CopyPaste — A local-first clipboard manager that keeps a searchable history and ignores what comes from a password manager. Windows and macOS.</td>
-  </tr>
-</table>
-
----
-
-## Alternatives
-
-Other browser pickers, so you can pick the one that fits. Platform and licence checked against each project in September 2026; everything else changes, so go and look.
-
-| Project | Platform | Licence |
-| :-- | :-- | :-- |
-| [Finicky](https://github.com/johnste/finicky) | macOS | MIT |
-| [Browserino](https://github.com/AlexStrNik/Browserino) | macOS | GPL-3.0 |
-| [Browserosaurus](https://github.com/will-stone/browserosaurus) | macOS | GPL-3.0, no longer maintained |
-| [BrowserPicker](https://github.com/mortenn/BrowserPicker) | Windows | MIT |
-| [Browser Tamer](https://github.com/aloneguid/bt) | Windows, Linux | Apache-2.0 |
-| [Junction](https://github.com/sonnyp/Junction) | Linux | GPL-3.0 |
-| [Switchbar](https://switchbar.app/) | Windows, macOS | Freemium, closed source |
-| [Choosy](https://choosy.app/) | macOS | Paid |
-| [Velja](https://sindresorhus.com/velja) | macOS | Free, closed source |
-
-What LinkUnbound does that most of these do not: **one build for Windows and macOS**, rules that match **the app a link came from** and not only its address, **browser profiles** detected on their own, and signed automatic updates. Finicky is configured in a file and is macOS only; Junction is Linux only; Browserosaurus now points its own readers at Browserino, which is macOS only too.
+- **Write Code** — Fix bugs or add features. See [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Translate** — Add your language.
+- **Report Bugs** — [Open an issue](https://github.com/rgdevment/LinkUnbound/issues/new).
+- **Share Ideas** — Tell me what you wish this browser picker could do.
 
 ---
 
