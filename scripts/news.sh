@@ -14,8 +14,7 @@ amiss() {
   fi
 }
 
-# the window only shows entries at or below the version running, and 1.31.0 is above 1.31.0-rc.1,
-# so a candidate would show nothing however carefully its notes were written
+# a candidate's window shows nothing, however carefully its notes were written
 case $version in
   *-*)
     printf 'ok %s is a candidate, and the window shows no notes for one\n' "$version"
@@ -28,9 +27,9 @@ if [ ! -f "$news" ]; then
   exit 1
 fi
 
-if ! command -v python3 > /dev/null; then
-  # a gate that cannot look has to say so: in CI that is a failure, on a machine it is a warning,
-  # because a hook that blocks over a missing tool is a hook somebody uninstalls
+# Windows answers python3 with a Store alias that runs nothing, so asking it to run is the test
+if ! python3 -c '' > /dev/null 2>&1; then
+  # a hook that blocks over a missing tool is a hook somebody uninstalls
   amiss "python3 is not here, so nobody looked at what $news says about $version"
   [ -n "${GITHUB_ACTIONS:-}" ] && exit 1
   exit 0
@@ -66,7 +65,7 @@ sys.exit(1)
 said=$(python3 -c "$reads" "$version" "$news" 2>&1)
 looked=$?
 
-# a patch fixes what its minor release shipped, and the window tells that release's news again
+# a patch fixes what its minor release shipped, and the window tells that release's news to whoever missed it
 minor="${version%.*}.0"
 if [ "$looked" = 1 ] && [ "$minor" != "$version" ] \
   && python3 -c "$reads" "$minor" "$news" > /dev/null 2>&1; then

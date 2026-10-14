@@ -23,9 +23,9 @@ fn told() -> Vec<String> {
 pub fn raise(app: &tauri::AppHandle) {
     let prefs = store().prefs();
     let seen = prefs.news_seen.as_deref();
-    // The star's first mark is laid the first time the window opens, so its absence is a copy
-    // that has never been opened: it is greeted by what it does, not by what changed.
-    let fresh = prefs.here_since.is_none();
+    // No star mark and no rule is a copy nobody has used yet, whatever version laid it down.
+    let fresh =
+        prefs.here_since.is_none() && store().rules().map_or(true, |set| set.rules.is_empty());
     let versions = linkunbound_core::untold_news(fresh, seen, HERE, &told());
     if versions.is_empty() && linkunbound_core::news_behind(seen, HERE) {
         mark();

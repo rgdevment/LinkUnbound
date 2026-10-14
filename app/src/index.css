@@ -87,13 +87,16 @@ body {
   gap: 14px;
 }
 
-.brow .bear {
-  height: 56px;
+.bear {
   width: auto;
   flex-shrink: 0;
 }
 
-.dark .brow .bear {
+.brow .bear {
+  height: 56px;
+}
+
+.dark .bear {
   filter: drop-shadow(0 0 1px rgb(248 250 255 / 0.9));
 }
 

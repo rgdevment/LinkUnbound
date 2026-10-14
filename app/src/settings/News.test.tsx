@@ -91,3 +91,38 @@ describe("the news after an update", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("the news keeps the keyboard", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    waiting(["2.6.0"]);
+  });
+
+  it("closes with Escape wherever the focus wandered", async () => {
+    render(
+      <>
+        <button type="button">behind</button>
+        <News />
+      </>,
+    );
+    await screen.findByRole("dialog");
+    screen.getByRole("button", { name: "behind" }).focus();
+    await userEvent.keyboard("{Escape}");
+    expect(invoke).toHaveBeenCalledWith("news_seen");
+  });
+
+  it("cycles Tab between its own buttons", async () => {
+    render(
+      <>
+        <button type="button">behind</button>
+        <News />
+      </>,
+    );
+    const ok = await screen.findByRole("button", { name: "Entendido" });
+    expect(ok).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "Ver todas las versiones" })).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(ok).toHaveFocus();
+  });
+});

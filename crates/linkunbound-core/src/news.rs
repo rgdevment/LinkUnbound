@@ -22,18 +22,16 @@ pub fn untold(fresh: bool, seen: Option<&str>, running: &str, told: &[String]) -
         Some(since) => parsed()
             .filter(|(one, _)| *one <= now && one > since)
             .collect(),
-        None => parsed().filter(|(one, _)| *one <= now).collect(),
+        // Nothing says which version came before, so only the one it runs is surely new.
+        None => parsed()
+            .filter(|(one, _)| *one == now || is_minor_of(one, &now))
+            .collect(),
     };
-    if news.is_empty() {
-        news = parsed().filter(|(one, _)| is_minor_of(one, &now)).collect();
-    }
     news.sort_by(|a, b| b.0.cmp(&a.0));
     news.dedup_by(|a, b| a.0 == b.0);
     news.into_iter().map(|(_, said)| said.clone()).collect()
 }
 
-/// Whether the version last told is older than the one running, so it has to be written down
-/// even when there was nothing to show.
 #[must_use]
 pub fn behind(seen: Option<&str>, running: &str) -> bool {
     let Ok(now) = Version::parse(running) else {
@@ -70,12 +68,10 @@ mod tests {
     }
 
     #[test]
-    fn a_copy_told_nothing_before_hears_everything_up_to_what_it_runs() {
+    fn a_copy_told_nothing_before_hears_only_what_it_runs() {
         let all = told(&["2.5.0", "2.6.0", "2.7.0"]);
-        assert_eq!(
-            untold(false, None, "2.6.0", &all),
-            told(&["2.6.0", "2.5.0"])
-        );
+        assert_eq!(untold(false, None, "2.6.0", &all), told(&["2.6.0"]));
+        assert_eq!(untold(false, None, "2.6.2", &all), told(&["2.6.0"]));
     }
 
     #[test]
@@ -85,12 +81,13 @@ mod tests {
     }
 
     #[test]
-    fn a_patch_tells_its_minor_release_again() {
+    fn a_patch_tells_its_minor_release_only_to_whoever_missed_it() {
         let all = told(&["2.5.0", "2.6.0"]);
         assert_eq!(
-            untold(false, Some("2.6.0"), "2.6.1", &all),
+            untold(false, Some("2.5.0"), "2.6.1", &all),
             told(&["2.6.0"])
         );
+        assert!(untold(false, Some("2.6.0"), "2.6.1", &all).is_empty());
         assert!(untold(false, Some("2.6.0"), "2.6.1-rc.1", &all).is_empty());
     }
 

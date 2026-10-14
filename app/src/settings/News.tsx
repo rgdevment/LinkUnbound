@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import bear from "../assets/linkunbound.svg";
 import { useSpoken, useWords } from "../i18n";
 import { headline, toldFor } from "./told";
@@ -12,6 +12,7 @@ export default function News() {
   const language = useSpoken();
   const [versions, setVersions] = useState<string[]>([]);
   const ok = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void invoke<string[]>("news")
@@ -22,38 +23,52 @@ export default function News() {
   const told = toldFor(versions, language);
   const open = told.length > 0;
 
-  useEffect(() => {
-    if (open) ok.current?.focus();
-  }, [open]);
-
-  if (!open) return null;
-
-  const close = () => {
+  const close = useCallback(() => {
     setVersions([]);
     void invoke("news_seen").catch(noop);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    ok.current?.focus();
+    const held = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+        return;
+      }
+      if (e.key !== "Tab" || !box.current) return;
+      const reachable = [...box.current.querySelectorAll<HTMLElement>("button")];
+      const first = reachable[0];
+      const last = reachable[reachable.length - 1];
+      const at = document.activeElement;
+      const outside = !box.current.contains(at);
+      if (e.shiftKey && (at === first || outside)) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && (at === last || outside)) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", held);
+    return () => document.removeEventListener("keydown", held);
+  }, [open, close]);
+
+  if (!open) return null;
   const title = headline(versions[0], language) ?? t("newsTitle");
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-6">
       <div
+        ref={box}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.stopPropagation();
-            close();
-          }
-        }}
         className="w-full max-w-md rounded-[10px] border border-black/[0.08] bg-white p-6 shadow-xl dark:border-white/[0.08] dark:bg-[#1E2027]"
       >
         <div className="mb-3 flex flex-col items-center gap-2">
-          <img
-            src={bear}
-            alt=""
-            className="h-[64px] w-auto dark:drop-shadow-[0_0_1px_rgb(248_250_255/0.9)]"
-          />
+          <img src={bear} alt="" className="bear h-[64px]" />
           <span className="flex items-center gap-2 text-[10.5px] font-semibold tracking-[0.06em] text-neutral-500 uppercase dark:text-[#8B92A1]">
             {t("newsOver")}
             <span className="rounded-full bg-[#2F62D8]/10 px-2 py-0.5 font-mono tracking-normal text-[#2F62D8] normal-case dark:bg-[#6E9BFF]/15 dark:text-[#6E9BFF]">

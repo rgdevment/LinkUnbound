@@ -100,8 +100,6 @@ describe("about", () => {
     expect(screen.getByRole("button", { name: /Tisty/ })).toBeInTheDocument();
   });
 
-  /// Version and licence sit in separate nodes with a dot drawn between them, so the screen is
-  /// asked for each fact rather than for one string that happens to contain both.
   it("puts the bear and the motto beside the name", async () => {
     show();
     const name = await screen.findByRole("heading", { name: "LinkUnbound" });
@@ -109,6 +107,8 @@ describe("about", () => {
     expect(screen.getByText("Cada enlace, donde tú decides.")).toBeInTheDocument();
   });
 
+  /// Version and licence sit in separate nodes with a dot drawn between them, so the screen is
+  /// asked for each fact rather than for one string that happens to contain both.
   it("reads the version from the build instead of a number typed into the screen", async () => {
     show();
     expect(await screen.findByText("2.0.0")).toBeInTheDocument();
