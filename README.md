@@ -42,7 +42,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rgdevment.com/linkunbound/"><b>rgdevment.com/linkunbound</b></a>
+  <a href="https://www.linkunbound.app"><b>linkunbound.app</b></a>
 </p>
 
 <p align="center">
