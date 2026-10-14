@@ -270,8 +270,8 @@ const ES = {
   newsTitle: "Lo nuevo de LinkUnbound",
   newsAll: "Ver todas las versiones",
   newsOk: "Entendido",
-  aboutCopyPaste: "CopyPaste",
-  aboutCopyPasteNote: "Recupera lo que copiaste hace diez minutos, o ayer.",
+  aboutCoPanda: "CoPanda",
+  aboutCoPandaNote: "Recupera lo que copiaste hace diez minutos, o ayer.",
   open: "Abrir",
 
   save: "Guardar",
@@ -548,8 +548,8 @@ const EN: Record<Key, string> = {
   newsTitle: "What's new in LinkUnbound",
   newsAll: "See every release",
   newsOk: "Got it",
-  aboutCopyPaste: "CopyPaste",
-  aboutCopyPasteNote: "Brings back what you copied ten minutes ago, or yesterday.",
+  aboutCoPanda: "CoPanda",
+  aboutCoPandaNote: "Brings back what you copied ten minutes ago, or yesterday.",
   open: "Open",
 
   save: "Save",

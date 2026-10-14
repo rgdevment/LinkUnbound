@@ -14,8 +14,8 @@ import type { Ready, Underway } from "./update";
 
 const REPO = "https://github.com/rgdevment/LinkUnbound";
 const COFFEE = "https://buymeacoffee.com/rgdevment";
-const COPYPASTE = "https://rgdevment.com/copypaste/";
-const TISTY = "https://rgdevment.com/tisty/";
+const COPANDA = "https://www.copanda.app/";
+const TISTY = "https://www.tisty.app/";
 const SPONSOR = "https://github.com/sponsors/rgdevment";
 const RATING = "ms-windows-store://review/?ProductId=9N9F7C8Q43KC";
 const ALTERNATIVETO = "https://alternativeto.net/software/linkunbound/";
@@ -461,9 +461,9 @@ export default function About({
       />
       <Tool
         icon={copanda}
-        said={t("aboutCopyPaste")}
-        note={t("aboutCopyPasteNote")}
-        onPick={() => void openUrl(COPYPASTE).catch(noop)}
+        said={t("aboutCoPanda")}
+        note={t("aboutCoPandaNote")}
+        onPick={() => void openUrl(COPANDA).catch(noop)}
       />
 
       <Rule said={t("troubleSection")} />
