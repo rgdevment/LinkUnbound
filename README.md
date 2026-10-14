@@ -311,8 +311,20 @@ Every contribution helps keep these tools alive and maintained. But if you can't
 
 I build free, open source tools focused on privacy and productivity. If you like LinkUnbound, you might also find these useful:
 
-- **[Tisty](https://www.tisty.app/)** — Notes, documents and tasks kept as plain files on your own disk, readable without the application. Windows and macOS.
-- **[CoPanda](https://www.copanda.app/)** — A local-first clipboard manager that keeps a searchable history and ignores what comes from a password manager. Windows and macOS.
+<table>
+  <tr>
+    <td width="96" align="center">
+      <a href="https://www.tisty.app/"><img src="app/src/assets/tisty.svg" alt="Tisty the beaver" width="72"/></a>
+    </td>
+    <td><b><a href="https://www.tisty.app/">Tisty</a></b> — Notes, documents and tasks kept as plain files on your own disk, readable without the application. Windows and macOS.</td>
+  </tr>
+  <tr>
+    <td width="96" align="center">
+      <a href="https://www.copanda.app/"><img src="app/src/assets/copanda.svg" alt="CoPanda the panda" width="72"/></a>
+    </td>
+    <td><b><a href="https://www.copanda.app/">CoPanda</a></b>, formerly CopyPaste — A local-first clipboard manager that keeps a searchable history and ignores what comes from a password manager. Windows and macOS.</td>
+  </tr>
+</table>
 
 ---
 
