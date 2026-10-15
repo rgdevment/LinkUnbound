@@ -386,6 +386,8 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
     window.set_ask(words.picker_ask.into());
     window.set_ask_private(words.picker_ask_private.into());
     window.set_motto(words.picker_motto.into());
+    window.set_add(words.picker_add.into());
+    window.set_add_more(words.picker_add_more.into());
     window.set_chosen_at(-1);
     window.set_preview(false);
     window.set_copy_label(words.picker_copy.into());

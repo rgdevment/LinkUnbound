@@ -69,6 +69,22 @@ async function opened() {
 }
 
 describe("settings", () => {
+  /// The picker sends people here to add a browser, by naming the page after a hash.
+  it("opens on the browsers when the picker asks for them", async () => {
+    answers(BASE);
+    const otherwise = invoke.getMockImplementation();
+    invoke.mockImplementation((cmd: string, ...rest: unknown[]) =>
+      cmd === "browsers_list" ? Promise.resolve([]) : otherwise?.(cmd, ...rest),
+    );
+    window.location.hash = "browsers";
+    try {
+      render(<Settings />);
+      expect(await screen.findByRole("heading", { name: "Navegadores" })).toBeInTheDocument();
+    } finally {
+      window.location.hash = "";
+    }
+  });
+
   it("asks for the window once it has painted", async () => {
     answers(BASE);
     await opened();

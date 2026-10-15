@@ -158,14 +158,54 @@ export component TilesLook inherits Rectangle {
     }
 }
 
+// A border drawn in dashes: the renderer strokes no dashed line, so each dash is a sliver.
+component Dashes inherits Rectangle {
+    in property <brush> ink;
+    property <int> across: Math.floor(self.width / 9px);
+    property <int> down: Math.floor(self.height / 9px);
+    for at in root.across: Rectangle {
+        x: at * 9px + 2px;
+        y: 0;
+        width: 5px;
+        height: 1px;
+        background: root.ink;
+    }
+    for at in root.across: Rectangle {
+        x: at * 9px + 2px;
+        y: root.height - 1px;
+        width: 5px;
+        height: 1px;
+        background: root.ink;
+    }
+    for at in root.down: Rectangle {
+        x: 0;
+        y: at * 9px + 2px;
+        width: 1px;
+        height: 5px;
+        background: root.ink;
+    }
+    for at in root.down: Rectangle {
+        x: root.width - 1px;
+        y: at * 9px + 2px;
+        width: 1px;
+        height: 5px;
+        background: root.ink;
+    }
+}
+
 // The bear's cards: three columns of buttons, the profile under the name and the key at the end.
 export component CardsLook inherits Rectangle {
     in property <[Destination]> rows;
     in property <bool> private-on;
     in property <int> chosen-at;
     in property <length> room;
+    // With one or two browsers the row is filled with a way to add another.
+    in property <int> empty;
+    in property <string> add;
+    in property <string> add-more;
     callback open(int);
     callback hovered(int);
+    callback adding();
     property <length> card-width: (self.width - 20px - 2 * 6px) / 3;
 
     Flickable {
@@ -227,6 +267,51 @@ export component CardsLook inherits Rectangle {
                         y: 6px;
                         key: item.key;
                         lit: (touch.has-hover || i == root.chosen-at) && !(root.private-on && !item.can-private);
+                    }
+                }
+            }
+        }
+        for slot in root.empty: Rectangle {
+            x: 10px + (root.rows.length + slot) * (root.card-width + 6px);
+            y: 8px;
+            width: root.card-width;
+            height: 52px;
+            border-radius: 8px;
+            background: add-touch.has-hover ? Palette.brand-soft : transparent;
+            accessible-role: button;
+            accessible-label: root.add + " " + root.add-more;
+            accessible-action-default => { root.adding(); }
+            Dashes {
+                ink: add-touch.has-hover ? Palette.brand : Palette.faint;
+            }
+            add-touch := TouchArea {
+                clicked => { root.adding(); }
+            }
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 8px;
+                spacing: 10px;
+                Text {
+                    text: "+";
+                    font-size: 22px;
+                    color: add-touch.has-hover ? Palette.brand : Palette.faint;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 1px;
+                    Text {
+                        text: root.add;
+                        font-size: 12.5px;
+                        font-weight: 600;
+                        color: add-touch.has-hover ? Palette.brand : Palette.dim;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: root.add-more;
+                        font-size: 11.5px;
+                        color: Palette.faint;
+                        overflow: elide;
                     }
                 }
             }

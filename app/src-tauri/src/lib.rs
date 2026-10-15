@@ -1053,7 +1053,7 @@ fn relay_links(app: AppHandle) {
                 hand_to_the_resident(url);
             }
         }
-        Event::Reopened => shell::open_settings(&app, store().prefs().theme),
+        Event::Reopened => shell::open_settings(&app, store().prefs().theme, None),
         Event::Launched { .. } => {}
     });
     std::mem::forget(listening);
@@ -1263,8 +1263,8 @@ pub fn run() {
     let builder = if errand.is_some() {
         builder
     } else {
-        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            shell::open_settings(app, store().prefs().theme);
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            shell::open_settings(app, store().prefs().theme, shell::page_in(&args));
         }))
     };
 
@@ -1294,7 +1294,7 @@ pub fn run() {
             news::raise(app.handle());
             #[cfg(target_os = "macos")]
             relay_links(app.handle().clone());
-            shell::open_settings(app.handle(), store().prefs().theme);
+            shell::open_settings(app.handle(), store().prefs().theme, shell::page_in(&args));
             Ok(())
         })
         .build(tauri::generate_context!())

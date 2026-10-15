@@ -78,8 +78,19 @@ impl Drop for Building {
 
 /// Built on demand: an idle webview costs tens of megabytes and this window is
 /// opened rarely. The resident owns the tray, the picker and the notice.
-pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
+/// The page the command line asks settings to open on, when it asks for one.
+#[must_use]
+pub fn page_in(args: &[String]) -> Option<&'static str> {
+    args.iter()
+        .any(|a| a == linkunbound_core::BROWSERS)
+        .then_some("browsers")
+}
+
+pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme, page: Option<&str>) {
     if let Some(window) = app.get_webview_window(SETTINGS) {
+        if let Some(page) = page {
+            let _ = window.eval(format!("location.hash = '{page}'"));
+        }
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
@@ -89,13 +100,16 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
         return;
     }
     let _building = Building;
-    build_settings(app, theme);
+    build_settings(app, theme, page);
 }
 
 const LONG_ENOUGH_TO_PAINT: std::time::Duration = std::time::Duration::from_millis(1500);
 
-fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
-    let mut builder = tauri::WebviewWindowBuilder::new(app, SETTINGS, tauri::WebviewUrl::default())
+fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme, page: Option<&str>) {
+    let url = page.map_or_else(tauri::WebviewUrl::default, |page| {
+        tauri::WebviewUrl::App(format!("index.html#{page}").into())
+    });
+    let mut builder = tauri::WebviewWindowBuilder::new(app, SETTINGS, url)
         .title("LinkUnbound")
         .inner_size(780.0, 560.0)
         .min_inner_size(640.0, 480.0)
@@ -127,7 +141,17 @@ pub fn reveal<R: Runtime>(window: &tauri::WebviewWindow<R>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{SETTINGS, dressed_as};
+    use super::{SETTINGS, dressed_as, page_in};
+
+    #[test]
+    fn the_picker_can_send_settings_to_the_browsers() {
+        let said = |args: &[&str]| args.iter().map(|&a| a.to_owned()).collect::<Vec<_>>();
+        assert_eq!(
+            page_in(&said(&["settings.exe", "--browsers"])),
+            Some("browsers")
+        );
+        assert_eq!(page_in(&said(&["settings.exe"])), None);
+    }
     use linkunbound_core::Theme;
 
     #[test]

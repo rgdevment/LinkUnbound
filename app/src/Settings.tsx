@@ -393,7 +393,15 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const t = useWords();
   const language = useSpoken();
   const { ready, step, look, settled } = useUpdate();
-  const [page, setPage] = useState<Page>("app");
+  const [page, setPage] = useState<Page>(() => asked() ?? "app");
+  useEffect(() => {
+    const follow = () => {
+      const next = asked();
+      if (next) setPage(next);
+    };
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
   const [state, setState] = useState<SystemState | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [starring, setStarring] = useState(false);
@@ -498,6 +506,12 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
       <News />
     </div>
   );
+}
+
+/// The resident opens settings on the browsers, with `#browsers`, to add one.
+function asked(): Page | null {
+  const said = window.location.hash.slice(1);
+  return [...PAGES, ABOUT].some((p) => p.id === said) ? (said as Page) : null;
 }
 
 function Tab({ tab, on, onPick }: { tab: Entry; on: Page; onPick: (next: Page) => void }) {

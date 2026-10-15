@@ -16,6 +16,8 @@ export component Picker inherits Window {
     in property <string> ask;
     in property <string> ask-private;
     in property <string> motto;
+    in property <string> add;
+    in property <string> add-more;
     in property <[Destination]> rows;
     in property <[Reach]> reaches;
     in property <[Reach]> reaches-more;
@@ -67,6 +69,7 @@ export component Picker inherits Window {
     pure callback step-reach(int) -> int;
     callback dismissed();
     callback copy();
+    callback add-browser();
     // Where the bear looks, from -1 to 1, and whether it wears the mask.
     callback mood(float, bool);
 
@@ -324,6 +327,10 @@ export component Picker inherits Window {
                 if root.look == Look.bear: CardsLook {
                     height: root.cards-room;
                     room: root.cards-room;
+                    empty: root.count > 0 && root.count < 3 ? 3 - root.count : 0;
+                    add: root.add;
+                    add-more: root.add-more;
+                    adding => { root.add-browser(); }
                     rows: root.rows;
                     private-on: root.private-on;
                     chosen-at: root.chosen-at;

@@ -114,12 +114,20 @@ impl Mascot {
     }
 }
 
-/// The picker says where the bear should look and whether it wears the mask.
+/// The picker says where the bear should look and whether it wears the mask, and an empty slot
+/// sends the person to settings to fill it.
 pub fn listen(picker: &Picker) {
     picker.on_mood(|aim, masked| {
         if let Some(ui) = crate::ui() {
             ui.mascot.mood(aim, masked);
         }
+    });
+    let handle = picker.as_weak();
+    picker.on_add_browser(move || {
+        if let Some(picker) = handle.upgrade() {
+            crate::look::put_away(&picker);
+        }
+        crate::run_settings(&[linkunbound_core::BROWSERS]);
     });
 }
 
