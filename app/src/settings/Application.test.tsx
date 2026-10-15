@@ -14,7 +14,6 @@ const PREFS = {
   shortcut: "Alt+Shift+L" as string | null,
   notify_on_rule: true,
   picker_style: "classic" as "bear" | "classic" | "sheet" | "compact",
-  picker_keys: "qwerty" as "digits" | "qwerty" | "alphabet",
   looks_for_updates: true,
 };
 
@@ -75,17 +74,6 @@ describe("application settings", () => {
     await userEvent.click(picker.getByRole("radio", { name: "Mosaico" }));
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
       prefs: { ...PREFS, picker_style: "sheet" },
-    });
-  });
-
-  /// The letters after the 9 are a choice: the QWERTY rows until another is picked.
-  it("offers the keys that open the browsers", async () => {
-    mount();
-    const keys = within(await screen.findByRole("group", { name: "Teclas del selector" }));
-    expect(keys.getByRole("radio", { name: "1–9 y QWERTY" })).toBeChecked();
-    await userEvent.click(keys.getByRole("radio", { name: "1–9 y A–Z" }));
-    expect(invoke).toHaveBeenCalledWith("prefs_set", {
-      prefs: { ...PREFS, picker_keys: "alphabet" },
     });
   });
 

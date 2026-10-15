@@ -30,29 +30,6 @@ pub enum PickerStyle {
     Bear,
 }
 
-/// The keys that open the picker's rows: the digits always, and after the 9 the three letter rows
-/// under them on a QWERTY keyboard, the whole alphabet, or nothing more.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PickerKeys {
-    Digits,
-    #[default]
-    Qwerty,
-    Alphabet,
-}
-
-impl PickerKeys {
-    /// Every key in the order of the rows it opens.
-    #[must_use]
-    pub const fn keys(self) -> &'static str {
-        match self {
-            Self::Digits => "123456789",
-            Self::Qwerty => "123456789QWERTYASDFGHZXCVBN",
-            Self::Alphabet => "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(default)]
@@ -72,8 +49,6 @@ pub struct Preferences {
     pub edge_warning_dismissed: bool,
     #[serde(default)]
     pub picker_style: PickerStyle,
-    #[serde(default)]
-    pub picker_keys: PickerKeys,
     /// Whether the resident asks about releases on its own, every few hours; off, only the
     /// settings window ever asks, and only while it is open.
     #[serde(default = "yes")]
@@ -104,7 +79,6 @@ impl Default for Preferences {
             notify_on_rule: true,
             edge_warning_dismissed: false,
             picker_style: PickerStyle::default(),
-            picker_keys: PickerKeys::default(),
             looks_for_updates: true,
             here_since: None,
             asked_for_a_star: false,
@@ -185,7 +159,7 @@ fn shortcut_of(said: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Locale, PickerKeys, PickerStyle, Preferences, Theme};
+    use super::{Locale, PickerStyle, Preferences, Theme};
 
     #[test]
     fn a_fresh_install_follows_the_system_and_claims_the_default_shortcut() {
@@ -302,24 +276,6 @@ mod tests {
 
         let written = serde_json::to_string(&asked).unwrap();
         assert!(written.contains(r#""picker_style":"sheet""#), "{written}");
-    }
-
-    /// A copy that never chose keeps the letters after the digits; each choice reads back.
-    #[test]
-    fn the_letters_follow_the_digits_unless_asked_otherwise() {
-        let fresh: Preferences = serde_json::from_str("{}").unwrap();
-        assert_eq!(fresh.picker_keys, PickerKeys::Qwerty);
-        for (said, keys, count) in [
-            ("digits", PickerKeys::Digits, 9),
-            ("qwerty", PickerKeys::Qwerty, 27),
-            ("alphabet", PickerKeys::Alphabet, 35),
-        ] {
-            let asked: Preferences =
-                serde_json::from_str(&format!(r#"{{"picker_keys": "{said}"}}"#)).unwrap();
-            assert_eq!(asked.picker_keys, keys);
-            assert_eq!(keys.keys().len(), count, "{said}");
-            assert!(keys.keys().starts_with("123456789"), "{said}");
-        }
     }
 
     /// Everybody moves to the bear once; after that, what they pick stays picked.

@@ -154,6 +154,7 @@ pub fn read_browsers(raw: &str) -> Result<BrowserConfig, ConfigError> {
                 icon_path: None,
                 custom: b.is_custom,
                 hidden: false,
+                keys: Default::default(),
                 extra_args: b.extra_args,
             })
             .collect(),
@@ -200,6 +201,7 @@ mod tests {
             icon_path: None,
             custom: true,
             hidden: true,
+            keys: Default::default(),
         });
 
         let body = write_browsers(&config).expect("written");

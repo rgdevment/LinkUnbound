@@ -18,6 +18,12 @@ const CHROME = {
   args: "",
   private_flag: "--incognito",
   icon_path: null,
+  profile_names: [
+    ["Default", "Personal"],
+    ["Profile 1", "Trabajo"],
+  ] as [string, string][],
+  keys: { "Profile 1": "W" } as Record<string, string>,
+  shown_keys: { Default: "1", "Profile 1": "W" } as Record<string, string>,
 };
 
 const EDGE = {
@@ -26,6 +32,9 @@ const EDGE = {
   name: "Microsoft Edge",
   profiles: 1,
   hidden: true,
+  profile_names: [["Default", "Personal"]] as [string, string][],
+  keys: {},
+  shown_keys: {},
 };
 
 const ODD = {
@@ -36,6 +45,9 @@ const ODD = {
   private: false,
   private_flag: null,
   hidden: false,
+  profile_names: [],
+  keys: {},
+  shown_keys: { "": "2" },
 };
 
 const MINE = {
@@ -50,6 +62,9 @@ const MINE = {
   args: "--disable-extensions",
   private_flag: null,
   icon_path: null,
+  profile_names: [] as [string, string][],
+  keys: {} as Record<string, string>,
+  shown_keys: { "": "3" } as Record<string, string>,
 };
 
 function answers(list: unknown[], overrides: Record<string, () => Promise<unknown>> = {}) {
@@ -179,6 +194,7 @@ describe("browsers", () => {
         args: '--profile-directory="Profile 1"',
         private_flag: null,
         icon_path: null,
+        keys: {},
       },
     });
   });
@@ -223,6 +239,68 @@ describe("browsers", () => {
       id: "custom-1",
       edit: expect.objectContaining({ name: "Otro nombre" }),
     });
+  });
+
+  /// A key another row holds is named before saving, and the form will not save it.
+  it("warns when the key is already another browser's", async () => {
+    render(<Browsers />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Editar Chrome sin extensiones" }),
+    );
+    await userEvent.type(screen.getByLabelText("Tecla en el selector"), "w");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Esa tecla ya la usa Google Chrome · Trabajo",
+    );
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText("Tecla en el selector"), "p");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(invoke).toHaveBeenCalledWith("browsers_update", {
+      id: "custom-1",
+      edit: expect.objectContaining({ keys: { "": "P" } }),
+    });
+  });
+
+  /// Each profile is a row of its own in the picker, so each gets its own key.
+  it("offers a key for every profile and keeps the one already given", async () => {
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Editar Google Chrome" }));
+    expect(screen.getByLabelText("Tecla de Trabajo")).toHaveValue("W");
+    expect(screen.getByLabelText("Tecla de Personal")).toHaveValue("");
+    expect(screen.getByLabelText("Tecla de Personal")).toHaveAttribute("placeholder", "1");
+    await userEvent.type(screen.getByLabelText("Tecla de Personal"), "w");
+    for (const said of screen.getAllByRole("alert")) {
+      expect(said).toHaveTextContent("Dos perfiles no pueden compartir tecla");
+    }
+    await userEvent.type(screen.getByLabelText("Tecla de Personal"), "1");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  /// The advanced options carry examples, since few people know these switches exist.
+  it("shows how to make a profile or a separate browser", async () => {
+    render(<Browsers />);
+    await userEvent.click(await screen.findByRole("button", { name: "Añadir un navegador" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Ejemplos: perfiles y navegadores personalizados" }),
+    );
+    expect(screen.getByText('--profile-directory="Profile 1"')).toBeVisible();
+    expect(screen.getByText('--user-data-dir="C:/Navegadores/Trabajo"')).toBeVisible();
+  });
+
+  /// The box holds one key, so the new one is whatever was typed, wherever the caret was; and a
+  /// hidden browser is not in the picker, so its key is free.
+  it("takes the key just typed and ignores the ones hidden browsers kept", async () => {
+    answers([CHROME, { ...EDGE, keys: { Default: "E" } }, ODD, MINE]);
+    render(<Browsers />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Editar Chrome sin extensiones" }),
+    );
+    const box = screen.getByLabelText("Tecla en el selector");
+    await userEvent.type(box, "e");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await userEvent.type(box, "k", { initialSelectionStart: 0, initialSelectionEnd: 0 });
+    expect(box).toHaveValue("K");
   });
 
   /// Duplicating a detected browser is how one binary becomes two entries with

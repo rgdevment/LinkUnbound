@@ -61,6 +61,7 @@ fn main() -> Result<(), slint::PlatformError> {
             profile: named("Tu Chrome", "Personal"),
             icon: icon("google-chrome"),
             can_private: true,
+            key: None,
         },
         Listed {
             browser_id: "firefox".to_owned(),
@@ -69,6 +70,7 @@ fn main() -> Result<(), slint::PlatformError> {
             profile: String::new(),
             icon: icon("firefox-308046b0af4a39cb"),
             can_private: true,
+            key: None,
         },
         Listed {
             browser_id: "vivaldi".to_owned(),
@@ -77,6 +79,7 @@ fn main() -> Result<(), slint::PlatformError> {
             profile: named("Trabajo", "Work"),
             icon: icon("vivaldi-xzttkvpr7ou6s6fgtka6s5fohm"),
             can_private: false,
+            key: None,
         },
     ];
 
@@ -177,8 +180,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 return false;
             };
             let digit = |c: char| c.to_digit(10);
-            let rows = w.get_rows().row_count();
-            let Some(index) = row_typed(&w.get_keys(), &typed, chorded, rows, digit) else {
+            let shown: Vec<_> = w.get_rows().iter().map(|row| row.key).collect();
+            let Some(index) = row_typed(&shown, &typed, chorded, digit) else {
                 return false;
             };
             w.invoke_open(index, private);

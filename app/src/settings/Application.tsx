@@ -8,7 +8,6 @@ import { Card, Line, Section, Switch } from "./parts";
 type Theme = "system" | "light" | "dark";
 type Locale = "system" | "spanish" | "english";
 type PickerStyle = "bear" | "classic" | "sheet" | "compact";
-type PickerKeys = "digits" | "qwerty" | "alphabet";
 
 type Preferences = {
   schema_version: number;
@@ -17,7 +16,6 @@ type Preferences = {
   shortcut: string | null;
   notify_on_rule: boolean;
   picker_style: PickerStyle;
-  picker_keys: PickerKeys;
   looks_for_updates: boolean;
 };
 
@@ -40,12 +38,6 @@ const PICKERS: { id: PickerStyle; label: Key }[] = [
   { id: "classic", label: "pickerClassic" },
   { id: "sheet", label: "pickerSheet" },
   { id: "compact", label: "pickerCompact" },
-];
-
-const KEYS: { id: PickerKeys; label: Key }[] = [
-  { id: "digits", label: "keysDigits" },
-  { id: "qwerty", label: "keysQwerty" },
-  { id: "alphabet", label: "keysAlphabet" },
 ];
 
 const MODIFIERS = new Set(["Control", "Alt", "Shift", "Meta"]);
@@ -203,14 +195,6 @@ export default function Application({
                 {t("pickerPreview")}
               </button>
             </div>
-          </Line>
-          <Line title={t("appKeys")} note={t("keysNote")}>
-            <Choice
-              options={KEYS}
-              value={prefs.picker_keys}
-              label={t("appKeys")}
-              onPick={(picker_keys) => apply({ picker_keys }, previewing ? preview : undefined)}
-            />
           </Line>
         </Card>
       </Section>

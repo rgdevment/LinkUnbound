@@ -1,4 +1,5 @@
 mod about;
+mod editing;
 mod news;
 mod shell;
 mod shop;
@@ -6,6 +7,7 @@ mod star;
 mod system;
 mod update;
 
+use editing::{BrowserView, Edit, added, edited, free_id, hidden_in, readable, views, without};
 use linkunbound_core::{
     Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of, is_public_suffix,
     merge, normalise, same_name, site_of,
@@ -327,79 +329,9 @@ fn rules_retarget(
     rules_list()
 }
 
-#[derive(Serialize)]
-struct BrowserView {
-    id: String,
-    name: String,
-    exe: String,
-    profiles: usize,
-    /// Named, not just counted: a rule can point at one profile of a browser,
-    /// so the screen has to be able to offer them apart.
-    profile_names: Vec<(String, String)>,
-    private: bool,
-    custom: bool,
-    hidden: bool,
-    icon: Option<String>,
-    /// Quoted back the way it has to be typed, or a value with a space in it would be split
-    /// the next time the form was saved.
-    args: String,
-    private_flag: Option<String>,
-    icon_path: Option<String>,
-}
-
-fn seen(browser: &Browser) -> BrowserView {
-    BrowserView {
-        profiles: browser.profiles.len(),
-        profile_names: browser
-            .profiles
-            .iter()
-            .map(|p| (p.id.clone(), p.name.clone()))
-            .collect(),
-        private: browser.private_flag.is_some(),
-        icon: icon_data(browser.icon_source(), &browser.id),
-        id: browser.id.clone(),
-        name: browser.name.clone(),
-        exe: browser.exe.clone(),
-        custom: browser.custom,
-        hidden: browser.hidden,
-        args: linkunbound_core::join_args(&browser.extra_args),
-        private_flag: browser.private_flag.clone(),
-        icon_path: browser.icon_path.clone(),
-    }
-}
-
-/// What the settings screen can change about a browser it owns.
-#[derive(serde::Deserialize)]
-struct Edit {
-    name: String,
-    exe: String,
-    /// The line as it was typed, not the words in it: a value in quotes is one argument, and
-    /// deciding that in the form put the rule somewhere nothing could test it.
-    args: String,
-    private_flag: Option<String>,
-    icon_path: Option<String>,
-}
-
-fn readable(path: &str) -> bool {
-    let path = std::path::Path::new(path);
-    path.is_file() || is_bundle(path)
-}
-
-#[cfg(target_os = "macos")]
-fn is_bundle(path: &std::path::Path) -> bool {
-    path.extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("app"))
-        && path.join("Contents").join("Info.plist").is_file()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn is_bundle(_path: &std::path::Path) -> bool {
-    false
-}
-
 #[tauri::command]
 fn browsers_list() -> Vec<BrowserView> {
-    catalogue().iter().map(seen).collect()
+    views(&catalogue())
 }
 
 /// Saves the merged catalogue, which is what turns a detected browser into a
@@ -422,63 +354,14 @@ fn browsers_set_hidden(id: String, hidden: bool) -> Result<Vec<BrowserView>, Str
     keep(hidden_in(catalogue(), &id, hidden)?)
 }
 
-fn hidden_in(mut all: Vec<Browser>, id: &str, hidden: bool) -> Result<Vec<Browser>, String> {
-    let Some(found) = all.iter_mut().find(|b| b.id == id) else {
-        return Err("browserGone".to_owned());
-    };
-    found.hidden = hidden;
-    Ok(all)
-}
-
 #[tauri::command]
 fn browsers_remove(id: String) -> Result<Vec<BrowserView>, String> {
     keep(without(catalogue(), &id)?)
 }
 
-/// A detected browser is hidden, never removed: the next scan would bring it
-/// back and the deletion would look like it failed.
-fn without(mut all: Vec<Browser>, id: &str) -> Result<Vec<Browser>, String> {
-    if !all.iter().any(|b| b.id == id && b.custom) {
-        return Err("browserNotYours".to_owned());
-    }
-    all.retain(|b| b.id != id);
-    Ok(all)
-}
-
-/// Never reuses a number a live entry already holds, or editing one would
-/// rename the other.
-fn free_id(all: &[Browser]) -> String {
-    (1..)
-        .map(|n| format!("custom-{n}"))
-        .find(|id| !all.iter().any(|b| &b.id == id))
-        .unwrap_or_else(|| "custom-1".to_owned())
-}
-
 #[tauri::command]
 fn browsers_add(edit: Edit) -> Result<Vec<BrowserView>, String> {
     keep(added(catalogue(), edit, readable)?)
-}
-
-fn added(
-    mut all: Vec<Browser>,
-    edit: Edit,
-    exists: impl Fn(&str) -> bool,
-) -> Result<Vec<Browser>, String> {
-    if !exists(&edit.exe) {
-        return Err("browserNoProgram".to_owned());
-    }
-    all.push(Browser {
-        id: free_id(&all),
-        name: edit.name,
-        exe: edit.exe,
-        profiles: Vec::new(),
-        extra_args: linkunbound_core::split_args(&edit.args),
-        private_flag: edit.private_flag.filter(|f| !f.is_empty()),
-        icon_path: edit.icon_path.filter(|p| !p.is_empty()),
-        custom: true,
-        hidden: false,
-    });
-    Ok(all)
 }
 
 /// A detected browser can be renamed and given arguments or an icon, the way
@@ -487,33 +370,6 @@ fn added(
 #[tauri::command]
 fn browsers_update(id: String, edit: Edit) -> Result<Vec<BrowserView>, String> {
     keep(edited(catalogue(), &id, edit, readable)?)
-}
-
-fn edited(
-    mut all: Vec<Browser>,
-    id: &str,
-    edit: Edit,
-    exists: impl Fn(&str) -> bool,
-) -> Result<Vec<Browser>, String> {
-    let Some(found) = all.iter_mut().find(|b| b.id == id) else {
-        return Err("browserGone".to_owned());
-    };
-    if found.custom {
-        if !exists(&edit.exe) {
-            return Err("browserNoProgram".to_owned());
-        }
-        found.exe = edit.exe;
-    }
-    found.name = edit.name;
-    found.extra_args = linkunbound_core::split_args(&edit.args);
-    // Detection knows how a browser it found opens privately, and keeps that; where it found one
-    // it does not know — a family off its list — the flag is the person's to say, as for a
-    // browser they added themselves.
-    if found.custom || linkunbound_core::private_flag_for(&found.exe).is_none() {
-        found.private_flag = edit.private_flag.filter(|f| !f.is_empty());
-    }
-    found.icon_path = edit.icon_path.filter(|p| !p.is_empty());
-    Ok(all)
 }
 
 /// What the bar shows. The plugin reports the size of each chunk rather than the total so far,
@@ -581,7 +437,7 @@ fn maintenance_rescan() -> Result<Rescanned, String> {
     // What was just detected and saved is the list; reading the catalogue again would detect twice.
     keep_in(&store(), found.browsers.clone())?;
     Ok(Rescanned {
-        browsers: found.browsers.iter().map(seen).collect(),
+        browsers: views(&found.browsers),
         added: found.added,
         removed: found.removed,
     })
@@ -1340,8 +1196,9 @@ pub fn run() {
 mod tests {
     use super::{
         Edit, Errand, Store, added, describe, duplicated_in, edited, errand_in, far_along, free_id,
-        hidden_in, keep_in, ordered, readable, rescanned, seen, spoken, without,
+        hidden_in, keep_in, ordered, readable, rescanned, spoken, without,
     };
+    use crate::editing::seen;
     use linkunbound_core::{Locale, Preferences, Profile, Rule, Scope, Target};
 
     /// The resident's errands are told apart from a launch that wants the window, and from each
@@ -1620,6 +1477,7 @@ mod tests {
                 args: String::new(),
                 private_flag: Some(String::new()),
                 icon_path: Some(String::new()),
+                keys: [(String::new(), " ".to_owned())].into(),
             },
             |_| true,
         )
@@ -1627,6 +1485,10 @@ mod tests {
 
         assert_eq!(all[0].private_flag, None);
         assert_eq!(all[0].icon_path, None);
+        assert!(
+            all[0].keys.is_empty(),
+            "an empty key box leaves the row to the defaults"
+        );
         assert!(all[0].custom, "one somebody added is theirs to edit");
         assert!(!all[0].hidden);
     }
@@ -1643,6 +1505,7 @@ mod tests {
                 args: String::new(),
                 private_flag: None,
                 icon_path: None,
+                keys: Default::default(),
             },
             |_| false,
         );
@@ -1661,6 +1524,7 @@ mod tests {
                 args: r#"--new-window --user-data-dir="C:\My Data""#.to_owned(),
                 private_flag: Some("--incognito".to_owned()),
                 icon_path: None,
+                keys: Default::default(),
             },
             |_| true,
         )
@@ -1723,6 +1587,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
@@ -1765,7 +1630,7 @@ mod tests {
 
     #[test]
     fn a_detected_browser_is_not_reported_as_one_the_user_added() {
-        let view = seen(&detected("chrome"));
+        let view = seen(&detected("chrome"), Default::default());
         assert!(!view.custom);
         assert_eq!(view.profiles, 1);
         assert_eq!(
@@ -1775,7 +1640,7 @@ mod tests {
         );
         assert!(view.private, "it declares a private switch");
 
-        let mine = seen(&custom("custom-1"));
+        let mine = seen(&custom("custom-1"), Default::default());
         assert!(mine.custom);
         assert!(!mine.private);
     }
@@ -1896,6 +1761,7 @@ mod tests {
             args: "--new-window".to_owned(),
             private_flag: Some(String::new()),
             icon_path: None,
+            keys: Default::default(),
         }
     }
 
@@ -2007,6 +1873,7 @@ mod tests {
             icon_path: None,
             custom: true,
             hidden: false,
+            keys: Default::default(),
         }
     }
 

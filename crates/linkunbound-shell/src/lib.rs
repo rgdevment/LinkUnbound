@@ -93,6 +93,8 @@ pub struct Listed {
     pub profile: String,
     pub icon: Option<String>,
     pub can_private: bool,
+    /// The key the person gave this row, if any.
+    pub key: Option<char>,
 }
 
 #[must_use]
@@ -108,19 +110,21 @@ pub fn destinations(browsers: &[Browser]) -> Vec<Listed> {
                 profile: String::new(),
                 icon: None,
                 can_private: browser.supports_private(),
+                key: browser.key_for(None),
             };
-            if browser.profiles.is_empty() {
-                return vec![base];
-            }
             browser
-                .profiles
-                .iter()
-                .map(|profile| Listed {
-                    profile_id: Some(profile.id.clone()),
-                    profile: profile.name.clone(),
-                    ..base.clone()
+                .rows()
+                .into_iter()
+                .map(|profile| match profile {
+                    None => base.clone(),
+                    Some(profile) => Listed {
+                        profile_id: Some(profile.id.clone()),
+                        profile: profile.name.clone(),
+                        key: browser.key_for(Some(&profile.id)),
+                        ..base.clone()
+                    },
                 })
-                .collect()
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -345,48 +349,29 @@ pub fn split(url: &str) -> (String, String) {
     }
 }
 
-/// The key a row shows, none past the last one: those are opened with the pointer or the arrows.
+/// The key each row of the picker shows.
 #[must_use]
-pub fn key_of(keys: &str, at: usize) -> slint::SharedString {
-    keys.get(at..=at).unwrap_or_default().into()
+pub fn keys_for(rows: &[Listed]) -> Vec<Option<char>> {
+    linkunbound_core::assigned_keys(rows.iter().map(|row| row.key))
 }
 
-/// New keys for a picker that may be on screen: its rows were labelled with the old ones.
-pub fn relabel(window: &Picker, keys: &str) {
-    use slint::Model;
-    window.set_keys(keys.into());
-    let rows = window.get_rows();
-    for at in 0..rows.row_count() {
-        if let Some(mut row) = rows.row_data(at) {
-            row.key = key_of(keys, at);
-            rows.set_row_data(at, row);
-        }
-    }
-}
-
-/// The row a typed letter opens, with or without Shift held for a private window. The digits are
-/// read from the key pressed, not the glyph, so they are left to the host.
-#[must_use]
-pub fn row_of_letter(keys: &str, typed: char) -> Option<usize> {
-    let letters = keys.get(9..)?;
-    letters.find(typed.to_ascii_uppercase()).map(|at| at + 9)
-}
-
-/// The row a key opens, if one of those shown does: the digit under the key the host read, or a
-/// letter past the digits unless a modifier makes it a shortcut.
+/// The row a key opens, if one shows it: the digit under the key the host read, or a letter unless
+/// a modifier makes it a shortcut.
 #[must_use]
 pub fn row_typed(
-    keys: &str,
+    shown: &[slint::SharedString],
     typed: &str,
     chorded: bool,
-    rows: usize,
     digit_behind: impl Fn(char) -> Option<u32>,
 ) -> Option<i32> {
     let typed = typed.chars().next()?;
-    let at = digit_behind(typed)
-        .and_then(|digit| usize::try_from(digit).ok()?.checked_sub(1))
-        .or_else(|| row_of_letter(keys, typed).filter(|_| !chorded))?;
-    (at < rows).then(|| i32::try_from(at).ok()).flatten()
+    let wanted = digit_behind(typed)
+        .and_then(|digit| char::from_digit(digit, 10))
+        .or_else(|| {
+            linkunbound_core::usable_key(typed).filter(|k| !chorded && k.is_ascii_uppercase())
+        })?;
+    let at = shown.iter().position(|key| key.chars().eq([wanted]))?;
+    i32::try_from(at).ok()
 }
 
 /// What a browser is called among friends: the maker's name in front and «Browser» at the end
@@ -449,12 +434,12 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
         slint::SharedString::new()
     });
 
-    let keys = window.get_keys();
+    let keys = keys_for(rows);
     let listed: Vec<Destination> = rows
         .iter()
-        .enumerate()
-        .map(|(i, row)| Destination {
-            key: key_of(&keys, i),
+        .zip(keys)
+        .map(|(row, key)| Destination {
+            key: key.map(String::from).unwrap_or_default().into(),
             name: row.name.clone().into(),
             short: short_name(&row.name).into(),
             profile: row.profile.clone().into(),
@@ -541,9 +526,7 @@ mod short {
 mod tests {
     use super::dress;
     use super::{Listed, Palette, Reaches, destinations, image_for, paint, reaches, split};
-    use linkunbound_core::{
-        Browser, Language, PickerKeys, Profile, Scope, Strings, looks_unresolved,
-    };
+    use linkunbound_core::{Browser, Language, Profile, Scope, Strings, looks_unresolved};
     use slint::ComponentHandle;
 
     const SPOKEN: Strings = Language::Spanish.strings();
@@ -566,6 +549,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
@@ -588,6 +572,7 @@ mod tests {
     fn a_hidden_browser_never_reaches_the_picker() {
         let hidden = Browser {
             hidden: true,
+            keys: Default::default(),
             ..browser("edge", &[], true)
         };
         assert!(destinations(&[hidden]).is_empty());
@@ -610,6 +595,7 @@ mod tests {
                 profile: String::new(),
                 icon: None,
                 can_private: true,
+                key: None,
             },
             Listed {
                 browser_id: "chrome".to_owned(),
@@ -618,6 +604,7 @@ mod tests {
                 profile: "Personal".to_owned(),
                 icon: None,
                 can_private: false,
+                key: None,
             },
         ]
     }
@@ -726,52 +713,61 @@ mod tests {
         assert_eq!(rows.row_data(8).expect("ninth").key, "9");
         assert_eq!(rows.row_data(9).expect("tenth").key, "Q");
         assert_eq!(rows.row_data(11).expect("twelfth").key, "E");
-
-        super::relabel(&window, PickerKeys::Digits.keys());
-        assert_eq!(window.get_keys(), "123456789");
-        assert_eq!(rows.row_data(8).expect("ninth").key, "9");
-        assert_eq!(
-            rows.row_data(9).expect("tenth").key,
-            "",
-            "an open picker drops the letters"
-        );
     }
 
-    /// With the QWERTY rows, twenty-seven rows have a key each and the next one none, and a letter
-    /// opens the same row whether Shift is held or not. With the digits alone no letter opens one.
-    #[test]
-    fn the_letters_carry_on_where_the_digits_stop() {
-        use super::{key_of, row_of_letter};
-        let keys = PickerKeys::Qwerty.keys();
-        assert_eq!(key_of(keys, 0), "1");
-        assert_eq!(key_of(keys, 9), "Q");
-        assert_eq!(key_of(keys, 15), "A");
-        assert_eq!(key_of(keys, 26), "N");
-        assert_eq!(key_of(keys, 27), "");
-        assert_eq!(key_of(PickerKeys::Digits.keys(), 9), "");
-        assert_eq!(row_of_letter(PickerKeys::Digits.keys(), 'q'), None);
-        assert_eq!(row_of_letter(PickerKeys::Alphabet.keys(), 'm'), Some(21));
-        let digit = |c: char| c.to_digit(10).filter(|d| (1..=9).contains(d));
-        let typed = |text: &str, chorded: bool| super::row_typed(keys, text, chorded, 12, digit);
-        assert_eq!(typed("3", false), Some(2));
-        assert_eq!(typed("3", true), Some(2), "Ctrl+3 still opens");
-        assert_eq!(typed("E", false), Some(11));
-        assert_eq!(typed("e", true), None, "Alt+E is a shortcut");
-        assert_eq!(typed("r", false), None, "past the rows shown");
-        assert_eq!(typed("", false), None);
-        for (typed, row) in [
-            ('q', Some(9)),
-            ('Q', Some(9)),
-            ('a', Some(15)),
-            ('z', Some(21)),
-            ('N', Some(26)),
-            ('p', None),
-            ('m', None),
-            ('1', None),
-            ('é', None),
-        ] {
-            assert_eq!(row_of_letter(keys, typed), row, "{typed}");
+    fn chose(key: Option<char>) -> Listed {
+        Listed {
+            browser_id: "chrome".to_owned(),
+            profile_id: None,
+            name: "Chrome".to_owned(),
+            profile: String::new(),
+            icon: None,
+            can_private: true,
+            key,
         }
+    }
+
+    /// A key chosen in settings is kept, the first row to claim it wins, and the rest take the
+    /// defaults nobody holds, in order; past the twenty-seven defaults a row has none.
+    #[test]
+    fn a_chosen_key_stands_and_the_others_take_what_is_left() {
+        use super::keys_for;
+        let rows = [
+            chose(None),
+            chose(Some('1')),
+            chose(Some('p')),
+            chose(Some('P')),
+            chose(Some('0')),
+        ];
+        assert_eq!(
+            keys_for(&rows),
+            [Some('2'), Some('1'), Some('P'), Some('3'), Some('4')],
+            "a second P and a zero fall back to the defaults"
+        );
+
+        let many: Vec<Listed> = (0..28).map(|_| chose(None)).collect();
+        let given = keys_for(&many);
+        assert_eq!(given[9], Some('Q'));
+        assert_eq!(given[26], Some('N'));
+        assert_eq!(given[27], None);
+    }
+
+    /// A letter opens the row that shows it whether Shift is held or not; a digit is the one the
+    /// host read under the key; Alt, Ctrl or Cmd with a letter is a shortcut, with a digit it still
+    /// opens.
+    #[test]
+    fn a_key_opens_the_row_that_shows_it() {
+        let shown: Vec<slint::SharedString> = ["2", "1", "P", "Q", ""].map(Into::into).to_vec();
+        let digit = |c: char| c.to_digit(10).filter(|d| (1..=9).contains(d));
+        let typed = |text: &str, chorded: bool| super::row_typed(&shown, text, chorded, digit);
+        assert_eq!(typed("1", false), Some(1));
+        assert_eq!(typed("2", true), Some(0), "Ctrl+2 still opens");
+        assert_eq!(typed("p", false), Some(2));
+        assert_eq!(typed("Q", false), Some(3));
+        assert_eq!(typed("q", true), None, "Alt+Q is a shortcut");
+        assert_eq!(typed("w", false), None, "no row shows it");
+        assert_eq!(typed("é", false), None);
+        assert_eq!(typed("", false), None);
     }
 
     /// The pill says the consequence in full once a reach is chosen: «Todo el sitio» in a menu is

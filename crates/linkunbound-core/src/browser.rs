@@ -36,6 +36,67 @@ pub struct Browser {
     /// Kept out of the picker without being forgotten.
     #[serde(default)]
     pub hidden: bool,
+    /// The key the person gave each row in the picker, by profile id, or by "" for a browser with
+    /// none. Kept here rather than on the profile, which every scan rebuilds.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub keys: std::collections::BTreeMap<String, char>,
+}
+
+/// A key a person may give a row of the picker: a digit from 1 or a letter, in either case.
+#[must_use]
+pub fn usable_key(key: char) -> Option<char> {
+    let key = key.to_ascii_uppercase();
+    (key.is_ascii_uppercase() || ('1'..='9').contains(&key)).then_some(key)
+}
+
+/// The keys the rows answer to unless the person chose one: the digits, then the three rows of
+/// letters under them.
+pub const KEYS: &str = "123456789QWERTYASDFGHZXCVBN";
+
+/// The key each row shows, from the ones chosen in order of the rows: a chosen key stands unless
+/// an earlier row holds it already, the others take the first of the defaults nobody took, and
+/// past the defaults a row has none and opens with the pointer.
+#[must_use]
+pub fn assigned_keys(chosen: impl IntoIterator<Item = Option<char>>) -> Vec<Option<char>> {
+    let mut given: Vec<Option<char>> = Vec::new();
+    for key in chosen {
+        let key = key.and_then(usable_key);
+        given.push(key.filter(|k| !given.contains(&Some(*k))));
+    }
+    let spare: Vec<char> = KEYS
+        .chars()
+        .filter(|k| !given.contains(&Some(*k)))
+        .collect();
+    let mut spare = spare.into_iter();
+    given
+        .into_iter()
+        .map(|key| key.or_else(|| spare.next()))
+        .collect()
+}
+
+/// The keys the picker gives each browser's rows, by profile id or "" as in [`Browser::keys`]: the
+/// hidden ones are not in the picker and have none.
+#[must_use]
+pub fn picker_keys(browsers: &[Browser]) -> Vec<std::collections::BTreeMap<String, char>> {
+    let rows: Vec<(usize, String, Option<char>)> = browsers
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| !b.hidden)
+        .flat_map(|(at, b)| {
+            b.rows().into_iter().map(move |profile| {
+                let id = profile.map(|p| p.id.as_str());
+                (at, id.unwrap_or_default().to_owned(), b.key_for(id))
+            })
+        })
+        .collect();
+    let keys = assigned_keys(rows.iter().map(|(_, _, key)| *key));
+    let mut out = vec![std::collections::BTreeMap::new(); browsers.len()];
+    for ((at, row, _), key) in rows.into_iter().zip(keys) {
+        if let Some(key) = key {
+            out[at].insert(row, key);
+        }
+    }
+    out
 }
 
 /// What the registry finds is the truth about paths and profiles; what the user
@@ -56,8 +117,12 @@ pub fn merge(detected: Vec<Browser>, saved: &[Browser]) -> Vec<Browser> {
                 extra_args: kept.extra_args.clone(),
                 private_flag: kept.private_flag.clone(),
                 icon_path: kept.icon_path.clone(),
+                keys: kept.keys.clone(),
                 ..found.clone()
             });
+            if let Some(last) = out.last_mut() {
+                last.forget_gone_keys();
+            }
         }
     }
     for found in detected {
@@ -84,9 +149,40 @@ impl Browser {
             name: named.to_owned(),
             custom: true,
             hidden: false,
+            keys: Default::default(),
             profiles: Vec::new(),
             ..self.clone()
         }
+    }
+
+    /// The rows it puts in the picker: one per profile, or the browser itself when it has none.
+    #[must_use]
+    pub fn rows(&self) -> Vec<Option<&Profile>> {
+        if self.profiles.is_empty() {
+            vec![None]
+        } else {
+            self.profiles.iter().map(Some).collect()
+        }
+    }
+
+    /// The key the person gave the row of this profile, or of the browser when it has none.
+    #[must_use]
+    pub fn key_for(&self, profile: Option<&str>) -> Option<char> {
+        self.keys
+            .get(profile.unwrap_or_default())
+            .copied()
+            .and_then(usable_key)
+    }
+
+    /// A scan can take a profile away, or give profiles to a browser that had none: a key left on
+    /// a row nobody sees would still count as taken, with no box in settings to clear it.
+    fn forget_gone_keys(&mut self) {
+        let live: Vec<String> = self
+            .rows()
+            .iter()
+            .map(|p| p.map(|p| p.id.clone()).unwrap_or_default())
+            .collect();
+        self.keys.retain(|row, _| live.contains(row));
     }
 
     pub fn profile(&self, id: &str) -> Option<&Profile> {
@@ -147,6 +243,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: true,
+            keys: Default::default(),
         };
 
         assert!(
@@ -171,6 +268,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         };
         assert!(browser.supports_private());
 
@@ -200,6 +298,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
@@ -214,6 +313,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
@@ -259,7 +359,7 @@ mod tests {
 
 #[cfg(test)]
 mod merging {
-    use super::{Browser, merge};
+    use super::{Browser, merge, usable_key};
 
     fn browser(id: &str, exe: &str) -> Browser {
         Browser {
@@ -272,6 +372,7 @@ mod merging {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
@@ -281,6 +382,7 @@ mod merging {
         let detected = vec![browser("chrome", "C:/New/chrome.exe")];
         let saved = vec![Browser {
             hidden: true,
+            keys: Default::default(),
             extra_args: vec!["--foo".to_owned()],
             ..browser("chrome", "C:/Old/chrome.exe")
         }];
@@ -357,6 +459,70 @@ mod merging {
             copy.name, "Original (copy)",
             "the name is the caller's, worded in its language"
         );
+    }
+
+    /// The keys are the person's, like the name: a rescan rebuilds the profiles but not them, and
+    /// a copy starts with none, or it would fight its original for the same key.
+    #[test]
+    fn the_keys_survive_a_scan_and_stay_off_a_copy() {
+        let detected = vec![browser("chrome", "C:/real/chrome.exe")];
+        let mut mine = browser("chrome", "C:/real/chrome.exe");
+        mine.keys.insert("Default".to_owned(), 'W');
+        mine.keys.insert(String::new(), 'F');
+        mine.keys.insert("Gone".to_owned(), 'G');
+        let mut detected = detected;
+        detected[0].profiles = vec![super::Profile {
+            id: "Default".to_owned(),
+            name: "Personal".to_owned(),
+            args: Vec::new(),
+        }];
+        let merged = merge(detected, &[mine]);
+        assert_eq!(merged[0].key_for(Some("Default")), Some('W'));
+        assert_eq!(
+            merged[0].keys.len(),
+            1,
+            "the rows the scan took away let go of their keys"
+        );
+        assert_eq!(merged[0].key_for(None), None);
+        assert!(
+            merged[0]
+                .duplicated("custom-1".to_owned(), "x")
+                .keys
+                .is_empty()
+        );
+    }
+
+    /// Settings shows the key each row gets on its own, so it has to be the picker's: the chosen
+    /// ones stand, the rest take the free defaults in order, and a hidden browser gets none.
+    #[test]
+    fn every_row_shown_gets_the_key_the_picker_gives_it() {
+        let mut chrome = browser("chrome", "chrome.exe");
+        chrome.profiles = ["Default", "Work"]
+            .map(|id| super::Profile {
+                id: id.to_owned(),
+                name: id.to_owned(),
+                args: Vec::new(),
+            })
+            .to_vec();
+        chrome.keys.insert("Work".to_owned(), '1');
+        let mut hidden = browser("edge", "edge.exe");
+        hidden.hidden = true;
+        let firefox = browser("firefox", "firefox.exe");
+
+        let keys = super::picker_keys(&[chrome, hidden, firefox]);
+        assert_eq!(keys[0].get("Default"), Some(&'2'));
+        assert_eq!(keys[0].get("Work"), Some(&'1'));
+        assert!(keys[1].is_empty(), "hidden, so not in the picker");
+        assert_eq!(keys[2].get(""), Some(&'3'));
+    }
+
+    #[test]
+    fn only_a_digit_from_one_or_a_letter_is_a_key() {
+        assert_eq!(usable_key('w'), Some('W'));
+        assert_eq!(usable_key('7'), Some('7'));
+        assert_eq!(usable_key('0'), None);
+        assert_eq!(usable_key('ñ'), None);
+        assert_eq!(usable_key(' '), None);
     }
 
     /// Settings lets a detected browser be renamed and given a private switch.

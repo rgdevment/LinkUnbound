@@ -553,6 +553,7 @@ mod tests {
             icon_path: None,
             custom: true,
             hidden: false,
+            keys: Default::default(),
         });
         store.save_browsers(&browsers).expect("saved");
         let read = Store::at(&dir).browsers().expect("read back");

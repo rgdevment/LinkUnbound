@@ -23,7 +23,9 @@ pub use binaries::{
     BROWSERS, PREVIEW, RESIDENT, Registered, SETTINGS, link_handler, settings_binary,
     what_is_registered,
 };
-pub use browser::{Browser, LaunchRefused, Profile, merge};
+pub use browser::{
+    Browser, KEYS, LaunchRefused, Profile, assigned_keys, merge, picker_keys, usable_key,
+};
 pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,
@@ -35,7 +37,7 @@ pub use icons::{cached_icon, prune as prune_icons};
 pub use journal::{JOURNAL, journal, note, scrubbed};
 pub use launch::{LaunchError, open as launch, spawn_and_forget};
 pub use news::{behind as news_behind, untold as untold_news};
-pub use prefs::{Locale, PickerKeys, PickerStyle, Preferences, Theme};
+pub use prefs::{Locale, PickerStyle, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{

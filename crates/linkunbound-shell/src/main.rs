@@ -854,7 +854,6 @@ impl Ui {
         self.light_seen.set(light);
         paint(&self.picker, &self.notice, light);
         look::style(&self.picker, prefs.picker_style);
-        linkunbound_shell::relabel(&self.picker, prefs.picker_keys.keys());
         if let Some(tray) = self.tray.as_ref() {
             tray.show(true);
             tray.relabel(&self.words.get());
@@ -1175,13 +1174,10 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(window) = handle.upgrade() else {
                 return false;
             };
-            let rows = window.get_rows().row_count();
-            let keys = window.get_keys();
-            match linkunbound_shell::row_typed(&keys, &typed, chorded, rows, host::digit_behind) {
-                Some(index) => window.invoke_open(index, private),
-                None => return false,
-            }
-            true
+            let shown: Vec<_> = window.get_rows().iter().map(|row| row.key).collect();
+            linkunbound_shell::row_typed(&shown, &typed, chorded, host::digit_behind)
+                .map(|index| window.invoke_open(index, private))
+                .is_some()
         });
     }
     {
@@ -1654,6 +1650,7 @@ mod tests {
             profile: String::new(),
             icon: None,
             can_private: false,
+            key: None,
         }
     }
     fn browser_named(id: &str) -> linkunbound_core::Browser {
@@ -1667,6 +1664,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
@@ -1812,6 +1810,7 @@ mod tests {
             profile: "Personal".to_owned(),
             icon: None,
             can_private: true,
+            key: None,
         }
     }
 

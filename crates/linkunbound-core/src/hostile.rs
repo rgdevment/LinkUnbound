@@ -147,6 +147,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
