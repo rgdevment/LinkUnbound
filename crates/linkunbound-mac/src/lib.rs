@@ -31,7 +31,7 @@ pub use detect::{app_named, bundle_id_named, installed_browsers};
 #[cfg(target_os = "macos")]
 pub use events::{Event, Listening, listen};
 #[cfg(target_os = "macos")]
-pub use glass::{liquid_glass, reduces_transparency, wear_glass};
+pub use glass::{liquid_glass, reduces_transparency, take_off_glass, wear_glass};
 #[cfg(target_os = "macos")]
 pub use icons::icon_for;
 #[cfg(target_os = "macos")]

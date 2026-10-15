@@ -1,24 +1,35 @@
+use std::cell::Cell;
+use std::ptr::NonNull;
+use std::rc::Rc;
+
+use block2::RcBlock;
+use objc2::Message;
 use objc2::rc::Retained;
 use objc2::runtime::AnyClass;
 use objc2_app_kit::{
     NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
     NSBackingStoreType, NSColor, NSGlassEffectView, NSUserInterfaceItemIdentification, NSView,
     NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
-    NSWindow, NSWindowOrderingMode, NSWindowStyleMask, NSWorkspace,
+    NSWindow, NSWindowDidMoveNotification, NSWindowDidResizeNotification, NSWindowOrderingMode,
+    NSWindowStyleMask, NSWorkspace,
 };
-use objc2_foundation::{MainThreadMarker, NSString};
+use objc2_foundation::{MainThreadMarker, NSNotification, NSNotificationCenter, NSPoint, NSString};
 
 use crate::native::window_of;
 
 const GLASS: &str = "linkunbound-glass";
 
-/// Asked by name: the class only exists from macOS 26, and naming it in code would fail to load
-/// on the systems before it.
+/// Asked by name: the class only exists from macOS 26, and naming it in code, a downcast
+/// included, panics on the systems before it.
+fn glass_exists() -> bool {
+    AnyClass::get(c"NSGlassEffectView").is_some()
+}
+
 #[must_use]
 pub fn liquid_glass() -> bool {
     let skipped =
         cfg!(debug_assertions) && std::env::var_os("LINKUNBOUND_NO_LIQUID_GLASS").is_some();
-    !skipped && AnyClass::get(c"NSGlassEffectView").is_some()
+    !skipped && glass_exists()
 }
 
 #[must_use]
@@ -39,7 +50,9 @@ fn material(mtm: MainThreadMarker) -> Retained<NSView> {
 }
 
 fn round(material: &NSView, corner: f64) {
-    if let Some(glass) = material.downcast_ref::<NSGlassEffectView>() {
+    if glass_exists()
+        && let Some(glass) = material.downcast_ref::<NSGlassEffectView>()
+    {
         glass.setCornerRadius(corner);
         return;
     }
@@ -102,7 +115,63 @@ fn glass_window(mtm: MainThreadMarker, picker: &NSWindow) -> Retained<NSWindow> 
     window.setContentView(Some(&material));
     // SAFETY: both windows live on the main thread; AppKit keeps the child with its parent.
     unsafe { picker.addChildWindow_ordered(&window, NSWindowOrderingMode::Below) };
+    keep_with(picker, &window);
     window
+}
+
+/// AppKit grows and shrinks a window from its bottom edge: the picker keeps its top instead, as it
+/// does on Windows and as the bear leaning on it expects, and the glass takes its frame again.
+#[allow(unsafe_code)]
+fn keep_with(picker: &NSWindow, glass: &NSWindow) {
+    let top = Rc::new(Cell::new(None::<f64>));
+    let moved = {
+        let (picker, glass, top) = (picker.retain(), glass.retain(), Rc::clone(&top));
+        RcBlock::new(move |_: NonNull<NSNotification>| {
+            let frame = picker.frame();
+            top.set(Some(frame.origin.y + frame.size.height));
+            glass.setFrame_display(frame, true);
+        })
+    };
+    let resized = {
+        let (picker, glass) = (picker.retain(), glass.retain());
+        RcBlock::new(move |_: NonNull<NSNotification>| {
+            let frame = picker.frame();
+            if let Some(top) = top.get()
+                && (frame.origin.y + frame.size.height - top).abs() > 0.5
+            {
+                picker.setFrameTopLeftPoint(NSPoint::new(frame.origin.x, top));
+            }
+            glass.setFrame_display(picker.frame(), true);
+        })
+    };
+    let centre = NSNotificationCenter::defaultCenter();
+    // SAFETY: AppKit's own names, posted on the main thread where the blocks run; the centre keeps
+    // both observers for as long as the picker, which lives as long as the app.
+    unsafe {
+        centre.addObserverForName_object_queue_usingBlock(
+            Some(NSWindowDidMoveNotification),
+            Some(picker),
+            None,
+            &moved,
+        );
+        centre.addObserverForName_object_queue_usingBlock(
+            Some(NSWindowDidResizeNotification),
+            Some(picker),
+            None,
+            &resized,
+        );
+    }
+}
+
+/// The painted sheet is back: the glass behind it would show in its shadow margin.
+pub fn take_off_glass(view: isize) {
+    let Some(picker) = window_of(view) else {
+        return;
+    };
+    if let Some(glass) = glass_behind(&picker) {
+        picker.removeChildWindow(&glass);
+        glass.orderOut(None);
+    }
 }
 
 /// The material lives in a window of its own just behind the picker: AppKit only blends it with

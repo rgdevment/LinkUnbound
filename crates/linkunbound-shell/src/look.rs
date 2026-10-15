@@ -59,7 +59,11 @@ pub fn corner_of(picker: &Picker) -> f64 {
 /// painted sheet and its shadow come back. Returns whether the window changed size.
 pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
     let palette = picker.global::<Palette>();
-    if !palette.get_clear() || wear_glass(handle, !palette.get_light(), corner_of(picker)) {
+    if !palette.get_clear() {
+        take_off_glass(handle);
+        return false;
+    }
+    if wear_glass(handle, !palette.get_light(), corner_of(picker)) {
         return false;
     }
     palette.set_clear(false);
@@ -190,6 +194,15 @@ fn native_glass() -> bool {
 fn wear_glass(view: isize, dark: bool, corner: f64) -> bool {
     linkunbound_mac::wear_glass(view, dark, corner)
 }
+
+#[cfg(target_os = "macos")]
+fn take_off_glass(view: isize) {
+    linkunbound_mac::take_off_glass(view);
+}
+
+/// Acrylic is a window attribute DWM drops when the system turns transparency off.
+#[cfg(not(target_os = "macos"))]
+fn take_off_glass(_window: isize) {}
 
 #[cfg(not(any(windows, target_os = "macos")))]
 fn native_glass() -> bool {

@@ -31,7 +31,7 @@ fn main() {
     use linkunbound_mac::{
         Event, cursor, dress_window, is_in_front, keep_off_the_taskbar,
         let_whoever_opens_next_come_forward, liquid_glass, listen, reduces_transparency,
-        tuck_beside, wear_glass, work_area_at,
+        take_off_glass, tuck_beside, wear_glass, work_area_at,
     };
     use objc2::MainThreadOnly;
     use objc2::rc::Retained;
@@ -103,15 +103,18 @@ fn main() {
     );
     assert!(!glass.hasShadow(), "the picker casts the only shadow");
     let material = glass.contentView().expect("the material");
-    let corner =
-        |material: &objc2_app_kit::NSView| match material.downcast_ref::<NSGlassEffectView>() {
-            Some(glass) => glass.cornerRadius(),
-            None => material.layer().expect("a rounded layer").cornerRadius(),
-        };
-    assert_eq!(
-        material.downcast_ref::<NSGlassEffectView>().is_some(),
+    // Only named where it exists: naming the class on a macOS before 26 panics.
+    let as_glass = |material: &objc2_app_kit::NSView| {
         liquid_glass()
-    );
+            .then(|| material.downcast_ref::<NSGlassEffectView>())
+            .flatten()
+            .map(NSGlassEffectView::cornerRadius)
+    };
+    let corner = |material: &objc2_app_kit::NSView| {
+        as_glass(material)
+            .unwrap_or_else(|| material.layer().expect("a rounded layer").cornerRadius())
+    };
+    assert_eq!(as_glass(&material).is_some(), liquid_glass());
     assert_eq!(
         material.downcast_ref::<NSVisualEffectView>().is_some(),
         !liquid_glass()
@@ -128,6 +131,24 @@ fn main() {
     );
     assert_eq!(corner(&material), 10.0);
     assert_eq!(tone(&material).as_deref(), Some("NSAppearanceNameAqua"));
+
+    window.setFrameTopLeftPoint(NSPoint::new(50.0, 500.0));
+    let grown = NSRect::new(NSPoint::new(50.0, 490.0), NSSize::new(10.0, 50.0));
+    window.setFrame_display(grown, false);
+    let frame = window.frame();
+    assert_eq!(
+        frame.origin.y + frame.size.height,
+        500.0,
+        "the picker grows downwards, keeping its top"
+    );
+    assert_eq!(glass.frame(), frame, "and the glass grows with it");
+
+    take_off_glass(handle);
+    assert_eq!(
+        window.childWindows().map(|c| c.len()).unwrap_or_default(),
+        0,
+        "the painted sheet has no glass behind it"
+    );
 
     // SAFETY: made and used on the main thread, never shown, dropped at the end.
     let bear = unsafe {
