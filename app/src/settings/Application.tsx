@@ -7,7 +7,7 @@ import { Card, Line, Section, Switch } from "./parts";
 
 type Theme = "system" | "light" | "dark";
 type Locale = "system" | "spanish" | "english";
-type PickerStyle = "classic" | "sheet";
+type PickerStyle = "bear" | "classic" | "sheet" | "compact";
 
 type Preferences = {
   schema_version: number;
@@ -34,8 +34,10 @@ const LOCALES: { id: Locale; label: Key }[] = [
 ];
 
 const PICKERS: { id: PickerStyle; label: Key }[] = [
+  { id: "bear", label: "pickerBear" },
   { id: "classic", label: "pickerClassic" },
   { id: "sheet", label: "pickerSheet" },
+  { id: "compact", label: "pickerCompact" },
 ];
 
 const MODIFIERS = new Set(["Control", "Alt", "Shift", "Meta"]);
@@ -116,7 +118,13 @@ export default function Application({
   const [problem, setProblem] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
 
-  const apply = (patch: Partial<Preferences>) => {
+  const [previewing, setPreviewing] = useState(false);
+  const preview = () => {
+    setPreviewing(true);
+    void invoke("picker_preview").catch(noop);
+  };
+
+  const apply = (patch: Partial<Preferences>, then?: () => void) => {
     if (!settings) return;
     void invoke<Settings>("prefs_set", { prefs: { ...settings.prefs, ...patch } })
       .then((next) => {
@@ -125,6 +133,7 @@ export default function Application({
         refresh();
         setProblem(null);
         if ("shortcut" in patch) askAgainOnceTheResidentHasIt();
+        then?.();
       })
       .catch((e: unknown) => setProblem(saidPlainly(language, e)))
       .finally(() => setCapturing(false));
@@ -171,12 +180,21 @@ export default function Application({
             />
           </Line>
           <Line title={t("appPicker")}>
-            <Choice
-              options={PICKERS}
-              value={prefs.picker_style}
-              label={t("appPicker")}
-              onPick={(picker_style) => apply({ picker_style })}
-            />
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <Choice
+                options={PICKERS}
+                value={prefs.picker_style}
+                label={t("appPicker")}
+                onPick={(picker_style) => apply({ picker_style }, previewing ? preview : undefined)}
+              />
+              <button
+                type="button"
+                onClick={preview}
+                className="text-[11.5px] text-[#2F62D8] hover:underline dark:text-[#6E9BFF]"
+              >
+                {t("pickerPreview")}
+              </button>
+            </div>
           </Line>
         </Card>
       </Section>

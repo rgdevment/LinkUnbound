@@ -93,6 +93,16 @@ type Entry = { id: Page; label: Key; icon: React.ReactNode };
 
 const PAGES: Entry[] = [
   {
+    id: "app",
+    label: "navApp",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2" />
+      </>
+    ),
+  },
+  {
     id: "links",
     label: "navLinks",
     icon: (
@@ -110,16 +120,6 @@ const PAGES: Entry[] = [
       <>
         <circle cx="12" cy="12" r="9" />
         <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
-      </>
-    ),
-  },
-  {
-    id: "app",
-    label: "navApp",
-    icon: (
-      <>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2" />
       </>
     ),
   },
@@ -393,7 +393,15 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const t = useWords();
   const language = useSpoken();
   const { ready, step, look, settled } = useUpdate();
-  const [page, setPage] = useState<Page>("links");
+  const [page, setPage] = useState<Page>(() => asked() ?? "app");
+  useEffect(() => {
+    const follow = () => {
+      const next = asked();
+      if (next) setPage(next);
+    };
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
   const [state, setState] = useState<SystemState | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [starring, setStarring] = useState(false);
@@ -498,6 +506,12 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
       <News />
     </div>
   );
+}
+
+/// The resident opens settings on the browsers, with `#browsers`, to add one.
+function asked(): Page | null {
+  const said = window.location.hash.slice(1);
+  return [...PAGES, ABOUT].some((p) => p.id === said) ? (said as Page) : null;
 }
 
 function Tab({ tab, on, onPick }: { tab: Entry; on: Page; onPick: (next: Page) => void }) {

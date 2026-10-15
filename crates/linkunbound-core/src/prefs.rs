@@ -18,13 +18,16 @@ pub enum Locale {
     English,
 }
 
-/// The picker's look: rows under the link, the way 1.x users know it, or a sheet of tiles.
+/// The picker's look: rows under the link, the way 1.x users know it, a sheet of tiles, a row of
+/// icons, or the bear asking where the link goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PickerStyle {
-    #[default]
     Classic,
     Sheet,
+    Compact,
+    #[default]
+    Bear,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +88,18 @@ impl Default for Preferences {
 }
 
 impl Preferences {
+    /// The bear became everybody's picker once, whatever was chosen before; the move is written
+    /// down so a style picked afterwards stands. Returns the style left behind, when it was not
+    /// already the bear, so the person can be told how to get it back.
+    pub fn meets_the_bear(&mut self) -> Option<PickerStyle> {
+        if self.schema_version >= 1 {
+            return None;
+        }
+        self.schema_version = 1;
+        let before = std::mem::replace(&mut self.picker_style, PickerStyle::Bear);
+        (before != PickerStyle::Bear).then_some(before)
+    }
+
     /// 1.x kept the theme in a file of its own holding nothing but the word.
     #[must_use]
     pub fn with_legacy_theme(mut self, raw: &str) -> Self {
@@ -249,19 +264,34 @@ mod tests {
         assert!(!quiet.looks_for_updates);
     }
 
-    /// The rows are what a copy gets until somebody asks for the tiles, and a file from before
-    /// the choice existed must read the same way. The words in the file are the ones settings
-    /// shows, so a hand edit reads back.
+    /// The bear is what a copy gets until somebody asks for another look. The words in the file
+    /// are the ones settings shows, so a hand edit reads back.
     #[test]
-    fn the_picker_is_the_classic_one_unless_the_sheet_was_asked_for() {
+    fn the_picker_is_the_bear_unless_another_look_was_asked_for() {
         let fresh: Preferences = serde_json::from_str("{}").unwrap();
-        assert_eq!(fresh.picker_style, PickerStyle::Classic);
+        assert_eq!(fresh.picker_style, PickerStyle::Bear);
 
         let asked: Preferences = serde_json::from_str(r#"{"picker_style": "sheet"}"#).unwrap();
         assert_eq!(asked.picker_style, PickerStyle::Sheet);
 
         let written = serde_json::to_string(&asked).unwrap();
         assert!(written.contains(r#""picker_style":"sheet""#), "{written}");
+    }
+
+    /// Everybody moves to the bear once; after that, what they pick stays picked.
+    #[test]
+    fn the_bear_comes_once_and_a_later_choice_stands() {
+        let mut kept: Preferences = serde_json::from_str(r#"{"picker_style": "sheet"}"#).unwrap();
+        assert_eq!(kept.meets_the_bear(), Some(PickerStyle::Sheet));
+        assert_eq!(kept.picker_style, PickerStyle::Bear);
+
+        kept.picker_style = PickerStyle::Classic;
+        assert_eq!(kept.meets_the_bear(), None);
+        assert_eq!(kept.picker_style, PickerStyle::Classic);
+
+        let mut fresh = Preferences::default();
+        assert_eq!(fresh.meets_the_bear(), None, "nothing to tell a new copy");
+        assert_eq!(fresh.schema_version, 1);
     }
 
     #[test]

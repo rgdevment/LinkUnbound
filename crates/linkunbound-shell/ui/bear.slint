@@ -1,0 +1,146 @@
+// The mascot drawn from the same shapes as resources/mascot/linkunbound-head.svg.
+component Shape inherits Path {
+    width: 100%;
+    height: 100%;
+    viewbox-x: 44;
+    viewbox-y: 60;
+    viewbox-width: 312;
+    viewbox-height: 256;
+}
+
+component Head inherits Rectangle {
+    in property <bool> masked;
+    in property <float> look;
+    property <float> k: self.width / 312px;
+
+    Shape {
+        commands: "M79 98 a29 29 0 1 0 58 0 a29 29 0 1 0 -58 0 Z M263 98 a29 29 0 1 0 58 0 a29 29 0 1 0 -58 0 Z";
+        fill: #0C2A7A;
+    }
+    Shape {
+        commands: "M97 100 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0 Z M281 100 a11 11 0 1 0 22 0 a11 11 0 1 0 -22 0 Z";
+        fill: #A9C8FF;
+    }
+    Shape {
+        commands: "M200 72 C262 72 310 96 328 148 L348 172 L326 186 L346 214 L320 224 C316 276 272 304 200 304 C128 304 84 276 80 224 L54 214 L74 186 L52 172 L72 148 C90 96 138 72 200 72 Z";
+        fill: #0C2A7A;
+        stroke: #0C2A7A;
+        stroke-width: 8px * root.k;
+    }
+    Shape {
+        commands: "M130 100 Q200 84 270 100";
+        stroke: #2D55C8;
+        stroke-width: 7px * root.k;
+    }
+    Shape {
+        commands: "M108 154 Q140 138 176 152 M292 154 Q260 138 224 152";
+        stroke: #3E6BE0;
+        stroke-width: 11px * root.k;
+    }
+    if root.masked: Shape {
+        commands: "M96 160 Q200 140 304 160 L300 200 Q200 186 100 200 Z";
+        fill: #6B4BD8;
+    }
+    Shape {
+        commands: "M132 178 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 Z M248 178 a10 10 0 1 0 20 0 a10 10 0 1 0 -20 0 Z";
+        fill: #FFFFFF;
+    }
+    Shape {
+        x: root.look * 6px * root.k;
+        commands: "M138.5 180 a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0 Z M254.5 180 a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0 Z";
+        fill: #0C2A7A;
+    }
+    Shape {
+        commands: "M138 246 a62 50 0 1 0 124 0 a62 50 0 1 0 -124 0 Z";
+        fill: #DCE9FF;
+    }
+    Shape {
+        commands: "M174 214 Q200 202 226 214 Q228 234 200 244 Q172 234 174 214 Z";
+        fill: #0C2A7A;
+        stroke: #0C2A7A;
+        stroke-width: 6px * root.k;
+    }
+    Shape {
+        commands: "M200 244 L200 262 M176 270 Q200 286 224 270";
+        stroke: #0C2A7A;
+        stroke-width: 5px * root.k;
+    }
+}
+
+component PawShape inherits Path {
+    width: 100%;
+    height: 100%;
+    viewbox-width: 40;
+    viewbox-height: 31;
+}
+
+// The renderer blurs nothing, so the shadow is the paw itself, offset twice and fading.
+component Paw inherits Rectangle {
+    property <float> k: self.width / 40px;
+    PawShape {
+        y: 3px * root.k;
+        commands: "M4 13 V6 Q4 0 10 0 H30 Q36 0 36 6 V13 Z M4.5 12.5 a3.5 3.5 0 0 1 7 0 V18.5 a3.5 3.5 0 0 1 -7 0 Z M12.5 12.5 a3.5 3.5 0 0 1 7 0 V21 a3.5 3.5 0 0 1 -7 0 Z M20.5 12.5 a3.5 3.5 0 0 1 7 0 V21 a3.5 3.5 0 0 1 -7 0 Z M28.5 12.25 a3.25 3.25 0 0 1 6.5 0 V18.25 a3.25 3.25 0 0 1 -6.5 0 Z";
+        fill: #00000026;
+    }
+    PawShape {
+        y: 1.5px * root.k;
+        commands: "M4 13 V6 Q4 0 10 0 H30 Q36 0 36 6 V13 Z M4.5 12.5 a3.5 3.5 0 0 1 7 0 V18.5 a3.5 3.5 0 0 1 -7 0 Z M12.5 12.5 a3.5 3.5 0 0 1 7 0 V21 a3.5 3.5 0 0 1 -7 0 Z M20.5 12.5 a3.5 3.5 0 0 1 7 0 V21 a3.5 3.5 0 0 1 -7 0 Z M28.5 12.25 a3.25 3.25 0 0 1 6.5 0 V18.25 a3.25 3.25 0 0 1 -6.5 0 Z";
+        fill: #00000059;
+    }
+    PawShape {
+        commands: "M4 13 V6 Q4 0 10 0 H30 Q36 0 36 6 V13 Z M4.5 12.5 a3.5 3.5 0 0 1 7 0 V18.5 a3.5 3.5 0 0 1 -7 0 Z M12.5 12.5 a3.5 3.5 0 0 1 7 0 V21 a3.5 3.5 0 0 1 -7 0 Z M20.5 12.5 a3.5 3.5 0 0 1 7 0 V21 a3.5 3.5 0 0 1 -7 0 Z M28.5 12.25 a3.25 3.25 0 0 1 6.5 0 V18.25 a3.25 3.25 0 0 1 -6.5 0 Z";
+        fill: #0C2A7A;
+    }
+    PawShape {
+        commands: "M12 5.5 a8 3.2 0 1 0 16 0 a8 3.2 0 1 0 -16 0 Z";
+        fill: #2D55C88C;
+    }
+    PawShape {
+        commands: "M5.7 12.5 a1 1 0 0 1 2 0 V18 a1 1 0 0 1 -2 0 Z M13.7 12.5 a1 1 0 0 1 2 0 V20.5 a1 1 0 0 1 -2 0 Z M21.7 12.5 a1 1 0 0 1 2 0 V20.5 a1 1 0 0 1 -2 0 Z M29.7 12.5 a1 1 0 0 1 2 0 V17.5 a1 1 0 0 1 -2 0 Z";
+        fill: #3E6BE099;
+    }
+    PawShape {
+        commands: "M5.9 15 Q8 16.4 10.1 15 M13.9 15 Q16 16.4 18.1 15 M21.9 15 Q24 16.4 26.1 15 M29.9 15 Q31.75 16.4 33.6 15";
+        stroke: #06184A;
+        stroke-width: 1px * root.k;
+    }
+}
+
+// Below the picker, so the glass blurs the half it covers.
+export component BearHead inherits Window {
+    in property <bool> masked;
+    in property <float> look;
+    in property <length> side: 92px;
+    title: "LinkUnbound";
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    width: root.side;
+    height: root.side * 256 / 312;
+
+    Head {
+        masked: root.masked;
+        look: root.look;
+    }
+}
+
+// Above the picker: the fingers rest on its top edge.
+export component BearPaws inherits Window {
+    in property <length> paw: 30px;
+    in property <length> gap: 70px;
+    title: "LinkUnbound";
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    width: root.gap + 2 * root.paw;
+    height: root.paw * 31 / 40;
+
+    Paw {
+        x: 0;
+        width: root.paw;
+    }
+    Paw {
+        x: root.gap + root.paw;
+        width: root.paw;
+    }
+}

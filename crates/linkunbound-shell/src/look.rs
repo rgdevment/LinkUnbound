@@ -1,19 +1,29 @@
 //! How the picker is drawn: list or tiles, and the material behind it where the system lends one.
 
 use linkunbound_core::PickerStyle;
-use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
+use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, place};
 use slint::ComponentHandle;
 
 pub fn style(picker: &Picker, chosen: PickerStyle) {
-    let classic = chosen != PickerStyle::Sheet;
+    let look = match chosen {
+        PickerStyle::Classic => Look::List,
+        PickerStyle::Sheet => Look::Tiles,
+        PickerStyle::Compact => Look::Compact,
+        PickerStyle::Bear => Look::Bear,
+    };
     let clear = acrylic();
-    picker.set_classic(classic);
+    picker.set_look(look);
     picker.global::<Palette>().set_clear(clear);
-    picker.set_halo(if classic || clear { 0.0 } else { HALO });
+    picker.global::<Palette>().set_see_through(see_through());
+    picker.set_halo(if look == Look::List || clear {
+        0.0
+    } else {
+        HALO
+    });
 }
 
 pub fn corner_of(picker: &Picker) -> f64 {
-    if picker.get_classic() {
+    if picker.get_look() == Look::List {
         CLASSIC_CORNER
     } else {
         CORNER
@@ -28,16 +38,102 @@ pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
         return false;
     }
     palette.set_clear(false);
-    if picker.get_classic() {
+    if picker.get_look() == Look::List {
         return false;
     }
     picker.set_halo(HALO);
     true
 }
 
+/// The picker belongs to the click that summoned it, not to the middle of a screen.
+pub fn beside_the_pointer(picker: &Picker) {
+    let Some(pointer) = crate::host::cursor() else {
+        return;
+    };
+    let Some(area) = crate::host::work_area_at(pointer.0, pointer.1) else {
+        return;
+    };
+    place_near(picker, pointer, area);
+}
+
+/// Where the picker goes for a pointer and the screen area around it, in the units the window is
+/// placed in. Returns the corner it was put at.
+fn place_near(
+    picker: &Picker,
+    (cx, cy): (i32, i32),
+    (x, y, width, height): (i32, i32, i32, i32),
+) -> (i32, i32) {
+    let scale = if cfg!(target_os = "macos") {
+        1.0
+    } else {
+        f64::from(picker.window().scale_factor())
+    };
+    let size = |logical: f32| crate::physical(logical, scale);
+
+    let halo = size(picker.get_halo());
+    let (at_x, at_y) = place::beside(
+        (cx, cy),
+        (
+            size(picker.get_wanted_width()),
+            size(picker.get_wanted_height()),
+        ),
+        // The bear rises over the sheet, so the screen it may use starts that much lower.
+        place::Bounds {
+            x,
+            y: y + size(crate::mascot::rise(picker)),
+            width,
+            height: height - size(crate::mascot::rise(picker)),
+        },
+    );
+    // The margin holds the shadow, not the sheet: the sheet's edge is what sits by the pointer,
+    // and the transparent rim may hang past the screen without anyone seeing it.
+    let (at_x, at_y) = (at_x - halo, at_y - halo);
+    if let Some(ui) = crate::ui() {
+        ui.mascot.anchor(at_x, at_y);
+    }
+    #[cfg(target_os = "macos")]
+    picker
+        .window()
+        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
+    #[cfg(not(target_os = "macos"))]
+    picker
+        .window()
+        .set_position(slint::PhysicalPosition::new(at_x, at_y));
+    if picker.window().is_visible() {
+        follow(picker);
+    }
+    (at_x, at_y)
+}
+
+/// The mascot comes and goes with the picker it leans on.
+pub fn follow(picker: &Picker) {
+    if let Some(ui) = crate::ui() {
+        ui.mascot.follow(picker);
+    }
+}
+
+pub fn put_away(picker: &Picker) {
+    let _ = picker.hide();
+    if let Some(ui) = crate::ui() {
+        ui.mascot.hide();
+    }
+}
+
+#[cfg(windows)]
+fn see_through() -> bool {
+    linkunbound_win::transparency_is_on()
+}
+
+#[cfg(not(windows))]
+fn see_through() -> bool {
+    true
+}
+
 #[cfg(windows)]
 fn acrylic() -> bool {
-    linkunbound_win::acrylic_is_available()
+    // A debug build can be told to paint, to see on Windows 11 what Windows 10 shows.
+    let painted = cfg!(debug_assertions) && std::env::var_os("LINKUNBOUND_NO_ACRYLIC").is_some();
+    linkunbound_win::acrylic_is_available() && !painted
 }
 
 #[cfg(windows)]
@@ -57,7 +153,7 @@ fn wear_acrylic(_window: isize, _dark: bool) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{acrylic, corner_of, style, wear_backdrop};
+    use super::{acrylic, corner_of, place_near, style, wear_backdrop};
     use linkunbound_core::PickerStyle;
     use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
     use slint::ComponentHandle;
@@ -82,6 +178,28 @@ mod tests {
         style(&picker, PickerStyle::Classic);
         assert_eq!(picker.get_halo(), 0.0);
         assert!((corner_of(&picker) - CLASSIC_CORNER).abs() < f64::EPSILON);
+    }
+
+    /// The bear rises over the sheet, so a picker near the top of the screen is put that much
+    /// lower; a look without the bear goes right to the edge.
+    #[test]
+    fn a_picker_by_the_top_edge_keeps_room_for_the_bear() {
+        let picker = picker();
+        let screen = (0, 0, 1920, 1080);
+        let near_the_top = (900, 2);
+
+        style(&picker, PickerStyle::Classic);
+        let (_, list_y) = place_near(&picker, near_the_top, screen);
+
+        style(&picker, PickerStyle::Bear);
+        picker.set_halo(0.0);
+        let (_, bear_y) = place_near(&picker, near_the_top, screen);
+        let rise = crate::mascot::rise(&picker);
+        assert!(
+            f64::from(bear_y) >= f64::from(rise) * f64::from(picker.window().scale_factor()) - 1.0,
+            "the bear's head stays on the screen: {bear_y} for a rise of {rise}"
+        );
+        assert!(bear_y > list_y, "the list needs no room above it");
     }
 
     /// A window the system will not dress gets the painted sheet back, and the tiles their

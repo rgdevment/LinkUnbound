@@ -1,22 +1,32 @@
 #![windows_subsystem = "windows"]
 
-//! `cargo run -p linkunbound-shell --example preview -- [--sheet] [--light] [--en] [--six | --twelve]
+//! `cargo run -p linkunbound-shell --example preview -- [--look=list|tiles|compact|bear] [--glass]
+//! [--count=N] [--light] [--en] [--six | --twelve]
 //! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]`
 
 use linkunbound_core::Language;
-use linkunbound_shell::{HALO, ICON_SIDE, Listed, Picker, TILE_ICON_SIDE, dress, paint};
+use linkunbound_shell::{HALO, Listed, Look, Palette, Picker, dress, paint};
 use slint::ComponentHandle;
 
 fn main() -> Result<(), slint::PlatformError> {
     let args: Vec<String> = std::env::args().collect();
     let flag = |name: &str| args.iter().any(|a| a == name);
-    let classic = !flag("--sheet");
+    let look = match args.iter().find_map(|a| a.strip_prefix("--look=")) {
+        Some("list") => Look::List,
+        Some("tiles") => Look::Tiles,
+        Some("compact") => Look::Compact,
+        _ => Look::Bear,
+    };
     let scale: u32 = args
         .iter()
         .find_map(|a| a.strip_prefix("--scale="))
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
-    let side = if classic { ICON_SIDE } else { TILE_ICON_SIDE } * scale;
+    let side = match look {
+        Look::List => 24,
+        Look::Tiles => 48,
+        Look::Compact | Look::Bear => 32,
+    } * scale;
     let icons = linkunbound_core::data_dir().join("icons");
     // Real icons at the side the chosen style draws them, so what the preview shows is what
     // the resident will: a 24 px icon stretched to a tile is exactly the blur being checked for.
@@ -44,7 +54,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let english = flag("--en");
     let named = |es: &str, en: &str| if english { en } else { es }.to_owned();
-    let rows = vec![
+    let rows = [
         Listed {
             browser_id: "google-chrome".to_owned(),
             profile_id: Some("Default".to_owned()),
@@ -71,17 +81,27 @@ fn main() -> Result<(), slint::PlatformError> {
         },
     ];
 
-    let mut rows = rows;
-    if flag("--six") || flag("--twelve") {
-        let mut more = rows.clone();
-        more[0].profile = named("Cliente", "Client");
-        more[2].profile = named("Personal", "Home");
-        rows.extend(more);
-    }
-    if flag("--twelve") {
-        let more = rows.clone();
-        rows.extend(more);
-    }
+    // Any number of rows, the three browsers taking turns with a profile each past the first round.
+    let count = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--count="))
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(if flag("--twelve") {
+            12
+        } else if flag("--six") {
+            6
+        } else {
+            rows.len()
+        });
+    let rows: Vec<Listed> = (0..count)
+        .map(|at| {
+            let mut row = rows[at % rows.len()].clone();
+            if at >= rows.len() {
+                row.profile = format!("{} {}", named("Perfil", "Profile"), at / rows.len() + 1);
+            }
+            row
+        })
+        .collect();
 
     let words = if english {
         Language::English
@@ -92,8 +112,14 @@ fn main() -> Result<(), slint::PlatformError> {
     let window = Picker::new()?;
     let notice = linkunbound_shell::Notice::new()?;
     paint(&window, &notice, flag("--light"));
-    window.set_classic(classic);
-    window.set_halo(if classic { 0.0 } else { HALO });
+    window.set_look(look);
+    let glass = flag("--glass");
+    window.global::<Palette>().set_clear(glass);
+    window.set_halo(if look == Look::List || glass {
+        0.0
+    } else {
+        HALO
+    });
     dress(
         &window,
         &words,
@@ -171,6 +197,21 @@ fn main() -> Result<(), slint::PlatformError> {
         notice.set_undo_label(words.notice_undo.into());
         notice.set_left(6);
         notice.show()?;
+    }
+
+    #[cfg(windows)]
+    if glass {
+        let handle = window.as_weak();
+        let dark = !flag("--light");
+        slint::Timer::single_shot(std::time::Duration::from_millis(50), move || {
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            let Some(w) = handle.upgrade() else { return };
+            if let Ok(found) = w.window().window_handle().window_handle()
+                && let RawWindowHandle::Win32(win32) = found.as_raw()
+            {
+                linkunbound_win::wear_acrylic(win32.hwnd.get(), dark);
+            }
+        });
     }
 
     window.run()

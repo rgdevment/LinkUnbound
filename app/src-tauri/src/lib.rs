@@ -680,11 +680,6 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
     Ok(claim(&settled))
 }
 
-#[tauri::command]
-fn system_open_default_apps() -> Result<(), String> {
-    system::open_default_apps()
-}
-
 /// Re-registers against this executable, which is the only repair there is: the
 /// command pointed somewhere this binary no longer lives.
 #[tauri::command(async)]
@@ -1058,7 +1053,7 @@ fn relay_links(app: AppHandle) {
                 hand_to_the_resident(url);
             }
         }
-        Event::Reopened => shell::open_settings(&app, store().prefs().theme),
+        Event::Reopened => shell::open_settings(&app, store().prefs().theme, None),
         Event::Launched { .. } => {}
     });
     std::mem::forget(listening);
@@ -1240,13 +1235,14 @@ pub fn run() {
             about::maintenance_report,
             prefs_get,
             prefs_set,
+            shell::picker_preview,
             system_state,
             system_legacy,
             system_retire_legacy,
             system_reveal_legacy,
             system_set_registered,
             system_set_startup,
-            system_open_default_apps,
+            system::system_open_default_apps,
             system_repair,
             system_register_anyway,
             system_open_elsewhere,
@@ -1267,8 +1263,8 @@ pub fn run() {
     let builder = if errand.is_some() {
         builder
     } else {
-        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            shell::open_settings(app, store().prefs().theme);
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            shell::open_settings(app, store().prefs().theme, shell::page_in(&args));
         }))
     };
 
@@ -1298,7 +1294,7 @@ pub fn run() {
             news::raise(app.handle());
             #[cfg(target_os = "macos")]
             relay_links(app.handle().clone());
-            shell::open_settings(app.handle(), store().prefs().theme);
+            shell::open_settings(app.handle(), store().prefs().theme, shell::page_in(&args));
             Ok(())
         })
         .build(tauri::generate_context!())

@@ -280,6 +280,15 @@ pub fn windows_are_light() -> bool {
         .is_ok_and(|v| v == 1)
 }
 
+/// The switch in Settings › Personalisation › Colours; read as on when it cannot be read.
+#[must_use]
+pub fn transparency_is_on() -> bool {
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        .and_then(|k| k.get_value::<u32, _>("EnableTransparency"))
+        .map_or(true, |v| v != 0)
+}
+
 /// Acrylic as a window backdrop arrived with Windows 11 22H2, build 22621; earlier builds
 /// refuse the attribute or draw it black.
 #[must_use]
