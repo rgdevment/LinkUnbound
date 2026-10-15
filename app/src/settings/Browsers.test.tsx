@@ -282,7 +282,7 @@ describe("browsers", () => {
     render(<Browsers />);
     await userEvent.click(await screen.findByRole("button", { name: "Añadir un navegador" }));
     await userEvent.click(
-      screen.getByRole("button", { name: "Ejemplos: perfiles y navegadores personalizados" }),
+      screen.getByRole("button", { name: "¿Cómo creo un perfil o un navegador personalizado?" }),
     );
     expect(screen.getByText('--profile-directory="Profile 1"')).toBeVisible();
     expect(screen.getByText('--user-data-dir="C:/Navegadores/Trabajo"')).toBeVisible();

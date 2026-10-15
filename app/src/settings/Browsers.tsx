@@ -212,21 +212,15 @@ function Form({
         <p className="text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">{t("fieldKeyHint")}</p>
       </fieldset>
       <details open={advancedAtFirst} className="group/advanced">
-        <summary className="flex cursor-pointer items-center gap-2 text-[11.5px] text-neutral-500 select-none dark:text-[#8B92A1]">
-          {t("fieldAdvanced")}
-          <button
-            type="button"
-            aria-label={t("helpTitle")}
-            aria-expanded={helping}
-            title={t("helpTitle")}
-            onClick={(e) => {
-              e.preventDefault();
-              setHelping((now) => !now);
-            }}
-            className="grid h-[18px] w-[18px] place-items-center rounded-full border border-current text-[10.5px] font-semibold text-[#2F62D8] dark:text-[#6E9BFF]"
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11.5px] text-neutral-500 select-none dark:text-[#8B92A1] [&::-webkit-details-marker]:hidden">
+          <svg
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+            className="h-2.5 w-2.5 transition-transform group-open/advanced:rotate-90"
           >
-            ?
-          </button>
+            <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+          {t("fieldAdvanced")}
         </summary>
         <div className="mt-2 flex flex-col gap-2">
           <input
@@ -259,10 +253,23 @@ function Form({
           />
         </div>
       </details>
+      <button
+        type="button"
+        aria-expanded={helping}
+        onClick={() => setHelping((now) => !now)}
+        className="flex items-center gap-1.5 self-start text-[11.5px] text-[#2F62D8] dark:text-[#6E9BFF]"
+      >
+        <span
+          aria-hidden="true"
+          className="grid h-4 w-4 place-items-center rounded-full border border-current text-[9.5px] font-semibold"
+        >
+          ?
+        </span>
+        {t("helpTitle")}
+      </button>
       {helping && (
         <div className="rounded-md bg-black/[0.035] px-2.5 py-2 text-[11px] dark:bg-white/[0.04]">
-          <p className="font-medium">{t("helpTitle")}</p>
-          <dl className="mt-2 flex flex-col gap-2">
+          <dl className="flex flex-col gap-2">
             {HELP.map(([said, code]) => (
               <div key={said}>
                 <dt className="text-neutral-600 dark:text-[#AAB1C0]">{t(said)}</dt>

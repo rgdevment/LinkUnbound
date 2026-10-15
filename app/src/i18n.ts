@@ -108,7 +108,7 @@ const ES = {
   fieldPrivateHint:
     "Déjalo vacío si es Chrome, Edge, Brave, Vivaldi, Opera o Firefox: se pone solo. Sin él, otro navegador no podrá abrir en privado.",
   fieldAdvanced: "Opciones avanzadas",
-  helpTitle: "Ejemplos: perfiles y navegadores personalizados",
+  helpTitle: "¿Cómo creo un perfil o un navegador personalizado?",
   helpProfile:
     "Un perfil de Chrome, Edge o Brave (su carpeta aparece en chrome://version, «Ruta del perfil»):",
   helpProfileCode: '--profile-directory="Profile 1"',
@@ -408,7 +408,7 @@ const EN: Record<Key, string> = {
   fieldPrivateHint:
     "Leave it empty for Chrome, Edge, Brave, Vivaldi, Opera or Firefox: it fills itself in. Without it, any other browser cannot open privately.",
   fieldAdvanced: "Advanced options",
-  helpTitle: "Examples: profiles and custom browsers",
+  helpTitle: "How do I make a profile or a custom browser?",
   helpProfile:
     "A Chrome, Edge or Brave profile (its folder shows in chrome://version, “Profile Path”):",
   helpProfileCode: '--profile-directory="Profile 1"',
