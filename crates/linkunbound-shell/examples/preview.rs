@@ -24,8 +24,7 @@ fn main() -> Result<(), slint::PlatformError> {
         .unwrap_or(1);
     let side = match look {
         Look::List => 24,
-        Look::Tiles => 48,
-        Look::Compact | Look::Bear => 32,
+        Look::Tiles | Look::Compact | Look::Bear => 32,
     } * scale;
     let icons = linkunbound_core::data_dir().join("icons");
     // Real icons at the side the chosen style draws them, so what the preview shows is what

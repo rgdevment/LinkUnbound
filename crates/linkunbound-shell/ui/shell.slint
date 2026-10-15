@@ -1,5 +1,5 @@
 import { Destination, Reach, Palette, Look, UpdateStrip, Hair, AddressHead, AskHead, RememberFoot, ReachMenu } from "parts.slint";
-import { ListLook, TilesLook, CardsLook, CompactLook } from "looks.slint";
+import { ListLook, CardsLook, CompactLook } from "looks.slint";
 
 export { Palette, Look } from "parts.slint";
 export { BearHead, BearPaws } from "bear.slint";
@@ -87,9 +87,11 @@ export component Picker inherits Window {
     property <int> hovered-at: -1;
     property <int> aimed: root.hovered-at >= 0 ? root.hovered-at : root.chosen-at;
     property <float> count: root.rows.length;
+    // Tiles are the bear's cards with nobody leaning on them.
+    property <bool> cards: root.look == Look.bear || root.look == Look.tiles;
     property <float> aim:
         root.aimed < 0 ? 0
-        : root.look == Look.bear ? (Math.mod(root.aimed, 3) - 1) * 0.7
+        : root.cards ? (Math.mod(root.aimed, 3) - 1) * 0.7
         : ((root.aimed + 0.5) / max(1, root.count) - 0.5) * 2;
     changed aim => { root.mood(root.aim, root.private-on); }
     changed private-on => { root.mood(root.aim, root.private-on); }
@@ -112,13 +114,6 @@ export component Picker inherits Window {
         visible: false;
     }
 
-    // Tiles shared out evenly, so six make two rows of three rather than four and two.
-    property <float> tile-rows: max(1, Math.ceil(root.count / 4));
-    property <float> tile-cols: max(1, Math.ceil(root.count / root.tile-rows));
-    property <length> tiles-width: min(max(root.tile-cols >= 4 ? 400px : 372px, root.track-need), 560px);
-    property <length> tile-width: Math.floor(((root.tiles-width - 20px - (root.tile-cols - 1) * 6px) / root.tile-cols) / 1px) * 1px;
-    property <length> tiles-room: root.tile-rows * 106px + 10px;
-
     // Three columns of cards; four rows on screen and the rest scroll.
     property <length> cards-room: min(4, max(1, Math.ceil(root.count / 3))) * 58px + 10px;
 
@@ -129,13 +124,11 @@ export component Picker inherits Window {
     property <length> foot-room: 74px;
     property <length> sheet-width:
         root.look == Look.list ? root.list-width
-        : root.look == Look.tiles ? root.tiles-width
-        : root.look == Look.bear ? max(500px, root.list-width)
+        : root.cards ? max(500px, root.list-width)
         : root.compact-width;
-    property <length> head-room: root.look == Look.bear ? 80px : 60px;
+    property <length> head-room: root.cards ? 80px : 60px;
     property <length> body-room:
-        root.look == Look.tiles ? root.tiles-room
-        : root.look == Look.bear ? root.cards-room
+        root.cards ? root.cards-room
         : root.list-room;
     property <length> sheet-height: root.strip-room + (root.look == Look.compact
         ? root.compact-height
@@ -145,7 +138,7 @@ export component Picker inherits Window {
     out property <length> wanted-height: root.sheet-height + 2 * root.halo;
     // The side the icons are drawn at, for the resident to extract them at in screen pixels.
     out property <float> drawn-icon-side:
-        root.look == Look.tiles ? 48 : root.look == Look.list ? 24 : 32;
+        root.look == Look.list ? 24 : 32;
 
     function toggle-private() {
         root.pinned-private = !root.pinned-private;
@@ -184,7 +177,7 @@ export component Picker inherits Window {
             }
             if (event.text == Key.UpArrow || event.text == Key.DownArrow) {
                 root.step-chosen((event.text == Key.DownArrow ? 1 : -1)
-                    * (root.look == Look.tiles ? root.tile-cols : root.look == Look.bear ? 3 : 1));
+                    * (root.cards ? 3 : 1));
                 return accept;
             }
             // Every reach, not only the ones the track draws: the keyboard reaches those behind
@@ -303,7 +296,7 @@ export component Picker inherits Window {
             if root.look != Look.compact: VerticalLayout {
                 y: root.strip-room;
                 height: parent.height - root.strip-room;
-                if root.look == Look.bear: AskHead {
+                if root.cards: AskHead {
                     ask: root.private-on ? root.ask-private : root.ask;
                     host: root.host;
                     trail: root.trail;
@@ -316,7 +309,7 @@ export component Picker inherits Window {
                     toggle-private => { root.toggle-private(); }
                     copy => { root.copy(); }
                 }
-                if root.look != Look.bear: AddressHead {
+                if !root.cards: AddressHead {
                     host: root.host;
                     trail: root.trail;
                     line: root.line;
@@ -329,7 +322,7 @@ export component Picker inherits Window {
                     copy => { root.copy(); }
                 }
                 Hair {}
-                if root.look == Look.bear: CardsLook {
+                if root.cards: CardsLook {
                     height: root.cards-room;
                     room: root.cards-room;
                     empty: root.count > 0 && root.count < 3 ? 3 - root.count : 0;
@@ -348,16 +341,6 @@ export component Picker inherits Window {
                     rows: root.rows;
                     private-on: root.private-on;
                     chosen-at: root.chosen-at;
-                    open(i) => { root.open(i, root.private-on); }
-                    hovered(i) => { root.hovered-at = i; }
-                }
-                if root.look == Look.tiles: TilesLook {
-                    height: root.tiles-room;
-                    rows: root.rows;
-                    private-on: root.private-on;
-                    chosen-at: root.chosen-at;
-                    cols: root.tile-cols;
-                    tile-width: root.tile-width;
                     open(i) => { root.open(i, root.private-on); }
                     hovered(i) => { root.hovered-at = i; }
                 }

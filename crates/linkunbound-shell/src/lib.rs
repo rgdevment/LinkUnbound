@@ -613,38 +613,40 @@ mod tests {
         }
     }
 
-    /// The sheet's width comes from how many tiles share a row, never from the words: four across
-    /// need the wider sheet and the origin's name changes nothing. The halo is room for the
-    /// shadow and is counted, since the window is what gets placed beside the pointer.
+    /// Tiles are the bear's cards without the bear: the same sheet for any number of browsers.
+    /// The halo is room for the shadow and is counted, since the window is what gets placed
+    /// beside the pointer.
     #[test]
-    fn the_sheet_is_sized_by_its_tiles_and_its_halo() {
+    fn tiles_draw_the_bear_sheet_and_count_their_halo() {
         headless();
         let window = crate::Picker::new().expect("a window");
-        window.set_look(crate::Look::Tiles);
         let words = Language::Spanish.strings();
         let two = dressed();
+        let mut eight = two.clone();
+        for _ in 0..3 {
+            eight.extend(two.iter().cloned());
+        }
 
-        dress(
-            &window,
-            &words,
-            "https://docs.google.com/a",
-            Some("ms-teams"),
-            &two,
-        );
-        let two_across = window.get_wanted_width();
-        assert!(two_across >= 372.0, "{two_across}");
+        for rows in [&two, &eight] {
+            dress(
+                &window,
+                &words,
+                "https://docs.google.com/a",
+                Some("ms-teams"),
+                rows,
+            );
+            window.set_look(crate::Look::Bear);
+            let bear = (window.get_wanted_width(), window.get_wanted_height());
+            window.set_look(crate::Look::Tiles);
+            let tiles = (window.get_wanted_width(), window.get_wanted_height());
+            assert_eq!(tiles, bear, "{} browsers", rows.len());
+            assert!(tiles.0 >= 500.0, "{}", tiles.0);
+            assert_eq!(window.get_drawn_icon_side(), 32.0);
+        }
 
-        let mut four = two.clone();
-        four.extend(two.iter().cloned());
-        dress(&window, &words, "https://docs.google.com/a", None, &four);
-        let four_across = window.get_wanted_width();
-        assert!(
-            four_across >= 400.0 && four_across >= two_across,
-            "four across need the wider sheet"
-        );
-
+        let plain = window.get_wanted_width();
         window.set_halo(18.0);
-        assert_eq!(window.get_wanted_width(), four_across + 36.0);
+        assert_eq!(window.get_wanted_width(), plain + 36.0);
 
         window.set_halo(0.0);
         window.set_look(crate::Look::List);
