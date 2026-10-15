@@ -81,7 +81,7 @@ describe("application settings", () => {
   it("offers the four looks and shows the picker over a sample link", async () => {
     mount();
     const picker = within(await screen.findByRole("group", { name: "Selector" }));
-    for (const look of ["Oso", "Clásico", "Mosaico", "Compacto"]) {
+    for (const look of ["LinkBear", "Clásico", "Mosaico", "Compacto"]) {
       expect(picker.getByRole("radio", { name: look })).toBeInTheDocument();
     }
     await userEvent.click(screen.getByRole("button", { name: "Vista previa" }));
@@ -96,7 +96,7 @@ describe("application settings", () => {
     expect(invoke.mock.calls.filter(([cmd]) => cmd === "picker_preview")).toHaveLength(0);
 
     await userEvent.click(screen.getByRole("button", { name: "Vista previa" }));
-    await userEvent.click(picker.getByRole("radio", { name: "Oso" }));
+    await userEvent.click(picker.getByRole("radio", { name: "LinkBear" }));
     await waitFor(() =>
       expect(invoke.mock.calls.filter(([cmd]) => cmd === "picker_preview")).toHaveLength(2),
     );
