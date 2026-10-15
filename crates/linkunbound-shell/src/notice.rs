@@ -1,7 +1,6 @@
 use std::rc::Rc;
-use std::time::Duration;
 
-use linkunbound_core::{PickerStyle, Strings};
+use linkunbound_core::Strings;
 use linkunbound_shell::Notice;
 use slint::ComponentHandle;
 
@@ -16,7 +15,6 @@ pub fn flash(notice: &Notice, headline: String, reason: String, undo: Option<&st
     notice.set_reason(reason.into());
     notice.set_undo_label(undo.unwrap_or_default().into());
     notice.set_undoable(undo.is_some());
-    notice.set_choices(slint::ModelRc::default());
     notice.set_left(NOTICE_SECONDS);
     let _ = notice.show();
     if let Some(handle) = native_handle(notice.window()) {
@@ -30,75 +28,22 @@ pub fn flash(notice: &Notice, headline: String, reason: String, undo: Option<&st
     }
 }
 
-/// The looks the notice offers, in the order it draws them: the bear first, as the one in use.
-const OFFERED: [PickerStyle; 4] = [
-    PickerStyle::Bear,
-    PickerStyle::Classic,
-    PickerStyle::Sheet,
-    PickerStyle::Compact,
-];
-const STYLES_SECONDS: i32 = 20;
-
-/// Once, after the update moved everybody to the bear: whatever look they had stays one press
-/// away, in the corner, instead of three windows deep in settings.
+/// Once, after the update: everybody moves to the bear. Settings opens on its own to tell what
+/// the version brings, and the look can be changed there.
 pub fn after_the_bear(state: &Rc<Ui>) {
-    let mut left_behind = None;
-    let _ = store().edit_prefs(|prefs| {
-        let before = prefs.schema_version;
-        left_behind = prefs.meets_the_bear();
-        prefs.schema_version != before
-    });
-    if left_behind.is_none() {
-        return;
+    if moved_to_the_bear(&store()) {
+        state.obey(&store().prefs());
     }
-    state.obey(&store().prefs());
-    state.notice.on_chose(|at| {
-        let Some(ui) = ui() else { return };
-        let chosen = OFFERED[usize::try_from(at).unwrap_or(0).min(OFFERED.len() - 1)];
-        let _ = store().edit_prefs(|prefs| {
-            prefs.picker_style = chosen;
-            true
-        });
-        ui.obey(&store().prefs());
-        ui.countdown.stop();
-        let _ = ui.notice.hide();
-    });
-    // Shown from inside the loop: before it runs the window has no handle to keep it off the
-    // taskbar.
-    slint::Timer::single_shot(Duration::ZERO, || {
-        if let Some(ui) = ui() {
-            offer_styles(&ui);
-        }
-    });
 }
 
-fn offer_styles(ui: &Rc<Ui>) {
-    {
-        let words = ui.words.get();
-        flash(
-            &ui.notice,
-            words.styles_headline.to_owned(),
-            words.styles_reason.to_owned(),
-            None,
-        );
-        let names: Vec<slint::SharedString> = OFFERED
-            .iter()
-            .map(|style| {
-                match style {
-                    PickerStyle::Bear => words.style_bear,
-                    PickerStyle::Classic => words.style_classic,
-                    PickerStyle::Sheet => words.style_sheet,
-                    PickerStyle::Compact => words.style_compact,
-                }
-                .into()
-            })
-            .collect();
-        ui.notice
-            .set_choices(Rc::new(slint::VecModel::from(names)).into());
-        ui.notice.set_left(STYLES_SECONDS);
-        in_the_corner(&ui.notice);
-        ui.count_down();
-    }
+fn moved_to_the_bear(store: &linkunbound_core::Store) -> bool {
+    let mut moved = false;
+    let _ = store.edit_prefs(|prefs| {
+        let before = prefs.schema_version;
+        moved = prefs.meets_the_bear().is_some();
+        prefs.schema_version != before
+    });
+    moved
 }
 
 pub fn noted(area: &'static str, what: &str) {
@@ -149,34 +94,32 @@ fn in_the_corner(notice: &Notice) {
 
 #[cfg(test)]
 mod tests {
-    use super::{OFFERED, STYLES_SECONDS, flash, offer_styles};
-    use slint::Model;
-
-    /// The look in use comes first and every other one is a press away, for longer than a notice
-    /// about a rule stays.
-    #[test]
-    fn the_looks_are_offered_with_the_bear_first() {
-        let ui = crate::tests::headless_ui();
-        offer_styles(&ui);
-        let choices = ui.notice.get_choices();
-        assert_eq!(choices.row_count(), OFFERED.len());
-        assert_eq!(choices.row_data(0).as_deref(), Some("Bear"));
-        assert_eq!(ui.notice.get_left(), STYLES_SECONDS);
-        assert!(!ui.notice.get_undoable());
-
-        flash(
-            &ui.notice,
-            "Opened".into(),
-            "by a rule".into(),
-            Some("Undo"),
-        );
-        assert_eq!(
-            ui.notice.get_choices().row_count(),
-            0,
-            "a later notice offers no looks"
-        );
-    }
+    use super::{flash, moved_to_the_bear};
+    use linkunbound_core::{PickerStyle, Store};
     use linkunbound_shell::Notice;
+
+    /// A look chosen before the update moves to the bear once, and is left alone after that.
+    #[test]
+    fn the_bear_is_met_once() {
+        let dir = std::env::temp_dir().join(format!("linkunbound-bear-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::at(&dir);
+        let _ = store.edit_prefs(|prefs| {
+            prefs.picker_style = PickerStyle::Sheet;
+            prefs.schema_version = 0;
+            true
+        });
+        assert!(moved_to_the_bear(&store));
+        assert_eq!(store.prefs().picker_style, PickerStyle::Bear);
+
+        let _ = store.edit_prefs(|prefs| {
+            prefs.picker_style = PickerStyle::Compact;
+            true
+        });
+        assert!(!moved_to_the_bear(&store), "once is enough");
+        assert_eq!(store.prefs().picker_style, PickerStyle::Compact);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_notice_about_trouble_offers_nothing_to_undo() {
