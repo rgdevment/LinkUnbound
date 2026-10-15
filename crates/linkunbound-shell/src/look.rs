@@ -14,6 +14,7 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
     let clear = acrylic();
     picker.set_look(look);
     picker.global::<Palette>().set_clear(clear);
+    picker.global::<Palette>().set_tint(TINT);
     picker.global::<Palette>().set_see_through(see_through());
     picker.set_halo(if look == Look::List || clear {
         0.0
@@ -21,6 +22,14 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
         HALO
     });
 }
+
+/// How much of the picker's tone is laid over the material: Liquid Glass and vibrancy let far more
+/// light through than Acrylic, which already comes milky.
+const TINT: f32 = if cfg!(target_os = "macos") {
+    0.55
+} else {
+    0.77
+};
 
 pub fn corner_of(picker: &Picker) -> f64 {
     if picker.get_look() == Look::List {

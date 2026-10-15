@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 //! `cargo run -p linkunbound-shell --example preview -- [--look=list|tiles|compact|bear] [--glass]
-//! [--count=N] [--light] [--en] [--six | --twelve]
+//! [--count=N] [--tint=0..1] [--light] [--en] [--six | --twelve]
 //! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]`
 
 use linkunbound_core::Language;
@@ -115,6 +115,13 @@ fn main() -> Result<(), slint::PlatformError> {
     window.set_look(look);
     let glass = flag("--glass");
     window.global::<Palette>().set_clear(glass);
+    if let Some(tint) = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--tint="))
+        .and_then(|v| v.parse::<f32>().ok())
+    {
+        window.global::<Palette>().set_tint(tint);
+    }
     window.set_halo(if look == Look::List || glass {
         0.0
     } else {
@@ -210,6 +217,28 @@ fn main() -> Result<(), slint::PlatformError> {
                 && let RawWindowHandle::Win32(win32) = found.as_raw()
             {
                 linkunbound_win::wear_acrylic(win32.hwnd.get(), dark);
+            }
+        });
+    }
+
+    #[cfg(target_os = "macos")]
+    if glass {
+        let handle = window.as_weak();
+        let dark = !flag("--light");
+        let corner = if look == Look::List {
+            linkunbound_shell::CLASSIC_CORNER
+        } else {
+            linkunbound_shell::CORNER
+        };
+        slint::Timer::single_shot(std::time::Duration::from_millis(50), move || {
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            let Some(w) = handle.upgrade() else { return };
+            if let Ok(found) = w.window().window_handle().window_handle()
+                && let RawWindowHandle::AppKit(appkit) = found.as_raw()
+            {
+                let view = appkit.ns_view.as_ptr() as isize;
+                linkunbound_mac::keep_off_the_taskbar(view, corner);
+                linkunbound_mac::wear_glass(view, dark, corner);
             }
         });
     }

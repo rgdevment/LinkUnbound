@@ -3,6 +3,8 @@ mod detect;
 #[cfg(target_os = "macos")]
 mod events;
 #[cfg(target_os = "macos")]
+mod glass;
+#[cfg(target_os = "macos")]
 mod icons;
 #[cfg(target_os = "macos")]
 mod legacy;
@@ -29,6 +31,8 @@ pub use detect::{app_named, bundle_id_named, installed_browsers};
 #[cfg(target_os = "macos")]
 pub use events::{Event, Listening, listen};
 #[cfg(target_os = "macos")]
+pub use glass::{reduces_transparency, wear_glass};
+#[cfg(target_os = "macos")]
 pub use icons::icon_for;
 #[cfg(target_os = "macos")]
 pub use legacy::{
@@ -53,8 +57,9 @@ mod audit {
     use std::fs;
     use std::path::Path;
 
-    const AUDITED: [&str; 5] = [
+    const AUDITED: [&str; 6] = [
         "events.rs",
+        "glass.rs",
         "icons.rs",
         "native.rs",
         "registration.rs",

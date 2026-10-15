@@ -83,7 +83,7 @@ pub fn work_area_at(x: i32, y: i32) -> Option<(i32, i32, i32, i32)> {
 }
 
 #[allow(unsafe_code)]
-fn window_of(view: isize) -> Option<Retained<NSWindow>> {
+pub(crate) fn window_of(view: isize) -> Option<Retained<NSWindow>> {
     let view = view as *const NSView;
     if view.is_null() {
         return None;
