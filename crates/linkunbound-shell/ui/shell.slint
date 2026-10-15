@@ -398,10 +398,6 @@ export component Notice inherits Window {
     in property <string> undo-label;
     in property <bool> undoable: true;
     in-out property <int> left: 6;
-    // Looks offered once after the update made the bear everybody's, the current one first.
-    in property <[string]> choices;
-    callback chose(int);
-
     callback undo();
     callback dismissed();
 
@@ -410,7 +406,7 @@ export component Notice inherits Window {
     no-frame: true;
     background: transparent;
     out property <length> wanted-width: 356px;
-    out property <length> wanted-height: root.choices.length > 0 ? 120px : 76px;
+    out property <length> wanted-height: 76px;
     width: root.wanted-width;
     height: root.wanted-height;
     in property <string> family;
@@ -484,33 +480,6 @@ export component Notice inherits Window {
                     vertical-alignment: center;
                     width: 100%;
                     height: 100%;
-                }
-            }
-        }
-        if root.choices.length > 0: HorizontalLayout {
-            height: 44px;
-            padding-left: 12px;
-            padding-right: 12px;
-            padding-bottom: 12px;
-            spacing: 6px;
-            for choice[i] in root.choices: Rectangle {
-                horizontal-stretch: 1;
-                border-radius: 6px;
-                background: i == 0 ? Palette.brand-soft : (pick.has-hover ? Palette.hover : Palette.chip);
-                border-width: i == 0 ? 1px : 0px;
-                border-color: Palette.brand;
-                Text {
-                    text: choice;
-                    font-size: 12.5px;
-                    font-weight: i == 0 ? 600 : 400;
-                    color: i == 0 ? Palette.brand : Palette.ink;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 100%;
-                    height: 100%;
-                }
-                pick := TouchArea {
-                    clicked => { root.chose(i); }
                 }
             }
         }

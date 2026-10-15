@@ -14,7 +14,7 @@ struct Pose {
 
 const BEAR: Pose = Pose {
     head: 92.0,
-    rise: 62.0,
+    rise: 52.0,
     paw: 30.0,
     gap: 70.0,
 };
@@ -268,13 +268,13 @@ mod tests {
     #[test]
     fn the_bear_leans_on_the_middle_of_the_sheet() {
         let (head, paws) = spots(&BEAR, (100, 300), 400.0, 0.0, 1.0);
-        assert_eq!(head, (300 - 46, 300 - 62));
+        assert_eq!(head, (300 - 46, 300 - 52));
         assert_eq!(paws, (300 - 65, 300 - 9));
 
         let (head, _) = spots(&BEAR, (200, 600), 400.0, 18.0, 2.0);
         assert_eq!(
             head,
-            (600 - 92, 636 - 124),
+            (600 - 92, 636 - 104),
             "pixels on a dense screen, under a shadow margin"
         );
     }
