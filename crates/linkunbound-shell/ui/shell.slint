@@ -16,6 +16,13 @@ struct Reach {
 
 export global Palette {
     in property <bool> light: false;
+    // Over Acrylic the system paints the material, the corners and the edge of the picker.
+    in property <bool> clear: false;
+    // Laid over Acrylic: the blur is the system's, the tone and the lit edge stay the picker's.
+    out property <brush> veil: light
+        ? @linear-gradient(180deg, #FFFFFFC4 0%, #F3F5F9CC 100%)
+        : @linear-gradient(180deg, #282B36C4 0%, #1A1C23CC 100%);
+    out property <color> rim: light ? #FFFFFFE6 : #FFFFFF2E;
 
     out property <brush> ground: light ? #FFFFFF : #191A1F;
     // Header and footer sit a shade apart from the list, which is what tells the zones apart.
@@ -520,10 +527,18 @@ export component Picker inherits Window {
             width: 100%;
             height: 100%;
             Rectangle {
-                border-radius: 10px;
-                background: Palette.ground;
+                border-radius: Palette.clear ? 8px : 10px;
+                background: Palette.clear ? Palette.veil : Palette.ground;
                 border-width: 1px;
-                border-color: Palette.edge;
+                border-color: Palette.clear ? transparent : Palette.edge;
+
+                if Palette.clear: Rectangle {
+                    x: parent.width * 0.15;
+                    y: 1px;
+                    width: parent.width * 0.7;
+                    height: 1px;
+                    background: @linear-gradient(90deg, transparent 0%, Palette.rim 50%, transparent 100%);
+                }
 
                 // The renderer clips square, so each band is rounded like the window and the
                 // edge it turns towards the list is hidden under a strip of ground.
@@ -535,14 +550,14 @@ export component Picker inherits Window {
                     width: parent.width - 2px;
                     height: parent.head-band + 10px;
                     border-radius: 9px;
-                    background: Palette.band;
+                    background: Palette.clear ? transparent : Palette.band;
                 }
                 Rectangle {
                     x: 1px;
                     y: parent.head-band;
                     width: parent.width - 2px;
                     height: 11px;
-                    background: Palette.ground;
+                    background: Palette.clear ? transparent : Palette.ground;
                 }
                 Rectangle {
                     x: 1px;
@@ -550,14 +565,14 @@ export component Picker inherits Window {
                     width: parent.width - 2px;
                     height: parent.foot-band + 10px;
                     border-radius: 9px;
-                    background: Palette.band;
+                    background: Palette.clear ? transparent : Palette.band;
                 }
                 Rectangle {
                     x: 1px;
                     y: parent.height - 1px - parent.foot-band - 11px;
                     width: parent.width - 2px;
                     height: 11px;
-                    background: Palette.ground;
+                    background: Palette.clear ? transparent : Palette.ground;
                 }
 
                 VerticalLayout {
@@ -769,10 +784,18 @@ export component Picker inherits Window {
                 y: root.halo;
                 width: root.sheet-width;
                 height: root.sheet-height;
-                border-radius: 14px;
-                background: Palette.surface;
+                border-radius: Palette.clear ? 8px : 14px;
+                background: Palette.clear ? Palette.veil : Palette.surface;
                 border-width: 1px;
-                border-color: Palette.glow;
+                border-color: Palette.clear ? transparent : Palette.glow;
+
+                if Palette.clear: Rectangle {
+                    x: parent.width * 0.15;
+                    y: 1px;
+                    width: parent.width * 0.7;
+                    height: 1px;
+                    background: @linear-gradient(90deg, transparent 0%, Palette.rim 50%, transparent 100%);
+                }
 
                 property <length> head-band: root.tiles-top - 4px;
                 property <length> foot-band: 12px + 28px + 8px;
@@ -782,14 +805,14 @@ export component Picker inherits Window {
                     width: parent.width - 2px;
                     height: parent.head-band + 14px;
                     border-radius: 13px;
-                    background: Palette.sheet-band;
+                    background: Palette.clear ? transparent : Palette.sheet-band;
                 }
                 Rectangle {
                     x: 1px;
                     y: parent.head-band;
                     width: parent.width - 2px;
                     height: 15px;
-                    background: Palette.surface;
+                    background: Palette.clear ? transparent : Palette.surface;
                 }
                 Rectangle {
                     x: 1px;
@@ -797,14 +820,14 @@ export component Picker inherits Window {
                     width: parent.width - 2px;
                     height: parent.foot-band + 14px;
                     border-radius: 13px;
-                    background: Palette.sheet-band;
+                    background: Palette.clear ? transparent : Palette.sheet-band;
                 }
                 Rectangle {
                     x: 1px;
                     y: parent.height - 1px - parent.foot-band - 15px;
                     width: parent.width - 2px;
                     height: 15px;
-                    background: Palette.surface;
+                    background: Palette.clear ? transparent : Palette.surface;
                 }
 
                 if root.update-shown: UpdateStrip {
