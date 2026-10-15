@@ -92,9 +92,24 @@ fn is_bundle(_path: &std::path::Path) -> bool {
 }
 
 pub fn hidden_in(mut all: Vec<Browser>, id: &str, hidden: bool) -> Result<Vec<Browser>, String> {
+    // Hidden, its keys were free to give away; back in the picker, it lets go of those now taken.
+    let taken: Vec<char> = all
+        .iter()
+        .filter(|b| b.id != id && !b.hidden)
+        .flat_map(|b| {
+            b.keys
+                .values()
+                .filter_map(|k| linkunbound_core::usable_key(*k))
+        })
+        .collect();
     let Some(found) = all.iter_mut().find(|b| b.id == id) else {
         return Err("browserGone".to_owned());
     };
+    if found.hidden && !hidden {
+        found
+            .keys
+            .retain(|_, k| linkunbound_core::usable_key(*k).is_none_or(|k| !taken.contains(&k)));
+    }
     found.hidden = hidden;
     Ok(all)
 }
@@ -181,10 +196,19 @@ pub fn keyed(
     id: &str,
     typed: &BTreeMap<String, String>,
 ) -> Result<BTreeMap<String, char>, String> {
+    let rows: Vec<String> = all.iter().find(|b| b.id == id).map_or_else(
+        || vec![String::new()],
+        |b| {
+            b.rows()
+                .iter()
+                .map(|p| p.map(|p| p.id.clone()).unwrap_or_default())
+                .collect()
+        },
+    );
     let mut keys = BTreeMap::new();
     for (row, said) in typed {
         let said = said.trim();
-        if said.is_empty() {
+        if said.is_empty() || !rows.contains(row) {
             continue;
         }
         let mut chars = said.chars();
@@ -227,7 +251,7 @@ fn holder_of(all: &[Browser], id: &str, key: char) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Edit, added, keyed};
+    use super::{Edit, added, hidden_in, keyed};
     use linkunbound_core::{Browser, Profile};
     use std::collections::BTreeMap;
 
@@ -287,6 +311,26 @@ mod tests {
         assert_eq!(add("C:/Apps/raro.exe", "").as_deref(), None);
     }
 
+    /// A hidden browser holds no key, so another may take its key meanwhile; shown again, it lets
+    /// go of that one rather than share it, and keeps the rest.
+    #[test]
+    fn a_browser_shown_again_lets_go_of_a_key_given_away() {
+        let mut edge = browser("edge", &[]);
+        edge.hidden = true;
+        edge.keys.insert(String::new(), 'H');
+        let mut firefox = browser("firefox", &[]);
+        firefox.keys.insert(String::new(), 'H');
+        let mut kept = browser("brave", &[]);
+        kept.hidden = true;
+        kept.keys.insert(String::new(), 'B');
+
+        let shown = hidden_in(vec![edge, firefox, kept], "edge", false).expect("there");
+        assert!(shown[0].keys.is_empty(), "Firefox has H now");
+        assert_eq!(shown[1].key_for(None), Some('H'));
+        let back = hidden_in(shown, "brave", false).expect("there");
+        assert_eq!(back[2].key_for(None), Some('B'), "nobody took B");
+    }
+
     /// A key is one digit from 1 or one letter, kept in capitals, and only while no other row holds
     /// it: the second row would never be reached by it.
     #[test]
@@ -317,7 +361,12 @@ mod tests {
             "keyUnusable"
         );
         assert_eq!(
-            keyed(&all, "custom-1", &typed(&[("a", "Q"), ("b", "q")])).unwrap_err(),
+            keyed(
+                &all,
+                "chrome",
+                &typed(&[("Default", "Q"), ("Profile 1", "q")])
+            )
+            .unwrap_err(),
             "keyTwice",
             "two rows of one browser cannot share one either"
         );
@@ -339,6 +388,12 @@ mod tests {
         assert!(
             keyed(&others, "custom-1", &typed(&[("", "L")])).is_err(),
             "a key written in lowercase by hand still holds"
+        );
+
+        assert_eq!(
+            keyed(&all, "custom-1", &typed(&[("Profile 9", "z")])).expect("ignored"),
+            BTreeMap::new(),
+            "a row the browser does not have keeps no key"
         );
 
         let mut plain = browser("firefox", &[]);

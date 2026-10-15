@@ -194,7 +194,7 @@ describe("browsers", () => {
         args: '--profile-directory="Profile 1"',
         private_flag: null,
         icon_path: null,
-        keys: {},
+        keys: { "": "" },
       },
     });
   });
@@ -301,6 +301,9 @@ describe("browsers", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await userEvent.type(box, "k", { initialSelectionStart: 0, initialSelectionEnd: 0 });
     expect(box).toHaveValue("K");
+    await userEvent.type(box, " ");
+    expect(box).toHaveValue("");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   /// Duplicating a detected browser is how one binary becomes two entries with

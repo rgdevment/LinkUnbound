@@ -64,7 +64,7 @@ function holderOf(key: string, others: BrowserView[]): string | null {
 function typedKey(value: string, was: string): string {
   const upper = value.toUpperCase();
   const fresh = was && upper.length > 1 ? upper.replace(was, "") : upper;
-  return fresh.slice(-1);
+  return fresh.slice(-1).trim();
 }
 
 /// What is wrong with the key typed for one row, said before saving rather than after.
@@ -72,12 +72,16 @@ function keyProblem(
   key: string,
   row: string,
   typed: Record<string, string>,
+  rows: string[],
   others: BrowserView[],
   t: (key: Key, ...values: string[]) => string,
 ): string | null {
   if (key === "") return null;
   if (!/^[1-9A-Z]$/.test(key)) return t("keyUnusable");
-  if (Object.entries(typed).some(([other, k]) => other !== row && k === key)) return t("keyTwice");
+  if (
+    Object.entries(typed).some(([other, k]) => other !== row && k === key && rows.includes(other))
+  )
+    return t("keyTwice");
   const holder = holderOf(key, others);
   return holder ? t("keyTaken", holder) : null;
 }
@@ -145,7 +149,8 @@ function Form({
   const [keys, setKeys] = useState<Record<string, string>>(initial.keys);
   const advancedAtFirst = Boolean(initial.args || initial.icon_path);
   const [helping, setHelping] = useState(false);
-  const problems = rows.map(([row]) => keyProblem(keys[row] ?? "", row, keys, others, t));
+  const ids = rows.map(([row]) => row);
+  const problems = ids.map((row) => keyProblem(keys[row] ?? "", row, keys, ids, others, t));
 
   return (
     <form
@@ -158,7 +163,7 @@ function Form({
           args,
           private_flag: priv || null,
           icon_path: icon || null,
-          keys,
+          keys: Object.fromEntries(ids.map((row) => [row, keys[row] ?? ""])),
         });
       }}
     >
