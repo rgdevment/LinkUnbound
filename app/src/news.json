@@ -1,5 +1,56 @@
 [
   {
+    "version": "2.7.1",
+    "headline": {
+      "es": "Tu tecla para cada navegador, y un Mosaico renovado",
+      "en": "Your own key for every browser, and a renewed Tiles look"
+    },
+    "es": [
+      {
+        "title": "Una tecla para cada navegador",
+        "said": "en Navegadores, al editar uno, le das la tecla que quieras a él o a cada uno de sus perfiles. Si esa tecla ya la usa otro, te avisa antes de guardar. Si no eliges ninguna, se ve en gris la que le toca."
+      },
+      {
+        "title": "Más teclas",
+        "said": "después del 9 siguen las letras Q W E R T Y, A S D F G H y Z X C V B N, así que hasta 27 navegadores y perfiles se abren con una tecla. Con las flechas, la lista sigue al que eliges."
+      },
+      {
+        "title": "Mosaico renovado",
+        "said": "el estilo Mosaico ahora tiene las mismas tarjetas de LinkBear, en tres columnas, pero sin el oso."
+      },
+      {
+        "title": "Añadir un navegador es más fácil",
+        "said": "la ventana privada de Chrome, Edge, Brave, Vivaldi, Opera y Firefox se configura sola. Lo demás queda en Opciones avanzadas, con ejemplos para crear un perfil o un navegador aparte."
+      },
+      {
+        "title": "Ajustes en orden",
+        "said": "Navegadores va justo después de Aplicación, seguido de Reglas y Enlaces."
+      }
+    ],
+    "en": [
+      {
+        "title": "A key for every browser",
+        "said": "in Browsers, when you edit one, you give it, or each of its profiles, the key you want. If another one already uses that key, you are told before saving. If you choose none, the key it gets is shown in grey."
+      },
+      {
+        "title": "More keys",
+        "said": "after 9 come the letters Q W E R T Y, A S D F G H and Z X C V B N, so up to 27 browsers and profiles open with a single key. With the arrows, the list follows the one you choose."
+      },
+      {
+        "title": "Tiles, renewed",
+        "said": "the Tiles look now has the same cards as LinkBear, in three columns, without the bear."
+      },
+      {
+        "title": "Adding a browser is easier",
+        "said": "the private window of Chrome, Edge, Brave, Vivaldi, Opera and Firefox sets itself up. Everything else sits under Advanced options, with examples for making a profile or a separate browser."
+      },
+      {
+        "title": "Settings in order",
+        "said": "Browsers comes right after Application, followed by Rules and Links."
+      }
+    ]
+  },
+  {
     "version": "2.7.0",
     "headline": {
       "es": "Un selector nuevo, con LinkBear, Acrylic y Liquid Glass",
