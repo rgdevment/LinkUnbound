@@ -370,6 +370,12 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
     );
     window.set_remember_label(words.picker_remember.into());
     window.set_private_label(words.picker_private.into());
+    window.set_private_line(words.picker_private_line.into());
+    window.set_remember_short(words.picker_remember_short.into());
+    window.set_ask(words.picker_ask.into());
+    window.set_ask_private(words.picker_ask_private.into());
+    window.set_motto(words.picker_motto.into());
+    window.set_chosen_at(-1);
     window.set_copy_label(words.picker_copy.into());
     window.set_update_later(words.update_later.into());
     window.set_private_on(false);
@@ -545,10 +551,11 @@ mod tests {
         let window = crate::Picker::new().expect("a window");
         let words = Language::Spanish.strings();
         let rows = dressed();
+        window.set_look(crate::Look::List);
 
         dress(&window, &words, "https://docs.google.com/a", None, &rows);
         let alone = window.get_wanted_width();
-        assert_eq!(alone, 348.0);
+        assert_eq!(alone, 380.0);
 
         for from in ["ms-teams", "Microsoft Teams Classic"] {
             dress(
@@ -573,7 +580,7 @@ mod tests {
     fn the_sheet_is_sized_by_its_tiles_and_its_halo() {
         headless();
         let window = crate::Picker::new().expect("a window");
-        window.set_classic(false);
+        window.set_look(crate::Look::Tiles);
         let words = Language::Spanish.strings();
         let two = dressed();
 
@@ -584,25 +591,26 @@ mod tests {
             Some("ms-teams"),
             &two,
         );
-        assert_eq!(window.get_wanted_width(), 348.0);
+        assert_eq!(window.get_wanted_width(), 372.0);
 
         let mut four = two.clone();
         four.extend(two.iter().cloned());
         dress(&window, &words, "https://docs.google.com/a", None, &four);
         assert_eq!(
             window.get_wanted_width(),
-            392.0,
+            400.0,
             "four across need the wider sheet"
         );
 
         window.set_halo(18.0);
-        assert_eq!(window.get_wanted_width(), 392.0 + 36.0);
+        assert_eq!(window.get_wanted_width(), 400.0 + 36.0);
 
-        window.set_classic(true);
+        window.set_halo(0.0);
+        window.set_look(crate::Look::List);
         assert_eq!(
             window.get_wanted_width(),
-            348.0,
-            "the classic look keeps its own width"
+            380.0,
+            "the list keeps its own width"
         );
     }
 
@@ -612,7 +620,7 @@ mod tests {
     fn the_classic_look_stops_growing_at_nine_rows_and_the_keys_stop_with_it() {
         headless();
         let window = crate::Picker::new().expect("a window");
-        window.set_classic(true);
+        window.set_look(crate::Look::List);
         let words = Language::Spanish.strings();
         let two = dressed();
         let mut many: Vec<Listed> = Vec::new();
@@ -627,7 +635,7 @@ mod tests {
         nine.truncate(9);
         dress(&window, &words, "https://docs.google.com/a", None, &nine);
         let with_nine = window.get_wanted_height();
-        assert_eq!(with_nine - with_two, 7.0 * 42.0);
+        assert_eq!(with_nine - with_two, 7.0 * 45.0);
 
         dress(&window, &words, "https://docs.google.com/a", None, &many);
         assert_eq!(window.get_wanted_height(), with_nine, "the rest scroll");
@@ -853,8 +861,13 @@ mod tests {
             &dressed(),
         );
 
-        for classic in [false, true] {
-            window.set_classic(classic);
+        for look in [
+            crate::Look::List,
+            crate::Look::Tiles,
+            crate::Look::Compact,
+            crate::Look::Bear,
+        ] {
+            window.set_look(look);
             let plain = window.get_wanted_height();
             show_strip(
                 &window,
@@ -866,11 +879,7 @@ mod tests {
                     far: 0,
                 }),
             );
-            assert_eq!(
-                window.get_wanted_height(),
-                plain + 46.0,
-                "classic: {classic}"
-            );
+            assert_eq!(window.get_wanted_height(), plain + 46.0, "{look:?}");
             show_strip(&window, None);
             assert_eq!(window.get_wanted_height(), plain);
         }

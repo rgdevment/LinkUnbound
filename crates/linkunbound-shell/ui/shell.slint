@@ -1,368 +1,8 @@
+import { Destination, Reach, Palette, Look, UpdateStrip, Hair, AddressHead, AskHead, RememberFoot, ReachMenu } from "parts.slint";
+import { ListLook, TilesLook, CardsLook, CompactLook } from "looks.slint";
+
+export { Palette, Look } from "parts.slint";
 export { BearHead, BearPaws } from "bear.slint";
-
-struct Destination {
-    key: string,
-    name: string,
-    profile: string,
-    icon: image,
-    can-private: bool,
-}
-
-struct Reach {
-    label: string,
-    full: string,
-    keeps: bool,
-    dead: bool,
-    index: int,
-}
-
-export global Palette {
-    in property <bool> light: false;
-    // Over Acrylic the system paints the material, the corners and the edge of the picker.
-    in property <bool> clear: false;
-    // Laid over Acrylic: the blur is the system's, the tone and the lit edge stay the picker's.
-    out property <brush> veil: light
-        ? @linear-gradient(180deg, #FFFFFFC4 0%, #F3F5F9CC 100%)
-        : @linear-gradient(180deg, #282B36C4 0%, #1A1C23CC 100%);
-    out property <color> rim: light ? #FFFFFFE6 : #FFFFFF2E;
-
-    out property <brush> ground: light ? #FFFFFF : #191A1F;
-    // Header and footer sit a shade apart from the list, which is what tells the zones apart.
-    out property <brush> band: light ? #F8F9FB : #1C1D23;
-    out property <brush> ink: light ? #16181D : #F0F1F4;
-    out property <brush> dim: light ? #555B6A : #AAB1C0;
-    out property <brush> dimmer: light ? #5F6575 : #9CA3B3;
-    out property <brush> line: light ? #00000014 : #ffffff14;
-    out property <brush> hover: light ? #0000000b : #ffffff12;
-    out property <brush> chip: light ? #0000000e : #ffffff10;
-    out property <brush> key-bg: light ? #00000010 : #ffffff14;
-    out property <brush> key-ink: light ? #5F6575 : #B3BAC9;
-    out property <brush> accent: light ? #2F62D8 : #6E9BFF;
-    // Literals here were picked for a dark ground and sat at 2.2:1 on a light
-    // one, which is where the launch failures are printed.
-    out property <brush> wrong: light ? #B3261E : #FF8A85;
-    out property <brush> caution: light ? #8A5200 : #E9A05C;
-    out property <brush> accent-soft: light ? #2F62D821 : #6E9BFF2b;
-    out property <brush> neutral: light ? #00000017 : #ffffff1c;
-    out property <brush> neutral-ink: light ? #3A3F4B : #D6DAE3;
-    out property <brush> edge: light ? #0000001f : #ffffff1a;
-    // The modern surface: one sheet, separated by fill rather than by lines.
-    out property <brush> surface: light ? #FFFFFF : #1E2027;
-    out property <brush> sheet-band: light ? #F8F9FB : #212329;
-    out property <brush> fill: light ? #0000000c : #ffffff0e;
-    out property <brush> fill-hover: light ? #00000014 : #ffffff1a;
-    out property <brush> faint: light ? #6B7280 : #8791A4;
-    out property <brush> glow: light ? #0000000f : #ffffff12;
-    out property <brush> shade: light ? #14192d : #000000;
-    out property <brush> accent-ink: light ? #FFFFFF : #12141B;
-}
-
-component Row inherits Rectangle {
-    in property <Destination> entry;
-    in property <bool> private-wanted;
-    in property <float> icon-side;
-    callback chosen(bool);
-
-    height: 42px;
-    border-radius: 7px;
-    background: touch.has-hover ? Palette.hover : transparent;
-    opacity: root.private-wanted && !root.entry.can-private ? 0.45 : 1.0;
-
-    touch := TouchArea {
-        enabled: !(root.private-wanted && !root.entry.can-private);
-        clicked => { root.chosen(root.private-wanted); }
-    }
-
-    HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        spacing: 11px;
-
-        Rectangle {
-            width: 22px;
-            height: 22px;
-            y: (parent.height - self.height) / 2;
-            border-radius: 4px;
-            // No digit past the ninth row: the box keeps the column and shows nothing.
-            background: root.entry.key == "" ? transparent : Palette.key-bg;
-            Text {
-                text: root.entry.key;
-                font-size: 13px;
-                color: Palette.key-ink;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                width: 100%;
-                height: 100%;
-            }
-        }
-
-        Image {
-            source: root.entry.icon;
-            width: root.icon-side * 1px;
-            height: root.icon-side * 1px;
-            y: (parent.height - self.height) / 2;
-            image-fit: contain;
-            image-rendering: smooth;
-        }
-
-        Text {
-            text: root.entry.name;
-            font-size: 15px;
-            color: Palette.ink;
-            vertical-alignment: center;
-            overflow: elide;
-            horizontal-stretch: 1;
-        }
-
-        if root.entry.profile != "": Text {
-            horizontal-stretch: 0;
-            text: root.entry.profile;
-            font-size: 13px;
-            color: Palette.dim;
-            vertical-alignment: center;
-        }
-    }
-}
-
-component Segment inherits Rectangle {
-    in property <Reach> reach;
-    in property <bool> active;
-    in property <bool> last;
-    callback picked();
-
-    height: 22px;
-    // A Rectangle contributes nothing to the layout around it unless it says what it wants, and
-    // the row's width is the sum of what its segments ask for.
-    preferred-width: body.preferred-width;
-    opacity: root.reach.dead ? 0.4 : 1.0;
-
-    body := HorizontalLayout {
-        spacing: 7px;
-
-        VerticalLayout {
-            spacing: 2px;
-            alignment: center;
-
-            label := Text {
-                text: root.reach.label;
-                font-size: 12.5px;
-                color: root.active
-                    ? (root.reach.keeps ? Palette.accent : Palette.neutral-ink)
-                    : (touch.has-hover ? Palette.neutral-ink : Palette.dim);
-                font-weight: root.active ? 600 : 400;
-                vertical-alignment: center;
-            }
-
-            // The mark sits under the word rather than around it, so a row of four reads as one
-            // line of text with one of them chosen.
-            Rectangle {
-                height: 2px;
-                border-radius: 1px;
-                background: root.active
-                    ? (root.reach.keeps ? Palette.accent : Palette.neutral-ink)
-                    : transparent;
-            }
-        }
-
-        if !root.last: Text {
-            text: "·";
-            font-size: 12.5px;
-            color: Palette.dimmer;
-            vertical-alignment: center;
-        }
-    }
-
-    touch := TouchArea {
-        enabled: !root.reach.dead;
-        width: label.width;
-        x: 0;
-        clicked => { root.picked(); }
-    }
-}
-
-// Two sheets, one over the other: rectangles, which the software renderer draws with edges,
-// where a stroked path came out soft. Lit once the address was really copied.
-component CopyMark inherits Rectangle {
-    in property <bool> done;
-    in property <string> label;
-    callback pressed();
-
-    accessible-role: button;
-    accessible-label: root.label;
-    accessible-action-default => { root.pressed(); }
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background: touch.has-hover ? Palette.hover : transparent;
-    property <brush> line: root.done ? Palette.accent : (touch.has-hover ? Palette.dim : Palette.faint);
-
-    Rectangle {
-        x: 5px;
-        y: 5px;
-        width: 10px;
-        height: 10px;
-        border-radius: 2px;
-        border-width: 1.5px;
-        border-color: root.line;
-    }
-    Rectangle {
-        x: 9px;
-        y: 9px;
-        width: 10px;
-        height: 10px;
-        border-radius: 2px;
-        border-width: 1.5px;
-        border-color: root.line;
-        background: Palette.surface;
-    }
-    touch := TouchArea {
-        clicked => { root.pressed(); }
-    }
-}
-
-// «⇧ Privada»: lit while Shift is down or after a press, which pins it.
-component PrivateWords inherits Rectangle {
-    in property <string> label;
-    in property <bool> on;
-    callback pressed();
-
-    accessible-role: checkbox;
-    accessible-label: root.label;
-    accessible-checked: root.on;
-    accessible-action-default => { root.pressed(); }
-    height: 22px;
-    width: body.preferred-width + 8px;
-    border-radius: 5px;
-    background: touch.has-hover ? Palette.hover : transparent;
-
-    body := HorizontalLayout {
-        padding-left: 4px;
-        padding-right: 4px;
-        spacing: 5px;
-        Text {
-            text: "⇧";
-            font-size: 14px;
-            color: root.on ? Palette.accent : Palette.dimmer;
-            vertical-alignment: center;
-        }
-        Text {
-            text: root.label;
-            font-size: 13px;
-            color: root.on ? Palette.accent : Palette.dimmer;
-            vertical-alignment: center;
-        }
-    }
-    touch := TouchArea {
-        clicked => { root.pressed(); }
-    }
-}
-
-// The update, when one is owed: what it is, what pressing does, and how far along it is. The
-// same strip sits atop both looks of the picker.
-component UpdateStrip inherits Rectangle {
-    in property <string> line;
-    in property <string> detail;
-    in property <string> button;
-    in property <string> later;
-    in property <int> far;
-    in property <bool> busy;
-    callback asked();
-    callback dismissed();
-
-    height: 36px;
-    border-radius: 10px;
-    background: Palette.accent-soft;
-
-    HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 6px;
-        spacing: 10px;
-
-        VerticalLayout {
-            alignment: center;
-            spacing: 3px;
-            horizontal-stretch: 1;
-            Text {
-                text: root.line;
-                font-size: 12.5px;
-                color: Palette.ink;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-            if root.detail != "": Text {
-                text: root.detail;
-                font-size: 11.5px;
-                color: Palette.dim;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-            if root.far > 0: Rectangle {
-                height: 3px;
-                border-radius: 2px;
-                background: Palette.neutral;
-                Rectangle {
-                    x: 0;
-                    width: parent.width * root.far / 100;
-                    height: 100%;
-                    border-radius: 2px;
-                    background: Palette.accent;
-                }
-            }
-        }
-
-        if root.button != "": Rectangle {
-            accessible-role: AccessibleRole.button;
-            accessible-label: root.button;
-            accessible-action-default => { root.asked(); }
-            horizontal-stretch: 0;
-            y: (parent.height - self.height) / 2;
-            height: 26px;
-            width: take-words.preferred-width + 24px;
-            border-radius: 13px;
-            background: Palette.accent;
-            opacity: take-touch.has-hover ? 0.9 : 1.0;
-            take-words := Text {
-                text: root.button;
-                font-size: 12.5px;
-                font-weight: 600;
-                color: Palette.accent-ink;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                width: 100%;
-                height: 100%;
-            }
-            take-touch := TouchArea {
-                clicked => { root.asked(); }
-            }
-        }
-
-        if !root.busy: Rectangle {
-            accessible-role: AccessibleRole.button;
-            accessible-label: root.later;
-            accessible-action-default => { root.dismissed(); }
-            horizontal-stretch: 0;
-            y: (parent.height - self.height) / 2;
-            width: 22px;
-            height: 22px;
-            border-radius: 6px;
-            background: later-touch.has-hover ? Palette.fill-hover : transparent;
-            Path {
-                x: 7px;
-                y: 7px;
-                width: 8px;
-                height: 8px;
-                viewbox-width: 8;
-                viewbox-height: 8;
-                stroke: Palette.faint;
-                stroke-width: 1.5px;
-                commands: "M 1 1 L 7 7 M 7 1 L 1 7";
-            }
-            later-touch := TouchArea {
-                clicked => { root.dismissed(); }
-            }
-        }
-    }
-}
 
 export component Picker inherits Window {
     in property <float> icon-side: 24;
@@ -370,7 +10,12 @@ export component Picker inherits Window {
     in property <string> trail;
     in property <string> source-line;
     in property <string> remember-label;
+    in property <string> remember-short;
     in property <string> private-label;
+    in property <string> private-line;
+    in property <string> ask;
+    in property <string> ask-private;
+    in property <string> motto;
     in property <[Destination]> rows;
     in property <[Reach]> reaches;
     in property <[Reach]> reaches-more;
@@ -383,9 +28,10 @@ export component Picker inherits Window {
     in-out property <int> reach-index: 0;
     in-out property <bool> private-on: false;
     in-out property <bool> more-open: false;
+    // The row the arrows rest on, opened by Enter; none until an arrow is pressed.
+    in-out property <int> chosen-at: -1;
 
-    // Rows the way 1.x users know them, or the sheet of tiles behind a preference.
-    in property <bool> classic: true;
+    in property <Look> look: Look.bear;
     in property <bool> on-mac: false;
     // Room around the sheet for the shadow it draws itself. Zero where the system draws one.
     in property <length> halo: 0px;
@@ -419,6 +65,8 @@ export component Picker inherits Window {
     pure callback step-reach(int) -> int;
     callback dismissed();
     callback copy();
+    // Where the bear looks, from -1 to 1, and whether it wears the mask.
+    callback mood(float, bool);
 
     title: "LinkUnbound";
     icon: @image-url("../../../app/src-tauri/icons/128x128.png");
@@ -431,62 +79,110 @@ export component Picker inherits Window {
     default-font-family: root.family;
     forward-focus: keys;
 
+    property <int> hovered-at: -1;
+    property <int> aimed: root.hovered-at >= 0 ? root.hovered-at : root.chosen-at;
+    property <float> count: root.rows.length;
+    property <float> aim:
+        root.aimed < 0 ? 0
+        : root.look == Look.bear ? (Math.mod(root.aimed, 2) == 0 ? -0.7 : 0.7)
+        : ((root.aimed + 0.5) / max(1, root.count) - 0.5) * 2;
+    changed aim => { root.mood(root.aim, root.private-on); }
+    changed private-on => { root.mood(root.aim, root.private-on); }
+
+    property <string> line: root.problem != "" ? root.problem : (root.private-on ? root.private-line : root.source-line);
+    property <brush> line-color: root.problem != "" ? (root.alarming ? Palette.wrong : Palette.caution) : (root.private-on ? Palette.secret : Palette.dim);
+    out property <string> reach-said: root.all-reaches[root.reach-index].full;
+    property <string> more-said: root.more-holds ? root.reach-labels[root.reach-index] : root.reach-more-label;
+
+    // Nine rows at most on screen, the keys stop at 9, and the rest scroll under them.
+    property <float> rows-shown: min(root.count, 9);
+    property <length> list-room: max(1, root.rows-shown) * 45px + 11px;
     // A fifth reach appears when the click came from a known app, and its label carries that
-    // app's name — which no fixed width can be drawn for. The reaches ask for the room they
-    // need; the floor is the width the rows were designed at and the ceiling keeps one long
-    // name from stretching the window across the screen.
-    property <length> classic-width: min(
-        max(348px, ruler.preferred-width + 30px + (root.reaches.length - 1) * 8px),
-        560px);
-    // Repeated elements reach the layout only once they are drawn, so the row cannot be asked
-    // how wide it wants to be before the window has a width. This measures the same words in one
-    // go instead, and the spacing the row puts around each separator is added on.
+    // app's name, which no fixed width can be drawn for: the track asks for the room it needs.
+    property <length> list-width: min(max(380px, ruler.preferred-width + 60px + root.reaches.length * 18px), 560px);
     ruler := Text {
         text: root.reaches-line;
         font-size: 12.5px;
         visible: false;
     }
 
-    // Nine rows at most on screen — the keys stop at 9 — and the rest scroll under them.
-    property <int> rows-shown: min(root.rows.length, 9);
-    property <length> rows-room: root.rows-shown * 42px + 14px;
-    property <length> classic-height:
-        root.strip-room
-        + 66px + 1px
-        + root.rows-room + 2px
-        + 1px + 38px + 22px + 12px
-        + (root.problem == "" ? 0px : 36px);
-
-    // The sheet: tiles of one size, at most four to a row, the rows shared out evenly so six
-    // destinations make two rows of three rather than four and two. The last row is centred.
-    property <float> count: root.rows.length;
+    // Tiles shared out evenly, so six make two rows of three rather than four and two.
     property <float> tile-rows: max(1, Math.ceil(root.count / 4));
     property <float> tile-cols: max(1, Math.ceil(root.count / root.tile-rows));
-    property <length> sheet-width: root.tile-cols >= 4 ? 392px : 348px;
-    property <length> tile-width:
-        Math.floor(((root.sheet-width - 28px - (root.tile-cols - 1) * 4px) / root.tile-cols) / 1px) * 1px;
-    property <bool> second-line: root.problem != "" || root.source-line != "";
-    property <length> head-height: 17px + (root.second-line ? 17px : 0px);
-    property <length> tiles-top: 14px + root.strip-room + root.head-height + 10px;
-    property <length> tiles-height: root.tile-rows * 88px + (root.tile-rows - 1) * 4px;
-    property <length> sheet-height: root.tiles-top + root.tiles-height + 10px + 28px + 12px;
+    property <length> tiles-width: root.tile-cols >= 4 ? 400px : 372px;
+    property <length> tile-width: Math.floor(((root.tiles-width - 20px - (root.tile-cols - 1) * 6px) / root.tile-cols) / 1px) * 1px;
+    property <length> tiles-room: root.tile-rows * 104px + 10px;
 
-    out property <length> wanted-width: root.classic ? root.classic-width : root.sheet-width + 2 * root.halo;
-    out property <length> wanted-height: root.classic ? root.classic-height : root.sheet-height + 2 * root.halo;
-    out property <string> reach-said: root.all-reaches[root.reach-index].full;
+    // Two columns of cards; five rows on screen and the rest scroll.
+    property <float> card-rows: min(5, max(1, Math.ceil(root.count / 2)));
+    property <length> cards-room: root.card-rows * 58px + 10px;
+
+    property <float> icons-shown: max(1, root.count);
+    property <length> compact-width: max(280px, root.icons-shown * 54px - 4px + 20px);
+    property <length> compact-height: 12px + 28px + 6px + 76px + 6px + 20px + 6px + 26px + 10px;
+
+    property <length> foot-room: 74px;
+    property <length> sheet-width:
+        root.look == Look.list ? root.list-width
+        : root.look == Look.tiles ? root.tiles-width
+        : root.look == Look.bear ? 420px
+        : root.compact-width;
+    property <length> head-room: root.look == Look.bear ? 104px : 60px;
+    property <length> body-room:
+        root.look == Look.list ? root.list-room
+        : root.look == Look.tiles ? root.tiles-room
+        : root.cards-room;
+    property <length> sheet-height: root.strip-room + (root.look == Look.compact
+        ? root.compact-height
+        : root.head-room + 1px + root.body-room + 1px + root.foot-room);
+
+    out property <length> wanted-width: root.sheet-width + 2 * root.halo;
+    out property <length> wanted-height: root.sheet-height + 2 * root.halo;
+    // The side the icons are drawn at, for the resident to extract them at in screen pixels.
+    out property <float> drawn-icon-side:
+        root.look == Look.list ? 28 : root.look == Look.tiles ? 44 : root.look == Look.bear ? 34 : 38;
+
+    function toggle-private() {
+        root.pinned-private = !root.pinned-private;
+        root.private-on = root.pinned-private;
+    }
+    function step-chosen(by: int) {
+        if (root.count == 0) {
+            return;
+        }
+        root.chosen-at = root.chosen-at < 0
+            ? (by > 0 ? 0 : root.count - 1)
+            : Math.mod(root.chosen-at + by + root.count * 4, root.count);
+    }
 
     keys := FocusScope {
-        // Shift is held, not toggled: the icon lights while it is down.
+        // Shift is held, not toggled: the mask lights while it is down.
         key-pressed(event) => {
             root.private-on = event.modifiers.shift || root.pinned-private;
             if (event.text == Key.Escape) {
+                if (root.more-open) {
+                    root.more-open = false;
+                    return accept;
+                }
                 root.dismissed();
                 return accept;
             }
-            // Reach, copy and private are the rest of what this window does, and
-            // a TouchArea answers to nothing but a pointer: without these, a
-            // keyboard could open a link but never remember one.
-            // Every reach, not only the two the row draws: the keyboard reaches the ones behind
+            if (event.text == Key.Return && root.chosen-at >= 0) {
+                root.open(root.chosen-at, root.private-on);
+                return accept;
+            }
+            // The icons of the compact look lie in a row, so the arrows across walk them there;
+            // everywhere else they walk the reaches, as they always did.
+            if (root.look == Look.compact && (event.text == Key.LeftArrow || event.text == Key.RightArrow)) {
+                root.step-chosen(event.text == Key.RightArrow ? 1 : -1);
+                return accept;
+            }
+            if (event.text == Key.UpArrow || event.text == Key.DownArrow) {
+                root.step-chosen((event.text == Key.DownArrow ? 1 : -1)
+                    * (root.look == Look.bear ? 2 : root.look == Look.tiles ? root.tile-cols : 1));
+                return accept;
+            }
+            // Every reach, not only the ones the track draws: the keyboard reaches those behind
             // the opener without having to open it.
             if (event.text == Key.LeftArrow) {
                 root.reach-index = root.step-reach(-1);
@@ -503,8 +199,7 @@ export component Picker inherits Window {
                 return accept;
             }
             if (event.text == "p" && (root.on-mac ? event.modifiers.meta : event.modifiers.control)) {
-                root.pinned-private = !root.pinned-private;
-                root.private-on = root.pinned-private;
+                root.toggle-private();
                 return accept;
             }
             // The digit is worked out in Rust: with Shift held the layout hands
@@ -525,597 +220,159 @@ export component Picker inherits Window {
             clicked => { root.more-open = false; }
         }
 
-        if root.classic: Rectangle {
-            width: 100%;
-            height: 100%;
+        // The shadow is stacked, not blurred: six sheets fading outwards is what the
+        // software renderer can draw, and it reads as one soft shadow.
+        if root.halo > 0px: Rectangle {
+            for step in [1, 2, 3, 4, 5, 6]: Rectangle {
+                x: root.halo - step * 3px;
+                y: root.halo - step * 2px + step * 1.5px;
+                width: root.sheet-width + step * 6px;
+                height: root.sheet-height + step * 6px;
+                border-radius: 14px + step * 3px;
+                background: Palette.shade;
+                opacity: 0.05;
+            }
+        }
+
+        sheet := Rectangle {
+            x: root.halo;
+            y: root.halo;
+            width: root.sheet-width;
+            height: root.sheet-height;
+            border-radius: Palette.clear ? 8px : (root.look == Look.list ? 10px : 14px);
+            background: Palette.clear ? Palette.veil : Palette.surface;
+            border-width: Palette.clear && !root.private-on ? 0px : 1px;
+            border-color: root.private-on ? Palette.secret : Palette.glow;
+
             Rectangle {
-                border-radius: Palette.clear ? 8px : 10px;
-                background: Palette.clear ? Palette.veil : Palette.ground;
-                border-width: 1px;
-                border-color: Palette.clear ? transparent : Palette.edge;
-
-                if Palette.clear: Rectangle {
-                    x: parent.width * 0.15;
-                    y: 1px;
-                    width: parent.width * 0.7;
-                    height: 1px;
-                    background: @linear-gradient(90deg, transparent 0%, Palette.rim 50%, transparent 100%);
-                }
-
-                // The renderer clips square, so each band is rounded like the window and the
-                // edge it turns towards the list is hidden under a strip of ground.
-                property <length> head-band: root.strip-room + 66px;
-                property <length> foot-band: 38px + 22px + 12px;
-                Rectangle {
-                    x: 1px;
-                    y: 1px;
-                    width: parent.width - 2px;
-                    height: parent.head-band + 10px;
-                    border-radius: 9px;
-                    background: Palette.clear ? transparent : Palette.band;
-                }
-                Rectangle {
-                    x: 1px;
-                    y: parent.head-band;
-                    width: parent.width - 2px;
-                    height: 11px;
-                    background: Palette.clear ? transparent : Palette.ground;
-                }
-                Rectangle {
-                    x: 1px;
-                    y: parent.height - 1px - parent.foot-band - 10px;
-                    width: parent.width - 2px;
-                    height: parent.foot-band + 10px;
-                    border-radius: 9px;
-                    background: Palette.clear ? transparent : Palette.band;
-                }
-                Rectangle {
-                    x: 1px;
-                    y: parent.height - 1px - parent.foot-band - 11px;
-                    width: parent.width - 2px;
-                    height: 11px;
-                    background: Palette.clear ? transparent : Palette.ground;
-                }
-
-                VerticalLayout {
-                    if root.update-shown: Rectangle {
-                        height: 46px;
-                        UpdateStrip {
-                            x: 10px;
-                            y: 10px;
-                            width: parent.width - 20px;
-                            line: root.update-line;
-                            detail: root.update-detail;
-                            button: root.update-button;
-                    later: root.update-later;
-                            far: root.update-far;
-                            busy: root.update-busy;
-                            asked => { root.update-asked(); }
-                            dismissed => { root.update-dismissed(); }
-                        }
-                    }
-
-                    Rectangle {
-                        height: 66px;
-                        HorizontalLayout {
-                            padding-left: 15px;
-                            padding-right: 11px;
-                            spacing: 8px;
-                            alignment: stretch;
-
-                            VerticalLayout {
-                                spacing: 4px;
-                                alignment: center;
-                                HorizontalLayout {
-                                    alignment: start;
-                                    Text {
-                                        text: root.host;
-                                        font-size: 15px;
-                                        font-weight: 600;
-                                        color: Palette.ink;
-                                    }
-                                    Text {
-                                        text: root.trail;
-                                        font-size: 15px;
-                                        color: Palette.dimmer;
-                                        overflow: elide;
-                                    }
-                                }
-                                if root.source-line != "": Text {
-                                    text: root.source-line;
-                                    font-size: 12.5px;
-                                    color: Palette.dim;
-                                }
-                            }
-
-                            CopyMark {
-                                y: (parent.height - self.height) / 2;
-                                label: root.copy-label;
-                                done: root.copied;
-                                pressed => { root.copy(); }
-                            }
-                        }
-                    }
-
-                Rectangle { height: 1px; background: Palette.line; }
-
-                    Rectangle {
-                        height: root.rows-room + 2px;
-                        Flickable {
-                            y: 1px;
-                            height: root.rows-room;
-                            content-height: root.rows.length * 42px + 14px;
-                            VerticalLayout {
-                                padding-left: 6px;
-                                padding-right: 6px;
-                                padding-top: 7px;
-                                padding-bottom: 7px;
-                                for item[i] in root.rows: Row {
-                                    entry: item;
-                                    icon-side: root.icon-side;
-                                    private-wanted: root.private-on;
-                                    chosen(private) => { root.open(i, private); }
-                                }
-                            }
-                        }
-                    }
-
-                    if root.problem != "": Rectangle {
-                        height: 36px;
-                        HorizontalLayout {
-                            padding-left: 15px;
-                            padding-right: 15px;
-                            Text {
-                                text: root.problem;
-                                font-size: 11.5px;
-                                color: root.alarming ? Palette.wrong : Palette.caution;
-                                vertical-alignment: center;
-                                overflow: elide;
-                            }
-                        }
-                    }
-
-                    Rectangle { height: 1px; background: Palette.line; }
-
-                    Rectangle {
-                        VerticalLayout {
-                    Rectangle {
-                        height: 38px;
-                        HorizontalLayout {
-                            padding-left: 15px;
-                            padding-right: 15px;
-                            alignment: space-between;
-                            Text {
-                                text: root.remember-label;
-                                font-size: 13px;
-                                color: Palette.dimmer;
-                                vertical-alignment: center;
-                            }
-                            PrivateWords {
-                                y: (parent.height - self.height) / 2;
-                                label: root.private-label;
-                                on: root.private-on;
-                                pressed => { root.pinned-private = !root.pinned-private; root.private-on = root.pinned-private; }
-                            }
-                        }
-                    }
-
-                    scopes := HorizontalLayout {
-                        padding-left: 15px;
-                        padding-right: 15px;
-                        padding-bottom: 12px;
-                        spacing: 7px;
-                        alignment: start;
-
-                        for item in root.reaches: Segment {
-                            reach: item;
-                            active: item.index == root.reach-index;
-                            last: false;
-                            picked => {
-                                root.reach-index = item.index;
-                                root.more-open = false;
-                            }
-                        }
-
-                        more := Rectangle {
-                            height: 22px;
-                            preferred-width: opener.preferred-width;
-
-                            opener := HorizontalLayout {
-                                spacing: 4px;
-                                VerticalLayout {
-                                    spacing: 2px;
-                                    alignment: center;
-                                    said := Text {
-                                        text: root.more-holds ? root.reach-labels[root.reach-index]
-                                                              : root.reach-more-label;
-                                        font-size: 12.5px;
-                                        max-width: 150px;
-                                        overflow: elide;
-                                        color: root.more-holds
-                                            ? Palette.accent
-                                            : (more-touch.has-hover ? Palette.neutral-ink : Palette.dim);
-                                        font-weight: root.more-holds ? 600 : 400;
-                                        vertical-alignment: center;
-                                    }
-                                    Rectangle {
-                                        height: 2px;
-                                        border-radius: 1px;
-                                        background: root.more-holds ? Palette.accent : transparent;
-                                    }
-                                }
-                                Text {
-                                    text: root.more-open ? "▴" : "▾";
-                                    font-size: 9px;
-                                    color: Palette.dimmer;
-                                    vertical-alignment: center;
-                                }
-                            }
-
-                            more-touch := TouchArea {
-                                clicked => { root.more-open = !root.more-open; }
-                            }
-                        }
-                    }
-                        }
-                    }
-                }
-            }
-        }
-
-        if !root.classic: Rectangle {
-            width: 100%;
-            height: 100%;
-
-            // The shadow is stacked, not blurred: six sheets fading outwards is what the
-            // software renderer can draw, and it reads as one soft shadow.
-            if root.halo > 0px: Rectangle {
-                for step in [1, 2, 3, 4, 5, 6]: Rectangle {
-                    x: root.halo - step * 3px;
-                    y: root.halo - step * 2px + step * 1.5px;
-                    width: root.sheet-width + step * 6px;
-                    height: root.sheet-height + step * 6px;
-                    border-radius: 14px + step * 3px;
-                    background: Palette.shade;
-                    opacity: 0.05;
-                }
+                x: parent.width * 0.15;
+                y: 1px;
+                width: parent.width * 0.7;
+                height: 1px;
+                background: @linear-gradient(90deg, transparent 0%, Palette.rim 50%, transparent 100%);
             }
 
-            sheet := Rectangle {
-                x: root.halo;
-                y: root.halo;
-                width: root.sheet-width;
-                height: root.sheet-height;
-                border-radius: Palette.clear ? 8px : 14px;
-                background: Palette.clear ? Palette.veil : Palette.surface;
-                border-width: 1px;
-                border-color: Palette.clear ? transparent : Palette.glow;
-
-                if Palette.clear: Rectangle {
-                    x: parent.width * 0.15;
-                    y: 1px;
-                    width: parent.width * 0.7;
-                    height: 1px;
-                    background: @linear-gradient(90deg, transparent 0%, Palette.rim 50%, transparent 100%);
-                }
-
-                property <length> head-band: root.tiles-top - 4px;
-                property <length> foot-band: 12px + 28px + 8px;
-                Rectangle {
-                    x: 1px;
-                    y: 1px;
-                    width: parent.width - 2px;
-                    height: parent.head-band + 14px;
-                    border-radius: 13px;
-                    background: Palette.clear ? transparent : Palette.sheet-band;
-                }
-                Rectangle {
-                    x: 1px;
-                    y: parent.head-band;
-                    width: parent.width - 2px;
-                    height: 15px;
-                    background: Palette.clear ? transparent : Palette.surface;
-                }
-                Rectangle {
-                    x: 1px;
-                    y: parent.height - 1px - parent.foot-band - 14px;
-                    width: parent.width - 2px;
-                    height: parent.foot-band + 14px;
-                    border-radius: 13px;
-                    background: Palette.clear ? transparent : Palette.sheet-band;
-                }
-                Rectangle {
-                    x: 1px;
-                    y: parent.height - 1px - parent.foot-band - 15px;
-                    width: parent.width - 2px;
-                    height: 15px;
-                    background: Palette.clear ? transparent : Palette.surface;
-                }
-
-                if root.update-shown: UpdateStrip {
-                    x: 14px;
-                    y: 14px;
-                    width: root.sheet-width - 28px;
-                    line: root.update-line;
-                    detail: root.update-detail;
-                    button: root.update-button;
-                    later: root.update-later;
-                    far: root.update-far;
-                    busy: root.update-busy;
-                    asked => { root.update-asked(); }
-                    dismissed => { root.update-dismissed(); }
-                }
-
-                HorizontalLayout {
-                    x: 16px;
-                    y: 14px + root.strip-room;
-                    width: root.sheet-width - 32px - 30px;
-                    height: 17px;
-                    alignment: start;
-                    Text {
-                        text: root.host;
-                        font-size: 13.5px;
-                        font-weight: 600;
-                        color: Palette.ink;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: root.trail;
-                        font-size: 13.5px;
-                        color: Palette.dim;
-                        vertical-alignment: center;
-                        overflow: elide;
-                    }
-                }
-
-                if root.second-line: Text {
-                    x: 16px;
-                    y: 33px + root.strip-room;
-                    width: root.sheet-width - 32px - 30px;
-                    height: 15px;
-                    text: root.problem != "" ? root.problem : root.source-line;
-                    font-size: 12px;
-                    color: root.problem != "" ? (root.alarming ? Palette.wrong : Palette.caution) : Palette.dim;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-
-                CopyMark {
-                    x: root.sheet-width - 14px - 24px;
-                    y: 10px + root.strip-room;
-                    label: root.copy-label;
-                    done: root.copied;
-                    pressed => { root.copy(); }
-                }
-
-                Rectangle {
-                    x: 14px;
-                    y: root.tiles-top;
-                    width: root.sheet-width - 28px;
-                    height: root.tiles-height;
-
-                    for item[i] in root.rows: Rectangle {
-                        property <float> row-at: Math.floor(i / root.tile-cols);
-                        property <float> col-at: i - self.row-at * root.tile-cols;
-                        property <float> in-row: min(root.tile-cols, root.count - self.row-at * root.tile-cols);
-                        property <bool> greyed: root.private-on && !item.can-private;
-                        x: (parent.width - (self.in-row * root.tile-width + (self.in-row - 1) * 4px)) / 2
-                            + self.col-at * (root.tile-width + 4px);
-                        y: self.row-at * 92px;
-                        width: root.tile-width;
-                        height: 88px;
-                        border-radius: 12px;
-                        background: tile-touch.has-hover && !self.greyed ? Palette.fill-hover : transparent;
-                        opacity: self.greyed ? 0.4 : 1.0;
-
-                        accessible-role: button;
-                        accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
-                        accessible-action-default => { root.open(i, root.private-on); }
-                        tile-touch := TouchArea {
-                            enabled: !parent.greyed;
-                            clicked => { root.open(i, root.private-on); }
-                        }
-
-                        Text {
-                            x: parent.width - 9px - self.width;
-                            y: 6px;
-                            text: item.key;
-                            font-size: 11.5px;
-                            color: tile-touch.has-hover ? Palette.dim : Palette.faint;
-                        }
-
-                        Image {
-                            source: item.icon;
-                            x: (parent.width - self.width) / 2;
-                            y: 9px;
-                            width: 40px;
-                            height: 40px;
-                            image-fit: contain;
-                            image-rendering: smooth;
-                        }
-
-                        Text {
-                            x: 4px;
-                            y: 55px;
-                            width: parent.width - 8px;
-                            height: 15px;
-                            text: item.name;
-                            font-size: 12px;
-                            color: Palette.ink;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
-
-                        Text {
-                            x: 4px;
-                            y: 71px;
-                            width: parent.width - 8px;
-                            height: 13px;
-                            text: item.profile;
-                            font-size: 11px;
-                            color: Palette.dim;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
-                    }
-                }
-
-                // Hasta cuándo: one pill that says the consequence in full, blue when a click
-                // leaves a rule behind, and opens the menu of every reach.
-                reach-pill := Rectangle {
-                    x: 14px;
-                    y: root.sheet-height - 12px - 28px;
-                    height: 28px;
-                    width: reach-words.preferred-width + 20px + 6px + 8px;
-                    // Words, the gap, the chevron, and the padding either side.
-                    border-radius: 14px;
-                    background: root.reach-index > 0 ? Palette.accent-soft : (reach-touch.has-hover ? Palette.fill-hover : Palette.fill);
-                    opacity: root.problem != "" && !root.alarming ? 0.55 : 1.0;
-                    HorizontalLayout {
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 6px;
-                        reach-words := Text {
-                            text: root.reach-said;
-                            font-size: 12.5px;
-                            font-weight: root.reach-index > 0 ? 600 : 400;
-                            color: root.reach-index > 0 ? Palette.accent : Palette.dim;
-                            vertical-alignment: center;
-                            max-width: 200px;
-                            overflow: elide;
-                        }
-                        // Drawn: the triangle glyphs are not in every system font.
-                        Rectangle {
-                            width: 8px;
-                            Path {
-                                x: 0px;
-                                y: (parent.height - 5px) / 2;
-                                width: 8px;
-                                height: 5px;
-                                viewbox-width: 8;
-                                viewbox-height: 5;
-                                stroke: root.reach-index > 0 ? Palette.accent : Palette.faint;
-                                stroke-width: 1.5px;
-                                commands: root.more-open ? "M 1 4 L 4 1 L 7 4" : "M 1 1 L 4 4 L 7 1";
-                            }
-                        }
-                    }
-                    reach-touch := TouchArea {
-                        clicked => { root.more-open = !root.more-open; }
-                    }
-                }
-
-                // Cómo: the private pill, lit while Shift is down or after Ctrl+P.
-
-                PrivateWords {
-                    x: root.sheet-width - 14px - self.width;
-                    y: root.sheet-height - 12px - 28px + 3px;
-                    label: root.private-label;
-                    on: root.private-on;
-                    pressed => { root.pinned-private = !root.pinned-private; root.private-on = root.pinned-private; }
-                }
+            if root.update-shown: UpdateStrip {
+                x: 12px;
+                y: 10px;
+                width: parent.width - 24px;
+                line: root.update-line;
+                detail: root.update-detail;
+                button: root.update-button;
+                later: root.update-later;
+                far: root.update-far;
+                busy: root.update-busy;
+                asked => { root.update-asked(); }
+                dismissed => { root.update-dismissed(); }
             }
-        }
-    }
 
-    if root.classic: Rectangle {
-        width: 100%;
-        height: 100%;
-            // Drawn over the rows rather than below the row that opens it: the reaches sit at the
-            // bottom edge, and a list growing downwards would fall outside the window.
-            if root.more-open: Rectangle {
-                // Hangs from the opener, which sits at the right edge with the row.
-                x: root.width - 15px - self.width;
-                y: root.height - 12px - 22px - self.height - 6px;
-                width: 190px;
-                height: shelf.preferred-height;
-                border-radius: 8px;
-                background: Palette.ground;
-                border-width: 1px;
-                border-color: Palette.edge;
-
-                TouchArea {}
-
-                shelf := VerticalLayout {
-                    padding: 4px;
-                    for item in root.reaches-more: Rectangle {
-                        height: 26px;
-                        border-radius: 5px;
-                        opacity: item.dead ? 0.4 : 1.0;
-                        background: item.index == root.reach-index
-                            ? Palette.accent-soft
-                            : (option.has-hover ? Palette.hover : transparent);
-
-                        HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
-                            Text {
-                                text: item.label;
-                                font-size: 11.5px;
-                                color: item.index == root.reach-index ? Palette.accent : Palette.dim;
-                                font-weight: item.index == root.reach-index ? 700 : 400;
-                                vertical-alignment: center;
-                                overflow: elide;
-                            }
-                        }
-
-                        option := TouchArea {
-                            enabled: !item.dead;
-                            clicked => {
-                                root.reach-index = item.index;
-                                root.more-open = false;
-                            }
-                        }
-                    }
-                }
+            if root.look == Look.compact: CompactLook {
+                y: root.strip-room;
+                height: root.compact-height;
+                rows: root.rows;
+                private-on: root.private-on;
+                chosen-at: root.chosen-at;
+                hovered-at: root.hovered-at;
+                host: root.host;
+                trail: root.trail;
+                motto: root.problem != "" ? root.problem : root.motto;
+                private-line: root.private-line;
+                private-label: root.private-label;
+                copied: root.copied;
+                copy-label: root.copy-label;
+                remember-label: root.remember-short;
+                reach-said: root.reach-said;
+                reach-keeps: root.all-reaches[root.reach-index].keeps;
+                open(i) => { root.open(i, root.private-on); }
+                hovered(i) => { root.hovered-at = i; }
+                toggle-private => { root.toggle-private(); }
+                copy => { root.copy(); }
+                turn-reach => { root.reach-index = root.step-reach(1); }
             }
-    }
 
-    // The sheet's menu hangs upwards from the pill, the way the classic one hangs from its opener.
-    if !root.classic && root.more-open: Rectangle {
-        x: root.halo + 14px;
-        y: root.halo + root.sheet-height - 12px - 28px - 6px - self.height;
-        width: 200px;
-        height: shelf-sheet.preferred-height;
-        border-radius: 10px;
-        background: Palette.surface;
-        border-width: 1px;
-        border-color: Palette.glow;
-
-        TouchArea {}
-
-        shelf-sheet := VerticalLayout {
-            padding: 4px;
-            for item in root.all-reaches: Rectangle {
-                height: 28px;
-                border-radius: 7px;
-                opacity: item.dead ? 0.4 : 1.0;
-                background: item.index == root.reach-index
-                    ? Palette.accent-soft
-                    : (option-sheet.has-hover ? Palette.fill-hover : transparent);
-
-                HorizontalLayout {
-                    padding-left: 10px;
-                    padding-right: 10px;
-                    Text {
-                        text: item.label;
-                        font-size: 12.5px;
-                        color: item.index == root.reach-index ? Palette.accent : Palette.dim;
-                        font-weight: item.index == root.reach-index ? 600 : 400;
-                        vertical-alignment: center;
-                        overflow: elide;
-                    }
+            if root.look != Look.compact: VerticalLayout {
+                y: root.strip-room;
+                height: parent.height - root.strip-room;
+                if root.look == Look.bear: AskHead {
+                    ask: root.private-on ? root.ask-private : root.ask;
+                    host: root.host;
+                    trail: root.trail;
+                    line: root.problem != "" ? root.problem : root.source-line;
+                    line-color: root.problem != "" ? root.line-color : Palette.dim;
+                    private-on: root.private-on;
+                    private-label: root.private-label;
+                    copied: root.copied;
+                    copy-label: root.copy-label;
+                    toggle-private => { root.toggle-private(); }
+                    copy => { root.copy(); }
                 }
-
-                option-sheet := TouchArea {
-                    enabled: !item.dead;
-                    clicked => {
-                        root.reach-index = item.index;
+                if root.look != Look.bear: AddressHead {
+                    host: root.host;
+                    trail: root.trail;
+                    line: root.line;
+                    line-color: root.line-color;
+                    private-on: root.private-on;
+                    private-label: root.private-label;
+                    copied: root.copied;
+                    copy-label: root.copy-label;
+                    toggle-private => { root.toggle-private(); }
+                    copy => { root.copy(); }
+                }
+                Hair {}
+                if root.look == Look.list: ListLook {
+                    height: root.list-room;
+                    room: root.list-room;
+                    rows: root.rows;
+                    private-on: root.private-on;
+                    chosen-at: root.chosen-at;
+                    open(i) => { root.open(i, root.private-on); }
+                    hovered(i) => { root.hovered-at = i; }
+                }
+                if root.look == Look.tiles: TilesLook {
+                    height: root.tiles-room;
+                    rows: root.rows;
+                    private-on: root.private-on;
+                    chosen-at: root.chosen-at;
+                    cols: root.tile-cols;
+                    tile-width: root.tile-width;
+                    open(i) => { root.open(i, root.private-on); }
+                    hovered(i) => { root.hovered-at = i; }
+                }
+                if root.look == Look.bear: CardsLook {
+                    height: root.cards-room;
+                    room: root.cards-room;
+                    rows: root.rows;
+                    private-on: root.private-on;
+                    chosen-at: root.chosen-at;
+                    open(i) => { root.open(i, root.private-on); }
+                    hovered(i) => { root.hovered-at = i; }
+                }
+                Hair {}
+                RememberFoot {
+                    label: root.remember-label;
+                    reaches: root.reaches;
+                    has-more: root.reaches-more.length > 0;
+                    more-said: root.more-said;
+                    more-holds: root.more-holds;
+                    more-open: root.more-open;
+                    reach-index: root.reach-index;
+                    picked(i) => {
+                        root.reach-index = i;
                         root.more-open = false;
                     }
+                    more => { root.more-open = !root.more-open; }
                 }
+            }
+        }
+
+        if root.more-open && root.look != Look.compact: ReachMenu {
+            x: root.halo + root.sheet-width - 12px - self.width;
+            y: root.halo + root.sheet-height - 12px - 32px - 6px - self.height;
+            reaches: root.reaches-more;
+            reach-index: root.reach-index;
+            picked(i) => {
+                root.reach-index = i;
+                root.more-open = false;
             }
         }
     }
@@ -1127,6 +384,9 @@ export component Notice inherits Window {
     in property <string> undo-label;
     in property <bool> undoable: true;
     in-out property <int> left: 6;
+    // Looks offered once after the update made the bear everybody's, the current one first.
+    in property <[string]> choices;
+    callback chose(int);
 
     callback undo();
     callback dismissed();
@@ -1136,7 +396,7 @@ export component Notice inherits Window {
     no-frame: true;
     background: transparent;
     out property <length> wanted-width: 356px;
-    out property <length> wanted-height: 76px;
+    out property <length> wanted-height: root.choices.length > 0 ? 120px : 76px;
     width: root.wanted-width;
     height: root.wanted-height;
     in property <string> family;
@@ -1148,7 +408,9 @@ export component Notice inherits Window {
         border-width: 1px;
         border-color: Palette.edge;
 
+        VerticalLayout {
         HorizontalLayout {
+            height: 76px;
             padding-left: 15px;
             padding-right: 12px;
             spacing: 10px;
@@ -1210,6 +472,34 @@ export component Notice inherits Window {
                     height: 100%;
                 }
             }
+        }
+        if root.choices.length > 0: HorizontalLayout {
+            height: 44px;
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-bottom: 12px;
+            spacing: 6px;
+            for choice[i] in root.choices: Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 6px;
+                background: i == 0 ? Palette.brand-soft : (pick.has-hover ? Palette.hover : Palette.chip);
+                border-width: i == 0 ? 1px : 0px;
+                border-color: Palette.brand;
+                Text {
+                    text: choice;
+                    font-size: 12.5px;
+                    font-weight: i == 0 ? 600 : 400;
+                    color: i == 0 ? Palette.brand : Palette.ink;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    width: 100%;
+                    height: 100%;
+                }
+                pick := TouchArea {
+                    clicked => { root.chose(i); }
+                }
+            }
+        }
         }
     }
 }

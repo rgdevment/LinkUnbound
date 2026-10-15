@@ -1,0 +1,382 @@
+import { Destination, Palette, KeyCap, Badge, Tools } from "parts.slint";
+
+// The rows: key, icon, name, profile; nine on screen and the rest scroll under them.
+export component ListLook inherits Rectangle {
+    in property <[Destination]> rows;
+    in property <bool> private-on;
+    in property <int> chosen-at;
+    in property <length> room;
+    callback open(int);
+    callback hovered(int);
+
+    Flickable {
+        height: root.room;
+        content-height: root.rows.length * 45px + 12px;
+        VerticalLayout {
+            padding: 6px;
+            spacing: 1px;
+            for item[i] in root.rows: Rectangle {
+                property <bool> greyed: root.private-on && !item.can-private;
+                property <bool> lit: touch.has-hover || i == root.chosen-at;
+                height: 44px;
+                border-radius: 6px;
+                background: self.lit && !self.greyed ? Palette.hover : transparent;
+                opacity: self.greyed ? 0.45 : 1.0;
+                accessible-role: button;
+                accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
+                accessible-action-default => { root.open(i); }
+                touch := TouchArea {
+                    enabled: !parent.greyed;
+                    clicked => { root.open(i); }
+                    changed has-hover => { root.hovered(self.has-hover ? i : -1); }
+                }
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 11px;
+                    Rectangle {
+                        width: 22px;
+                        KeyCap {
+                            y: (parent.height - self.height) / 2;
+                            key: item.key;
+                        }
+                    }
+                    Badge {
+                        y: (parent.height - self.height) / 2;
+                        width: 28px;
+                        height: 28px;
+                        icon: item.icon;
+                        secret: root.private-on && item.can-private;
+                    }
+                    Text {
+                        text: item.name;
+                        font-size: 15px;
+                        color: Palette.ink;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    if item.profile != "": Rectangle {
+                        horizontal-stretch: 0;
+                        y: (parent.height - self.height) / 2;
+                        height: 20px;
+                        width: profile.preferred-width + 16px;
+                        border-radius: 10px;
+                        background: Palette.chip;
+                        profile := Text {
+                            text: item.profile;
+                            font-size: 12px;
+                            color: Palette.dim;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: 100%;
+                            height: 100%;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Tiles of one size, at most four to a row, the last row centred; the key in the corner.
+export component TilesLook inherits Rectangle {
+    in property <[Destination]> rows;
+    in property <bool> private-on;
+    in property <int> chosen-at;
+    in property <float> cols;
+    in property <length> tile-width;
+    callback open(int);
+    callback hovered(int);
+
+    for item[i] in root.rows: Rectangle {
+        property <float> row-at: Math.floor(i / root.cols);
+        property <float> col-at: i - self.row-at * root.cols;
+        property <float> in-row: min(root.cols, root.rows.length - self.row-at * root.cols);
+        property <bool> greyed: root.private-on && !item.can-private;
+        property <bool> lit: touch.has-hover || i == root.chosen-at;
+        x: (parent.width - (self.in-row * root.tile-width + (self.in-row - 1) * 6px)) / 2
+            + self.col-at * (root.tile-width + 6px);
+        y: 8px + self.row-at * 104px;
+        width: root.tile-width;
+        height: 98px;
+        border-radius: 8px;
+        background: self.lit && !self.greyed ? Palette.hover : transparent;
+        opacity: self.greyed ? 0.4 : 1.0;
+        accessible-role: button;
+        accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
+        accessible-action-default => { root.open(i); }
+        touch := TouchArea {
+            enabled: !parent.greyed;
+            clicked => { root.open(i); }
+            changed has-hover => { root.hovered(self.has-hover ? i : -1); }
+        }
+        KeyCap {
+            x: 6px;
+            y: 6px;
+            key: item.key;
+        }
+        Badge {
+            x: (parent.width - self.width) / 2;
+            y: 14px;
+            width: 44px;
+            height: 44px;
+            icon: item.icon;
+            secret: root.private-on && item.can-private;
+        }
+        Text {
+            x: 4px;
+            y: 62px;
+            width: parent.width - 8px;
+            height: 17px;
+            text: item.name;
+            font-size: 13px;
+            color: Palette.ink;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if item.profile != "": Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: 80px;
+            height: 16px;
+            width: min(parent.width - 12px, tag.preferred-width + 14px);
+            border-radius: 8px;
+            background: Palette.chip;
+            tag := Text {
+                text: item.profile;
+                font-size: 11px;
+                color: Palette.dim;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+                width: 100%;
+                height: 100%;
+            }
+        }
+    }
+}
+
+// The bear's cards: two columns, the profile under the name and the key at the end.
+export component CardsLook inherits Rectangle {
+    in property <[Destination]> rows;
+    in property <bool> private-on;
+    in property <int> chosen-at;
+    in property <length> room;
+    callback open(int);
+    callback hovered(int);
+    property <length> card-width: (self.width - 20px - 6px) / 2;
+
+    Flickable {
+        height: root.room;
+        content-height: Math.ceil(root.rows.length / 2) * 58px + 10px;
+        for item[i] in root.rows: Rectangle {
+            property <bool> greyed: root.private-on && !item.can-private;
+            property <bool> lit: touch.has-hover || i == root.chosen-at;
+            x: 10px + Math.mod(i, 2) * (root.card-width + 6px);
+            y: 8px + Math.floor(i / 2) * 58px;
+            width: root.card-width;
+            height: 52px;
+            border-radius: 8px;
+            background: self.lit && !self.greyed ? Palette.brand-soft : Palette.chip;
+            border-width: self.lit && !self.greyed ? 1.5px : 0px;
+            border-color: Palette.brand;
+            opacity: self.greyed ? 0.4 : 1.0;
+            accessible-role: button;
+            accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
+            accessible-action-default => { root.open(i); }
+            touch := TouchArea {
+                enabled: !parent.greyed;
+                clicked => { root.open(i); }
+                changed has-hover => { root.hovered(self.has-hover ? i : -1); }
+            }
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 8px;
+                spacing: 10px;
+                Badge {
+                    y: (parent.height - self.height) / 2;
+                    width: 34px;
+                    height: 34px;
+                    icon: item.icon;
+                    secret: root.private-on && item.can-private;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 1px;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: item.name;
+                        font-size: 14px;
+                        font-weight: 600;
+                        color: Palette.ink;
+                        overflow: elide;
+                    }
+                    if item.profile != "": Text {
+                        text: item.profile;
+                        font-size: 12px;
+                        color: Palette.dim;
+                        overflow: elide;
+                    }
+                }
+                Rectangle {
+                    width: 22px;
+                    KeyCap {
+                        y: 8px;
+                        key: item.key;
+                        lit: (touch.has-hover || i == root.chosen-at) && !(root.private-on && !item.can-private);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Only icons: the address in a small line, the keys under the icons, the name of the one aimed
+// at under them, and what to remember in a pill that Tab turns.
+export component CompactLook inherits Rectangle {
+    in property <[Destination]> rows;
+    in property <bool> private-on;
+    in property <int> chosen-at;
+    in property <int> hovered-at;
+    in property <string> host;
+    in property <string> trail;
+    in property <string> motto;
+    in property <string> private-line;
+    in property <string> private-label;
+    in property <bool> copied;
+    in property <string> copy-label;
+    in property <string> remember-label;
+    in property <string> reach-said;
+    in property <bool> reach-keeps;
+    callback open(int);
+    callback hovered(int);
+    callback toggle-private();
+    callback copy();
+    callback turn-reach();
+    property <int> aimed: root.hovered-at >= 0 ? root.hovered-at : root.chosen-at;
+
+    VerticalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        padding-top: 12px;
+        padding-bottom: 10px;
+        spacing: 6px;
+        HorizontalLayout {
+            height: 28px;
+            spacing: 6px;
+            HorizontalLayout {
+                horizontal-stretch: 1;
+                alignment: start;
+                padding-left: 4px;
+                Text {
+                    text: root.host;
+                    font-size: 12.5px;
+                    font-weight: 600;
+                    color: Palette.ink;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.trail;
+                    font-size: 12.5px;
+                    color: Palette.dimmer;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+            Tools {
+                private-on: root.private-on;
+                private-label: root.private-label;
+                copied: root.copied;
+                copy-label: root.copy-label;
+                toggle-private => { root.toggle-private(); }
+                copy => { root.copy(); }
+            }
+        }
+        HorizontalLayout {
+            alignment: center;
+            spacing: 4px;
+            height: 76px;
+            for item[i] in root.rows: Rectangle {
+                property <bool> greyed: root.private-on && !item.can-private;
+                property <bool> lit: touch.has-hover || i == root.chosen-at;
+                width: 50px;
+                border-radius: 8px;
+                background: i == root.chosen-at ? Palette.brand-soft : (touch.has-hover ? Palette.hover : transparent);
+                border-width: i == root.chosen-at ? 1.5px : 0px;
+                border-color: Palette.brand;
+                opacity: self.greyed ? 0.4 : 1.0;
+                accessible-role: button;
+                accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
+                accessible-action-default => { root.open(i); }
+                touch := TouchArea {
+                    enabled: !parent.greyed;
+                    clicked => { root.open(i); }
+                    changed has-hover => { root.hovered(self.has-hover ? i : -1); }
+                }
+                Badge {
+                    x: (parent.width - self.width) / 2;
+                    y: 8px;
+                    width: 38px;
+                    height: 38px;
+                    icon: item.icon;
+                    secret: root.private-on && item.can-private;
+                }
+                KeyCap {
+                    x: (parent.width - self.width) / 2;
+                    y: 51px;
+                    key: item.key;
+                    lit: i == root.chosen-at;
+                }
+            }
+        }
+        Text {
+            height: 20px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            font-size: 13px;
+            text: root.private-on ? root.private-line
+                : root.aimed >= 0 && root.aimed < root.rows.length
+                    ? (root.rows[root.aimed].profile != "" ? root.rows[root.aimed].name + " · " + root.rows[root.aimed].profile : root.rows[root.aimed].name)
+                    : root.motto;
+            color: root.private-on ? Palette.secret : (root.aimed >= 0 ? Palette.ink : Palette.dim);
+            font-italic: !root.private-on && root.aimed < 0;
+        }
+        HorizontalLayout {
+            alignment: center;
+            height: 26px;
+            Rectangle {
+                width: pill.preferred-width + 24px;
+                border-radius: 13px;
+                background: turn.has-hover ? Palette.hover : Palette.track;
+                pill := HorizontalLayout {
+                    x: 12px;
+                    spacing: 5px;
+                    Text {
+                        text: root.remember-label + ":";
+                        font-size: 12.5px;
+                        color: Palette.dim;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: root.reach-said;
+                        font-size: 12.5px;
+                        font-weight: 600;
+                        color: root.reach-keeps ? Palette.brand : Palette.ink;
+                        vertical-alignment: center;
+                        max-width: 180px;
+                        overflow: elide;
+                    }
+                    KeyCap {
+                        y: 3px;
+                        key: "Tab";
+                    }
+                }
+                turn := TouchArea {
+                    clicked => { root.turn-reach(); }
+                }
+            }
+        }
+    }
+}

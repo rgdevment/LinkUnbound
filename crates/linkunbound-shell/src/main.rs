@@ -10,9 +10,7 @@ use linkunbound_core::{
 };
 use linkunbound_shell::hotkey::Hotkey;
 use linkunbound_shell::tray::{Asked, Tray};
-use linkunbound_shell::{
-    ICON_SIDE, Listed, Notice, Picker, Reaches, TILE_ICON_SIDE, dress, paint, single,
-};
+use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, single};
 use slint::{ComponentHandle, Model};
 
 mod detected;
@@ -282,17 +280,12 @@ fn with_icons(
     listed
 }
 
-/// The side the icon is drawn at, in the pixels of the screen it is drawn on: a row's 24 or a
-/// tile's 40, times the scale. Extracted at that and drawn one to one, it has edges; extracted
+/// The side the icon is drawn at, in the pixels of the screen it is drawn on: what the look
+/// draws it at, times the scale. Extracted at that and drawn one to one, it has edges; extracted
 /// at anything else and scaled, it has none.
 fn physical_icon_side(picker: &Picker) -> u32 {
-    let logical = if picker.get_classic() {
-        ICON_SIDE
-    } else {
-        TILE_ICON_SIDE
-    };
     let scale = f64::from(picker.window().scale_factor()).max(1.0);
-    (f64::from(logical) * scale).round() as u32
+    (f64::from(picker.get_drawn_icon_side()) * scale).round() as u32
 }
 
 fn rows(icon_side: u32) -> Vec<Listed> {
@@ -1169,6 +1162,7 @@ fn main() -> Result<(), slint::PlatformError> {
     without_taking_the_front()?;
     let picker = Picker::new()?;
     picker.set_on_mac(cfg!(target_os = "macos"));
+    mascot::listen(&picker);
     let shown = Rc::new(RefCell::new(Shown::default()));
 
     // Alt+F4 reaches the window as a close request, which Slint answers by hiding it: the queue
@@ -1364,6 +1358,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Applied here rather than only on a later change: the tray was built
     // visible and the theme never left settings at all.
     state.obey(&store().prefs());
+    notice::after_the_bear(&state);
     state.keep_looking();
     UI.with_borrow_mut(|slot| *slot = Some(Rc::clone(&state)));
 

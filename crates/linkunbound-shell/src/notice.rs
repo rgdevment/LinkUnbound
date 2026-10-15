@@ -1,8 +1,11 @@
-use linkunbound_core::Strings;
+use std::rc::Rc;
+use std::time::Duration;
+
+use linkunbound_core::{PickerStyle, Strings};
 use linkunbound_shell::Notice;
 use slint::ComponentHandle;
 
-use crate::{host, native_handle, physical, store, ui};
+use crate::{Ui, host, native_handle, physical, store, ui};
 
 const NOTICE_SECONDS: i32 = 6;
 const NOTICE_MARGIN: f32 = 16.0;
@@ -13,6 +16,7 @@ pub fn flash(notice: &Notice, headline: String, reason: String, undo: Option<&st
     notice.set_reason(reason.into());
     notice.set_undo_label(undo.unwrap_or_default().into());
     notice.set_undoable(undo.is_some());
+    notice.set_choices(slint::ModelRc::default());
     notice.set_left(NOTICE_SECONDS);
     let _ = notice.show();
     if let Some(handle) = native_handle(notice.window()) {
@@ -24,6 +28,70 @@ pub fn flash(notice: &Notice, headline: String, reason: String, undo: Option<&st
     if !ui().is_some_and(|ui| ui.picker.window().is_visible()) {
         host::let_whoever_opens_next_come_forward();
     }
+}
+
+/// The looks the notice offers, in the order it draws them: the bear first, as the one in use.
+const OFFERED: [PickerStyle; 4] = [
+    PickerStyle::Bear,
+    PickerStyle::Classic,
+    PickerStyle::Sheet,
+    PickerStyle::Compact,
+];
+const STYLES_SECONDS: i32 = 20;
+
+/// Once, after the update moved everybody to the bear: whatever look they had stays one press
+/// away, in the corner, instead of three windows deep in settings.
+pub fn after_the_bear(state: &Rc<Ui>) {
+    let mut left_behind = None;
+    let _ = store().edit_prefs(|prefs| {
+        let before = prefs.schema_version;
+        left_behind = prefs.meets_the_bear();
+        prefs.schema_version != before
+    });
+    if left_behind.is_none() {
+        return;
+    }
+    state.obey(&store().prefs());
+    state.notice.on_chose(|at| {
+        let Some(ui) = ui() else { return };
+        let chosen = OFFERED[usize::try_from(at).unwrap_or(0).min(OFFERED.len() - 1)];
+        let _ = store().edit_prefs(|prefs| {
+            prefs.picker_style = chosen;
+            true
+        });
+        ui.obey(&store().prefs());
+        ui.countdown.stop();
+        let _ = ui.notice.hide();
+    });
+    // Shown from inside the loop: before it runs the window has no handle to keep it off the
+    // taskbar.
+    slint::Timer::single_shot(Duration::ZERO, || {
+        let Some(ui) = ui() else { return };
+        let words = ui.words.get();
+        flash(
+            &ui.notice,
+            words.styles_headline.to_owned(),
+            words.styles_reason.to_owned(),
+            None,
+        );
+        let names: Vec<slint::SharedString> = OFFERED
+            .iter()
+            .map(|style| {
+                match style {
+                    PickerStyle::Bear => words.style_bear,
+                    PickerStyle::Classic => words.style_classic,
+                    PickerStyle::Sheet => words.style_sheet,
+                    PickerStyle::Compact => words.style_compact,
+                }
+                .into()
+            })
+            .collect();
+        ui.notice
+            .set_choices(Rc::new(slint::VecModel::from(names)).into());
+        ui.notice.set_left(STYLES_SECONDS);
+        in_the_corner(&ui.notice);
+        ui.count_down();
+    });
 }
 
 pub fn noted(area: &'static str, what: &str) {

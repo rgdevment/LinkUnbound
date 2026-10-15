@@ -1,22 +1,32 @@
 #![windows_subsystem = "windows"]
 
-//! `cargo run -p linkunbound-shell --example preview -- [--sheet] [--light] [--en] [--six | --twelve]
+//! `cargo run -p linkunbound-shell --example preview -- [--look=list|tiles|compact|bear] [--light] [--en] [--six | --twelve]
 //! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]`
 
 use linkunbound_core::Language;
-use linkunbound_shell::{HALO, ICON_SIDE, Listed, Picker, TILE_ICON_SIDE, dress, paint};
+use linkunbound_shell::{HALO, Listed, Look, Picker, dress, paint};
 use slint::ComponentHandle;
 
 fn main() -> Result<(), slint::PlatformError> {
     let args: Vec<String> = std::env::args().collect();
     let flag = |name: &str| args.iter().any(|a| a == name);
-    let classic = !flag("--sheet");
+    let look = match args.iter().find_map(|a| a.strip_prefix("--look=")) {
+        Some("list") => Look::List,
+        Some("tiles") => Look::Tiles,
+        Some("compact") => Look::Compact,
+        _ => Look::Bear,
+    };
     let scale: u32 = args
         .iter()
         .find_map(|a| a.strip_prefix("--scale="))
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
-    let side = if classic { ICON_SIDE } else { TILE_ICON_SIDE } * scale;
+    let side = match look {
+        Look::List => 28,
+        Look::Tiles => 44,
+        Look::Compact => 38,
+        Look::Bear => 34,
+    } * scale;
     let icons = linkunbound_core::data_dir().join("icons");
     // Real icons at the side the chosen style draws them, so what the preview shows is what
     // the resident will: a 24 px icon stretched to a tile is exactly the blur being checked for.
@@ -92,8 +102,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let window = Picker::new()?;
     let notice = linkunbound_shell::Notice::new()?;
     paint(&window, &notice, flag("--light"));
-    window.set_classic(classic);
-    window.set_halo(if classic { 0.0 } else { HALO });
+    window.set_look(look);
+    window.set_halo(if look == Look::List { 0.0 } else { HALO });
     dress(
         &window,
         &words,

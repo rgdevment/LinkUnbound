@@ -1,19 +1,28 @@
 //! How the picker is drawn: list or tiles, and the material behind it where the system lends one.
 
 use linkunbound_core::PickerStyle;
-use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker, place};
+use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, place};
 use slint::ComponentHandle;
 
 pub fn style(picker: &Picker, chosen: PickerStyle) {
-    let classic = chosen != PickerStyle::Sheet;
+    let look = match chosen {
+        PickerStyle::Classic => Look::List,
+        PickerStyle::Sheet => Look::Tiles,
+        PickerStyle::Compact => Look::Compact,
+        PickerStyle::Bear => Look::Bear,
+    };
     let clear = acrylic();
-    picker.set_classic(classic);
+    picker.set_look(look);
     picker.global::<Palette>().set_clear(clear);
-    picker.set_halo(if classic || clear { 0.0 } else { HALO });
+    picker.set_halo(if look == Look::List || clear {
+        0.0
+    } else {
+        HALO
+    });
 }
 
 pub fn corner_of(picker: &Picker) -> f64 {
-    if picker.get_classic() {
+    if picker.get_look() == Look::List {
         CLASSIC_CORNER
     } else {
         CORNER
@@ -28,7 +37,7 @@ pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
         return false;
     }
     palette.set_clear(false);
-    if picker.get_classic() {
+    if picker.get_look() == Look::List {
         return false;
     }
     picker.set_halo(HALO);
