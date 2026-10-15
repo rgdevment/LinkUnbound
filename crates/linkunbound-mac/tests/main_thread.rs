@@ -132,16 +132,15 @@ fn main() {
     assert_eq!(corner(&material), 10.0);
     assert_eq!(tone(&material).as_deref(), Some("NSAppearanceNameAqua"));
 
-    window.setFrameTopLeftPoint(NSPoint::new(50.0, 500.0));
-    let grown = NSRect::new(NSPoint::new(50.0, 490.0), NSSize::new(10.0, 50.0));
+    let grown = NSRect::new(NSPoint::new(50.0, 450.0), NSSize::new(10.0, 50.0));
     window.setFrame_display(grown, false);
-    let frame = window.frame();
+    let drawn = window.convertRectToScreen(view.frame());
+    assert_eq!(drawn.size.height, 50.0);
     assert_eq!(
-        frame.origin.y + frame.size.height,
-        500.0,
-        "the picker grows downwards, keeping its top"
+        glass.frame(),
+        drawn,
+        "the glass follows what the picker draws"
     );
-    assert_eq!(glass.frame(), frame, "and the glass grows with it");
 
     take_off_glass(handle);
     assert_eq!(

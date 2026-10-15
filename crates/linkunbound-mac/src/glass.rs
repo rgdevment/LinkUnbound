@@ -1,6 +1,4 @@
-use std::cell::Cell;
 use std::ptr::NonNull;
-use std::rc::Rc;
 
 use block2::RcBlock;
 use objc2::Message;
@@ -9,11 +7,11 @@ use objc2::runtime::AnyClass;
 use objc2_app_kit::{
     NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
     NSBackingStoreType, NSColor, NSGlassEffectView, NSUserInterfaceItemIdentification, NSView,
-    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
-    NSWindow, NSWindowDidMoveNotification, NSWindowDidResizeNotification, NSWindowOrderingMode,
-    NSWindowStyleMask, NSWorkspace,
+    NSViewFrameDidChangeNotification, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowDidMoveNotification,
+    NSWindowDidResizeNotification, NSWindowOrderingMode, NSWindowStyleMask, NSWorkspace,
 };
-use objc2_foundation::{MainThreadMarker, NSNotification, NSNotificationCenter, NSPoint, NSString};
+use objc2_foundation::{MainThreadMarker, NSNotification, NSNotificationCenter, NSString};
 
 use crate::native::window_of;
 
@@ -119,47 +117,44 @@ fn glass_window(mtm: MainThreadMarker, picker: &NSWindow) -> Retained<NSWindow> 
     window
 }
 
-/// AppKit grows and shrinks a window from its bottom edge: the picker keeps its top instead, as it
-/// does on Windows and as the bear leaning on it expects, and the glass takes its frame again.
+/// The glass covers what the picker draws, not its frame: AppKit at times gives the frame room
+/// above the content the picker never paints.
+fn cover(picker: &NSWindow, glass: &NSWindow) {
+    if let Some(content) = picker.contentView() {
+        glass.setFrame_display(picker.convertRectToScreen(content.frame()), true);
+    }
+}
+
 #[allow(unsafe_code)]
 fn keep_with(picker: &NSWindow, glass: &NSWindow) {
-    let top = Rc::new(Cell::new(None::<f64>));
-    let moved = {
-        let (picker, glass, top) = (picker.retain(), glass.retain(), Rc::clone(&top));
-        RcBlock::new(move |_: NonNull<NSNotification>| {
-            let frame = picker.frame();
-            top.set(Some(frame.origin.y + frame.size.height));
-            glass.setFrame_display(frame, true);
-        })
-    };
-    let resized = {
+    let follow = {
         let (picker, glass) = (picker.retain(), glass.retain());
-        RcBlock::new(move |_: NonNull<NSNotification>| {
-            let frame = picker.frame();
-            if let Some(top) = top.get()
-                && (frame.origin.y + frame.size.height - top).abs() > 0.5
-            {
-                picker.setFrameTopLeftPoint(NSPoint::new(frame.origin.x, top));
-            }
-            glass.setFrame_display(picker.frame(), true);
-        })
+        RcBlock::new(move |_: NonNull<NSNotification>| cover(&picker, &glass))
     };
     let centre = NSNotificationCenter::defaultCenter();
-    // SAFETY: AppKit's own names, posted on the main thread where the blocks run; the centre keeps
-    // both observers for as long as the picker, which lives as long as the app.
+    let content = picker.contentView();
+    if let Some(content) = &content {
+        content.setPostsFrameChangedNotifications(true);
+    }
+    // SAFETY: AppKit's own names, posted on the main thread where the block runs; the centre keeps
+    // the observers for as long as the picker, which lives as long as the app.
     unsafe {
-        centre.addObserverForName_object_queue_usingBlock(
-            Some(NSWindowDidMoveNotification),
-            Some(picker),
-            None,
-            &moved,
-        );
-        centre.addObserverForName_object_queue_usingBlock(
-            Some(NSWindowDidResizeNotification),
-            Some(picker),
-            None,
-            &resized,
-        );
+        for name in [NSWindowDidMoveNotification, NSWindowDidResizeNotification] {
+            centre.addObserverForName_object_queue_usingBlock(
+                Some(name),
+                Some(picker),
+                None,
+                &follow,
+            );
+        }
+        if let Some(content) = &content {
+            centre.addObserverForName_object_queue_usingBlock(
+                Some(NSViewFrameDidChangeNotification),
+                Some(content),
+                None,
+                &follow,
+            );
+        }
     }
 }
 
@@ -185,7 +180,7 @@ pub fn wear_glass(view: isize, dark: bool, corner: f64) -> bool {
     };
     let glass = glass_behind(&picker).unwrap_or_else(|| glass_window(mtm, &picker));
     glass.setLevel(picker.level());
-    glass.setFrame_display(picker.frame(), true);
+    cover(&picker, &glass);
     let Some(material) = glass.contentView() else {
         return false;
     };
