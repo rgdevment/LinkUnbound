@@ -3,6 +3,7 @@ import { Destination, Palette, KeyCap, Badge, Tools } from "parts.slint";
 // The rows: key, icon, name, profile; nine on screen and the rest scroll under them.
 export component ListLook inherits Rectangle {
     in property <[Destination]> rows;
+    in property <length> icon: 24px;
     in property <bool> private-on;
     in property <int> chosen-at;
     in property <length> room;
@@ -43,8 +44,8 @@ export component ListLook inherits Rectangle {
                     }
                     Badge {
                         y: (parent.height - self.height) / 2;
-                        width: 28px;
-                        height: 28px;
+                        width: root.icon;
+                        height: root.icon;
                         icon: item.icon;
                         secret: root.private-on && item.can-private;
                     }
@@ -97,9 +98,9 @@ export component TilesLook inherits Rectangle {
         property <bool> lit: touch.has-hover || i == root.chosen-at;
         x: (parent.width - (self.in-row * root.tile-width + (self.in-row - 1) * 6px)) / 2
             + self.col-at * (root.tile-width + 6px);
-        y: 8px + self.row-at * 104px;
+        y: 8px + self.row-at * 106px;
         width: root.tile-width;
-        height: 98px;
+        height: 100px;
         border-radius: 8px;
         background: self.lit && !self.greyed ? Palette.hover : transparent;
         opacity: self.greyed ? 0.4 : 1.0;
@@ -118,15 +119,15 @@ export component TilesLook inherits Rectangle {
         }
         Badge {
             x: (parent.width - self.width) / 2;
-            y: 14px;
-            width: 44px;
-            height: 44px;
+            y: 12px;
+            width: 48px;
+            height: 48px;
             icon: item.icon;
             secret: root.private-on && item.can-private;
         }
         Text {
             x: 4px;
-            y: 62px;
+            y: 64px;
             width: parent.width - 8px;
             height: 17px;
             text: item.name;
@@ -138,7 +139,7 @@ export component TilesLook inherits Rectangle {
         }
         if item.profile != "": Rectangle {
             x: (parent.width - self.width) / 2;
-            y: 80px;
+            y: 82px;
             height: 16px;
             width: min(parent.width - 12px, tag.preferred-width + 14px);
             border-radius: 8px;
@@ -157,7 +158,7 @@ export component TilesLook inherits Rectangle {
     }
 }
 
-// The bear's cards: two columns, the profile under the name and the key at the end.
+// The bear's cards: three columns of buttons, the profile under the name and the key at the end.
 export component CardsLook inherits Rectangle {
     in property <[Destination]> rows;
     in property <bool> private-on;
@@ -165,16 +166,16 @@ export component CardsLook inherits Rectangle {
     in property <length> room;
     callback open(int);
     callback hovered(int);
-    property <length> card-width: (self.width - 20px - 6px) / 2;
+    property <length> card-width: (self.width - 20px - 2 * 6px) / 3;
 
     Flickable {
         height: root.room;
-        content-height: Math.ceil(root.rows.length / 2) * 58px + 10px;
+        content-height: Math.ceil(root.rows.length / 3) * 58px + 10px;
         for item[i] in root.rows: Rectangle {
             property <bool> greyed: root.private-on && !item.can-private;
             property <bool> lit: touch.has-hover || i == root.chosen-at;
-            x: 10px + Math.mod(i, 2) * (root.card-width + 6px);
-            y: 8px + Math.floor(i / 2) * 58px;
+            x: 10px + Math.mod(i, 3) * (root.card-width + 6px);
+            y: 8px + Math.floor(i / 3) * 58px;
             width: root.card-width;
             height: 52px;
             border-radius: 8px;
@@ -191,13 +192,13 @@ export component CardsLook inherits Rectangle {
                 changed has-hover => { root.hovered(self.has-hover ? i : -1); }
             }
             HorizontalLayout {
-                padding-left: 10px;
-                padding-right: 8px;
-                spacing: 10px;
+                padding-left: 8px;
+                padding-right: 6px;
+                spacing: 8px;
                 Badge {
                     y: (parent.height - self.height) / 2;
-                    width: 34px;
-                    height: 34px;
+                    width: 32px;
+                    height: 32px;
                     icon: item.icon;
                     secret: root.private-on && item.can-private;
                 }
@@ -206,8 +207,8 @@ export component CardsLook inherits Rectangle {
                     spacing: 1px;
                     horizontal-stretch: 1;
                     Text {
-                        text: item.name;
-                        font-size: 14px;
+                        text: item.short;
+                        font-size: 13px;
                         font-weight: 600;
                         color: Palette.ink;
                         overflow: elide;
@@ -220,9 +221,10 @@ export component CardsLook inherits Rectangle {
                     }
                 }
                 Rectangle {
-                    width: 22px;
+                    width: 20px;
                     KeyCap {
-                        y: 8px;
+                        x: parent.width - self.width;
+                        y: 6px;
                         key: item.key;
                         lit: (touch.has-hover || i == root.chosen-at) && !(root.private-on && !item.can-private);
                     }
@@ -296,7 +298,7 @@ export component CompactLook inherits Rectangle {
         HorizontalLayout {
             alignment: center;
             spacing: 4px;
-            height: 76px;
+            height: 72px;
             for item[i] in root.rows: Rectangle {
                 property <bool> greyed: root.private-on && !item.can-private;
                 property <bool> lit: touch.has-hover || i == root.chosen-at;
@@ -316,15 +318,15 @@ export component CompactLook inherits Rectangle {
                 }
                 Badge {
                     x: (parent.width - self.width) / 2;
-                    y: 8px;
-                    width: 38px;
-                    height: 38px;
+                    y: 10px;
+                    width: 32px;
+                    height: 32px;
                     icon: item.icon;
                     secret: root.private-on && item.can-private;
                 }
                 KeyCap {
                     x: (parent.width - self.width) / 2;
-                    y: 51px;
+                    y: 46px;
                     key: item.key;
                     lit: i == root.chosen-at;
                 }

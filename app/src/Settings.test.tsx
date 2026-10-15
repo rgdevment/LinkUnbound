@@ -62,10 +62,16 @@ async function go(section: string) {
   await userEvent.click(await screen.findByRole("button", { name: section }));
 }
 
+/// Settings opens on the application page; most of these are about the links one.
+async function opened() {
+  render(<Settings />);
+  await userEvent.click(await screen.findByRole("button", { name: /^(Enlaces|Links)$/ }));
+}
+
 describe("settings", () => {
   it("asks for the window once it has painted", async () => {
     answers(BASE);
-    render(<Settings />);
+    await opened();
     await screen.findByRole("heading", { name: "Enlaces" });
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("settings_painted"));
   });
@@ -75,7 +81,7 @@ describe("settings", () => {
   /// The corner is gone and About carries the number, so the bar must stay quiet with nothing new.
   it("says nothing in the bar when there is no newer version", async () => {
     answers(BASE);
-    render(<Settings />);
+    await opened();
     await go("Acerca de");
     expect(await screen.findByText("2.0.0")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /hay una versión nueva/ })).toBeNull();
@@ -86,7 +92,7 @@ describe("settings", () => {
       update_ready: () =>
         Promise.resolve({ version: "2.1.0", route: "download", package: null, installs: true }),
     });
-    render(<Settings />);
+    await opened();
 
     const go = await screen.findByRole("button", {
       name: "Acerca de · hay una versión nueva",
@@ -105,7 +111,7 @@ describe("settings", () => {
 
   it("speaks whatever language the backend resolved", async () => {
     answers(BASE, { prefs_get: () => Promise.resolve({ ...PREFS, language: "en" }) });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByRole("button", { name: "Links" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Maintenance" })).toBeInTheDocument();
   });
@@ -120,7 +126,7 @@ describe("settings", () => {
           language: "en",
         }),
     });
-    render(<Settings />);
+    await opened();
     await go("Aplicación");
     await userEvent.click(await screen.findByRole("radio", { name: "Inglés" }));
     expect(await screen.findByRole("button", { name: "Application" })).toBeInTheDocument();
@@ -130,7 +136,7 @@ describe("settings", () => {
   /// the language actually being shown.
   it("tells the document which language it is speaking", async () => {
     answers(BASE, { prefs_get: () => Promise.resolve({ ...PREFS, language: "en" }) });
-    render(<Settings />);
+    await opened();
     await screen.findByRole("button", { name: "Links" });
     await waitFor(() => expect(document.documentElement.lang).toBe("en"));
   });
@@ -141,7 +147,7 @@ describe("settings", () => {
       health: "wrong_binary",
       registered_path: String.raw`"C:\Program Files\LinkUnbound\linkunbound-settings.exe" "%1"`,
     });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/no sabe abrir un enlace/)).toBeInTheDocument();
     expect(screen.getByText(/Windows ejecutaría/).textContent).toContain(
       "linkunbound-settings.exe",
@@ -154,14 +160,14 @@ describe("settings", () => {
       health: "build_tree",
       registered_path: String.raw`"D:\Code\LinkUnbound\target\debug\linkunbound-shell.exe" "%1"`,
     });
-    render(<Settings />);
+    await opened();
     expect((await screen.findByText(/Windows ejecutaría/)).textContent).toContain(
       String.raw`target\debug`,
     );
   });
 
   it("says the links arrive here when they really do", async () => {
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/recibe los enlaces/)).toBeInTheDocument();
   });
 
@@ -170,7 +176,7 @@ describe("settings", () => {
   /// after the person had just made them arrive.
   it("asks again when it comes back from the Windows panel", async () => {
     answers({ ...BASE, is_default: false, associations: [] });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/todavía no envía/)).toBeInTheDocument();
 
     answers(BASE);
@@ -181,13 +187,13 @@ describe("settings", () => {
 
   it("opens the Windows panel when another browser holds the links", async () => {
     answers({ ...BASE, is_default: false });
-    render(<Settings />);
+    await opened();
     await userEvent.click(await screen.findByRole("button", { name: "Abrir Configuración" }));
     expect(invoke).toHaveBeenCalledWith("system_open_default_apps");
   });
 
   it("offers no Windows button once the links already arrive here", async () => {
-    render(<Settings />);
+    await opened();
     await screen.findByText(/recibe los enlaces/);
     expect(screen.queryByRole("button", { name: "Abrir Configuración" })).toBeNull();
   });
@@ -196,7 +202,7 @@ describe("settings", () => {
   /// path this executable no longer occupies.
   it("warns and offers to repair a registration pointing somewhere else", async () => {
     answers({ ...BASE, health: "stale" });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/no está recibiendo los enlaces/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Reparar" }));
     expect(invoke).toHaveBeenCalledWith("system_repair");
@@ -206,7 +212,7 @@ describe("settings", () => {
   /// says what it costs; «Reparar» would lie, since the next reconcile would not keep it.
   it("lets a build tree register itself on purpose, and says what that costs", async () => {
     answers({ ...BASE, health: "build_tree" });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/recién compilada/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
     expect(screen.getByText(/si mueves o limpias la carpeta/)).toBeInTheDocument();
@@ -219,7 +225,7 @@ describe("settings", () => {
     Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
     try {
       answers({ ...BASE, health: "build_tree" });
-      render(<Settings />);
+      await opened();
       expect(await screen.findByText(/fuera de un paquete/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Registrar esta copia igualmente" })).toBeNull();
     } finally {
@@ -234,7 +240,7 @@ describe("settings", () => {
       health: "stale",
       registered_path: String.raw`C:\Users\Mario\AppData\Local\Programs\LinkUnbound\linkunbound-shell.exe`,
     });
-    render(<Settings />);
+    await opened();
     const shown = await screen.findByText(/Windows ejecutaría/);
     expect(shown.textContent).toBe(
       String.raw`Windows ejecutaría: C:\Users\Mario\AppData\Local\Programs\LinkUnbound\linkunbound-shell.exe`,
@@ -246,7 +252,7 @@ describe("settings", () => {
   });
 
   it("says nothing about the handler when it is healthy", async () => {
-    render(<Settings />);
+    await opened();
     await screen.findByText(/recibe los enlaces/);
     expect(screen.queryByText(/no está recibiendo los enlaces/)).toBeNull();
   });
@@ -255,7 +261,7 @@ describe("settings", () => {
   /// though intercepting the channel is not.
   it("explains the Edge channel only on a machine that has Edge", async () => {
     answers({ ...BASE, edge_installed: true });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/saltándose el navegador/)).toBeInTheDocument();
   });
 
@@ -263,7 +269,7 @@ describe("settings", () => {
   /// untouched, and the section does not come back on the next visit.
   it("stops explaining Edge once the person says they understood", async () => {
     answers({ ...BASE, edge_installed: true });
-    render(<Settings />);
+    await opened();
     await userEvent.click(await screen.findByRole("button", { name: /Entendido/ }));
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
       prefs: { ...PREFS.prefs, edge_warning_dismissed: true },
@@ -278,19 +284,19 @@ describe("settings", () => {
           Promise.resolve({ ...PREFS, prefs: { ...PREFS.prefs, edge_warning_dismissed: true } }),
       },
     );
-    render(<Settings />);
+    await opened();
     await screen.findByText(/recibe los enlaces/);
     expect(screen.queryByText(/saltándose el navegador/)).toBeNull();
   });
 
   it("says nothing about Edge when Edge is not installed", async () => {
-    render(<Settings />);
+    await opened();
     await screen.findByText(/recibe los enlaces/);
     expect(screen.queryByText(/saltándose el navegador/)).toBeNull();
   });
 
   it("lets the registration be turned off", async () => {
-    render(<Settings />);
+    await opened();
     await userEvent.click(await screen.findByRole("switch", { name: "Ofrecerse como navegador" }));
     expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: false });
   });
@@ -299,7 +305,7 @@ describe("settings", () => {
   /// rather than pretend the order was accepted.
   it("blocks startup when something outside disabled it, and explains why", async () => {
     answers({ ...BASE, starts_with_system: false, startup_is_ours: false });
-    render(<Settings />);
+    await opened();
     await go("Aplicación");
     expect(await screen.findByText(/Aplicaciones de inicio/)).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Iniciar con el sistema" })).toBeDisabled();
@@ -309,7 +315,7 @@ describe("settings", () => {
     answers(BASE, {
       system_set_registered: () => Promise.reject("the registry refused the write"),
     });
-    render(<Settings />);
+    await opened();
     await userEvent.click(await screen.findByRole("switch", { name: "Ofrecerse como navegador" }));
     expect(await screen.findByText(/registry refused/)).toBeInTheDocument();
   });
@@ -324,7 +330,7 @@ describe("settings", () => {
 
     it("offers to become the default, which macOS confirms with its own prompt", async () => {
       answers({ ...BASE, is_default: false });
-      render(<Settings />);
+      await opened();
       expect(await screen.findByText(/macOS todavía no envía/)).toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Establecer" }));
       expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: true });
@@ -333,7 +339,7 @@ describe("settings", () => {
 
     it("sends to System Settings as the second way, never as the first", async () => {
       answers({ ...BASE, is_default: false });
-      render(<Settings />);
+      await opened();
       await userEvent.click(
         await screen.findByRole("button", { name: "Abrir Ajustes del Sistema" }),
       );
@@ -341,7 +347,7 @@ describe("settings", () => {
     });
 
     it("offers nothing to press once the links already arrive here", async () => {
-      render(<Settings />);
+      await opened();
       await screen.findByText(/recibe los enlaces/);
       expect(screen.queryByRole("button", { name: "Establecer" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Abrir Ajustes del Sistema" })).toBeNull();
@@ -354,14 +360,14 @@ describe("settings", () => {
           system_set_registered: () => Promise.reject("defaultDeclined"),
         },
       );
-      render(<Settings />);
+      await opened();
       await userEvent.click(await screen.findByRole("button", { name: "Establecer" }));
       expect(await screen.findByText(/Rechazaste el cambio/)).toBeInTheDocument();
     });
 
     it("names the login items pane rather than a Windows one", async () => {
       answers({ ...BASE, starts_with_system: false, startup_is_ours: false });
-      render(<Settings />);
+      await opened();
       await go("Aplicación");
       expect(await screen.findByText(/Ítems de inicio/)).toBeInTheDocument();
     });
@@ -371,7 +377,7 @@ describe("settings", () => {
         system_legacy: () =>
           Promise.resolve({ path: "/Applications/LinkUnbound.app", version: "1.4.0" }),
       });
-      render(<Settings />);
+      await opened();
       expect(await screen.findByText(/LinkUnbound 1\.4\.0 instalado/)).toBeInTheDocument();
       expect(screen.getByText(/Applications/)).toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "Quitar la versión anterior" }));
@@ -385,7 +391,7 @@ describe("settings", () => {
           Promise.resolve({ path: "/Applications/LinkUnbound.app", version: "1.4.0" }),
         system_retire_legacy: () => Promise.reject("no permission"),
       });
-      render(<Settings />);
+      await opened();
       await userEvent.click(
         await screen.findByRole("button", { name: "Quitar la versión anterior" }),
       );
@@ -395,7 +401,7 @@ describe("settings", () => {
 
     it("says nothing about 1.x when there is none installed", async () => {
       answers(BASE);
-      render(<Settings />);
+      await opened();
       await screen.findByText(/recibe los enlaces/);
       expect(screen.queryByText(/instalado/)).toBeNull();
     });
@@ -405,7 +411,7 @@ describe("settings", () => {
     answers(BASE, {
       system_legacy: () => Promise.resolve({ path: "C:/x/LinkUnbound.exe", version: "1.4.0" }),
     });
-    render(<Settings />);
+    await opened();
     await screen.findByRole("heading", { name: "Enlaces" });
     expect(invoke).not.toHaveBeenCalledWith("system_legacy");
   });
@@ -420,14 +426,14 @@ describe("settings", () => {
         { scheme: ".htm", held: false },
       ],
     });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText("1 de 3 asociaciones")).toBeInTheDocument();
     expect(screen.getByText(/todavía no envía/)).toBeInTheDocument();
   });
 
   it("says nothing about the links while the backend has not answered", async () => {
     answers(BASE, { system_state: () => new Promise(() => {}) });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByRole("heading", { name: "Enlaces" })).toBeInTheDocument();
     expect(screen.getByText("0 de 0 asociaciones")).toBeInTheDocument();
     expect(screen.getByText(/todavía no envía/)).toBeInTheDocument();
@@ -439,7 +445,7 @@ describe("settings", () => {
       { ...BASE, is_default: false },
       { system_open_default_apps: () => Promise.resolve(null) },
     );
-    render(<Settings />);
+    await opened();
     await userEvent.click(await screen.findByRole("button", { name: "Abrir Configuración" }));
     expect(screen.getByText(/todavía no envía/)).toBeInTheDocument();
     expect(screen.queryByText(/Algo salió mal/)).toBeNull();
@@ -451,7 +457,7 @@ describe("settings", () => {
       system_set_registered: () =>
         refuse ? Promise.reject("the registry refused the write") : Promise.resolve(BASE),
     });
-    render(<Settings />);
+    await opened();
     await userEvent.click(await screen.findByRole("switch", { name: "Ofrecerse como navegador" }));
     expect(await screen.findByText(/registry refused/)).toBeInTheDocument();
     refuse = false;
@@ -465,7 +471,7 @@ describe("settings", () => {
       health: "stale",
       registered_path: String.raw`C:\Other\linkunbound-shell.exe`,
     });
-    render(<Settings />);
+    await opened();
     await userEvent.click(await screen.findByRole("button", { name: "Reparar" }));
     expect(invoke).toHaveBeenCalledWith("system_repair");
   });
@@ -474,7 +480,7 @@ describe("settings", () => {
   /// some other browser, since the default one is the resident that is missing.
   it("sends a copy without its resident to the download, not to a repair", async () => {
     answers({ ...BASE, health: "no_resident" });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/Falta el programa/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Descargar de nuevo" }));
@@ -486,14 +492,14 @@ describe("settings", () => {
 
   it("warns a copy running from the disk image, and offers no repair", async () => {
     answers({ ...BASE, health: "mounted" });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/imagen de disco/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
   });
 
   it("walks every section and marks the one it is on", async () => {
     answers(BASE, { browsers_list: () => Promise.resolve([]) });
-    render(<Settings />);
+    await opened();
     for (const [name, heading] of [
       ["Reglas", "Reglas"],
       ["Navegadores", "Navegadores"],
@@ -511,7 +517,7 @@ describe("settings", () => {
 
   it("shows one section at a time", async () => {
     answers(BASE, { browsers_list: () => Promise.resolve([]) });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText("Navegador predeterminado")).toBeInTheDocument();
     expect(screen.queryByText(/Todavía no hay ninguna regla/)).toBeNull();
     await go("Reglas");
@@ -524,14 +530,14 @@ describe("settings", () => {
 
   it("names no path when the registration names none", async () => {
     answers({ ...BASE, health: "stale", registered_path: null });
-    render(<Settings />);
+    await opened();
     expect(await screen.findByText(/apunta a otra copia/)).toBeInTheDocument();
     expect(screen.queryByText(/ejecutaría/)).toBeNull();
   });
 
   it("takes the startup toggle as off and ours while nothing is known", async () => {
     answers(BASE, { system_state: () => new Promise(() => {}) });
-    render(<Settings />);
+    await opened();
     await go("Aplicación");
     const toggle = await screen.findByRole("switch", { name: "Iniciar con el sistema" });
     expect(toggle).toBeEnabled();
@@ -539,7 +545,7 @@ describe("settings", () => {
   });
 
   it("opens on the links section, not on a blank pane", async () => {
-    render(<Settings />);
+    await opened();
     expect(await screen.findByRole("heading", { name: "Enlaces" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enlaces" })).toHaveAttribute("aria-current", "page");
   });

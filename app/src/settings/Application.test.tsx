@@ -88,6 +88,20 @@ describe("application settings", () => {
     expect(invoke).toHaveBeenCalledWith("picker_preview");
   });
 
+  /// Once a preview is up, choosing another look redraws it rather than leaving the old one open.
+  it("redraws the preview when another look is chosen", async () => {
+    mount();
+    const picker = within(await screen.findByRole("group", { name: "Selector" }));
+    await userEvent.click(picker.getByRole("radio", { name: "Mosaico" }));
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "picker_preview")).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole("button", { name: "Vista previa" }));
+    await userEvent.click(picker.getByRole("radio", { name: "Oso" }));
+    await waitFor(() =>
+      expect(invoke.mock.calls.filter(([cmd]) => cmd === "picker_preview")).toHaveLength(2),
+    );
+  });
+
   /// The resident asks the feed on its own; the switch is the one way to say not to, and it has
   /// to read back what is in force.
   it("lets the background look for releases be turned off", async () => {

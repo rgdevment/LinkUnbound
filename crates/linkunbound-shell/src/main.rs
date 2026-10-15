@@ -989,13 +989,13 @@ fn arrived(raw: String) {
         held::hold_for_the_loop(raw);
         return;
     };
+    ui.catch_up();
     if preview::shown_for(&ui, &raw) {
         return;
     }
     // The socket takes a line from any process of this user; the command line is
     // normalised and this has to be too, or the scheme guard is walked around.
     let Some(url) = normalise(&raw) else { return };
-    ui.catch_up();
 
     let source = host::clicked_in();
     if let Some(fired) = answered_by_rule(&url, source.as_ref()) {

@@ -17,10 +17,14 @@ pub fn asked(args: &[String]) -> Option<String> {
         .then(|| PREVIEW.to_owned())
 }
 
-/// Whether the line was the preview, shown or not: over a picker in use it waits for nobody.
+/// Whether the line was the preview, shown or not: over a picker in use it waits for nobody, and
+/// over a preview it starts again, so a look chosen meanwhile is drawn from scratch.
 pub fn shown_for(ui: &Rc<Ui>, raw: &str) -> bool {
     if raw != PREVIEW {
         return false;
+    }
+    if ui.picker.window().is_visible() && ui.picker.get_preview() {
+        crate::look::put_away(&ui.picker);
     }
     let sample = Arrival {
         url: SAMPLE.to_owned(),

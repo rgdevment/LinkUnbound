@@ -86,7 +86,7 @@ export component Picker inherits Window {
     property <float> count: root.rows.length;
     property <float> aim:
         root.aimed < 0 ? 0
-        : root.look == Look.bear ? (Math.mod(root.aimed, 2) == 0 ? -0.7 : 0.7)
+        : root.look == Look.bear ? (Math.mod(root.aimed, 3) - 1) * 0.7
         : ((root.aimed + 0.5) / max(1, root.count) - 0.5) * 2;
     changed aim => { root.mood(root.aim, root.private-on); }
     changed private-on => { root.mood(root.aim, root.private-on); }
@@ -101,7 +101,8 @@ export component Picker inherits Window {
     property <length> list-room: max(1, root.rows-shown) * 45px + 11px;
     // A fifth reach appears when the click came from a known app, and its label carries that
     // app's name, which no fixed width can be drawn for: the track asks for the room it needs.
-    property <length> list-width: min(max(380px, ruler.preferred-width + 60px + root.reaches.length * 18px), 560px);
+    property <length> track-need: ruler.preferred-width + 60px + root.reaches.length * 18px;
+    property <length> list-width: min(max(380px, root.track-need), 560px);
     ruler := Text {
         text: root.reaches-line;
         font-size: 12.5px;
@@ -111,29 +112,28 @@ export component Picker inherits Window {
     // Tiles shared out evenly, so six make two rows of three rather than four and two.
     property <float> tile-rows: max(1, Math.ceil(root.count / 4));
     property <float> tile-cols: max(1, Math.ceil(root.count / root.tile-rows));
-    property <length> tiles-width: root.tile-cols >= 4 ? 400px : 372px;
+    property <length> tiles-width: min(max(root.tile-cols >= 4 ? 400px : 372px, root.track-need), 560px);
     property <length> tile-width: Math.floor(((root.tiles-width - 20px - (root.tile-cols - 1) * 6px) / root.tile-cols) / 1px) * 1px;
-    property <length> tiles-room: root.tile-rows * 104px + 10px;
+    property <length> tiles-room: root.tile-rows * 106px + 10px;
 
-    // Two columns of cards; five rows on screen and the rest scroll.
-    property <float> card-rows: min(5, max(1, Math.ceil(root.count / 2)));
-    property <length> cards-room: root.card-rows * 58px + 10px;
+    // Three columns of cards; four rows on screen and the rest scroll.
+    property <length> cards-room: min(4, max(1, Math.ceil(root.count / 3))) * 58px + 10px;
 
     property <float> icons-shown: max(1, root.count);
     property <length> compact-width: max(280px, root.icons-shown * 54px - 4px + 20px);
-    property <length> compact-height: 12px + 28px + 6px + 76px + 6px + 20px + 6px + 26px + 10px;
+    property <length> compact-height: 12px + 28px + 6px + 72px + 6px + 20px + 6px + 26px + 10px;
 
     property <length> foot-room: 74px;
     property <length> sheet-width:
         root.look == Look.list ? root.list-width
         : root.look == Look.tiles ? root.tiles-width
-        : root.look == Look.bear ? 420px
+        : root.look == Look.bear ? max(500px, root.list-width)
         : root.compact-width;
-    property <length> head-room: root.look == Look.bear ? 104px : 60px;
+    property <length> head-room: root.look == Look.bear ? 80px : 60px;
     property <length> body-room:
-        root.look == Look.list ? root.list-room
-        : root.look == Look.tiles ? root.tiles-room
-        : root.cards-room;
+        root.look == Look.tiles ? root.tiles-room
+        : root.look == Look.bear ? root.cards-room
+        : root.list-room;
     property <length> sheet-height: root.strip-room + (root.look == Look.compact
         ? root.compact-height
         : root.head-room + 1px + root.body-room + 1px + root.foot-room);
@@ -142,7 +142,7 @@ export component Picker inherits Window {
     out property <length> wanted-height: root.sheet-height + 2 * root.halo;
     // The side the icons are drawn at, for the resident to extract them at in screen pixels.
     out property <float> drawn-icon-side:
-        root.look == Look.list ? 28 : root.look == Look.tiles ? 44 : root.look == Look.bear ? 34 : 38;
+        root.look == Look.tiles ? 48 : root.look == Look.list ? 24 : 32;
 
     function toggle-private() {
         root.pinned-private = !root.pinned-private;
@@ -181,7 +181,7 @@ export component Picker inherits Window {
             }
             if (event.text == Key.UpArrow || event.text == Key.DownArrow) {
                 root.step-chosen((event.text == Key.DownArrow ? 1 : -1)
-                    * (root.look == Look.bear ? 2 : root.look == Look.tiles ? root.tile-cols : 1));
+                    * (root.look == Look.tiles ? root.tile-cols : root.look == Look.bear ? 3 : 1));
                 return accept;
             }
             // Every reach, not only the ones the track draws: the keyboard reaches those behind
@@ -321,6 +321,15 @@ export component Picker inherits Window {
                     copy => { root.copy(); }
                 }
                 Hair {}
+                if root.look == Look.bear: CardsLook {
+                    height: root.cards-room;
+                    room: root.cards-room;
+                    rows: root.rows;
+                    private-on: root.private-on;
+                    chosen-at: root.chosen-at;
+                    open(i) => { root.open(i, root.private-on); }
+                    hovered(i) => { root.hovered-at = i; }
+                }
                 if root.look == Look.list: ListLook {
                     height: root.list-room;
                     room: root.list-room;
@@ -337,15 +346,6 @@ export component Picker inherits Window {
                     chosen-at: root.chosen-at;
                     cols: root.tile-cols;
                     tile-width: root.tile-width;
-                    open(i) => { root.open(i, root.private-on); }
-                    hovered(i) => { root.hovered-at = i; }
-                }
-                if root.look == Look.bear: CardsLook {
-                    height: root.cards-room;
-                    room: root.cards-room;
-                    rows: root.rows;
-                    private-on: root.private-on;
-                    chosen-at: root.chosen-at;
                     open(i) => { root.open(i, root.private-on); }
                     hovered(i) => { root.hovered-at = i; }
                 }

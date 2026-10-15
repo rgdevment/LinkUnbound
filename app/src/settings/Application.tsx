@@ -118,7 +118,13 @@ export default function Application({
   const [problem, setProblem] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
 
-  const apply = (patch: Partial<Preferences>) => {
+  const [previewing, setPreviewing] = useState(false);
+  const preview = () => {
+    setPreviewing(true);
+    void invoke("picker_preview").catch(noop);
+  };
+
+  const apply = (patch: Partial<Preferences>, then?: () => void) => {
     if (!settings) return;
     void invoke<Settings>("prefs_set", { prefs: { ...settings.prefs, ...patch } })
       .then((next) => {
@@ -127,6 +133,7 @@ export default function Application({
         refresh();
         setProblem(null);
         if ("shortcut" in patch) askAgainOnceTheResidentHasIt();
+        then?.();
       })
       .catch((e: unknown) => setProblem(saidPlainly(language, e)))
       .finally(() => setCapturing(false));
@@ -178,11 +185,11 @@ export default function Application({
                 options={PICKERS}
                 value={prefs.picker_style}
                 label={t("appPicker")}
-                onPick={(picker_style) => apply({ picker_style })}
+                onPick={(picker_style) => apply({ picker_style }, previewing ? preview : undefined)}
               />
               <button
                 type="button"
-                onClick={() => invoke("picker_preview").catch(() => {})}
+                onClick={preview}
                 className="text-[11.5px] text-[#2F62D8] hover:underline dark:text-[#6E9BFF]"
               >
                 {t("pickerPreview")}

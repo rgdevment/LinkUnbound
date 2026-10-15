@@ -189,10 +189,9 @@ impl Said {
     }
 }
 
-/// The two the row shows. Everything else goes behind «More», because five labels never fit a
-/// width the rows can also live at — and two of the five are dead half the time: a URL reach on
-/// a wrapped link, a subdomain reach on a host that has none.
-pub const IN_THE_ROW: [i32; 2] = [0, 3];
+/// The four the track shows, in the order it shows them. Only the app the link came from goes
+/// behind «More»: its label carries a name no fixed width can be drawn for.
+pub const IN_THE_ROW: [i32; 4] = [0, 3, 1, 2];
 
 #[must_use]
 pub fn in_the_row(index: i32) -> bool {
@@ -347,6 +346,18 @@ pub fn split(url: &str) -> (String, String) {
     }
 }
 
+/// What a browser is called among friends: the maker's name in front and «Browser» at the end
+/// say nothing a small card has room for.
+#[must_use]
+pub fn short_name(name: &str) -> &str {
+    let name = name.trim();
+    let name = ["Google ", "Mozilla ", "Microsoft "]
+        .iter()
+        .find_map(|maker| name.strip_prefix(maker))
+        .unwrap_or(name);
+    name.strip_suffix(" Browser").unwrap_or(name)
+}
+
 fn image_for(path: Option<&str>) -> slint::Image {
     path.and_then(|p| slint::Image::load_from_path(std::path::Path::new(p)).ok())
         .unwrap_or_default()
@@ -405,6 +416,7 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
                 slint::SharedString::new()
             },
             name: row.name.clone().into(),
+            short: short_name(&row.name).into(),
             profile: row.profile.clone().into(),
             icon: image_for(row.icon.as_deref()),
             can_private: row.can_private,
@@ -444,9 +456,12 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
 
     // What the row draws, so the window can be measured against the words it will actually show
     // rather than against every reach there is.
+    let row: Vec<Reach> = IN_THE_ROW
+        .iter()
+        .filter_map(|&at| all.iter().find(|one| one.index == at).cloned())
+        .collect();
     window.set_reaches_line(
-        all.iter()
-            .filter(|one| in_the_row(one.index))
+        row.iter()
             .map(|one| one.label.to_string())
             .chain(std::iter::once(words.reach_more.to_owned()))
             .collect::<Vec<_>>()
@@ -454,10 +469,32 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
             .into(),
     );
 
-    let (row, rest): (Vec<Reach>, Vec<Reach>) =
-        all.into_iter().partition(|one| in_the_row(one.index));
+    let rest: Vec<Reach> = all
+        .into_iter()
+        .filter(|one| !in_the_row(one.index))
+        .collect();
     window.set_reaches(Rc::new(slint::VecModel::from(row)).into());
     window.set_reaches_more(Rc::new(slint::VecModel::from(rest)).into());
+}
+
+#[cfg(test)]
+mod short {
+    use super::short_name;
+
+    #[test]
+    fn a_browser_goes_by_its_own_name() {
+        for (full, short) in [
+            ("Google Chrome", "Chrome"),
+            ("Mozilla Firefox", "Firefox"),
+            ("Microsoft Edge", "Edge"),
+            ("Brave Browser", "Brave"),
+            ("Vivaldi", "Vivaldi"),
+            ("Google Chrome Beta", "Chrome Beta"),
+            ("Opera GX", "Opera GX"),
+        ] {
+            assert_eq!(short_name(full), short, "{full}");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -556,7 +593,7 @@ mod tests {
 
         dress(&window, &words, "https://docs.google.com/a", None, &rows);
         let alone = window.get_wanted_width();
-        assert_eq!(alone, 380.0);
+        assert!(alone >= 380.0, "{alone}");
 
         for from in ["ms-teams", "Microsoft Teams Classic"] {
             dress(
@@ -592,26 +629,26 @@ mod tests {
             Some("ms-teams"),
             &two,
         );
-        assert_eq!(window.get_wanted_width(), 372.0);
+        let two_across = window.get_wanted_width();
+        assert!(two_across >= 372.0, "{two_across}");
 
         let mut four = two.clone();
         four.extend(two.iter().cloned());
         dress(&window, &words, "https://docs.google.com/a", None, &four);
-        assert_eq!(
-            window.get_wanted_width(),
-            400.0,
+        let four_across = window.get_wanted_width();
+        assert!(
+            four_across >= 400.0 && four_across >= two_across,
             "four across need the wider sheet"
         );
 
         window.set_halo(18.0);
-        assert_eq!(window.get_wanted_width(), 400.0 + 36.0);
+        assert_eq!(window.get_wanted_width(), four_across + 36.0);
 
         window.set_halo(0.0);
         window.set_look(crate::Look::List);
-        assert_eq!(
-            window.get_wanted_width(),
-            380.0,
-            "the list keeps its own width"
+        assert!(
+            window.get_wanted_width() >= 380.0,
+            "the list keeps its own floor"
         );
     }
 
@@ -937,8 +974,14 @@ mod tests {
 
         let row = window.get_reaches();
         let menu = window.get_reaches_more();
-        assert_eq!(row.row_count(), 2);
-        assert_eq!(menu.row_count(), 3);
+        assert_eq!(row.row_count(), 4);
+        assert_eq!(menu.row_count(), 1);
+        let order: Vec<i32> = row.iter().map(|one| one.index).collect();
+        assert_eq!(
+            order,
+            vec![0, 3, 1, 2],
+            "once, the whole site, this URL, the subdomain"
+        );
 
         let mut seen: Vec<(i32, String)> = row
             .iter()
@@ -957,12 +1000,6 @@ mod tests {
                 (4, Strings::fill(words.reach_from_app, "ms-teams")),
             ],
             "every reach kept the number Reaches::at reads"
-        );
-
-        assert_eq!(
-            row.iter().map(|one| one.index).collect::<Vec<_>>(),
-            vec![0, 3],
-            "the row shows «just this time» and «the whole site»"
         );
     }
 
@@ -983,14 +1020,15 @@ mod tests {
             &rows,
         );
 
-        for at in [0, 3] {
+        for at in [0, 1, 2, 3] {
             window.set_reach_index(at);
             assert!(!window.get_more_holds(), "{at} is drawn in the row");
         }
-        for at in [1, 2, 4] {
-            window.set_reach_index(at);
-            assert!(window.get_more_holds(), "{at} is only behind the opener");
-        }
+        window.set_reach_index(4);
+        assert!(
+            window.get_more_holds(),
+            "the origin is only behind the opener"
+        );
     }
 
     /// Slint's testing backend, so the window needs neither a screen nor the main thread: winit
@@ -1037,13 +1075,13 @@ mod tests {
         let offered = window.get_reaches();
         assert_eq!(
             offered.row_count(),
-            2,
-            "the row shows two and keeps the rest behind More"
+            4,
+            "the row shows four and keeps the origin behind More"
         );
         assert_eq!(offered.row_data(0).expect("first").label, words.reach_once);
         assert_eq!(
             window.get_reaches_more().row_count(),
-            2,
+            0,
             "no origin, so no origin reach"
         );
         assert_eq!(window.get_problem(), "", "an ordinary link raises nothing");

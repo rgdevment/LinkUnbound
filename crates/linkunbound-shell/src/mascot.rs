@@ -16,7 +16,7 @@ struct Pose {
 
 const BEAR: Pose = Pose {
     head: 92.0,
-    rise: 46.0,
+    rise: 62.0,
     paw: 30.0,
     gap: 70.0,
 };
@@ -48,6 +48,9 @@ pub fn rise(picker: &Picker) -> f32 {
 pub struct Mascot {
     head: BearHead,
     paws: BearPaws,
+    /// Where the picker was last put, as asked: Slint moves the window later, so reading it back
+    /// right after gives the place it is leaving.
+    anchor: std::cell::Cell<Option<(i32, i32)>>,
 }
 
 impl Mascot {
@@ -55,7 +58,12 @@ impl Mascot {
         Ok(Self {
             head: BearHead::new()?,
             paws: BearPaws::new()?,
+            anchor: std::cell::Cell::new(None),
         })
+    }
+
+    pub fn anchor(&self, x: i32, y: i32) {
+        self.anchor.set(Some((x, y)));
     }
 
     pub fn follow(&self, picker: &Picker) {
@@ -66,15 +74,17 @@ impl Mascot {
         self.head.set_side(pose.head);
         self.paws.set_paw(pose.paw);
         self.paws.set_gap(pose.gap);
+        // Measured from what the look asks for, not from the window: right after a change of
+        // look or place the window still reports the size and spot it had before.
         let window = picker.window();
         let scale = window.scale_factor();
-        let at = window.position();
+        let (x, y) = self
+            .anchor
+            .get()
+            .unwrap_or((window.position().x, window.position().y));
+        let at = slint::PhysicalPosition::new(x, y);
         let px = |logical: f32| (logical * scale).round() as i32;
-        let centre = if picker.get_look() == Look::Bear {
-            at.x + window.size().width as i32 / 2
-        } else {
-            at.x + px(18.0 + pose.head / 2.0)
-        };
+        let centre = at.x + px(picker.get_wanted_width() / 2.0);
         self.head
             .window()
             .set_position(slint::PhysicalPosition::new(

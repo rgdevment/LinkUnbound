@@ -77,6 +77,9 @@ pub fn beside_the_pointer(picker: &Picker) {
     // The margin holds the shadow, not the sheet: the sheet's edge is what sits by the pointer,
     // and the transparent rim may hang past the screen without anyone seeing it.
     let (at_x, at_y) = (at_x - halo, at_y - halo);
+    if let Some(ui) = crate::ui() {
+        ui.mascot.anchor(at_x, at_y);
+    }
     #[cfg(target_os = "macos")]
     picker
         .window()

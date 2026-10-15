@@ -24,7 +24,8 @@ pub fn cached_or_extract(exe: &str, id: &str, dir: &Path, side: u32) -> Option<P
     // The id comes from a file the user can edit, and `Path::join` lets an
     // absolute or UNC one throw the directory away entirely.
     let named = linkunbound_core::as_file_name(id);
-    let target = dir.join(format!("{named}-{:016x}-{side}.png", fingerprint(exe)));
+    // `fit` marks icons shrunk here; the ones before were left for the renderer to shrink.
+    let target = dir.join(format!("{named}-{:016x}-{side}-fit.png", fingerprint(exe)));
     let source = fs::metadata(exe).and_then(|m| m.modified()).ok();
     match (fs::metadata(&target).and_then(|m| m.modified()), source) {
         (Ok(cached), Some(built)) if cached >= built => return Some(target),
@@ -33,6 +34,7 @@ pub fn cached_or_extract(exe: &str, id: &str, dir: &Path, side: u32) -> Option<P
     }
 
     let (width, height, pixels) = file_icon(Path::new(exe), i32::try_from(side).ok()?)?;
+    let (width, height, pixels) = shrunk_to(side, width, height, &pixels);
     fs::create_dir_all(dir).ok()?;
 
     // Named after this process, and swept on failure: a shared staging name let
@@ -53,6 +55,50 @@ pub fn cached_or_extract(exe: &str, id: &str, dir: &Path, side: u32) -> Option<P
         return None;
     }
     Some(target)
+}
+
+/// Windows hands over the next size the file holds when the one asked for is not in it, and a
+/// renderer shrinking that on the fly samples it, which is what left the edges ragged. Each
+/// pixel here is the average of the area it covers; the shell's pixels carry their alpha
+/// premultiplied, so all four channels average alike.
+fn shrunk_to(side: u32, width: u32, height: u32, pixels: &[u8]) -> (u32, u32, Vec<u8>) {
+    if side == 0 || (width <= side && height <= side) {
+        return (width, height, pixels.to_vec());
+    }
+    let scale = f64::from(width.max(height)) / f64::from(side);
+    let fit = |n: u32| ((f64::from(n) / scale).round() as u32).max(1);
+    let (w, h) = (fit(width), fit(height));
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        let (y0, y1) = (
+            f64::from(y) * scale,
+            (f64::from(y + 1) * scale).min(f64::from(height)),
+        );
+        for x in 0..w {
+            let (x0, x1) = (
+                f64::from(x) * scale,
+                (f64::from(x + 1) * scale).min(f64::from(width)),
+            );
+            let mut sum = [0f64; 4];
+            let mut area = 0f64;
+            for sy in y0.floor() as u32..y1.ceil() as u32 {
+                let dy = (f64::from(sy + 1).min(y1) - f64::from(sy).max(y0)).max(0.0);
+                for sx in x0.floor() as u32..x1.ceil() as u32 {
+                    let dx = (f64::from(sx + 1).min(x1) - f64::from(sx).max(x0)).max(0.0);
+                    let at = ((sy * width + sx) * 4) as usize;
+                    for (c, total) in sum.iter_mut().enumerate() {
+                        *total += f64::from(pixels[at + c]) * dx * dy;
+                    }
+                    area += dx * dy;
+                }
+            }
+            let at = ((y * w + x) * 4) as usize;
+            for (c, total) in sum.iter().enumerate() {
+                out[at + c] = (total / area.max(f64::EPSILON)).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    (w, h, out)
 }
 
 #[cfg(test)]
@@ -142,7 +188,7 @@ mod tests {
 
 #[cfg(test)]
 mod probe {
-    use super::cached_or_extract;
+    use super::{cached_or_extract, shrunk_to};
     use crate::installed_browsers;
 
     /// `cargo test -p linkunbound-win -- --ignored --nocapture`
@@ -161,5 +207,26 @@ mod probe {
             }
         }
         println!("en {}", dir.display());
+    }
+
+    /// Four pixels become one that is their average, not whichever one a sample landed on.
+    #[test]
+    fn a_larger_icon_is_averaged_down_to_the_side_asked_for() {
+        let pixels: Vec<u8> = [
+            [0, 0, 0, 0],
+            [200, 100, 40, 255],
+            [200, 100, 40, 255],
+            [0, 0, 0, 0],
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let (w, h, out) = shrunk_to(1, 2, 2, &pixels);
+        assert_eq!((w, h), (1, 1));
+        assert_eq!(out, vec![100, 50, 20, 128]);
+
+        let (w, h, same) = shrunk_to(4, 2, 2, &pixels);
+        assert_eq!((w, h), (2, 2));
+        assert_eq!(same, pixels, "a smaller icon is left alone");
     }
 }

@@ -1,6 +1,7 @@
 export struct Destination {
     key: string,
     name: string,
+    short: string,
     profile: string,
     icon: image,
     can-private: bool,
@@ -405,12 +406,12 @@ export component AskHead inherits Rectangle {
     in property <string> copy-label;
     callback toggle-private();
     callback copy();
-    height: 104px;
+    height: 80px;
 
     VerticalLayout {
-        padding-top: 38px;
-        padding-left: 16px;
-        padding-right: 16px;
+        padding-top: 20px;
+        padding-left: 72px;
+        padding-right: 72px;
         spacing: 3px;
         alignment: start;
         Text {
@@ -447,7 +448,7 @@ export component AskHead inherits Rectangle {
     }
     Tools {
         x: root.width - 8px - self.width;
-        y: 8px;
+        y: 16px;
         width: 58px;
         height: 28px;
         private-on: root.private-on;
