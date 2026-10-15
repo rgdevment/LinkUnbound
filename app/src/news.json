@@ -2,13 +2,13 @@
   {
     "version": "2.7.0",
     "headline": {
-      "es": "Un selector nuevo, con el oso, Acrylic y Liquid Glass",
-      "en": "A new picker, with the bear, Acrylic and Liquid Glass"
+      "es": "Un selector nuevo, con LinkBear, Acrylic y Liquid Glass",
+      "en": "A new picker, with LinkBear, Acrylic and Liquid Glass"
     },
     "es": [
       {
-        "title": "Cuatro estilos, con el oso al frente",
-        "said": "en Aplicación, bajo Selector, eliges entre Oso, Clásico, Mosaico y Compacto. Oso es el nuevo predeterminado: se asoma sobre el selector, mira el navegador que apuntas y se pone antifaz en privado. Con esta versión empiezas con el Oso; si preferías otro, cámbialo ahí mismo."
+        "title": "Cuatro estilos, con LinkBear al frente",
+        "said": "en Aplicación, bajo Selector, eliges entre LinkBear, Clásico, Mosaico y Compacto. LinkBear, nuestra mascota, es el nuevo predeterminado: se asoma sobre el selector, mira el navegador que apuntas y se pone antifaz en privado. Con esta versión empiezas con LinkBear; si preferías otro, cámbialo ahí mismo."
       },
       {
         "title": "Acrylic y Liquid Glass",
@@ -29,8 +29,8 @@
     ],
     "en": [
       {
-        "title": "Four looks, with the bear up front",
-        "said": "under Application, in Picker, you choose between Bear, Classic, Tiles and Compact. Bear is the new default: it peeks over the picker, looks at the browser you point to and puts on a mask in private. This version starts you on Bear; if you preferred another look, change it right there."
+        "title": "Four looks, with LinkBear up front",
+        "said": "under Application, in Picker, you choose between LinkBear, Classic, Tiles and Compact. LinkBear, our mascot, is the new default: it peeks over the picker, looks at the browser you point to and puts on a mask in private. This version starts you on LinkBear; if you preferred another look, change it right there."
       },
       {
         "title": "Acrylic and Liquid Glass",
