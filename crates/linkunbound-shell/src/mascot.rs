@@ -82,8 +82,16 @@ impl Mascot {
             picker.get_halo(),
             scale,
         );
-        put(self.head.window(), head.0, head.1);
-        put(self.paws.window(), paws.0, paws.1);
+        put(
+            self.head.window(),
+            head,
+            (self.head.get_wide(), self.head.get_tall()),
+        );
+        put(
+            self.paws.window(),
+            paws,
+            (self.paws.get_wide(), self.paws.get_tall()),
+        );
         self.mood(0.0, picker.get_private_on());
         let _ = self.head.show();
         let _ = self.paws.show();
@@ -141,11 +149,19 @@ fn where_it_is(window: &slint::Window) -> (i32, i32) {
     }
 }
 
-fn put(window: &slint::Window, x: i32, y: i32) {
+/// On macOS the size goes first: AppKit keeps a window's bottom edge when Slint resizes it later,
+/// which would sink the head of a smaller pose into the picker.
+fn put(window: &slint::Window, (x, y): (i32, i32), (wide, tall): (f32, f32)) {
     #[cfg(target_os = "macos")]
-    window.set_position(slint::LogicalPosition::new(x as f32, y as f32));
+    {
+        window.set_size(slint::LogicalSize::new(wide, tall));
+        window.set_position(slint::LogicalPosition::new(x as f32, y as f32));
+    }
     #[cfg(not(target_os = "macos"))]
-    window.set_position(slint::PhysicalPosition::new(x, y));
+    {
+        let _ = (wide, tall);
+        window.set_position(slint::PhysicalPosition::new(x, y));
+    }
 }
 
 /// The picker says where the bear should look and whether it wears the mask, and an empty slot

@@ -111,12 +111,14 @@ export component BearHead inherits Window {
     in property <bool> masked;
     in property <float> look;
     in property <length> side: 92px;
+    out property <length> wide: root.side;
+    out property <length> tall: root.side * 256 / 312;
     title: "LinkUnbound";
     no-frame: true;
     always-on-top: true;
     background: transparent;
-    width: root.side;
-    height: root.side * 256 / 312;
+    width: root.wide;
+    height: root.tall;
 
     Head {
         masked: root.masked;
@@ -132,8 +134,10 @@ export component BearPaws inherits Window {
     no-frame: true;
     always-on-top: true;
     background: transparent;
-    width: root.gap + 2 * root.paw;
-    height: root.paw * 31 / 40;
+    out property <length> wide: root.gap + 2 * root.paw;
+    out property <length> tall: root.paw * 31 / 40;
+    width: root.wide;
+    height: root.tall;
 
     Paw {
         x: 0;
