@@ -103,23 +103,23 @@ const PAGES: Entry[] = [
     ),
   },
   {
-    id: "links",
-    label: "navLinks",
-    icon: (
-      <>
-        <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
-        <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
-      </>
-    ),
-  },
-  { id: "rules", label: "navRules", icon: <path d="M4 6h16M4 12h11M4 18h7" /> },
-  {
     id: "browsers",
     label: "navBrowsers",
     icon: (
       <>
         <circle cx="12" cy="12" r="9" />
         <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+      </>
+    ),
+  },
+  { id: "rules", label: "navRules", icon: <path d="M4 6h16M4 12h11M4 18h7" /> },
+  {
+    id: "links",
+    label: "navLinks",
+    icon: (
+      <>
+        <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+        <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
       </>
     ),
   },

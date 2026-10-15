@@ -513,6 +513,18 @@ describe("settings", () => {
     expect(screen.queryByRole("button", { name: "Reparar" })).toBeNull();
   });
 
+  /// Browsers come before the rules that point at them, and both before the default-browser page.
+  it("lists the sections in the order they are set up", async () => {
+    answers(BASE, { browsers_list: () => Promise.resolve([]) });
+    await opened();
+    const order = ["Aplicación", "Navegadores", "Reglas", "Enlaces", "Mantenimiento"];
+    const names = screen
+      .getAllByRole("button")
+      .map((b) => b.textContent?.trim() ?? "")
+      .filter((name) => order.includes(name));
+    expect(names).toEqual(order);
+  });
+
   it("walks every section and marks the one it is on", async () => {
     answers(BASE, { browsers_list: () => Promise.resolve([]) });
     await opened();
