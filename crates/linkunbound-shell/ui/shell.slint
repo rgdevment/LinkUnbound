@@ -30,6 +30,8 @@ export component Picker inherits Window {
     in-out property <bool> more-open: false;
     // The row the arrows rest on, opened by Enter; none until an arrow is pressed.
     in-out property <int> chosen-at: -1;
+    // Shown from settings over a sample link: a choice puts it away and opens nothing.
+    in-out property <bool> preview: false;
 
     in property <Look> look: Look.bear;
     in property <bool> on-mac: false;

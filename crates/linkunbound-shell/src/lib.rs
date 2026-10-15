@@ -376,6 +376,7 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
     window.set_ask_private(words.picker_ask_private.into());
     window.set_motto(words.picker_motto.into());
     window.set_chosen_at(-1);
+    window.set_preview(false);
     window.set_copy_label(words.picker_copy.into());
     window.set_update_later(words.update_later.into());
     window.set_private_on(false);

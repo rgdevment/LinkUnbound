@@ -66,7 +66,14 @@ pub fn after_the_bear(state: &Rc<Ui>) {
     // Shown from inside the loop: before it runs the window has no handle to keep it off the
     // taskbar.
     slint::Timer::single_shot(Duration::ZERO, || {
-        let Some(ui) = ui() else { return };
+        if let Some(ui) = ui() {
+            offer_styles(&ui);
+        }
+    });
+}
+
+fn offer_styles(ui: &Rc<Ui>) {
+    {
         let words = ui.words.get();
         flash(
             &ui.notice,
@@ -91,7 +98,7 @@ pub fn after_the_bear(state: &Rc<Ui>) {
         ui.notice.set_left(STYLES_SECONDS);
         in_the_corner(&ui.notice);
         ui.count_down();
-    });
+    }
 }
 
 pub fn noted(area: &'static str, what: &str) {
@@ -142,7 +149,33 @@ fn in_the_corner(notice: &Notice) {
 
 #[cfg(test)]
 mod tests {
-    use super::flash;
+    use super::{OFFERED, STYLES_SECONDS, flash, offer_styles};
+    use slint::Model;
+
+    /// The look in use comes first and every other one is a press away, for longer than a notice
+    /// about a rule stays.
+    #[test]
+    fn the_looks_are_offered_with_the_bear_first() {
+        let ui = crate::tests::headless_ui();
+        offer_styles(&ui);
+        let choices = ui.notice.get_choices();
+        assert_eq!(choices.row_count(), OFFERED.len());
+        assert_eq!(choices.row_data(0).as_deref(), Some("Bear"));
+        assert_eq!(ui.notice.get_left(), STYLES_SECONDS);
+        assert!(!ui.notice.get_undoable());
+
+        flash(
+            &ui.notice,
+            "Opened".into(),
+            "by a rule".into(),
+            Some("Undo"),
+        );
+        assert_eq!(
+            ui.notice.get_choices().row_count(),
+            0,
+            "a later notice offers no looks"
+        );
+    }
     use linkunbound_shell::Notice;
 
     #[test]

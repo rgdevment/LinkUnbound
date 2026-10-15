@@ -161,3 +161,19 @@ mod tests {
         assert!(!config.contains("\"label\":"));
     }
 }
+
+/// The picker over a sample link, so a look can be seen before it is kept. A resident already
+/// running takes the word over its socket; with none, one is started with it.
+#[tauri::command]
+pub fn picker_preview() {
+    if linkunbound_shell::single::hand_over(linkunbound_core::PREVIEW) {
+        return;
+    }
+    let Ok(here) = std::env::current_exe() else {
+        return;
+    };
+    let _ = linkunbound_core::spawn_and_forget(
+        std::process::Command::new(linkunbound_core::link_handler(&here))
+            .arg(linkunbound_core::PREVIEW),
+    );
+}

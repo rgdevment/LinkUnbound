@@ -27,6 +27,24 @@ const COMPACT: Pose = Pose {
     gap: 46.0,
 };
 
+/// The pose the look calls for, if the bear shows at all: only over the glass, since on a painted
+/// sheet the head would show whole above it, unblurred.
+fn pose(picker: &Picker) -> Option<&'static Pose> {
+    if !picker.global::<Palette>().get_clear() {
+        return None;
+    }
+    match picker.get_look() {
+        Look::Bear => Some(&BEAR),
+        Look::Compact => Some(&COMPACT),
+        _ => None,
+    }
+}
+
+/// How far above the picker the bear reaches, in logical pixels.
+pub fn rise(picker: &Picker) -> f32 {
+    pose(picker).map_or(0.0, |pose| pose.rise)
+}
+
 pub struct Mascot {
     head: BearHead,
     paws: BearPaws,
@@ -40,20 +58,11 @@ impl Mascot {
         })
     }
 
-    /// Only over the glass: on a painted sheet the head would show whole above it, unblurred.
     pub fn follow(&self, picker: &Picker) {
-        let pose = match picker.get_look() {
-            Look::Bear => &BEAR,
-            Look::Compact => &COMPACT,
-            _ => {
-                self.hide();
-                return;
-            }
-        };
-        if !picker.global::<Palette>().get_clear() {
+        let Some(pose) = pose(picker) else {
             self.hide();
             return;
-        }
+        };
         self.head.set_side(pose.head);
         self.paws.set_paw(pose.paw);
         self.paws.set_gap(pose.gap);
@@ -122,3 +131,48 @@ fn stack(head: &BearHead, paws: &BearPaws, picker: &Picker) {
 
 #[cfg(not(windows))]
 fn stack(_head: &BearHead, _paws: &BearPaws, _picker: &Picker) {}
+
+#[cfg(test)]
+mod tests {
+    use super::{BEAR, COMPACT, Mascot, rise};
+    use linkunbound_shell::{Look, Palette, Picker};
+    use slint::ComponentHandle;
+
+    fn picker(look: Look, clear: bool) -> Picker {
+        let picker = Picker::new().expect("a window");
+        picker.set_look(look);
+        picker.global::<Palette>().set_clear(clear);
+        picker
+    }
+
+    /// The bear rises over the glass only, and only in the two looks drawn for it.
+    #[test]
+    fn the_bear_needs_room_only_where_it_shows() {
+        i_slint_backend_testing::init_no_event_loop();
+        assert_eq!(rise(&picker(Look::Bear, true)), BEAR.rise);
+        assert_eq!(rise(&picker(Look::Compact, true)), COMPACT.rise);
+        assert_eq!(rise(&picker(Look::List, true)), 0.0);
+        assert_eq!(rise(&picker(Look::Bear, false)), 0.0, "no glass, no bear");
+    }
+
+    #[test]
+    fn the_bear_comes_with_the_picker_and_follows_its_mood() {
+        i_slint_backend_testing::init_no_event_loop();
+        let mascot = Mascot::new().expect("a bear");
+        let over = picker(Look::Bear, true);
+        over.set_private_on(true);
+        mascot.follow(&over);
+        assert!(mascot.head.window().is_visible());
+        assert!(mascot.paws.window().is_visible());
+        assert!(mascot.head.get_masked());
+        assert_eq!(mascot.head.get_side(), BEAR.head);
+
+        mascot.mood(0.7, false);
+        assert_eq!(mascot.head.get_look(), 0.7);
+        assert!(!mascot.head.get_masked());
+
+        mascot.follow(&picker(Look::Tiles, true));
+        assert!(!mascot.head.window().is_visible());
+        assert!(!mascot.paws.window().is_visible());
+    }
+}

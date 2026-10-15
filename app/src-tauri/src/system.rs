@@ -615,3 +615,8 @@ pub use platform::{
     browsers, legacy, open_default_apps, reconcile, register_anyway, register_for_the_installer,
     retire_legacy, reveal_legacy, set_registered, set_starts_with_system, state,
 };
+
+#[tauri::command]
+pub fn system_open_default_apps() -> Result<(), String> {
+    open_default_apps()
+}

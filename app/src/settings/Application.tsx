@@ -173,12 +173,21 @@ export default function Application({
             />
           </Line>
           <Line title={t("appPicker")}>
-            <Choice
-              options={PICKERS}
-              value={prefs.picker_style}
-              label={t("appPicker")}
-              onPick={(picker_style) => apply({ picker_style })}
-            />
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <Choice
+                options={PICKERS}
+                value={prefs.picker_style}
+                label={t("appPicker")}
+                onPick={(picker_style) => apply({ picker_style })}
+              />
+              <button
+                type="button"
+                onClick={() => invoke("picker_preview").catch(() => {})}
+                className="text-[11.5px] text-[#2F62D8] hover:underline dark:text-[#6E9BFF]"
+              >
+                {t("pickerPreview")}
+              </button>
+            </div>
           </Line>
         </Card>
       </Section>

@@ -66,11 +66,12 @@ pub fn beside_the_pointer(picker: &Picker) {
             size(picker.get_wanted_width()),
             size(picker.get_wanted_height()),
         ),
+        // The bear rises over the sheet, so the screen it may use starts that much lower.
         place::Bounds {
             x,
-            y,
+            y: y + size(crate::mascot::rise(picker)),
             width,
-            height,
+            height: height - size(crate::mascot::rise(picker)),
         },
     );
     // The margin holds the shadow, not the sheet: the sheet's edge is what sits by the pointer,

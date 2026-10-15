@@ -13,7 +13,7 @@ const PREFS = {
   locale: "system" as "system" | "spanish" | "english",
   shortcut: "Alt+Shift+L" as string | null,
   notify_on_rule: true,
-  picker_style: "classic" as "classic" | "sheet",
+  picker_style: "classic" as "bear" | "classic" | "sheet" | "compact",
   looks_for_updates: true,
 };
 
@@ -75,6 +75,17 @@ describe("application settings", () => {
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
       prefs: { ...PREFS, picker_style: "sheet" },
     });
+  });
+
+  /// Every look is offered, the bear among them, and each can be seen before it is kept.
+  it("offers the four looks and shows the picker over a sample link", async () => {
+    mount();
+    const picker = within(await screen.findByRole("group", { name: "Selector" }));
+    for (const look of ["Oso", "Clásico", "Mosaico", "Compacto"]) {
+      expect(picker.getByRole("radio", { name: look })).toBeInTheDocument();
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Vista previa" }));
+    expect(invoke).toHaveBeenCalledWith("picker_preview");
   });
 
   /// The resident asks the feed on its own; the switch is the one way to say not to, and it has

@@ -680,11 +680,6 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
     Ok(claim(&settled))
 }
 
-#[tauri::command]
-fn system_open_default_apps() -> Result<(), String> {
-    system::open_default_apps()
-}
-
 /// Re-registers against this executable, which is the only repair there is: the
 /// command pointed somewhere this binary no longer lives.
 #[tauri::command(async)]
@@ -1240,13 +1235,14 @@ pub fn run() {
             about::maintenance_report,
             prefs_get,
             prefs_set,
+            shell::picker_preview,
             system_state,
             system_legacy,
             system_retire_legacy,
             system_reveal_legacy,
             system_set_registered,
             system_set_startup,
-            system_open_default_apps,
+            system::system_open_default_apps,
             system_repair,
             system_register_anyway,
             system_open_elsewhere,

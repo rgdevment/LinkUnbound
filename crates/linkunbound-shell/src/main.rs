@@ -14,9 +14,11 @@ use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, single};
 use slint::{ComponentHandle, Model};
 
 mod detected;
+mod held;
 mod look;
 mod mascot;
 mod notice;
+mod preview;
 use detected::catalogue;
 
 fn store() -> Store {
@@ -984,9 +986,12 @@ fn announce(ui: &Rc<Ui>, fired: &Fired) {
 /// reads it: waiting for a poll turned four milliseconds of work into sixty.
 fn arrived(raw: String) {
     let Some(ui) = ui() else {
-        hold_for_the_loop(raw);
+        held::hold_for_the_loop(raw);
         return;
     };
+    if preview::shown_for(&ui, &raw) {
+        return;
+    }
     // The socket takes a line from any process of this user; the command line is
     // normalised and this has to be too, or the scheme guard is walked around.
     let Some(url) = normalise(&raw) else { return };
@@ -1006,33 +1011,6 @@ fn arrived(raw: String) {
         Arrival { url, source },
     ) {
         ui.watch_focus();
-    }
-}
-
-/// Links the socket took before the loop could: the copy that handed them over believes they
-/// were delivered, so they are kept here until there is a window to deliver them to.
-static HELD_FOR_THE_LOOP: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-
-fn hold_for_the_loop(url: String) {
-    if let Ok(mut held) = HELD_FOR_THE_LOOP.lock() {
-        held.push(url);
-    }
-}
-
-fn release_to_the_loop() {
-    let held: Vec<String> = HELD_FOR_THE_LOOP
-        .lock()
-        .map(|mut held| held.drain(..).collect())
-        .unwrap_or_default();
-    for url in held {
-        let _ = slint::invoke_from_event_loop(move || arrived(url));
-    }
-}
-
-fn handed_to_the_loop(url: String) {
-    let raw = url.clone();
-    if slint::invoke_from_event_loop(move || arrived(url)).is_err() {
-        hold_for_the_loop(raw);
     }
 }
 
@@ -1113,12 +1091,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let args: Vec<String> = std::env::args_os()
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
-    let incoming = link_from(&args);
+    let incoming = link_from(&args).or_else(|| preview::asked(&args));
     // Sign-in and a click on the icon both start this with no link, and only one of them wants a
     // window: the startup task passes this, the Start menu tile does not.
     let hushed = wants_no_window(&args, incoming.as_deref());
 
-    let _server = match single::claim(handed_to_the_loop) {
+    let _server = match single::claim(held::handed_to_the_loop) {
         Some(server) => server,
         None => {
             let Some(url) = incoming.as_deref() else {
@@ -1135,7 +1113,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // A resident that will not take the link is one that is no longer
             // there: the socket it held is free again, and leaving here dropped
             // a click already made.
-            match single::claim(handed_to_the_loop) {
+            match single::claim(held::handed_to_the_loop) {
                 Some(server) => server,
                 None => return Ok(()),
             }
@@ -1226,7 +1204,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(window) = handle.upgrade() else {
                 return;
             };
-            if ui().is_some_and(|ui| too_soon(ui.appeared.get())) {
+            if ui().is_some_and(|ui| too_soon(ui.appeared.get())) || preview::answered(&window) {
                 return;
             }
             // A reach the keys landed on while it was dead is no reach at all.
@@ -1367,7 +1345,7 @@ fn main() -> Result<(), slint::PlatformError> {
     if let Some(url) = incoming {
         let _ = slint::invoke_from_event_loop(move || arrived(url));
     }
-    release_to_the_loop();
+    held::release_to_the_loop();
 
     #[cfg(target_os = "macos")]
     if plain_launch {
@@ -1506,7 +1484,7 @@ mod tests {
         }
     }
 
-    fn headless_ui() -> Rc<Ui> {
+    pub(crate) fn headless_ui() -> Rc<Ui> {
         i_slint_backend_testing::init_no_event_loop();
         let ui = Rc::new(Ui {
             picker: Picker::new().expect("a window"),

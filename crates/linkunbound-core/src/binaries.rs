@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 pub const RESIDENT: &str = "linkunbound-shell";
 pub const SETTINGS: &str = "linkunbound-settings";
+/// What settings hands the resident to show the picker over a sample link, in place of a link.
+pub const PREVIEW: &str = "--preview";
 
 fn named(beside: &Path, stem: &str) -> PathBuf {
     let file = if cfg!(windows) {

@@ -33,6 +33,7 @@ catalogue! {
     picker_private_line: "Se abrirá en una ventana privada" | "It will open in a private window",
     picker_remember_short: "Recordar" | "Remember",
     picker_motto: "Cada enlace, donde tú decides." | "Every link, where you decide.",
+    picker_preview: "Vista previa: elegir no abre nada" | "Preview: choosing opens nothing",
     styles_headline: "El selector ahora es el oso" | "The picker is now the bear",
     styles_reason: "¿Prefieres otro estilo? Elígelo aquí o en Ajustes" | "Prefer another look? Pick it here or in Settings",
     style_classic: "Clásico" | "Classic",
