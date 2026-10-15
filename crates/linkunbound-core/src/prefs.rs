@@ -18,8 +18,8 @@ pub enum Locale {
     English,
 }
 
-/// The picker's look: rows under the link, the way 1.x users know it, a sheet of tiles, a row of
-/// icons, or the bear asking where the link goes.
+/// The picker's look: rows under the link, the way 1.x users know it, the bear's cards without
+/// the bear, a row of icons, or the bear asking where the link goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PickerStyle {

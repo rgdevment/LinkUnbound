@@ -87,7 +87,6 @@ export component Picker inherits Window {
     property <int> hovered-at: -1;
     property <int> aimed: root.hovered-at >= 0 ? root.hovered-at : root.chosen-at;
     property <float> count: root.rows.length;
-    // Tiles are the bear's cards with nobody leaning on them.
     property <bool> cards: root.look == Look.bear || root.look == Look.tiles;
     property <float> aim:
         root.aimed < 0 ? 0

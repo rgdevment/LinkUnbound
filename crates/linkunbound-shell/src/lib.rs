@@ -40,9 +40,8 @@ pub const CLASSIC_CORNER: f64 = 10.0;
 /// The sheet draws its own shadow where the system draws none for a frameless window.
 pub const HALO: f32 = if cfg!(target_os = "macos") { 0.0 } else { 18.0 };
 
-/// Logical sides the two looks draw the icon at; the resident asks for them in screen pixels.
+/// Logical side the list draws the icon at; the resident asks for it in screen pixels.
 pub const ICON_SIDE: u32 = 24;
-pub const TILE_ICON_SIDE: u32 = 40;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reaches {

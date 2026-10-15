@@ -1,4 +1,4 @@
-//! How the picker is drawn: list or tiles, and the material behind it where the system lends one.
+//! How the picker is drawn: which look, and the material behind it where the system lends one.
 
 use linkunbound_core::PickerStyle;
 use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, place};
