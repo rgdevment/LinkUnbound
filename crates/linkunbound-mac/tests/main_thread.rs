@@ -30,14 +30,15 @@ fn main() {
 
     use linkunbound_mac::{
         Event, cursor, dress_window, is_in_front, keep_off_the_taskbar,
-        let_whoever_opens_next_come_forward, listen, work_area_at,
+        let_whoever_opens_next_come_forward, liquid_glass, listen, reduces_transparency,
+        tuck_beside, wear_glass, work_area_at,
     };
     use objc2::MainThreadOnly;
     use objc2::rc::Retained;
     use objc2_app_kit::{
         NSAppearanceCustomization, NSApplication, NSApplicationActivationPolicy,
-        NSBackingStoreType, NSFloatingWindowLevel, NSWindow, NSWindowCollectionBehavior,
-        NSWindowStyleMask,
+        NSBackingStoreType, NSFloatingWindowLevel, NSGlassEffectView, NSVisualEffectView, NSWindow,
+        NSWindowCollectionBehavior, NSWindowStyleMask,
     };
     use objc2_core_services::keyDirectObject;
     use objc2_foundation::{
@@ -84,6 +85,76 @@ fn main() {
     let layer = view.layer().expect("a layer to round");
     assert_eq!(layer.cornerRadius(), 10.0);
     assert!(layer.masksToBounds());
+
+    let _ = reduces_transparency();
+    assert!(wear_glass(handle, true, 14.0));
+    let children = window.childWindows().expect("the glass behind the picker");
+    assert_eq!(children.len(), 1);
+    let glass = children.iter().next().expect("one child");
+    assert_eq!(
+        glass.frame(),
+        window.frame(),
+        "the glass covers the picker exactly"
+    );
+    assert_eq!(glass.level(), window.level());
+    assert!(
+        glass.ignoresMouseEvents(),
+        "clicks go through to the picker"
+    );
+    assert!(!glass.hasShadow(), "the picker casts the only shadow");
+    let material = glass.contentView().expect("the material");
+    let corner =
+        |material: &objc2_app_kit::NSView| match material.downcast_ref::<NSGlassEffectView>() {
+            Some(glass) => glass.cornerRadius(),
+            None => material.layer().expect("a rounded layer").cornerRadius(),
+        };
+    assert_eq!(
+        material.downcast_ref::<NSGlassEffectView>().is_some(),
+        liquid_glass()
+    );
+    assert_eq!(
+        material.downcast_ref::<NSVisualEffectView>().is_some(),
+        !liquid_glass()
+    );
+    assert_eq!(corner(&material), 14.0);
+    let tone =
+        |material: &objc2_app_kit::NSView| material.appearance().map(|a| a.name().to_string());
+    assert_eq!(tone(&material).as_deref(), Some("NSAppearanceNameDarkAqua"));
+    assert!(wear_glass(handle, false, 10.0));
+    assert_eq!(
+        window.childWindows().map(|c| c.len()),
+        Some(1),
+        "worn again, the same glass is brought up to date"
+    );
+    assert_eq!(corner(&material), 10.0);
+    assert_eq!(tone(&material).as_deref(), Some("NSAppearanceNameAqua"));
+
+    // SAFETY: made and used on the main thread, never shown, dropped at the end.
+    let bear = unsafe {
+        NSWindow::initWithContentRect_styleMask_backing_defer(
+            NSWindow::alloc(mtm),
+            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(10.0, 10.0)),
+            NSWindowStyleMask::Borderless,
+            NSBackingStoreType::Buffered,
+            false,
+        )
+    };
+    let bear_view = bear.contentView().expect("a content view");
+    let bear_handle = Retained::as_ptr(&bear_view) as isize;
+    tuck_beside(bear_handle, handle, true);
+    assert_eq!(
+        bear.level(),
+        window.level(),
+        "the head shares the picker's level"
+    );
+    assert!(bear.ignoresMouseEvents());
+    assert!(!bear.hasShadow());
+    tuck_beside(bear_handle, handle, false);
+    assert_eq!(
+        bear.level(),
+        window.level() + 1,
+        "the paws stay over a picker that takes the keyboard"
+    );
 
     let window_handle = Retained::as_ptr(&window) as isize;
     let named = |window: &NSWindow| window.appearance().map(|a| a.name().to_string());

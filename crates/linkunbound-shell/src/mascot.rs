@@ -75,20 +75,15 @@ impl Mascot {
         let window = picker.window();
         let scale = placing_scale(window);
         let (x, y) = self.anchor.get().unwrap_or_else(|| where_it_is(window));
-        let px = |logical: f32| (logical * scale).round() as i32;
-        let centre = x + px(picker.get_wanted_width() / 2.0);
-        // A painted sheet keeps a margin for its shadow; the bear leans on the sheet, not on it.
-        let top = y + px(picker.get_halo());
-        put(
-            self.head.window(),
-            centre - px(pose.head / 2.0),
-            top - px(pose.rise),
+        let (head, paws) = spots(
+            pose,
+            (x, y),
+            picker.get_wanted_width(),
+            picker.get_halo(),
+            scale,
         );
-        put(
-            self.paws.window(),
-            centre - px(pose.gap / 2.0 + pose.paw),
-            top - px(pose.paw * 0.3),
-        );
+        put(self.head.window(), head.0, head.1);
+        put(self.paws.window(), paws.0, paws.1);
         self.mood(0.0, picker.get_private_on());
         let _ = self.head.show();
         let _ = self.paws.show();
@@ -104,6 +99,27 @@ impl Mascot {
         let _ = self.head.hide();
         let _ = self.paws.hide();
     }
+}
+
+/// Where the head and the paws go for a picker put at `at`, in the units it was put in.
+fn spots(
+    pose: &Pose,
+    (x, y): (i32, i32),
+    width: f32,
+    halo: f32,
+    scale: f32,
+) -> ((i32, i32), (i32, i32)) {
+    let px = |logical: f32| (logical * scale).round() as i32;
+    let centre = x + px(width / 2.0);
+    // A painted sheet keeps a margin for its shadow; the bear leans on the sheet, not on it.
+    let top = y + px(halo);
+    (
+        (centre - px(pose.head / 2.0), top - px(pose.rise)),
+        (
+            centre - px(pose.gap / 2.0 + pose.paw),
+            top - px(pose.paw * 0.3),
+        ),
+    )
 }
 
 /// The picker is placed in points on macOS and in pixels elsewhere; the bear goes in the same units.
@@ -185,7 +201,7 @@ fn stack(_head: &BearHead, _paws: &BearPaws, _picker: &Picker) {}
 
 #[cfg(test)]
 mod tests {
-    use super::{BEAR, COMPACT, Mascot, rise};
+    use super::{BEAR, COMPACT, Mascot, rise, spots};
     use linkunbound_shell::{Look, Palette, Picker};
     use slint::ComponentHandle;
 
@@ -229,5 +245,21 @@ mod tests {
         mascot.follow(&picker(Look::Tiles, true));
         assert!(!mascot.head.window().is_visible());
         assert!(!mascot.paws.window().is_visible());
+    }
+
+    /// The head stands over the middle of the sheet and rises its pose's height over it, the paws
+    /// on the edge, whatever the scale the picker was placed at.
+    #[test]
+    fn the_bear_leans_on_the_middle_of_the_sheet() {
+        let (head, paws) = spots(&BEAR, (100, 300), 400.0, 0.0, 1.0);
+        assert_eq!(head, (300 - 46, 300 - 62));
+        assert_eq!(paws, (300 - 65, 300 - 9));
+
+        let (head, _) = spots(&BEAR, (200, 600), 400.0, 18.0, 2.0);
+        assert_eq!(
+            head,
+            (600 - 92, 636 - 124),
+            "pixels on a dense screen, under a shadow margin"
+        );
     }
 }
