@@ -47,12 +47,22 @@ pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
 
 /// The picker belongs to the click that summoned it, not to the middle of a screen.
 pub fn beside_the_pointer(picker: &Picker) {
-    let Some((cx, cy)) = crate::host::cursor() else {
+    let Some(pointer) = crate::host::cursor() else {
         return;
     };
-    let Some((x, y, width, height)) = crate::host::work_area_at(cx, cy) else {
+    let Some(area) = crate::host::work_area_at(pointer.0, pointer.1) else {
         return;
     };
+    place_near(picker, pointer, area);
+}
+
+/// Where the picker goes for a pointer and the screen area around it, in the units the window is
+/// placed in. Returns the corner it was put at.
+fn place_near(
+    picker: &Picker,
+    (cx, cy): (i32, i32),
+    (x, y, width, height): (i32, i32, i32, i32),
+) -> (i32, i32) {
     let scale = if cfg!(target_os = "macos") {
         1.0
     } else {
@@ -92,6 +102,7 @@ pub fn beside_the_pointer(picker: &Picker) {
     if picker.window().is_visible() {
         follow(picker);
     }
+    (at_x, at_y)
 }
 
 /// The mascot comes and goes with the picker it leans on.
@@ -142,7 +153,7 @@ fn wear_acrylic(_window: isize, _dark: bool) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{acrylic, corner_of, style, wear_backdrop};
+    use super::{acrylic, corner_of, place_near, style, wear_backdrop};
     use linkunbound_core::PickerStyle;
     use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
     use slint::ComponentHandle;
@@ -167,6 +178,28 @@ mod tests {
         style(&picker, PickerStyle::Classic);
         assert_eq!(picker.get_halo(), 0.0);
         assert!((corner_of(&picker) - CLASSIC_CORNER).abs() < f64::EPSILON);
+    }
+
+    /// The bear rises over the sheet, so a picker near the top of the screen is put that much
+    /// lower; a look without the bear goes right to the edge.
+    #[test]
+    fn a_picker_by_the_top_edge_keeps_room_for_the_bear() {
+        let picker = picker();
+        let screen = (0, 0, 1920, 1080);
+        let near_the_top = (900, 2);
+
+        style(&picker, PickerStyle::Classic);
+        let (_, list_y) = place_near(&picker, near_the_top, screen);
+
+        style(&picker, PickerStyle::Bear);
+        picker.set_halo(0.0);
+        let (_, bear_y) = place_near(&picker, near_the_top, screen);
+        let rise = crate::mascot::rise(&picker);
+        assert!(
+            f64::from(bear_y) >= f64::from(rise) * f64::from(picker.window().scale_factor()) - 1.0,
+            "the bear's head stays on the screen: {bear_y} for a rise of {rise}"
+        );
+        assert!(bear_y > list_y, "the list needs no room above it");
     }
 
     /// A window the system will not dress gets the painted sheet back, and the tiles their
