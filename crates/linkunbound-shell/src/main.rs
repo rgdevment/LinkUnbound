@@ -11,12 +11,13 @@ use linkunbound_core::{
 use linkunbound_shell::hotkey::Hotkey;
 use linkunbound_shell::tray::{Asked, Tray};
 use linkunbound_shell::{
-    ICON_SIDE, Listed, Notice, Picker, Reaches, TILE_ICON_SIDE, dress, paint, place, single,
+    ICON_SIDE, Listed, Notice, Picker, Reaches, TILE_ICON_SIDE, dress, paint, single,
 };
 use slint::{ComponentHandle, Model};
 
 mod detected;
 mod look;
+mod mascot;
 mod notice;
 use detected::catalogue;
 
@@ -524,13 +525,14 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
             held.rows = listed;
             held.source = source;
         }
-        beside_the_pointer(picker);
+        look::beside_the_pointer(picker);
         let _ = picker.show();
         if let Some(handle) = native_handle(picker.window()) {
             host::keep_off_the_taskbar(handle, look::corner_of(picker));
             if look::wear_backdrop(picker, handle) {
-                beside_the_pointer(picker);
+                look::beside_the_pointer(picker);
             }
+            look::follow(picker);
             host::take_the_keyboard(handle);
         }
         return true;
@@ -545,7 +547,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
     if let Some(ui) = ui() {
         ui.refresh_strip();
     }
-    beside_the_pointer(picker);
+    look::beside_the_pointer(picker);
     let asked_at = physical_icon_side(picker);
     let _ = picker.show();
     if let Some(ui) = ui() {
@@ -554,8 +556,9 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
     if let Some(handle) = native_handle(picker.window()) {
         host::keep_off_the_taskbar(handle, look::corner_of(picker));
         if look::wear_backdrop(picker, handle) {
-            beside_the_pointer(picker);
+            look::beside_the_pointer(picker);
         }
+        look::follow(picker);
         host::take_the_keyboard(handle);
     }
     // The window reports a scale of one until it exists, which is only now: the first picker of
@@ -563,7 +566,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
     // asked for at the wrong side.
     let drawn_at = physical_icon_side(picker);
     if drawn_at != asked_at {
-        beside_the_pointer(picker);
+        look::beside_the_pointer(picker);
         let redrawn = rows(drawn_at);
         let held = shown.borrow();
         if let Some(url) = held.url.as_deref() {
@@ -626,54 +629,13 @@ fn physical(logical: f32, scale: f64) -> i32 {
     (f64::from(logical) * scale).round() as i32
 }
 
-/// The picker belongs to the click that summoned it, not to the middle of a screen.
-fn beside_the_pointer(picker: &Picker) {
-    let Some((cx, cy)) = host::cursor() else {
-        return;
-    };
-    let Some((x, y, width, height)) = host::work_area_at(cx, cy) else {
-        return;
-    };
-    let scale = if cfg!(target_os = "macos") {
-        1.0
-    } else {
-        f64::from(picker.window().scale_factor())
-    };
-    let size = |logical: f32| physical(logical, scale);
-
-    let halo = size(picker.get_halo());
-    let (at_x, at_y) = place::beside(
-        (cx, cy),
-        (
-            size(picker.get_wanted_width()),
-            size(picker.get_wanted_height()),
-        ),
-        place::Bounds {
-            x,
-            y,
-            width,
-            height,
-        },
-    );
-    // The margin holds the shadow, not the sheet: the sheet's edge is what sits by the pointer,
-    // and the transparent rim may hang past the screen without anyone seeing it.
-    let (at_x, at_y) = (at_x - halo, at_y - halo);
-    #[cfg(target_os = "macos")]
-    picker
-        .window()
-        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
-    #[cfg(not(target_os = "macos"))]
-    picker
-        .window()
-        .set_position(slint::PhysicalPosition::new(at_x, at_y));
-}
-
 /// Everything the event loop owns. Reached from the listener thread by way of
 /// `invoke_from_event_loop`, which is why it lives here and not in a closure:
 /// the state is `Rc` and cannot cross a thread, but a wake-up can.
 struct Ui {
     picker: Picker,
     notice: Notice,
+    mascot: mascot::Mascot,
     shown: Rc<RefCell<Shown>>,
     words: Cell<Strings>,
     firing: RefCell<Option<String>>,
@@ -952,7 +914,7 @@ impl Ui {
                     match ui.shown_over.get() {
                         None => ui.shown_over.set(Some(front)),
                         Some(over) if over != front && !host::front_is_ours() => {
-                            let _ = ui.picker.hide();
+                            look::put_away(&ui.picker);
                             host::let_whoever_opens_next_come_forward();
                             ui.watch.stop();
                             next_in_line(&ui.picker, &ui.words.get(), &ui.shown);
@@ -974,7 +936,7 @@ impl Ui {
                         host::take_the_keyboard(ours);
                         return;
                     }
-                    let _ = ui.picker.hide();
+                    look::put_away(&ui.picker);
                     host::let_whoever_opens_next_come_forward();
                     ui.watch.stop();
                     // Whatever queued behind this link is still a click the user
@@ -1227,7 +1189,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(window) = handle.upgrade() else {
                 return;
             };
-            let _ = window.hide();
+            look::put_away(&window);
             host::let_whoever_opens_next_come_forward();
             if let Some(ui) = ui() {
                 next_in_line(&window, &ui.words.get(), &shown);
@@ -1303,7 +1265,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                     let words = ui().map(|ui| ui.words.get());
                     if remember(&url, chosen, private, reach, source) {
-                        let _ = window.hide();
+                        look::put_away(&window);
                         drop(held);
                         if let Some(words) = words {
                             next_in_line(&window, &words, &shown);
@@ -1377,6 +1339,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let state = Rc::new(Ui {
         picker,
         notice,
+        mascot: mascot::Mascot::new()?,
         shown,
         words: Cell::new(spoken),
         firing: RefCell::new(None),
@@ -1553,6 +1516,7 @@ mod tests {
         let ui = Rc::new(Ui {
             picker: Picker::new().expect("a window"),
             notice: Notice::new().expect("a notice"),
+            mascot: super::mascot::Mascot::new().expect("a mascot"),
             shown: Rc::new(RefCell::new(Shown::default())),
             words: Cell::new(Language::English.strings()),
             firing: RefCell::new(None),
@@ -1628,7 +1592,7 @@ mod tests {
         assert_eq!(ui.shown.borrow().url.as_deref(), Some("https://two.test/"));
         assert!(ui.shown.borrow().waiting.is_empty());
 
-        let _ = ui.picker.hide();
+        super::look::put_away(&ui.picker);
         ui.shown
             .borrow_mut()
             .waiting

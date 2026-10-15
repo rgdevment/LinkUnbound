@@ -1,7 +1,7 @@
 //! How the picker is drawn: list or tiles, and the material behind it where the system lends one.
 
 use linkunbound_core::PickerStyle;
-use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
+use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker, place};
 use slint::ComponentHandle;
 
 pub fn style(picker: &Picker, chosen: PickerStyle) {
@@ -33,6 +33,65 @@ pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
     }
     picker.set_halo(HALO);
     true
+}
+
+/// The picker belongs to the click that summoned it, not to the middle of a screen.
+pub fn beside_the_pointer(picker: &Picker) {
+    let Some((cx, cy)) = crate::host::cursor() else {
+        return;
+    };
+    let Some((x, y, width, height)) = crate::host::work_area_at(cx, cy) else {
+        return;
+    };
+    let scale = if cfg!(target_os = "macos") {
+        1.0
+    } else {
+        f64::from(picker.window().scale_factor())
+    };
+    let size = |logical: f32| crate::physical(logical, scale);
+
+    let halo = size(picker.get_halo());
+    let (at_x, at_y) = place::beside(
+        (cx, cy),
+        (
+            size(picker.get_wanted_width()),
+            size(picker.get_wanted_height()),
+        ),
+        place::Bounds {
+            x,
+            y,
+            width,
+            height,
+        },
+    );
+    // The margin holds the shadow, not the sheet: the sheet's edge is what sits by the pointer,
+    // and the transparent rim may hang past the screen without anyone seeing it.
+    let (at_x, at_y) = (at_x - halo, at_y - halo);
+    #[cfg(target_os = "macos")]
+    picker
+        .window()
+        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
+    #[cfg(not(target_os = "macos"))]
+    picker
+        .window()
+        .set_position(slint::PhysicalPosition::new(at_x, at_y));
+    if picker.window().is_visible() {
+        follow(picker);
+    }
+}
+
+/// The mascot comes and goes with the picker it leans on.
+pub fn follow(picker: &Picker) {
+    if let Some(ui) = crate::ui() {
+        ui.mascot.follow(picker);
+    }
+}
+
+pub fn put_away(picker: &Picker) {
+    let _ = picker.hide();
+    if let Some(ui) = crate::ui() {
+        ui.mascot.hide();
+    }
 }
 
 #[cfg(windows)]

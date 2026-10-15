@@ -175,6 +175,21 @@ pub fn wear_acrylic(window: isize, dark: bool) -> bool {
     }
 }
 
+/// Slides `window` just below `above` in the topmost band, so what `above` draws covers it.
+pub fn tuck_under(window: isize, above: isize) {
+    let _ = unsafe {
+        SetWindowPos(
+            HWND(window as *mut std::ffi::c_void),
+            Some(HWND(above as *mut std::ffi::c_void)),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        )
+    };
+}
+
 /// Windows draws the window's own icon beside the title, and this one has nothing to say there
 /// that the title does not. Clearing both icons alone still leaves the frame reserving the space,
 /// so the window is given a dialog's frame, which draws none.
