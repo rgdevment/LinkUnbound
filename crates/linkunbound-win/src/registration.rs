@@ -1,5 +1,7 @@
 use winreg::RegKey;
-use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
+use winreg::enums::{
+    HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE,
+};
 
 use linkunbound_core::OWN_SCHEME;
 
@@ -276,6 +278,18 @@ pub fn windows_are_light() -> bool {
         .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
         .and_then(|k| k.get_value::<u32, _>("AppsUseLightTheme"))
         .is_ok_and(|v| v == 1)
+}
+
+/// Acrylic as a window backdrop arrived with Windows 11 22H2, build 22621; earlier builds
+/// refuse the attribute or draw it black.
+#[must_use]
+pub fn acrylic_is_available() -> bool {
+    RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+        .and_then(|k| k.get_value::<String, _>("CurrentBuildNumber"))
+        .ok()
+        .and_then(|build| build.parse::<u32>().ok())
+        .is_some_and(|build| build >= 22621)
 }
 
 /// Matches exactly, never by substring: a third-party ProgId embedding our name

@@ -10,6 +10,11 @@ use windows::Win32::Foundation::{
     CloseHandle, ERROR_PIPE_BUSY, GENERIC_WRITE, GlobalFree, HANDLE, HLOCAL, HWND, LPARAM,
     LocalFree, POINT, WPARAM,
 };
+use windows::Win32::Graphics::Dwm::{
+    DWM_SYSTEMBACKDROP_TYPE, DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_TRANSIENTWINDOW,
+    DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE,
+    DWMWCP_ROUND, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits,
     GetMonitorInfoW, GetObjectW, HBITMAP, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
@@ -39,15 +44,16 @@ use windows::Win32::System::Threading::{
     OpenProcessToken, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
     QueryFullProcessImageNameW,
 };
+use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, SetFocus, VK_SHIFT, VkKeyScanW};
 use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW};
 use windows::Win32::UI::WindowsAndMessaging::{
-    ASFW_ANY, AllowSetForegroundWindow, GWL_EXSTYLE, GetCursorPos, GetForegroundWindow,
+    ASFW_ANY, AllowSetForegroundWindow, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetForegroundWindow,
     GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, ICON_BIG, ICON_SMALL,
     IsHungAppWindow, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SendMessageW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WM_SETICON,
-    WS_EX_DLGMODALFRAME, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_DLGMODALFRAME, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_SYSMENU,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
@@ -114,6 +120,59 @@ pub fn keep_off_the_taskbar(window: isize) {
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         )
     };
+}
+
+/// The picker wears the material of Windows 11's menus and flyouts, drawn by DWM behind a sheet
+/// left clear. DWM also rounds the corners and casts the shadow a frameless window lacks, and
+/// with transparency turned off in Settings it paints the solid colour on its own.
+pub fn wear_acrylic(window: isize, dark: bool) -> bool {
+    let hwnd = HWND(window as *mut std::ffi::c_void);
+    let dark = windows::core::BOOL::from(dark);
+    let corner = DWMWCP_ROUND;
+    let backdrop = DWMSBT_TRANSIENTWINDOW;
+    let margins = MARGINS {
+        cxLeftWidth: -1,
+        cxRightWidth: -1,
+        cyTopHeight: -1,
+        cyBottomHeight: -1,
+    };
+    // winit keeps the system menu on a frameless window, and over an extended frame DWM draws
+    // its close button.
+    let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) };
+    unsafe {
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style & !(WS_SYSMENU.0 as isize));
+        let _ = SetWindowPos(
+            hwnd,
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            (&raw const dark).cast(),
+            size_of::<windows::core::BOOL>() as u32,
+        );
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            (&raw const corner).cast(),
+            size_of::<DWM_WINDOW_CORNER_PREFERENCE>() as u32,
+        );
+        DwmExtendFrameIntoClientArea(hwnd, &margins).is_ok()
+            && DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_SYSTEMBACKDROP_TYPE,
+                (&raw const backdrop).cast(),
+                size_of::<DWM_SYSTEMBACKDROP_TYPE>() as u32,
+            )
+            .is_ok()
+    }
 }
 
 /// Windows draws the window's own icon beside the title, and this one has nothing to say there

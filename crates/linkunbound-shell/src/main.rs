@@ -16,6 +16,7 @@ use linkunbound_shell::{
 use slint::{ComponentHandle, Model};
 
 mod detected;
+mod look;
 mod notice;
 use detected::catalogue;
 
@@ -526,7 +527,10 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
         beside_the_pointer(picker);
         let _ = picker.show();
         if let Some(handle) = native_handle(picker.window()) {
-            host::keep_off_the_taskbar(handle, corner_of(picker));
+            host::keep_off_the_taskbar(handle, look::corner_of(picker));
+            if look::wear_backdrop(picker, handle) {
+                beside_the_pointer(picker);
+            }
             host::take_the_keyboard(handle);
         }
         return true;
@@ -548,7 +552,10 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
         ui.appeared.set(Some(std::time::Instant::now()));
     }
     if let Some(handle) = native_handle(picker.window()) {
-        host::keep_off_the_taskbar(handle, corner_of(picker));
+        host::keep_off_the_taskbar(handle, look::corner_of(picker));
+        if look::wear_backdrop(picker, handle) {
+            beside_the_pointer(picker);
+        }
         host::take_the_keyboard(handle);
     }
     // The window reports a scale of one until it exists, which is only now: the first picker of
@@ -889,7 +896,7 @@ impl Ui {
         let light = wants_light(prefs.theme);
         self.light_seen.set(light);
         paint(&self.picker, &self.notice, light);
-        style(&self.picker, prefs.picker_style);
+        look::style(&self.picker, prefs.picker_style);
         if let Some(tray) = self.tray.as_ref() {
             tray.show(true);
             tray.relabel(&self.words.get());
@@ -1127,24 +1134,6 @@ fn without_taking_the_front() -> Result<(), slint::PlatformError> {
     slint::BackendSelector::new()
         .with_winit_event_loop_builder(builder)
         .select()
-}
-
-fn style(picker: &Picker, chosen: linkunbound_core::PickerStyle) {
-    let classic = chosen != linkunbound_core::PickerStyle::Sheet;
-    picker.set_classic(classic);
-    picker.set_halo(if classic {
-        0.0
-    } else {
-        linkunbound_shell::HALO
-    });
-}
-
-fn corner_of(picker: &Picker) -> f64 {
-    if picker.get_classic() {
-        linkunbound_shell::CLASSIC_CORNER
-    } else {
-        linkunbound_shell::CORNER
-    }
 }
 
 fn wants_light(theme: linkunbound_core::Theme) -> bool {
