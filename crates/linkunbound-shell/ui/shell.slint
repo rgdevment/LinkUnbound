@@ -245,9 +245,14 @@ export component Picker inherits Window {
             width: root.sheet-width;
             height: root.sheet-height;
             border-radius: Palette.clear ? 8px : (root.look == Look.list ? 10px : 14px);
-            background: Palette.clear ? Palette.veil : Palette.surface;
+            background: Palette.clear ? Palette.veil : Palette.pane;
             border-width: Palette.clear && !root.private-on ? 0px : 1px;
             border-color: root.private-on ? Palette.secret : Palette.glow;
+
+            if !Palette.clear: Rectangle {
+                border-radius: parent.border-radius;
+                background: Palette.glint;
+            }
 
             Rectangle {
                 x: parent.width * 0.15;

@@ -14,6 +14,7 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
     let clear = acrylic();
     picker.set_look(look);
     picker.global::<Palette>().set_clear(clear);
+    picker.global::<Palette>().set_see_through(see_through());
     picker.set_halo(if look == Look::List || clear {
         0.0
     } else {
@@ -108,8 +109,20 @@ pub fn put_away(picker: &Picker) {
 }
 
 #[cfg(windows)]
+fn see_through() -> bool {
+    linkunbound_win::transparency_is_on()
+}
+
+#[cfg(not(windows))]
+fn see_through() -> bool {
+    true
+}
+
+#[cfg(windows)]
 fn acrylic() -> bool {
-    linkunbound_win::acrylic_is_available()
+    // A debug build can be told to paint, to see on Windows 11 what Windows 10 shows.
+    let painted = cfg!(debug_assertions) && std::env::var_os("LINKUNBOUND_NO_ACRYLIC").is_some();
+    linkunbound_win::acrylic_is_available() && !painted
 }
 
 #[cfg(windows)]

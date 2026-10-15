@@ -24,6 +24,15 @@ export global Palette {
         ? @linear-gradient(180deg, #FFFFFFC4 0%, #F3F5F9CC 100%)
         : @linear-gradient(180deg, #282B36C4 0%, #1A1C23CC 100%);
     out property <color> rim: light ? #FFFFFFE6 : #FFFFFF2E;
+    // Without a material: the same tone drawn by the picker, a touch see-through unless the system
+    // asked for no transparency, with the accent's glint coming in at the top corner.
+    in property <bool> see-through: true;
+    out property <brush> pane: light
+        ? (see-through ? @linear-gradient(180deg, #FFFFFFF8 0%, #F3F5F9FA 100%) : @linear-gradient(180deg, #FFFFFF 0%, #F3F5F9 100%))
+        : (see-through ? @linear-gradient(180deg, #282B36F8 0%, #1A1C23FA 100%) : @linear-gradient(180deg, #282B36 0%, #1A1C23 100%));
+    out property <brush> glint: light
+        ? @linear-gradient(135deg, #3E6BE017 0%, #3E6BE000 45%)
+        : @linear-gradient(135deg, #7FA2FF24 0%, #7FA2FF00 45%);
 
     out property <brush> ground: light ? #FFFFFF : #191A1F;
     // Header and footer sit a shade apart from the list, which is what tells the zones apart.
