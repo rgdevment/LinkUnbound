@@ -23,6 +23,6 @@ updating the wiki in the same change.
 
 ## Mascot
 
-The bear's sources are in `resources/mascot/`: `linkunbound-head.svg` in
+LinkBear's sources are in `resources/mascot/`: `linkunbound-head.svg` in
 colour and `linkunbound-head-mono.svg` in one ink. `app/src/assets/linkunbound.svg`
 is the copy the window shows in About.
