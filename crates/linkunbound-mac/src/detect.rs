@@ -238,6 +238,7 @@ fn read_bundle(found: &NSURL) -> Option<Browser> {
         icon_path: None,
         custom: false,
         hidden: false,
+        keys: Default::default(),
     })
 }
 
@@ -289,6 +290,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 

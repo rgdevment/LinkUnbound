@@ -1,2 +1,2 @@
-2026 app/src-tauri/src/lib.rs
-1969 crates/linkunbound-shell/src/main.rs
+1893 app/src-tauri/src/lib.rs
+1965 crates/linkunbound-shell/src/main.rs

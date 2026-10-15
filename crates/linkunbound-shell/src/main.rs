@@ -1170,21 +1170,14 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     {
         let handle = picker.as_weak();
-        picker.on_typed(move |typed, private| {
+        picker.on_typed(move |typed, private, chorded| {
             let Some(window) = handle.upgrade() else {
                 return false;
             };
-            let Some(digit) = typed.chars().next().and_then(host::digit_behind) else {
-                return false;
-            };
-            let Some(index) = i32::try_from(digit).ok().map(|d| d - 1) else {
-                return false;
-            };
-            if index >= window.get_rows().row_count().try_into().unwrap_or(i32::MAX) {
-                return false;
-            }
-            window.invoke_open(index, private);
-            true
+            let shown: Vec<_> = window.get_rows().iter().map(|row| row.key).collect();
+            linkunbound_shell::row_typed(&shown, &typed, chorded, host::digit_behind)
+                .map(|index| window.invoke_open(index, private))
+                .is_some()
         });
     }
     {
@@ -1657,6 +1650,7 @@ mod tests {
             profile: String::new(),
             icon: None,
             can_private: false,
+            key: None,
         }
     }
     fn browser_named(id: &str) -> linkunbound_core::Browser {
@@ -1670,6 +1664,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
@@ -1815,6 +1810,7 @@ mod tests {
             profile: "Personal".to_owned(),
             icon: None,
             can_private: true,
+            key: None,
         }
     }
 

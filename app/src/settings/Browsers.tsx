@@ -17,6 +17,9 @@ type BrowserView = {
   args: string;
   private_flag: string | null;
   icon_path: string | null;
+  profile_names: [string, string][];
+  keys: Record<string, string>;
+  shown_keys: Record<string, string>;
 };
 
 type Edit = {
@@ -25,9 +28,63 @@ type Edit = {
   args: string;
   private_flag: string | null;
   icon_path: string | null;
+  keys: Record<string, string>;
 };
 
-const BLANK: Edit = { name: "", exe: "", args: "", private_flag: null, icon_path: null };
+/// Examples for the advanced options: what to say, and what to type.
+const HELP: [Key, Key][] = [
+  ["helpProfile", "helpProfileCode"],
+  ["helpSeparate", "helpSeparateCode"],
+  ["helpFirefox", "helpFirefoxCode"],
+  ["helpWindow", "helpWindowCode"],
+];
+
+const BLANK: Edit = { name: "", exe: "", args: "", private_flag: null, icon_path: null, keys: {} };
+
+/// Each row of a browser in the picker, by the id its key is saved under: one per profile, or the
+/// browser itself under "" when it has none.
+function rowsOf(browser?: BrowserView): [string, string][] {
+  return browser?.profile_names.length ? browser.profile_names : [["", ""]];
+}
+
+/// Who else holds a key, named the way the picker shows them. A hidden browser is not in the
+/// picker and holds nothing.
+function holderOf(key: string, others: BrowserView[]): string | null {
+  for (const b of others.filter((o) => !o.hidden)) {
+    for (const [row, profile] of rowsOf(b)) {
+      if (b.keys[row]?.toUpperCase() !== key) continue;
+      return profile ? `${b.name} · ${profile}` : b.name;
+    }
+  }
+  return null;
+}
+
+/// The one key typed, wherever the caret was: the box already holds one, so the new one is
+/// whatever is not it.
+function typedKey(value: string, was: string): string {
+  const upper = value.toUpperCase();
+  const fresh = was && upper.length > 1 ? upper.replace(was, "") : upper;
+  return fresh.slice(-1).trim();
+}
+
+/// What is wrong with the key typed for one row, said before saving rather than after.
+function keyProblem(
+  key: string,
+  row: string,
+  typed: Record<string, string>,
+  rows: string[],
+  others: BrowserView[],
+  t: (key: Key, ...values: string[]) => string,
+): string | null {
+  if (key === "") return null;
+  if (!/^[1-9A-Z]$/.test(key)) return t("keyUnusable");
+  if (
+    Object.entries(typed).some(([other, k]) => other !== row && k === key && rows.includes(other))
+  )
+    return t("keyTwice");
+  const holder = holderOf(key, others);
+  return holder ? t("keyTaken", holder) : null;
+}
 
 function describe(browser: BrowserView, t: (key: Key, ...values: string[]) => string): string {
   const parts = [
@@ -64,11 +121,18 @@ const FIELD =
 
 function Form({
   initial,
+  rows,
+  shown = {},
+  others,
   detected,
   onSave,
   onCancel,
 }: {
   initial: Edit;
+  rows: [string, string][];
+  /// The key each row has in the picker today, chosen or next in line, shown in an empty box.
+  shown?: Record<string, string>;
+  others: BrowserView[];
   /// Detection owns the path and the private flag: the path is shown and locked, since it says
   /// which program this is; the flag is not shown at all where detection knows it, and offered
   /// only for a family it could not place — the one case the person knows better.
@@ -82,6 +146,11 @@ function Form({
   const [args, setArgs] = useState(initial.args);
   const [priv, setPriv] = useState(initial.private_flag ?? "");
   const [icon, setIcon] = useState(initial.icon_path ?? "");
+  const [keys, setKeys] = useState<Record<string, string>>(initial.keys);
+  const advancedAtFirst = Boolean(initial.args || initial.icon_path);
+  const [helping, setHelping] = useState(false);
+  const ids = rows.map(([row]) => row);
+  const problems = ids.map((row) => keyProblem(keys[row] ?? "", row, keys, ids, others, t));
 
   return (
     <form
@@ -94,6 +163,7 @@ function Form({
           args,
           private_flag: priv || null,
           icon_path: icon || null,
+          keys: Object.fromEntries(ids.map((row) => [row, keys[row] ?? ""])),
         });
       }}
     >
@@ -119,38 +189,108 @@ function Form({
           {t("fieldExeDetected")}
         </p>
       )}
-      <input
-        value={args}
-        onChange={(e) => setArgs(e.target.value)}
-        placeholder={t("fieldArgs")}
-        aria-label={t("fieldArgsLabel")}
-        className={FIELD}
-      />
-      {(!detected || initial.private_flag === null) && (
-        <>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1 text-[11.5px]">{t("fieldKey")}</legend>
+        {rows.map(([row, label], at) => (
+          <div key={row} className="flex flex-wrap items-center gap-2">
+            {label && <span className="min-w-[96px] text-[11.5px]">{label}</span>}
+            <input
+              value={keys[row] ?? ""}
+              placeholder={shown[row] ?? ""}
+              onChange={(e) => {
+                const key = typedKey(e.target.value, keys[row] ?? "");
+                setKeys((now) => ({ ...now, [row]: key }));
+              }}
+              aria-label={label ? t("fieldKeyOf", label) : t("fieldKey")}
+              aria-invalid={problems[at] !== null}
+              className={`${FIELD} w-10 text-center uppercase ${
+                problems[at] ? "border-[#C0362F] dark:border-[#FF8A85]" : ""
+              }`}
+            />
+            {problems[at] && (
+              <span role="alert" className="text-[10.5px] text-[#C0362F] dark:text-[#FF8A85]">
+                {problems[at]}
+              </span>
+            )}
+          </div>
+        ))}
+        <p className="text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">{t("fieldKeyHint")}</p>
+      </fieldset>
+      <details open={advancedAtFirst} className="group/advanced">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11.5px] text-neutral-500 select-none dark:text-[#8B92A1] [&::-webkit-details-marker]:hidden">
+          <svg
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+            className="h-2.5 w-2.5 transition-transform group-open/advanced:rotate-90"
+          >
+            <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+          {t("fieldAdvanced")}
+        </summary>
+        <div className="mt-2 flex flex-col gap-2">
           <input
-            value={priv}
-            onChange={(e) => setPriv(e.target.value)}
-            placeholder={t("fieldPrivate")}
-            aria-label={t("fieldPrivateLabel")}
+            value={args}
+            onChange={(e) => setArgs(e.target.value)}
+            placeholder={t("fieldArgs")}
+            aria-label={t("fieldArgsLabel")}
             className={FIELD}
           />
-          <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
-            {t("fieldPrivateHint")}
-          </p>
-        </>
+          {(!detected || initial.private_flag === null) && (
+            <>
+              <input
+                value={priv}
+                onChange={(e) => setPriv(e.target.value)}
+                placeholder={t("fieldPrivate")}
+                aria-label={t("fieldPrivateLabel")}
+                className={FIELD}
+              />
+              <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
+                {t("fieldPrivateHint")}
+              </p>
+            </>
+          )}
+          <input
+            value={icon}
+            onChange={(e) => setIcon(e.target.value)}
+            placeholder={t("fieldIcon")}
+            aria-label={t("fieldIconLabel")}
+            className={FIELD}
+          />
+        </div>
+      </details>
+      <button
+        type="button"
+        aria-expanded={helping}
+        onClick={() => setHelping((now) => !now)}
+        className="flex items-center gap-1.5 self-start text-[11.5px] text-[#2F62D8] dark:text-[#6E9BFF]"
+      >
+        <span
+          aria-hidden="true"
+          className="grid h-4 w-4 place-items-center rounded-full border border-current text-[9.5px] font-semibold"
+        >
+          ?
+        </span>
+        {t("helpTitle")}
+      </button>
+      {helping && (
+        <div className="rounded-md bg-black/[0.035] px-2.5 py-2 text-[11px] dark:bg-white/[0.04]">
+          <dl className="flex flex-col gap-2">
+            {HELP.map(([said, code]) => (
+              <div key={said}>
+                <dt className="text-neutral-600 dark:text-[#AAB1C0]">{t(said)}</dt>
+                <dd>
+                  <code className="text-[10.5px] select-all">{t(code)}</code>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       )}
-      <input
-        value={icon}
-        onChange={(e) => setIcon(e.target.value)}
-        placeholder={t("fieldIcon")}
-        aria-label={t("fieldIconLabel")}
-        className={FIELD}
-      />
       <div className="flex gap-2">
         <button
           type="submit"
-          className="rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+          disabled={problems.some((p) => p !== null)}
+          className="rounded-md bg-[#2F62D8] disabled:opacity-40 px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
         >
           {t("save")}
         </button>
@@ -273,6 +413,9 @@ export default function Browsers() {
               <Form
                 key={b.id}
                 initial={b}
+                rows={rowsOf(b)}
+                shown={b.shown_keys}
+                others={list.filter((o) => o.id !== b.id)}
                 detected
                 onCancel={() => setEditing(null)}
                 onSave={(edit) => run("browsers_update", { id: b.id, edit })}
@@ -357,6 +500,9 @@ export default function Browsers() {
               <Form
                 key={b.id}
                 initial={b}
+                rows={rowsOf(b)}
+                shown={b.shown_keys}
+                others={list.filter((o) => o.id !== b.id)}
                 onCancel={() => setEditing(null)}
                 onSave={(edit) => run("browsers_update", { id: b.id, edit })}
               />
@@ -430,6 +576,8 @@ export default function Browsers() {
           {editing === "new" ? (
             <Form
               initial={BLANK}
+              rows={rowsOf()}
+              others={list}
               onCancel={() => setEditing(null)}
               onSave={(edit) => run("browsers_add", { edit })}
             />

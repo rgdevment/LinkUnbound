@@ -40,9 +40,8 @@ pub const CLASSIC_CORNER: f64 = 10.0;
 /// The sheet draws its own shadow where the system draws none for a frameless window.
 pub const HALO: f32 = if cfg!(target_os = "macos") { 0.0 } else { 18.0 };
 
-/// Logical sides the two looks draw the icon at; the resident asks for them in screen pixels.
+/// Logical side the list draws the icon at; the resident asks for it in screen pixels.
 pub const ICON_SIDE: u32 = 24;
-pub const TILE_ICON_SIDE: u32 = 40;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reaches {
@@ -94,6 +93,8 @@ pub struct Listed {
     pub profile: String,
     pub icon: Option<String>,
     pub can_private: bool,
+    /// The key the person gave this row, if any.
+    pub key: Option<char>,
 }
 
 #[must_use]
@@ -109,19 +110,21 @@ pub fn destinations(browsers: &[Browser]) -> Vec<Listed> {
                 profile: String::new(),
                 icon: None,
                 can_private: browser.supports_private(),
+                key: browser.key_for(None),
             };
-            if browser.profiles.is_empty() {
-                return vec![base];
-            }
             browser
-                .profiles
-                .iter()
-                .map(|profile| Listed {
-                    profile_id: Some(profile.id.clone()),
-                    profile: profile.name.clone(),
-                    ..base.clone()
+                .rows()
+                .into_iter()
+                .map(|profile| match profile {
+                    None => base.clone(),
+                    Some(profile) => Listed {
+                        profile_id: Some(profile.id.clone()),
+                        profile: profile.name.clone(),
+                        key: browser.key_for(Some(&profile.id)),
+                        ..base.clone()
+                    },
                 })
-                .collect()
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -346,6 +349,31 @@ pub fn split(url: &str) -> (String, String) {
     }
 }
 
+/// The key each row of the picker shows.
+#[must_use]
+pub fn keys_for(rows: &[Listed]) -> Vec<Option<char>> {
+    linkunbound_core::assigned_keys(rows.iter().map(|row| row.key))
+}
+
+/// The row a key opens, if one shows it: the digit under the key the host read, or a letter unless
+/// a modifier makes it a shortcut.
+#[must_use]
+pub fn row_typed(
+    shown: &[slint::SharedString],
+    typed: &str,
+    chorded: bool,
+    digit_behind: impl Fn(char) -> Option<u32>,
+) -> Option<i32> {
+    let typed = typed.chars().next()?;
+    let wanted = digit_behind(typed)
+        .and_then(|digit| char::from_digit(digit, 10))
+        .or_else(|| {
+            linkunbound_core::usable_key(typed).filter(|k| !chorded && k.is_ascii_uppercase())
+        })?;
+    let at = shown.iter().position(|key| key.chars().eq([wanted]))?;
+    i32::try_from(at).ok()
+}
+
 /// What a browser is called among friends: the maker's name in front and «Browser» at the end
 /// say nothing a small card has room for.
 #[must_use]
@@ -406,17 +434,12 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
         slint::SharedString::new()
     });
 
+    let keys = keys_for(rows);
     let listed: Vec<Destination> = rows
         .iter()
-        .enumerate()
-        .map(|(i, row)| Destination {
-            // The digits stop at 9; a tenth row is opened with the pointer and says so by
-            // showing no key.
-            key: if i < 9 {
-                (i + 1).to_string().into()
-            } else {
-                slint::SharedString::new()
-            },
+        .zip(keys)
+        .map(|(row, key)| Destination {
+            key: key.map(String::from).unwrap_or_default().into(),
             name: row.name.clone().into(),
             short: short_name(&row.name).into(),
             profile: row.profile.clone().into(),
@@ -526,6 +549,7 @@ mod tests {
             icon_path: None,
             custom: false,
             hidden: false,
+            keys: Default::default(),
         }
     }
 
@@ -548,6 +572,7 @@ mod tests {
     fn a_hidden_browser_never_reaches_the_picker() {
         let hidden = Browser {
             hidden: true,
+            keys: Default::default(),
             ..browser("edge", &[], true)
         };
         assert!(destinations(&[hidden]).is_empty());
@@ -570,6 +595,7 @@ mod tests {
                 profile: String::new(),
                 icon: None,
                 can_private: true,
+                key: None,
             },
             Listed {
                 browser_id: "chrome".to_owned(),
@@ -578,6 +604,7 @@ mod tests {
                 profile: "Personal".to_owned(),
                 icon: None,
                 can_private: false,
+                key: None,
             },
         ]
     }
@@ -613,38 +640,40 @@ mod tests {
         }
     }
 
-    /// The sheet's width comes from how many tiles share a row, never from the words: four across
-    /// need the wider sheet and the origin's name changes nothing. The halo is room for the
-    /// shadow and is counted, since the window is what gets placed beside the pointer.
+    /// Tiles are the bear's cards without the bear: the same sheet for any number of browsers.
+    /// The halo is room for the shadow and is counted, since the window is what gets placed
+    /// beside the pointer.
     #[test]
-    fn the_sheet_is_sized_by_its_tiles_and_its_halo() {
+    fn tiles_draw_the_bear_sheet_and_count_their_halo() {
         headless();
         let window = crate::Picker::new().expect("a window");
-        window.set_look(crate::Look::Tiles);
         let words = Language::Spanish.strings();
         let two = dressed();
+        let mut eight = two.clone();
+        for _ in 0..3 {
+            eight.extend(two.iter().cloned());
+        }
 
-        dress(
-            &window,
-            &words,
-            "https://docs.google.com/a",
-            Some("ms-teams"),
-            &two,
-        );
-        let two_across = window.get_wanted_width();
-        assert!(two_across >= 372.0, "{two_across}");
+        for rows in [&two, &eight] {
+            dress(
+                &window,
+                &words,
+                "https://docs.google.com/a",
+                Some("ms-teams"),
+                rows,
+            );
+            window.set_look(crate::Look::Bear);
+            let bear = (window.get_wanted_width(), window.get_wanted_height());
+            window.set_look(crate::Look::Tiles);
+            let tiles = (window.get_wanted_width(), window.get_wanted_height());
+            assert_eq!(tiles, bear, "{} browsers", rows.len());
+            assert!(tiles.0 >= 500.0, "{}", tiles.0);
+            assert_eq!(window.get_drawn_icon_side(), 32.0);
+        }
 
-        let mut four = two.clone();
-        four.extend(two.iter().cloned());
-        dress(&window, &words, "https://docs.google.com/a", None, &four);
-        let four_across = window.get_wanted_width();
-        assert!(
-            four_across >= 400.0 && four_across >= two_across,
-            "four across need the wider sheet"
-        );
-
+        let plain = window.get_wanted_width();
         window.set_halo(18.0);
-        assert_eq!(window.get_wanted_width(), four_across + 36.0);
+        assert_eq!(window.get_wanted_width(), plain + 36.0);
 
         window.set_halo(0.0);
         window.set_look(crate::Look::List);
@@ -682,11 +711,63 @@ mod tests {
         use slint::Model;
         let rows = window.get_rows();
         assert_eq!(rows.row_data(8).expect("ninth").key, "9");
+        assert_eq!(rows.row_data(9).expect("tenth").key, "Q");
+        assert_eq!(rows.row_data(11).expect("twelfth").key, "E");
+    }
+
+    fn chose(key: Option<char>) -> Listed {
+        Listed {
+            browser_id: "chrome".to_owned(),
+            profile_id: None,
+            name: "Chrome".to_owned(),
+            profile: String::new(),
+            icon: None,
+            can_private: true,
+            key,
+        }
+    }
+
+    /// A key chosen in settings is kept, the first row to claim it wins, and the rest take the
+    /// defaults nobody holds, in order; past the twenty-seven defaults a row has none.
+    #[test]
+    fn a_chosen_key_stands_and_the_others_take_what_is_left() {
+        use super::keys_for;
+        let rows = [
+            chose(None),
+            chose(Some('1')),
+            chose(Some('p')),
+            chose(Some('P')),
+            chose(Some('0')),
+        ];
         assert_eq!(
-            rows.row_data(9).expect("tenth").key,
-            "",
-            "no digit opens the tenth"
+            keys_for(&rows),
+            [Some('2'), Some('1'), Some('P'), Some('3'), Some('4')],
+            "a second P and a zero fall back to the defaults"
         );
+
+        let many: Vec<Listed> = (0..28).map(|_| chose(None)).collect();
+        let given = keys_for(&many);
+        assert_eq!(given[9], Some('Q'));
+        assert_eq!(given[26], Some('N'));
+        assert_eq!(given[27], None);
+    }
+
+    /// A letter opens the row that shows it whether Shift is held or not; a digit is the one the
+    /// host read under the key; Alt, Ctrl or Cmd with a letter is a shortcut, with a digit it still
+    /// opens.
+    #[test]
+    fn a_key_opens_the_row_that_shows_it() {
+        let shown: Vec<slint::SharedString> = ["2", "1", "P", "Q", ""].map(Into::into).to_vec();
+        let digit = |c: char| c.to_digit(10).filter(|d| (1..=9).contains(d));
+        let typed = |text: &str, chorded: bool| super::row_typed(&shown, text, chorded, digit);
+        assert_eq!(typed("1", false), Some(1));
+        assert_eq!(typed("2", true), Some(0), "Ctrl+2 still opens");
+        assert_eq!(typed("p", false), Some(2));
+        assert_eq!(typed("Q", false), Some(3));
+        assert_eq!(typed("q", true), None, "Alt+Q is a shortcut");
+        assert_eq!(typed("w", false), None, "no row shows it");
+        assert_eq!(typed("é", false), None);
+        assert_eq!(typed("", false), None);
     }
 
     /// The pill says the consequence in full once a reach is chosen: «Todo el sitio» in a menu is

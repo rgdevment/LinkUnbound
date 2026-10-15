@@ -23,7 +23,9 @@ pub use binaries::{
     BROWSERS, PREVIEW, RESIDENT, Registered, SETTINGS, link_handler, settings_binary,
     what_is_registered,
 };
-pub use browser::{Browser, LaunchRefused, Profile, merge};
+pub use browser::{
+    Browser, KEYS, LaunchRefused, Profile, assigned_keys, merge, picker_keys, usable_key,
+};
 pub use config::{
     BrowserConfig, ConfigError, SCHEMA_VERSION, read_browsers, read_rules, write_browsers,
     write_rules,

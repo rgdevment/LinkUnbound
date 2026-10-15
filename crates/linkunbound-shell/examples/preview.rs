@@ -5,7 +5,7 @@
 //! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]`
 
 use linkunbound_core::Language;
-use linkunbound_shell::{HALO, Listed, Look, Palette, Picker, dress, paint};
+use linkunbound_shell::{HALO, Listed, Look, Palette, Picker, dress, paint, row_typed};
 use slint::ComponentHandle;
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -24,8 +24,7 @@ fn main() -> Result<(), slint::PlatformError> {
         .unwrap_or(1);
     let side = match look {
         Look::List => 24,
-        Look::Tiles => 48,
-        Look::Compact | Look::Bear => 32,
+        Look::Tiles | Look::Compact | Look::Bear => 32,
     } * scale;
     let icons = linkunbound_core::data_dir().join("icons");
     // Real icons at the side the chosen style draws them, so what the preview shows is what
@@ -62,6 +61,7 @@ fn main() -> Result<(), slint::PlatformError> {
             profile: named("Tu Chrome", "Personal"),
             icon: icon("google-chrome"),
             can_private: true,
+            key: None,
         },
         Listed {
             browser_id: "firefox".to_owned(),
@@ -70,6 +70,7 @@ fn main() -> Result<(), slint::PlatformError> {
             profile: String::new(),
             icon: icon("firefox-308046b0af4a39cb"),
             can_private: true,
+            key: None,
         },
         Listed {
             browser_id: "vivaldi".to_owned(),
@@ -78,6 +79,7 @@ fn main() -> Result<(), slint::PlatformError> {
             profile: named("Trabajo", "Work"),
             icon: icon("vivaldi-xzttkvpr7ou6s6fgtka6s5fohm"),
             can_private: false,
+            key: None,
         },
     ];
 
@@ -172,17 +174,16 @@ fn main() -> Result<(), slint::PlatformError> {
     // The keys as the resident reads them: a digit opens its row, the arrows walk the reaches.
     {
         let handle = window.as_weak();
-        window.on_typed(move |typed, private| {
+        window.on_typed(move |typed, private, chorded| {
+            use slint::Model;
             let Some(w) = handle.upgrade() else {
                 return false;
             };
-            let Some(digit) = typed.chars().next().and_then(|c| c.to_digit(10)) else {
+            let digit = |c: char| c.to_digit(10);
+            let shown: Vec<_> = w.get_rows().iter().map(|row| row.key).collect();
+            let Some(index) = row_typed(&shown, &typed, chorded, digit) else {
                 return false;
             };
-            let index = i32::try_from(digit).unwrap_or(0) - 1;
-            if index < 0 {
-                return false;
-            }
             w.invoke_open(index, private);
             true
         });

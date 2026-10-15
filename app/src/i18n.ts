@@ -105,10 +105,26 @@ const ES = {
   fieldArgsLabel: "Argumentos adicionales",
   fieldPrivate: "Argumento de ventana privada (--incognito, -private-window…)",
   fieldPrivateLabel: "Argumento de ventana privada",
-  fieldPrivateHint: "Sin este argumento, el navegador no podrá abrir en privado desde el selector.",
+  fieldPrivateHint:
+    "Déjalo vacío si es Chrome, Edge, Brave, Vivaldi, Opera o Firefox: se pone solo. Sin él, otro navegador no podrá abrir en privado.",
+  fieldAdvanced: "Opciones avanzadas",
+  helpTitle: "¿Cómo creo un perfil o un navegador personalizado?",
+  helpProfile:
+    "Un perfil de Chrome, Edge o Brave (su carpeta aparece en chrome://version, «Ruta del perfil»):",
+  helpProfileCode: '--profile-directory="Profile 1"',
+  helpSeparate: "Un navegador aparte, con su propio historial y sesiones:",
+  helpSeparateCode: '--user-data-dir="C:/Navegadores/Trabajo"',
+  helpFirefox: "Un perfil de Firefox (créalo antes en about:profiles):",
+  helpFirefoxCode: '-P "Trabajo"',
+  helpWindow: "Abrir siempre en una ventana nueva (en Firefox: -new-window):",
+  helpWindowCode: "--new-window",
   fieldIcon: "Ruta de icono personalizado (opcional)",
   fieldIconLabel: "Ruta de icono personalizado",
   fieldExeDetected: "La detección decide esta ruta; un nuevo escaneo la restauraría.",
+  fieldKey: "Tecla en el selector",
+  fieldKeyOf: "Tecla de {}",
+  fieldKeyHint:
+    "Si la dejas vacía usa la que le toca, en gris: 1–9, luego QWERTY, ASDFGH y ZXCVBN.",
   browserUp: "Subir {}",
   browserDown: "Bajar {}",
   browserDuplicate: "Duplicar {}",
@@ -189,6 +205,9 @@ const ES = {
   tryAgain: "Reintentar",
   browserGone: "Ese navegador ya no está",
   browserNoProgram: "No hay ningún programa en esa ruta",
+  keyTaken: "Esa tecla ya la usa {}",
+  keyTwice: "Dos perfiles no pueden compartir tecla",
+  keyUnusable: "Usa un número del 1 al 9 o una letra",
   browserNotYours: "Solo puedes quitar un navegador que hayas añadido tú",
   noStartupTask: "Esta versión no trae tarea de inicio",
   notOnThisPlatform: "Todavía no está disponible en este sistema",
@@ -387,10 +406,25 @@ const EN: Record<Key, string> = {
   fieldPrivate: "Private window argument (--incognito, -private-window…)",
   fieldPrivateLabel: "Private window argument",
   fieldPrivateHint:
-    "Without this argument, the browser will not be able to open privately from the picker.",
+    "Leave it empty for Chrome, Edge, Brave, Vivaldi, Opera or Firefox: it fills itself in. Without it, any other browser cannot open privately.",
+  fieldAdvanced: "Advanced options",
+  helpTitle: "How do I make a profile or a custom browser?",
+  helpProfile:
+    "A Chrome, Edge or Brave profile (its folder shows in chrome://version, “Profile Path”):",
+  helpProfileCode: '--profile-directory="Profile 1"',
+  helpSeparate: "A separate browser, with its own history and sign-ins:",
+  helpSeparateCode: '--user-data-dir="C:/Browsers/Work"',
+  helpFirefox: "A Firefox profile (create it first in about:profiles):",
+  helpFirefoxCode: '-P "Work"',
+  helpWindow: "Always open in a new window (in Firefox: -new-window):",
+  helpWindowCode: "--new-window",
   fieldIcon: "Custom icon path (optional)",
   fieldIconLabel: "Custom icon path",
   fieldExeDetected: "Detection owns this path; a rescan would put it back.",
+  fieldKey: "Key in the picker",
+  fieldKeyOf: "Key for {}",
+  fieldKeyHint:
+    "Left empty it uses the one in grey, next in line: 1–9, then QWERTY, ASDFGH and ZXCVBN.",
   browserUp: "Move {} up",
   browserDown: "Move {} down",
   browserDuplicate: "Duplicate {}",
@@ -471,6 +505,9 @@ const EN: Record<Key, string> = {
   tryAgain: "Try again",
   browserGone: "That browser is no longer there",
   browserNoProgram: "There is no program at that path",
+  keyTaken: "That key is already used by {}",
+  keyTwice: "Two profiles cannot share a key",
+  keyUnusable: "Use a number from 1 to 9 or a letter",
   browserNotYours: "Only a browser you added can be removed",
   noStartupTask: "This build has no startup task",
   notOnThisPlatform: "Not supported on this platform yet",
@@ -566,6 +603,7 @@ const EN: Record<Key, string> = {
 export const SPEECH: Record<Language, Record<Key, string>> = { es: ES, en: EN };
 
 const MAC_ES: Partial<Record<Key, string>> = {
+  helpSeparateCode: '--user-data-dir="/Users/Shared/Navegadores/Trabajo"',
   fieldExe: "Ruta de la aplicación (.app)",
   browserNoProgram: "No hay ninguna aplicación en esa ruta",
   healthBuildTree:
@@ -586,6 +624,7 @@ const MAC_ES: Partial<Record<Key, string>> = {
 };
 
 const MAC_EN: Partial<Record<Key, string>> = {
+  helpSeparateCode: '--user-data-dir="/Users/Shared/Browsers/Work"',
   fieldExe: "Application path (.app)",
   browserNoProgram: "There is no application at that path",
   healthBuildTree:
