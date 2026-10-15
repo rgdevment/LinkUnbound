@@ -214,7 +214,7 @@ A rule covers one of four reaches: an exact address, a host (`mail.google.com`),
 **Everything stays local.** LinkUnbound is built on a single, non-negotiable principle: your data never leaves your computer.
 
 <p align="center">
-  <img src="resources/assets/store/screenshots/en/06-private.png" alt="LinkUnbound's bear, private by design: nothing leaves your computer. No accounts, no subscriptions, no telemetry, no ads, no server, GPL-3.0, and rules and links stay local" width="92%"/>
+  <img src="resources/assets/store/screenshots/en/06-private.png" alt="LinkBear, LinkUnbound's mascot, private by design: nothing leaves your computer. No accounts, no subscriptions, no telemetry, no ads, no server, GPL-3.0, and rules and links stay local" width="92%"/>
 </p>
 
 - **Local-only storage** — browser list, rules and preferences stay on your machine
