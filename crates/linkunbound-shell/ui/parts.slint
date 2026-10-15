@@ -19,10 +19,14 @@ export global Palette {
     in property <bool> light: false;
     // Over Acrylic the system paints the material, the corners and the edge of the picker.
     in property <bool> clear: false;
-    // Laid over Acrylic: the blur is the system's, the tone and the lit edge stay the picker's.
+    // Laid over the material: the blur is the system's, the tone and the lit edge stay the picker's.
+    // Each material takes a different share of it: Acrylic is milky, Liquid Glass far clearer.
+    in property <float> tint: 0.77;
+    // DWM rounds Acrylic at its own 8px; on macOS the glass view is cut to the sheet's corner.
+    in property <length> glass-corner: 8px;
     out property <brush> veil: light
-        ? @linear-gradient(180deg, #FFFFFFC4 0%, #F3F5F9CC 100%)
-        : @linear-gradient(180deg, #282B36C4 0%, #1A1C23CC 100%);
+        ? @linear-gradient(180deg, #FFFFFF.with-alpha(tint) 0%, #F3F5F9.with-alpha(tint + 0.03) 100%)
+        : @linear-gradient(180deg, #282B36.with-alpha(tint) 0%, #1A1C23.with-alpha(tint + 0.03) 100%);
     out property <color> rim: light ? #FFFFFFE6 : #FFFFFF2E;
     // Without a material: the same tone drawn by the picker, a touch see-through unless the system
     // asked for no transparency, with the accent's glint coming in at the top corner.

@@ -214,7 +214,8 @@ const crates = () => {
       if (!one) continue;
       const [, name, version, from, licence] = one;
       const key = `${name}@${version}`;
-      if ((from && existsSync(from)) || seen.has(key)) continue;
+      const ours = from && existsSync(from) && !resolve(from).startsWith(join(root, "vendor"));
+      if (ours || seen.has(key)) continue;
       seen.set(key, { name, version, licence: licence || "see the crate" });
     }
   }
@@ -343,7 +344,8 @@ writeFileSync(
 <!-- Written by \`npm run notices\`. Do not edit by hand. -->
 
 LinkUnbound is GPL-3.0-only. The binary carries the work below, each under its own
-licence. Nothing of it was copied into LinkUnbound's own source. The licence text
+licence. Nothing of it was copied into LinkUnbound's own source, save the crates under
+\`vendor/\`, kept as published with the one change \`vendor/README.md\` describes. The licence text
 of every crate is in [THIRD-PARTY-LICENSES.md](https://github.com/rgdevment/LinkUnbound/blob/main/THIRD-PARTY-LICENSES.md),
 also under About → Licence texts.
 

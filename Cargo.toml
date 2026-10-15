@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "app/src-tauri"]
+exclude = ["vendor"]
 
 [workspace.package]
 version = "2.0.0"
@@ -65,3 +66,7 @@ unsafe_code = "deny"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
+
+[patch.crates-io]
+# macOS drops the alpha of every pixel without it; vendor/README.md says why and when it goes.
+softbuffer = { path = "vendor/softbuffer" }

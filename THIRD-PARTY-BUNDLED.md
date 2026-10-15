@@ -3,7 +3,8 @@
 <!-- Written by `npm run notices`. Do not edit by hand. -->
 
 LinkUnbound is GPL-3.0-only. The binary carries the work below, each under its own
-licence. Nothing of it was copied into LinkUnbound's own source. The licence text
+licence. Nothing of it was copied into LinkUnbound's own source, save the crates under
+`vendor/`, kept as published with the one change `vendor/README.md` describes. The licence text
 of every crate is in [THIRD-PARTY-LICENSES.md](https://github.com/rgdevment/LinkUnbound/blob/main/THIRD-PARTY-LICENSES.md),
 also under About → Licence texts.
 

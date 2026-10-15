@@ -144,6 +144,7 @@ unsafe_stays_where_it_was_audited() {
   local audited found
   audited="app/src-tauri/src/shop.rs
 crates/linkunbound-mac/src/events.rs
+crates/linkunbound-mac/src/glass.rs
 crates/linkunbound-mac/src/icons.rs
 crates/linkunbound-mac/src/native.rs
 crates/linkunbound-mac/src/registration.rs

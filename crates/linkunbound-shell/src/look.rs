@@ -11,16 +11,41 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
         PickerStyle::Compact => Look::Compact,
         PickerStyle::Bear => Look::Bear,
     };
-    let clear = acrylic();
+    let clear = native_glass();
     picker.set_look(look);
-    picker.global::<Palette>().set_clear(clear);
-    picker.global::<Palette>().set_see_through(see_through());
+    let palette = picker.global::<Palette>();
+    palette.set_clear(clear);
+    palette.set_tint(tint());
+    palette.set_glass_corner(if cfg!(target_os = "macos") {
+        corner_of(picker) as f32
+    } else {
+        DWM_CORNER
+    });
+    palette.set_see_through(see_through());
     picker.set_halo(if look == Look::List || clear {
         0.0
     } else {
         HALO
     });
 }
+
+/// How much of the picker's tone is laid over the material: Acrylic comes milky, Liquid Glass
+/// and menu vibrancy let far more of the desktop through.
+#[cfg(target_os = "macos")]
+fn tint() -> f32 {
+    if linkunbound_mac::liquid_glass() {
+        0.55
+    } else {
+        0.5
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn tint() -> f32 {
+    0.77
+}
+
+const DWM_CORNER: f32 = 8.0;
 
 pub fn corner_of(picker: &Picker) -> f64 {
     if picker.get_look() == Look::List {
@@ -34,7 +59,11 @@ pub fn corner_of(picker: &Picker) -> f64 {
 /// painted sheet and its shadow come back. Returns whether the window changed size.
 pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
     let palette = picker.global::<Palette>();
-    if !palette.get_clear() || wear_acrylic(handle, !palette.get_light()) {
+    if !palette.get_clear() {
+        take_off_glass(handle);
+        return false;
+    }
+    if wear_glass(handle, !palette.get_light(), corner_of(picker)) {
         return false;
     }
     palette.set_clear(false);
@@ -91,10 +120,18 @@ fn place_near(
     if let Some(ui) = crate::ui() {
         ui.mascot.anchor(at_x, at_y);
     }
+    // AppKit keeps a window's bottom edge when it grows, so the size Slint would set later would
+    // lift the picker off the place asked for, and off the bear.
     #[cfg(target_os = "macos")]
-    picker
-        .window()
-        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
+    {
+        picker.window().set_size(slint::LogicalSize::new(
+            picker.get_wanted_width(),
+            picker.get_wanted_height(),
+        ));
+        picker
+            .window()
+            .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
+    }
     #[cfg(not(target_os = "macos"))]
     picker
         .window()
@@ -124,36 +161,62 @@ fn see_through() -> bool {
     linkunbound_win::transparency_is_on()
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn see_through() -> bool {
+    !linkunbound_mac::reduces_transparency()
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn see_through() -> bool {
     true
 }
 
 #[cfg(windows)]
-fn acrylic() -> bool {
+fn native_glass() -> bool {
     // A debug build can be told to paint, to see on Windows 11 what Windows 10 shows.
     let painted = cfg!(debug_assertions) && std::env::var_os("LINKUNBOUND_NO_ACRYLIC").is_some();
     linkunbound_win::acrylic_is_available() && !painted
 }
 
 #[cfg(windows)]
-fn wear_acrylic(window: isize, dark: bool) -> bool {
+fn wear_glass(window: isize, dark: bool, _corner: f64) -> bool {
     linkunbound_win::wear_acrylic(window, dark)
 }
 
-#[cfg(not(windows))]
-fn acrylic() -> bool {
+/// Vibrancy is there on every macOS the app runs on, Liquid Glass from 26; only the person asking
+/// for less transparency sends the picker back to its painted sheet.
+#[cfg(target_os = "macos")]
+fn native_glass() -> bool {
+    !linkunbound_mac::reduces_transparency()
+}
+
+#[cfg(target_os = "macos")]
+fn wear_glass(view: isize, dark: bool, corner: f64) -> bool {
+    linkunbound_mac::wear_glass(view, dark, corner)
+}
+
+#[cfg(target_os = "macos")]
+fn take_off_glass(view: isize) {
+    linkunbound_mac::take_off_glass(view);
+}
+
+/// Acrylic is a window attribute DWM drops when the system turns transparency off.
+#[cfg(not(target_os = "macos"))]
+fn take_off_glass(_window: isize) {}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn native_glass() -> bool {
     false
 }
 
-#[cfg(not(windows))]
-fn wear_acrylic(_window: isize, _dark: bool) -> bool {
+#[cfg(not(any(windows, target_os = "macos")))]
+fn wear_glass(_window: isize, _dark: bool, _corner: f64) -> bool {
     false
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{acrylic, corner_of, place_near, style, wear_backdrop};
+    use super::{corner_of, native_glass, place_near, style, wear_backdrop};
     use linkunbound_core::PickerStyle;
     use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
     use slint::ComponentHandle;
@@ -168,7 +231,7 @@ mod tests {
     #[test]
     fn the_shadow_is_drawn_only_where_nothing_else_draws_one() {
         let picker = picker();
-        let clear = acrylic();
+        let clear = native_glass();
 
         style(&picker, PickerStyle::Sheet);
         assert_eq!(picker.global::<Palette>().get_clear(), clear);
