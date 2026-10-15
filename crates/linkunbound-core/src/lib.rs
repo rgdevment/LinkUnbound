@@ -35,7 +35,7 @@ pub use icons::{cached_icon, prune as prune_icons};
 pub use journal::{JOURNAL, journal, note, scrubbed};
 pub use launch::{LaunchError, open as launch, spawn_and_forget};
 pub use news::{behind as news_behind, untold as untold_news};
-pub use prefs::{Locale, PickerStyle, Preferences, Theme};
+pub use prefs::{Locale, PickerKeys, PickerStyle, Preferences, Theme};
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{

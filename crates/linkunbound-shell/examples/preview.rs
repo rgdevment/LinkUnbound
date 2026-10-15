@@ -5,7 +5,7 @@
 //! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]`
 
 use linkunbound_core::Language;
-use linkunbound_shell::{HALO, Listed, Look, Palette, Picker, dress, paint};
+use linkunbound_shell::{HALO, Listed, Look, Palette, Picker, dress, paint, row_typed};
 use slint::ComponentHandle;
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -171,17 +171,16 @@ fn main() -> Result<(), slint::PlatformError> {
     // The keys as the resident reads them: a digit opens its row, the arrows walk the reaches.
     {
         let handle = window.as_weak();
-        window.on_typed(move |typed, private| {
+        window.on_typed(move |typed, private, chorded| {
+            use slint::Model;
             let Some(w) = handle.upgrade() else {
                 return false;
             };
-            let Some(digit) = typed.chars().next().and_then(|c| c.to_digit(10)) else {
+            let digit = |c: char| c.to_digit(10);
+            let rows = w.get_rows().row_count();
+            let Some(index) = row_typed(&w.get_keys(), &typed, chorded, rows, digit) else {
                 return false;
             };
-            let index = i32::try_from(digit).unwrap_or(0) - 1;
-            if index < 0 {
-                return false;
-            }
             w.invoke_open(index, private);
             true
         });

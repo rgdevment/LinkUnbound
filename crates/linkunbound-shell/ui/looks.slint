@@ -10,7 +10,12 @@ export component ListLook inherits Rectangle {
     callback open(int);
     callback hovered(int);
 
-    Flickable {
+    // The arrows choose rows the window may not show: the chosen one is brought into sight, and a
+    // new link starts from the top.
+    changed chosen-at => {
+        list.content-y = root.chosen-at < 0 ? 0 : clamp(list.content-y, -(root.chosen-at * 45px), root.room - (root.chosen-at * 45px + 56px));
+    }
+    list := Flickable {
         height: root.room;
         content-height: root.rows.length * 45px + 12px;
         VerticalLayout {
@@ -130,7 +135,10 @@ export component CardsLook inherits Rectangle {
     callback adding();
     property <length> card-width: (self.width - 20px - 2 * 6px) / 3;
 
-    Flickable {
+    changed chosen-at => {
+        cards.content-y = root.chosen-at < 0 ? 0 : clamp(cards.content-y, -(Math.floor(root.chosen-at / 3) * 58px), root.room - (Math.floor(root.chosen-at / 3) * 58px + 68px));
+    }
+    cards := Flickable {
         height: root.room;
         content-height: Math.ceil(root.rows.length / 3) * 58px + 10px;
         for item[i] in root.rows: Rectangle {

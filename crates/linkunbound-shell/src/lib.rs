@@ -345,6 +345,50 @@ pub fn split(url: &str) -> (String, String) {
     }
 }
 
+/// The key a row shows, none past the last one: those are opened with the pointer or the arrows.
+#[must_use]
+pub fn key_of(keys: &str, at: usize) -> slint::SharedString {
+    keys.get(at..=at).unwrap_or_default().into()
+}
+
+/// New keys for a picker that may be on screen: its rows were labelled with the old ones.
+pub fn relabel(window: &Picker, keys: &str) {
+    use slint::Model;
+    window.set_keys(keys.into());
+    let rows = window.get_rows();
+    for at in 0..rows.row_count() {
+        if let Some(mut row) = rows.row_data(at) {
+            row.key = key_of(keys, at);
+            rows.set_row_data(at, row);
+        }
+    }
+}
+
+/// The row a typed letter opens, with or without Shift held for a private window. The digits are
+/// read from the key pressed, not the glyph, so they are left to the host.
+#[must_use]
+pub fn row_of_letter(keys: &str, typed: char) -> Option<usize> {
+    let letters = keys.get(9..)?;
+    letters.find(typed.to_ascii_uppercase()).map(|at| at + 9)
+}
+
+/// The row a key opens, if one of those shown does: the digit under the key the host read, or a
+/// letter past the digits unless a modifier makes it a shortcut.
+#[must_use]
+pub fn row_typed(
+    keys: &str,
+    typed: &str,
+    chorded: bool,
+    rows: usize,
+    digit_behind: impl Fn(char) -> Option<u32>,
+) -> Option<i32> {
+    let typed = typed.chars().next()?;
+    let at = digit_behind(typed)
+        .and_then(|digit| usize::try_from(digit).ok()?.checked_sub(1))
+        .or_else(|| row_of_letter(keys, typed).filter(|_| !chorded))?;
+    (at < rows).then(|| i32::try_from(at).ok()).flatten()
+}
+
 /// What a browser is called among friends: the maker's name in front and «Browser» at the end
 /// say nothing a small card has room for.
 #[must_use]
@@ -405,17 +449,12 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
         slint::SharedString::new()
     });
 
+    let keys = window.get_keys();
     let listed: Vec<Destination> = rows
         .iter()
         .enumerate()
         .map(|(i, row)| Destination {
-            // The digits stop at 9; a tenth row is opened with the pointer and says so by
-            // showing no key.
-            key: if i < 9 {
-                (i + 1).to_string().into()
-            } else {
-                slint::SharedString::new()
-            },
+            key: key_of(&keys, i),
             name: row.name.clone().into(),
             short: short_name(&row.name).into(),
             profile: row.profile.clone().into(),
@@ -502,7 +541,9 @@ mod short {
 mod tests {
     use super::dress;
     use super::{Listed, Palette, Reaches, destinations, image_for, paint, reaches, split};
-    use linkunbound_core::{Browser, Language, Profile, Scope, Strings, looks_unresolved};
+    use linkunbound_core::{
+        Browser, Language, PickerKeys, Profile, Scope, Strings, looks_unresolved,
+    };
     use slint::ComponentHandle;
 
     const SPOKEN: Strings = Language::Spanish.strings();
@@ -683,11 +724,54 @@ mod tests {
         use slint::Model;
         let rows = window.get_rows();
         assert_eq!(rows.row_data(8).expect("ninth").key, "9");
+        assert_eq!(rows.row_data(9).expect("tenth").key, "Q");
+        assert_eq!(rows.row_data(11).expect("twelfth").key, "E");
+
+        super::relabel(&window, PickerKeys::Digits.keys());
+        assert_eq!(window.get_keys(), "123456789");
+        assert_eq!(rows.row_data(8).expect("ninth").key, "9");
         assert_eq!(
             rows.row_data(9).expect("tenth").key,
             "",
-            "no digit opens the tenth"
+            "an open picker drops the letters"
         );
+    }
+
+    /// With the QWERTY rows, twenty-seven rows have a key each and the next one none, and a letter
+    /// opens the same row whether Shift is held or not. With the digits alone no letter opens one.
+    #[test]
+    fn the_letters_carry_on_where_the_digits_stop() {
+        use super::{key_of, row_of_letter};
+        let keys = PickerKeys::Qwerty.keys();
+        assert_eq!(key_of(keys, 0), "1");
+        assert_eq!(key_of(keys, 9), "Q");
+        assert_eq!(key_of(keys, 15), "A");
+        assert_eq!(key_of(keys, 26), "N");
+        assert_eq!(key_of(keys, 27), "");
+        assert_eq!(key_of(PickerKeys::Digits.keys(), 9), "");
+        assert_eq!(row_of_letter(PickerKeys::Digits.keys(), 'q'), None);
+        assert_eq!(row_of_letter(PickerKeys::Alphabet.keys(), 'm'), Some(21));
+        let digit = |c: char| c.to_digit(10).filter(|d| (1..=9).contains(d));
+        let typed = |text: &str, chorded: bool| super::row_typed(keys, text, chorded, 12, digit);
+        assert_eq!(typed("3", false), Some(2));
+        assert_eq!(typed("3", true), Some(2), "Ctrl+3 still opens");
+        assert_eq!(typed("E", false), Some(11));
+        assert_eq!(typed("e", true), None, "Alt+E is a shortcut");
+        assert_eq!(typed("r", false), None, "past the rows shown");
+        assert_eq!(typed("", false), None);
+        for (typed, row) in [
+            ('q', Some(9)),
+            ('Q', Some(9)),
+            ('a', Some(15)),
+            ('z', Some(21)),
+            ('N', Some(26)),
+            ('p', None),
+            ('m', None),
+            ('1', None),
+            ('é', None),
+        ] {
+            assert_eq!(row_of_letter(keys, typed), row, "{typed}");
+        }
     }
 
     /// The pill says the consequence in full once a reach is chosen: «Todo el sitio» in a menu is

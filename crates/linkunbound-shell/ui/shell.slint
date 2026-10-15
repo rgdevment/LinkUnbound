@@ -36,6 +36,7 @@ export component Picker inherits Window {
     in-out property <bool> preview: false;
 
     in property <Look> look: Look.bear;
+    in property <string> keys: "123456789QWERTYASDFGHZXCVBN";
     in property <bool> on-mac: false;
     // Room around the sheet for the shadow it draws itself. Zero where the system draws one.
     in property <length> halo: 0px;
@@ -64,7 +65,8 @@ export component Picker inherits Window {
 
     callback open(int, bool);
     /// Returns whether the key was a destination. See `key-pressed`.
-    callback typed(string, bool) -> bool;
+    // The third says Ctrl, Cmd or Alt was held: a letter then belongs to a shortcut, not a row.
+    callback typed(string, bool, bool) -> bool;
     /// The reach the keys land on next, one step either way; the dead ones are stepped over.
     pure callback step-reach(int) -> int;
     callback dismissed();
@@ -100,7 +102,7 @@ export component Picker inherits Window {
     out property <string> reach-said: root.all-reaches[root.reach-index].full;
     property <string> more-said: root.more-holds ? root.reach-labels[root.reach-index] : root.reach-more-label;
 
-    // Nine rows at most on screen, the keys stop at 9, and the rest scroll under them.
+    // Nine rows at most on screen and the rest scroll under them.
     property <float> rows-shown: min(root.count, 9);
     property <length> list-room: max(1, root.rows-shown) * 45px + 11px;
     // A fifth reach appears when the click came from a known app, and its label carries that
@@ -202,7 +204,7 @@ export component Picker inherits Window {
             // The digit is worked out in Rust: with Shift held the layout hands
             // over "!" or "@" instead of "1", so comparing characters here made
             // Shift-to-open-privately break the very key it modifies.
-            if (root.typed(event.text, root.private-on)) {
+            if (root.typed(event.text, root.private-on, event.modifiers.control || event.modifiers.meta || event.modifiers.alt)) {
                 return accept;
             }
             return reject;

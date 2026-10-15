@@ -854,6 +854,7 @@ impl Ui {
         self.light_seen.set(light);
         paint(&self.picker, &self.notice, light);
         look::style(&self.picker, prefs.picker_style);
+        linkunbound_shell::relabel(&self.picker, prefs.picker_keys.keys());
         if let Some(tray) = self.tray.as_ref() {
             tray.show(true);
             tray.relabel(&self.words.get());
@@ -1170,20 +1171,16 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     {
         let handle = picker.as_weak();
-        picker.on_typed(move |typed, private| {
+        picker.on_typed(move |typed, private, chorded| {
             let Some(window) = handle.upgrade() else {
                 return false;
             };
-            let Some(digit) = typed.chars().next().and_then(host::digit_behind) else {
-                return false;
-            };
-            let Some(index) = i32::try_from(digit).ok().map(|d| d - 1) else {
-                return false;
-            };
-            if index >= window.get_rows().row_count().try_into().unwrap_or(i32::MAX) {
-                return false;
+            let rows = window.get_rows().row_count();
+            let keys = window.get_keys();
+            match linkunbound_shell::row_typed(&keys, &typed, chorded, rows, host::digit_behind) {
+                Some(index) => window.invoke_open(index, private),
+                None => return false,
             }
-            window.invoke_open(index, private);
             true
         });
     }
