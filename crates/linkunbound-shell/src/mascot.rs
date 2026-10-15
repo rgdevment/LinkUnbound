@@ -3,8 +3,6 @@
 use linkunbound_shell::{BearHead, BearPaws, Look, Palette, Picker};
 use slint::ComponentHandle;
 
-use crate::native_handle;
-
 /// Sizes in logical pixels: the head, how far it rises over the edge, a paw, the room between
 /// the paws, and where across the picker the head is centred.
 struct Pose {
@@ -133,6 +131,7 @@ pub fn listen(picker: &Picker) {
 
 #[cfg(windows)]
 fn stack(head: &BearHead, paws: &BearPaws, picker: &Picker) {
+    use crate::native_handle;
     let (Some(head), Some(paws), Some(picker)) = (
         native_handle(head.window()),
         native_handle(paws.window()),
