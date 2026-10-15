@@ -54,3 +54,58 @@ fn acrylic() -> bool {
 fn wear_acrylic(_window: isize, _dark: bool) -> bool {
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{acrylic, corner_of, style, wear_backdrop};
+    use linkunbound_core::PickerStyle;
+    use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
+    use slint::ComponentHandle;
+
+    fn picker() -> Picker {
+        i_slint_backend_testing::init_no_event_loop();
+        Picker::new().expect("a window")
+    }
+
+    /// The sheet draws its own shadow only where the system lends no material; the list never
+    /// draws one.
+    #[test]
+    fn the_shadow_is_drawn_only_where_nothing_else_draws_one() {
+        let picker = picker();
+        let clear = acrylic();
+
+        style(&picker, PickerStyle::Sheet);
+        assert_eq!(picker.global::<Palette>().get_clear(), clear);
+        assert_eq!(picker.get_halo(), if clear { 0.0 } else { HALO });
+        assert!((corner_of(&picker) - CORNER).abs() < f64::EPSILON);
+
+        style(&picker, PickerStyle::Classic);
+        assert_eq!(picker.get_halo(), 0.0);
+        assert!((corner_of(&picker) - CLASSIC_CORNER).abs() < f64::EPSILON);
+    }
+
+    /// A window the system will not dress gets the painted sheet back, and the tiles their
+    /// shadow, which changes the size the window has to be placed at.
+    #[test]
+    fn a_refused_material_brings_the_painted_sheet_back() {
+        let picker = picker();
+        let palette = picker.global::<Palette>();
+
+        style(&picker, PickerStyle::Sheet);
+        palette.set_clear(true);
+        picker.set_halo(0.0);
+        assert!(wear_backdrop(&picker, 0), "the tiles grow by their shadow");
+        assert!(!palette.get_clear());
+        assert_eq!(picker.get_halo(), HALO);
+
+        style(&picker, PickerStyle::Classic);
+        palette.set_clear(true);
+        assert!(!wear_backdrop(&picker, 0), "the list has no shadow to add");
+        assert!(!palette.get_clear());
+
+        assert!(
+            !wear_backdrop(&picker, 0),
+            "a painted sheet asks for nothing"
+        );
+    }
+}
