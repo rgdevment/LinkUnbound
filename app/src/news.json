@@ -1,5 +1,56 @@
 [
   {
+    "version": "2.7.0",
+    "headline": {
+      "es": "Un selector nuevo, con el oso y vidrio de verdad",
+      "en": "A new picker, with the bear and real glass"
+    },
+    "es": [
+      {
+        "title": "Cuatro estilos, con el oso al frente",
+        "said": "en Aplicación, bajo Selector, eliges entre Oso, Clásico, Mosaico y Compacto. Oso es el nuevo predeterminado: se asoma sobre el selector, mira el navegador que apuntas y se pone antifaz en privado. Con esta versión empiezas con el Oso; si preferías otro, cámbialo ahí mismo."
+      },
+      {
+        "title": "El vidrio del sistema",
+        "said": "en Windows 11 el selector usa el vidrio esmerilado de los menús; en macOS 26 o posterior, Liquid Glass, y en versiones anteriores el vidrio de los menús. En Windows 10, o si le pides al sistema menos transparencia, se ve sólido."
+      },
+      {
+        "title": "Vista previa",
+        "said": "un botón junto a los estilos muestra el selector con un enlace de ejemplo, para que pruebes un estilo antes de quedártelo. No abre nada."
+      },
+      {
+        "title": "Más claro y más rápido",
+        "said": "íconos más nítidos, nombres más cortos, recordar la elección en una sola fila (solo esta vez, todo el sitio, esta URL o el subdominio) y el teclado para todo: flechas para moverte, Enter para abrir y Tab para cambiar qué se recuerda."
+      },
+      {
+        "title": "Espacio para más navegadores",
+        "said": "con uno o dos navegadores, los huecos te invitan a añadir otro o un perfil, y te llevan directo a esa parte de Ajustes."
+      }
+    ],
+    "en": [
+      {
+        "title": "Four looks, with the bear up front",
+        "said": "under Application, in Picker, you choose between Bear, Classic, Tiles and Compact. Bear is the new default: it peeks over the picker, looks at the browser you point to and puts on a mask in private. This version starts you on Bear; if you preferred another look, change it right there."
+      },
+      {
+        "title": "The system's own glass",
+        "said": "on Windows 11 the picker uses the frosted glass of the menus; on macOS 26 and later, Liquid Glass, and on earlier versions the glass of the menus. On Windows 10, or when you ask the system for less transparency, it looks solid."
+      },
+      {
+        "title": "Preview",
+        "said": "a button next to the looks shows the picker over a sample link, so you can try a look before keeping it. It opens nothing."
+      },
+      {
+        "title": "Clearer and quicker",
+        "said": "sharper icons, shorter names, remembering a choice in a single row (just this time, the whole site, this URL or the subdomain) and the keyboard for everything: arrows to move, Enter to open and Tab to change what is remembered."
+      },
+      {
+        "title": "Room for more browsers",
+        "said": "with one or two browsers, the empty spaces offer to add another one or a profile, and take you straight to that part of Settings."
+      }
+    ]
+  },
+  {
     "version": "2.6.1",
     "headline": {
       "es": "El oso tiene compañía",
