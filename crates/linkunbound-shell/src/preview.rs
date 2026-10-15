@@ -18,7 +18,9 @@ pub fn asked(args: &[String]) -> Option<String> {
 }
 
 /// Whether the line was the preview, shown or not: over a picker in use it waits for nobody, and
-/// over a preview it starts again, so a look chosen meanwhile is drawn from scratch.
+/// over a preview it starts again, so a look chosen meanwhile is drawn from scratch. Nothing
+/// watches it lose the front: it stays while the person goes back to settings to compare, and
+/// goes with Esc or a choice.
 pub fn shown_for(ui: &Rc<Ui>, raw: &str) -> bool {
     if raw != PREVIEW {
         return false;
@@ -34,7 +36,6 @@ pub fn shown_for(ui: &Rc<Ui>, raw: &str) -> bool {
         ui.picker.set_preview(true);
         ui.picker
             .set_source_line(ui.words.get().picker_preview.into());
-        ui.watch_focus();
     }
     true
 }
