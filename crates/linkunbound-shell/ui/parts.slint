@@ -22,6 +22,8 @@ export global Palette {
     // Laid over the material: the blur is the system's, the tone and the lit edge stay the picker's.
     // Each material takes a different share of it: Acrylic is milky, Liquid Glass far clearer.
     in property <float> tint: 0.77;
+    // DWM rounds Acrylic at its own 8px; on macOS the glass view is cut to the sheet's corner.
+    in property <length> glass-corner: 8px;
     out property <brush> veil: light
         ? @linear-gradient(180deg, #FFFFFF.with-alpha(tint) 0%, #F3F5F9.with-alpha(tint + 0.03) 100%)
         : @linear-gradient(180deg, #282B36.with-alpha(tint) 0%, #1A1C23.with-alpha(tint + 0.03) 100%);

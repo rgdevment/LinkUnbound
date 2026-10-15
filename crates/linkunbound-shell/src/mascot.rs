@@ -73,28 +73,22 @@ impl Mascot {
         // Measured from what the look asks for, not from the window: right after a change of
         // look or place the window still reports the size and spot it had before.
         let window = picker.window();
-        let scale = window.scale_factor();
-        let (x, y) = self
-            .anchor
-            .get()
-            .unwrap_or((window.position().x, window.position().y));
-        let at = slint::PhysicalPosition::new(x, y);
+        let scale = placing_scale(window);
+        let (x, y) = self.anchor.get().unwrap_or_else(|| where_it_is(window));
         let px = |logical: f32| (logical * scale).round() as i32;
-        let centre = at.x + px(picker.get_wanted_width() / 2.0);
+        let centre = x + px(picker.get_wanted_width() / 2.0);
         // A painted sheet keeps a margin for its shadow; the bear leans on the sheet, not on it.
-        let top = at.y + px(picker.get_halo());
-        self.head
-            .window()
-            .set_position(slint::PhysicalPosition::new(
-                centre - px(pose.head / 2.0),
-                top - px(pose.rise),
-            ));
-        self.paws
-            .window()
-            .set_position(slint::PhysicalPosition::new(
-                centre - px(pose.gap / 2.0 + pose.paw),
-                top - px(pose.paw * 0.3),
-            ));
+        let top = y + px(picker.get_halo());
+        put(
+            self.head.window(),
+            centre - px(pose.head / 2.0),
+            top - px(pose.rise),
+        );
+        put(
+            self.paws.window(),
+            centre - px(pose.gap / 2.0 + pose.paw),
+            top - px(pose.paw * 0.3),
+        );
         self.mood(0.0, picker.get_private_on());
         let _ = self.head.show();
         let _ = self.paws.show();
@@ -110,6 +104,32 @@ impl Mascot {
         let _ = self.head.hide();
         let _ = self.paws.hide();
     }
+}
+
+/// The picker is placed in points on macOS and in pixels elsewhere; the bear goes in the same units.
+fn placing_scale(window: &slint::Window) -> f32 {
+    if cfg!(target_os = "macos") {
+        1.0
+    } else {
+        window.scale_factor()
+    }
+}
+
+fn where_it_is(window: &slint::Window) -> (i32, i32) {
+    let at = window.position();
+    if cfg!(target_os = "macos") {
+        let at = at.to_logical(window.scale_factor());
+        (at.x.round() as i32, at.y.round() as i32)
+    } else {
+        (at.x, at.y)
+    }
+}
+
+fn put(window: &slint::Window, x: i32, y: i32) {
+    #[cfg(target_os = "macos")]
+    window.set_position(slint::LogicalPosition::new(x as f32, y as f32));
+    #[cfg(not(target_os = "macos"))]
+    window.set_position(slint::PhysicalPosition::new(x, y));
 }
 
 /// The picker says where the bear should look and whether it wears the mask, and an empty slot
@@ -146,7 +166,21 @@ fn stack(head: &BearHead, paws: &BearPaws, picker: &Picker) {
     linkunbound_win::tuck_under(head, picker);
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn stack(head: &BearHead, paws: &BearPaws, picker: &Picker) {
+    use crate::native_handle;
+    let (Some(head), Some(paws), Some(picker)) = (
+        native_handle(head.window()),
+        native_handle(paws.window()),
+        native_handle(picker.window()),
+    ) else {
+        return;
+    };
+    linkunbound_mac::tuck_beside(head, picker, true);
+    linkunbound_mac::tuck_beside(paws, picker, false);
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn stack(_head: &BearHead, _paws: &BearPaws, _picker: &Picker) {}
 
 #[cfg(test)]

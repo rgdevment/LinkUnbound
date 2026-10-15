@@ -10,7 +10,7 @@ use objc2_app_kit::{
     NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
     NSApplication, NSApplicationActivationPolicy, NSColor, NSEvent, NSEventModifierFlags,
     NSEventType, NSFloatingWindowLevel, NSPasteboard, NSPasteboardTypeString, NSRunningApplication,
-    NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWorkspace,
+    NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowOrderingMode, NSWorkspace,
     NSWorkspaceDidActivateApplicationNotification,
 };
 use objc2_foundation::{
@@ -112,6 +112,37 @@ pub fn keep_off_the_taskbar(view: isize, corner: f64) {
         }
     }
     window.invalidateShadow();
+}
+
+/// The bear's windows ride with the picker: on its level, out of the way of clicks, the head
+/// under it so the glass blurs it and the paws over its edge.
+pub fn tuck_beside(view: isize, picker: isize, under: bool) {
+    let (Some(window), Some(picker)) = (window_of(view), window_of(picker)) else {
+        return;
+    };
+    // Over the picker means a level above it: taking the keyboard brings the picker to the front
+    // of its own level again.
+    window.setLevel(picker.level() + isize::from(!under));
+    window.setCollectionBehavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces
+            | NSWindowCollectionBehavior::FullScreenAuxiliary,
+    );
+    window.setHidesOnDeactivate(false);
+    window.setOpaque(false);
+    window.setBackgroundColor(Some(&NSColor::clearColor()));
+    window.setHasShadow(false);
+    window.setIgnoresMouseEvents(true);
+    let place = if under {
+        NSWindowOrderingMode::Below
+    } else {
+        NSWindowOrderingMode::Above
+    };
+    // Under the glass, not just the picker, so the material blurs the hidden half of the head.
+    let beside = under
+        .then(|| crate::glass::glass_behind(&picker))
+        .flatten()
+        .unwrap_or(picker);
+    window.orderWindow_relativeTo(place, beside.windowNumber());
 }
 
 pub fn take_the_keyboard(view: isize) {
