@@ -14,7 +14,7 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
     settle(picker);
 }
 
-/// A remote session or energy saver can start between two links.
+/// The system can change between two links, and a refused material must be asked for again.
 pub fn settle(picker: &Picker) {
     dress_for(picker, !blends());
 }
@@ -71,6 +71,7 @@ pub fn corner_of(picker: &Picker) -> f64 {
 /// Refused, the material would leave the clear sheet showing the desktop through it, so the
 /// painted sheet and its shadow come back. Returns whether the window changed size.
 pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
+    keep_see_through(handle);
     let palette = picker.global::<Palette>();
     if palette.get_solid() {
         wear_solid(handle, !palette.get_light());
@@ -195,6 +196,14 @@ fn blends() -> bool {
 fn blends() -> bool {
     true
 }
+
+#[cfg(windows)]
+fn keep_see_through(window: isize) {
+    linkunbound_win::keep_see_through(window);
+}
+
+#[cfg(not(windows))]
+fn keep_see_through(_window: isize) {}
 
 #[cfg(windows)]
 fn dwm_rounds() -> bool {
