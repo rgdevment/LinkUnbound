@@ -71,6 +71,7 @@ pub fn corner_of(picker: &Picker) -> f64 {
 /// Refused, the material would leave the clear sheet showing the desktop through it, so the
 /// painted sheet and its shadow come back. Returns whether the window changed size.
 pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
+    keep_see_through(handle);
     let palette = picker.global::<Palette>();
     if palette.get_solid() {
         wear_solid(handle, !palette.get_light());
@@ -95,7 +96,6 @@ pub fn dress_the_window(picker: &Picker) {
     let Some(handle) = crate::native_handle(picker.window()) else {
         return;
     };
-    keep_see_through(handle);
     crate::host::keep_off_the_taskbar(handle, corner_of(picker));
     if wear_backdrop(picker, handle) {
         beside_the_pointer(picker);
