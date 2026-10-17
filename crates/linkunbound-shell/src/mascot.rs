@@ -194,6 +194,7 @@ fn stack(head: &BearHead, paws: &BearPaws, picker: &Picker) {
         return;
     };
     for window in [head, paws] {
+        linkunbound_win::keep_see_through(window);
         linkunbound_win::keep_off_the_taskbar(window);
         linkunbound_win::never_activates(window);
     }

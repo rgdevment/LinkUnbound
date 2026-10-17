@@ -14,7 +14,7 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
     settle(picker);
 }
 
-/// A remote session or energy saver can start between two links.
+/// The system can change between two links, and a refused material must be asked for again.
 pub fn settle(picker: &Picker) {
     dress_for(picker, !blends());
 }
@@ -95,6 +95,7 @@ pub fn dress_the_window(picker: &Picker) {
     let Some(handle) = crate::native_handle(picker.window()) else {
         return;
     };
+    keep_see_through(handle);
     crate::host::keep_off_the_taskbar(handle, corner_of(picker));
     if wear_backdrop(picker, handle) {
         beside_the_pointer(picker);
@@ -195,6 +196,14 @@ fn blends() -> bool {
 fn blends() -> bool {
     true
 }
+
+#[cfg(windows)]
+fn keep_see_through(window: isize) {
+    linkunbound_win::keep_see_through(window);
+}
+
+#[cfg(not(windows))]
+fn keep_see_through(_window: isize) {}
 
 #[cfg(windows)]
 fn dwm_rounds() -> bool {

@@ -11,14 +11,15 @@ use windows::Win32::Foundation::{
     LocalFree, POINT, WPARAM,
 };
 use windows::Win32::Graphics::Dwm::{
-    DWM_SYSTEMBACKDROP_TYPE, DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_NONE, DWMSBT_TRANSIENTWINDOW,
-    DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE,
-    DWMWCP_ROUND, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+    DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND, DWM_SYSTEMBACKDROP_TYPE,
+    DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_NONE, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+    DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+    DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
 };
 use windows::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits,
-    GetMonitorInfoW, GetObjectW, HBITMAP, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
-    MonitorFromPoint, ReleaseDC,
+    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateRectRgn, DIB_RGB_COLORS, DeleteObject,
+    GetDC, GetDIBits, GetMonitorInfoW, GetObjectW, HBITMAP, HMONITOR, MONITOR_DEFAULTTONEAREST,
+    MONITORINFO, MonitorFromPoint, ReleaseDC,
 };
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, GetSecurityInfo, SE_KERNEL_OBJECT,
@@ -38,7 +39,6 @@ use windows::Win32::System::DataExchange::{
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 use windows::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPipeW};
-use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, OpenProcess,
@@ -52,11 +52,11 @@ use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify
 use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW};
 use windows::Win32::UI::WindowsAndMessaging::{
     ASFW_ANY, AllowSetForegroundWindow, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetForegroundWindow,
-    GetSystemMetrics, GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, ICON_BIG,
-    ICON_SMALL, IsHungAppWindow, SM_REMOTESESSION, SPI_GETHIGHCONTRAST, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
-    SendMessageW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, SystemParametersInfoW,
-    WM_SETICON, WS_EX_DLGMODALFRAME, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_SYSMENU,
+    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, ICON_BIG, ICON_SMALL,
+    IsHungAppWindow, SPI_GETHIGHCONTRAST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_NOZORDER, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SendMessageW, SetForegroundWindow,
+    SetWindowLongPtrW, SetWindowPos, SystemParametersInfoW, WM_SETICON, WS_EX_DLGMODALFRAME,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_SYSMENU,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
@@ -196,13 +196,9 @@ fn framed_by_dwm(
     }
 }
 
-/// Remote Desktop, energy saver and high contrast can leave see-through pixels black.
+/// High contrast draws no material and no see-through pixels.
 #[must_use]
 pub fn blends_windows() -> bool {
-    let remote = unsafe { GetSystemMetrics(SM_REMOTESESSION) } != 0;
-    let mut power = SYSTEM_POWER_STATUS::default();
-    let saving =
-        unsafe { GetSystemPowerStatus(&raw mut power) }.is_ok() && power.SystemStatusFlag == 1;
     let mut contrast = HIGHCONTRASTW {
         cbSize: size_of::<HIGHCONTRASTW>() as u32,
         ..Default::default()
@@ -217,7 +213,22 @@ pub fn blends_windows() -> bool {
     }
     .is_ok()
         && contrast.dwFlags.contains(HCF_HIGHCONTRASTON);
-    !(remote || saving || high)
+    !high
+}
+
+/// winit asks for see-through pixels only when the window is made, and a restarted DWM forgets.
+pub fn keep_see_through(window: isize) {
+    let region = unsafe { CreateRectRgn(0, 0, -1, -1) };
+    let blur = DWM_BLURBEHIND {
+        dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,
+        fEnable: true.into(),
+        hRgnBlur: region,
+        fTransitionOnMaximized: false.into(),
+    };
+    unsafe {
+        let _ = DwmEnableBlurBehindWindow(HWND(window as *mut std::ffi::c_void), &blur);
+        let _ = DeleteObject(region.into());
+    }
 }
 
 /// Slides `window` just below `above` in the topmost band, so what `above` draws covers it.
