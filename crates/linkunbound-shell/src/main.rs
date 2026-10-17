@@ -499,6 +499,18 @@ fn attended(picker: &Picker) -> bool {
     picker.window().is_visible() && native_handle(picker.window()).is_some_and(host::is_in_front)
 }
 
+fn dress_the_window(picker: &Picker) {
+    let Some(handle) = native_handle(picker.window()) else {
+        return;
+    };
+    host::keep_off_the_taskbar(handle, look::corner_of(picker));
+    if look::wear_backdrop(picker, handle) {
+        look::beside_the_pointer(picker);
+    }
+    look::follow(picker);
+    host::take_the_keyboard(handle);
+}
+
 /// Whether the link went on screen, rather than behind one already being answered.
 fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival: Arrival) -> bool {
     let Some(Arrival { url, source }) =
@@ -506,6 +518,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
     else {
         return false;
     };
+    look::settle(picker);
     let label = source.as_ref().map(|origin| origin.label.as_str());
     let listed = rows(physical_icon_side(picker));
     if listed.is_empty() {
@@ -522,14 +535,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
         }
         look::beside_the_pointer(picker);
         let _ = picker.show();
-        if let Some(handle) = native_handle(picker.window()) {
-            host::keep_off_the_taskbar(handle, look::corner_of(picker));
-            if look::wear_backdrop(picker, handle) {
-                look::beside_the_pointer(picker);
-            }
-            look::follow(picker);
-            host::take_the_keyboard(handle);
-        }
+        dress_the_window(picker);
         return true;
     }
     dress(picker, words, &url, label, &listed);
@@ -548,14 +554,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
     if let Some(ui) = ui() {
         ui.appeared.set(Some(std::time::Instant::now()));
     }
-    if let Some(handle) = native_handle(picker.window()) {
-        host::keep_off_the_taskbar(handle, look::corner_of(picker));
-        if look::wear_backdrop(picker, handle) {
-            look::beside_the_pointer(picker);
-        }
-        look::follow(picker);
-        host::take_the_keyboard(handle);
-    }
+    dress_the_window(picker);
     // The window reports a scale of one until it exists, which is only now: the first picker of
     // a session on a dense display was placed for a window two thirds its size, and drew icons
     // asked for at the wrong side.

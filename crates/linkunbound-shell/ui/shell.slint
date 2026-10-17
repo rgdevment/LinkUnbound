@@ -237,7 +237,7 @@ export component Picker inherits Window {
             y: root.halo;
             width: root.sheet-width;
             height: root.sheet-height;
-            border-radius: Palette.clear ? Palette.glass-corner : (root.look == Look.list ? 10px : 14px);
+            border-radius: Palette.clear || Palette.solid ? Palette.glass-corner : (root.look == Look.list ? 10px : 14px);
             background: Palette.clear ? Palette.veil : Palette.pane;
             border-width: Palette.clear && !root.private-on ? 0px : 1px;
             border-color: root.private-on ? Palette.secret : Palette.glow;

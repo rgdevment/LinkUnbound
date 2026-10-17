@@ -11,7 +11,7 @@ use windows::Win32::Foundation::{
     LocalFree, POINT, WPARAM,
 };
 use windows::Win32::Graphics::Dwm::{
-    DWM_SYSTEMBACKDROP_TYPE, DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_TRANSIENTWINDOW,
+    DWM_SYSTEMBACKDROP_TYPE, DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_NONE, DWMSBT_TRANSIENTWINDOW,
     DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE,
     DWMWCP_ROUND, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
 };
@@ -38,22 +38,25 @@ use windows::Win32::System::DataExchange::{
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 use windows::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPipeW};
+use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 use windows::Win32::System::Threading::{
     AttachThreadInput, GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, OpenProcess,
     OpenProcessToken, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
     QueryFullProcessImageNameW,
 };
+use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
 use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, SetFocus, VK_SHIFT, VkKeyScanW};
 use windows::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 use windows::Win32::UI::Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW};
 use windows::Win32::UI::WindowsAndMessaging::{
     ASFW_ANY, AllowSetForegroundWindow, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetForegroundWindow,
-    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, ICON_BIG, ICON_SMALL,
-    IsHungAppWindow, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    SendMessageW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, WM_SETICON,
-    WS_EX_DLGMODALFRAME, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_SYSMENU,
+    GetSystemMetrics, GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, ICON_BIG,
+    ICON_SMALL, IsHungAppWindow, SM_REMOTESESSION, SPI_GETHIGHCONTRAST, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    SendMessageW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, SystemParametersInfoW,
+    WM_SETICON, WS_EX_DLGMODALFRAME, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_SYSMENU,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
@@ -123,19 +126,38 @@ pub fn keep_off_the_taskbar(window: isize) {
 }
 
 /// The picker wears the material of Windows 11's menus and flyouts, drawn by DWM behind a sheet
-/// left clear. DWM also rounds the corners and casts the shadow a frameless window lacks, and
-/// with transparency turned off in Settings it paints the solid colour on its own.
+/// left clear. DWM also rounds the corners and casts the shadow a frameless window lacks.
 pub fn wear_acrylic(window: isize, dark: bool) -> bool {
-    let hwnd = HWND(window as *mut std::ffi::c_void);
-    let dark = windows::core::BOOL::from(dark);
-    let corner = DWMWCP_ROUND;
-    let backdrop = DWMSBT_TRANSIENTWINDOW;
-    let margins = MARGINS {
+    let whole = MARGINS {
         cxLeftWidth: -1,
         cxRightWidth: -1,
         cyTopHeight: -1,
         cyBottomHeight: -1,
     };
+    framed_by_dwm(window, dark, &whole, DWMSBT_TRANSIENTWINDOW)
+}
+
+/// An opaque sheet with no material: DWM still rounds the window and casts its shadow, which
+/// needs some frame in the client area, and the material a previous showing wore comes off.
+pub fn wear_solid(window: isize, dark: bool) -> bool {
+    let edge = MARGINS {
+        cxLeftWidth: 1,
+        cxRightWidth: 1,
+        cyTopHeight: 1,
+        cyBottomHeight: 1,
+    };
+    framed_by_dwm(window, dark, &edge, DWMSBT_NONE)
+}
+
+fn framed_by_dwm(
+    window: isize,
+    dark: bool,
+    margins: &MARGINS,
+    backdrop: DWM_SYSTEMBACKDROP_TYPE,
+) -> bool {
+    let hwnd = HWND(window as *mut std::ffi::c_void);
+    let dark = windows::core::BOOL::from(dark);
+    let corner = DWMWCP_ROUND;
     // winit keeps the system menu on a frameless window, and over an extended frame DWM draws
     // its close button.
     let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) };
@@ -164,7 +186,7 @@ pub fn wear_acrylic(window: isize, dark: bool) -> bool {
             (&raw const corner).cast(),
             size_of::<DWM_WINDOW_CORNER_PREFERENCE>() as u32,
         );
-        DwmExtendFrameIntoClientArea(hwnd, &margins).is_ok()
+        DwmExtendFrameIntoClientArea(hwnd, margins).is_ok()
             && DwmSetWindowAttribute(
                 hwnd,
                 DWMWA_SYSTEMBACKDROP_TYPE,
@@ -173,6 +195,31 @@ pub fn wear_acrylic(window: isize, dark: bool) -> bool {
             )
             .is_ok()
     }
+}
+
+/// Over Remote Desktop, in energy saver or in high contrast DWM may leave the material out and
+/// the see-through pixels of a window black, without the switch in Settings saying so.
+#[must_use]
+pub fn blends_windows() -> bool {
+    let remote = unsafe { GetSystemMetrics(SM_REMOTESESSION) } != 0;
+    let mut power = SYSTEM_POWER_STATUS::default();
+    let saving =
+        unsafe { GetSystemPowerStatus(&raw mut power) }.is_ok() && power.SystemStatusFlag == 1;
+    let mut contrast = HIGHCONTRASTW {
+        cbSize: size_of::<HIGHCONTRASTW>() as u32,
+        ..Default::default()
+    };
+    let high = unsafe {
+        SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            contrast.cbSize,
+            Some((&raw mut contrast).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+    }
+    .is_ok()
+        && contrast.dwFlags.contains(HCF_HIGHCONTRASTON);
+    !(remote || saving || high)
 }
 
 /// Slides `window` just below `above` in the topmost band, so what `above` draws covers it.
