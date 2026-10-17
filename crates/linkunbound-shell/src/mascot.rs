@@ -1,6 +1,6 @@
 //! The bear that peeks over the picker: its head under the glass, its paws on the edge.
 
-use linkunbound_shell::{BearHead, BearPaws, Look, Picker};
+use linkunbound_shell::{BearHead, BearPaws, Look, Palette, Picker};
 use slint::ComponentHandle;
 
 /// Sizes in logical pixels: the head, how far it rises over the edge, a paw, the room between
@@ -25,10 +25,12 @@ const COMPACT: Pose = Pose {
     gap: 46.0,
 };
 
-/// The pose the look calls for, if the bear shows at all: only over the glass, since on a painted
 /// The pose the look calls for, if the bear shows at all. Its head sits under the picker, so on
 /// glass the hidden half shows blurred and on a painted sheet it is simply behind it.
 fn pose(picker: &Picker) -> Option<&'static Pose> {
+    if picker.global::<Palette>().get_solid() {
+        return None;
+    }
     match picker.get_look() {
         Look::Bear => Some(&BEAR),
         Look::Compact => Some(&COMPACT),

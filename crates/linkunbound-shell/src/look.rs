@@ -5,24 +5,37 @@ use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, pla
 use slint::ComponentHandle;
 
 pub fn style(picker: &Picker, chosen: PickerStyle) {
-    let look = match chosen {
+    picker.set_look(match chosen {
         PickerStyle::Classic => Look::List,
         PickerStyle::Sheet => Look::Tiles,
         PickerStyle::Compact => Look::Compact,
         PickerStyle::Bear => Look::Bear,
-    };
-    let clear = native_glass();
-    picker.set_look(look);
+    });
+    settle(picker);
+}
+
+/// A remote session or energy saver can start between two links.
+pub fn settle(picker: &Picker) {
+    dress_for(picker, !blends());
+}
+
+/// Unblended, the shadow and the bear would come out as black boxes.
+fn dress_for(picker: &Picker, solid: bool) {
+    let look = picker.get_look();
+    let clear = !solid && native_glass();
     let palette = picker.global::<Palette>();
+    palette.set_solid(solid);
     palette.set_clear(clear);
     palette.set_tint(tint());
     palette.set_glass_corner(if cfg!(target_os = "macos") {
         corner_of(picker) as f32
+    } else if solid && !dwm_rounds() {
+        0.0
     } else {
         DWM_CORNER
     });
-    palette.set_see_through(see_through());
-    picker.set_halo(if look == Look::List || clear {
+    palette.set_see_through(!solid && see_through());
+    picker.set_halo(if look == Look::List || clear || solid {
         0.0
     } else {
         HALO
@@ -59,6 +72,10 @@ pub fn corner_of(picker: &Picker) -> f64 {
 /// painted sheet and its shadow come back. Returns whether the window changed size.
 pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
     let palette = picker.global::<Palette>();
+    if palette.get_solid() {
+        wear_solid(handle, !palette.get_light());
+        return false;
+    }
     if !palette.get_clear() {
         take_off_glass(handle);
         return false;
@@ -72,6 +89,18 @@ pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
     }
     picker.set_halo(HALO);
     true
+}
+
+pub fn dress_the_window(picker: &Picker) {
+    let Some(handle) = crate::native_handle(picker.window()) else {
+        return;
+    };
+    crate::host::keep_off_the_taskbar(handle, corner_of(picker));
+    if wear_backdrop(picker, handle) {
+        beside_the_pointer(picker);
+    }
+    follow(picker);
+    crate::host::take_the_keyboard(handle);
 }
 
 /// The picker belongs to the click that summoned it, not to the middle of a screen.
@@ -157,6 +186,37 @@ pub fn put_away(picker: &Picker) {
 }
 
 #[cfg(windows)]
+fn blends() -> bool {
+    linkunbound_win::transparency_is_on() && linkunbound_win::blends_windows()
+}
+
+/// macOS blends every window; only the material can go.
+#[cfg(not(windows))]
+fn blends() -> bool {
+    true
+}
+
+#[cfg(windows)]
+fn dwm_rounds() -> bool {
+    linkunbound_win::dwm_rounds_corners()
+}
+
+#[cfg(not(windows))]
+fn dwm_rounds() -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn wear_solid(window: isize, dark: bool) {
+    if dwm_rounds() {
+        linkunbound_win::wear_solid(window, dark);
+    }
+}
+
+#[cfg(not(windows))]
+fn wear_solid(_window: isize, _dark: bool) {}
+
+#[cfg(windows)]
 fn see_through() -> bool {
     linkunbound_win::transparency_is_on()
 }
@@ -216,7 +276,7 @@ fn wear_glass(_window: isize, _dark: bool, _corner: f64) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{corner_of, native_glass, place_near, style, wear_backdrop};
+    use super::{corner_of, dress_for, native_glass, place_near, style, wear_backdrop};
     use linkunbound_core::PickerStyle;
     use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
     use slint::ComponentHandle;
@@ -234,11 +294,15 @@ mod tests {
         let clear = native_glass();
 
         style(&picker, PickerStyle::Sheet);
+
+        dress_for(&picker, false);
         assert_eq!(picker.global::<Palette>().get_clear(), clear);
         assert_eq!(picker.get_halo(), if clear { 0.0 } else { HALO });
         assert!((corner_of(&picker) - CORNER).abs() < f64::EPSILON);
 
         style(&picker, PickerStyle::Classic);
+
+        dress_for(&picker, false);
         assert_eq!(picker.get_halo(), 0.0);
         assert!((corner_of(&picker) - CLASSIC_CORNER).abs() < f64::EPSILON);
     }
@@ -252,9 +316,13 @@ mod tests {
         let near_the_top = (900, 2);
 
         style(&picker, PickerStyle::Classic);
+
+        dress_for(&picker, false);
         let (_, list_y) = place_near(&picker, near_the_top, screen);
 
         style(&picker, PickerStyle::Bear);
+
+        dress_for(&picker, false);
         picker.set_halo(0.0);
         let (_, bear_y) = place_near(&picker, near_the_top, screen);
         let rise = crate::mascot::rise(&picker);
@@ -273,6 +341,8 @@ mod tests {
         let palette = picker.global::<Palette>();
 
         style(&picker, PickerStyle::Sheet);
+
+        dress_for(&picker, false);
         palette.set_clear(true);
         picker.set_halo(0.0);
         assert!(wear_backdrop(&picker, 0), "the tiles grow by their shadow");
@@ -280,6 +350,8 @@ mod tests {
         assert_eq!(picker.get_halo(), HALO);
 
         style(&picker, PickerStyle::Classic);
+
+        dress_for(&picker, false);
         palette.set_clear(true);
         assert!(!wear_backdrop(&picker, 0), "the list has no shadow to add");
         assert!(!palette.get_clear());
@@ -288,5 +360,40 @@ mod tests {
             !wear_backdrop(&picker, 0),
             "a painted sheet asks for nothing"
         );
+    }
+
+    /// Unblended, every look fills its window with no shadow, material or bear.
+    #[test]
+    fn a_system_that_blends_nothing_gets_an_opaque_sheet() {
+        let picker = picker();
+        let palette = picker.global::<Palette>();
+
+        for chosen in [
+            PickerStyle::Classic,
+            PickerStyle::Sheet,
+            PickerStyle::Compact,
+            PickerStyle::Bear,
+        ] {
+            style(&picker, chosen);
+            dress_for(&picker, true);
+            assert!(palette.get_solid());
+            assert!(!palette.get_clear());
+            assert!(!palette.get_see_through());
+            assert_eq!(picker.get_halo(), 0.0);
+            assert_eq!(
+                crate::mascot::rise(&picker),
+                0.0,
+                "{chosen:?} shows no bear"
+            );
+        }
+        assert!(
+            !wear_backdrop(&picker, 0),
+            "the opaque sheet keeps its size"
+        );
+
+        style(&picker, PickerStyle::Bear);
+        dress_for(&picker, false);
+        assert!(!palette.get_solid());
+        assert!(crate::mascot::rise(&picker) > 0.0, "the bear is back");
     }
 }

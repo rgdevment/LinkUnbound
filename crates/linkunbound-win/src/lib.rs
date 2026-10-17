@@ -15,17 +15,17 @@ pub use detect::installed_browsers;
 pub use icons::cached_or_extract as icon_for;
 #[cfg(windows)]
 pub use native::{
-    attach_parent_console, copy_text, current_session, current_user_sid, cursor, digit_behind,
-    front_is_ours, front_window, is_in_front, keep_off_the_taskbar,
+    attach_parent_console, blends_windows, copy_text, current_session, current_user_sid, cursor,
+    digit_behind, front_is_ours, front_window, is_in_front, keep_off_the_taskbar,
     let_whoever_opens_next_come_forward, never_activates, notify_associations_changed,
     shift_is_down, source_app, strip_title_icon, take_the_keyboard, tuck_under, wear_acrylic,
-    work_area_at, write_line_to_pipe,
+    wear_solid, work_area_at, write_line_to_pipe,
 };
 #[cfg(windows)]
 pub use registration::{
-    Registration, acrylic_is_available, association_report, default_apps_page, is_build_tree,
-    is_default_browser, sweep_legacy_edge_capture, taskbar_is_light, transparency_is_on,
-    windows_are_light,
+    Registration, acrylic_is_available, association_report, default_apps_page, dwm_rounds_corners,
+    is_build_tree, is_default_browser, sweep_legacy_edge_capture, taskbar_is_light,
+    transparency_is_on, windows_are_light,
 };
 #[cfg(windows)]
 pub use startup::{

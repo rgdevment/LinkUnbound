@@ -293,12 +293,22 @@ pub fn transparency_is_on() -> bool {
 /// refuse the attribute or draw it black.
 #[must_use]
 pub fn acrylic_is_available() -> bool {
+    build_is_at_least(22621)
+}
+
+/// DWM rounds and shadows a frameless window from Windows 11, build 22000.
+#[must_use]
+pub fn dwm_rounds_corners() -> bool {
+    build_is_at_least(22000)
+}
+
+fn build_is_at_least(wanted: u32) -> bool {
     RegKey::predef(HKEY_LOCAL_MACHINE)
         .open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
         .and_then(|k| k.get_value::<String, _>("CurrentBuildNumber"))
         .ok()
         .and_then(|build| build.parse::<u32>().ok())
-        .is_some_and(|build| build >= 22621)
+        .is_some_and(|build| build >= wanted)
 }
 
 /// Matches exactly, never by substring: a third-party ProgId embedding our name
