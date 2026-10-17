@@ -14,13 +14,12 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
     settle(picker);
 }
 
-/// Read again at every showing: a remote session or energy saver can start between two links.
+/// A remote session or energy saver can start between two links.
 pub fn settle(picker: &Picker) {
     dress_for(picker, !blends());
 }
 
-/// Where the system blends no window, the shadow and the bear would come out as black boxes, so
-/// the sheet goes opaque, the size of its window, and DWM rounds it and casts the shadow.
+/// Unblended, the shadow and the bear would come out as black boxes.
 fn dress_for(picker: &Picker, solid: bool) {
     let look = picker.get_look();
     let clear = !solid && native_glass();
@@ -30,6 +29,8 @@ fn dress_for(picker: &Picker, solid: bool) {
     palette.set_tint(tint());
     palette.set_glass_corner(if cfg!(target_os = "macos") {
         corner_of(picker) as f32
+    } else if solid && !dwm_rounds() {
+        0.0
     } else {
         DWM_CORNER
     });
@@ -88,6 +89,18 @@ pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
     }
     picker.set_halo(HALO);
     true
+}
+
+pub fn dress_the_window(picker: &Picker) {
+    let Some(handle) = crate::native_handle(picker.window()) else {
+        return;
+    };
+    crate::host::keep_off_the_taskbar(handle, corner_of(picker));
+    if wear_backdrop(picker, handle) {
+        beside_the_pointer(picker);
+    }
+    follow(picker);
+    crate::host::take_the_keyboard(handle);
 }
 
 /// The picker belongs to the click that summoned it, not to the middle of a screen.
@@ -177,15 +190,27 @@ fn blends() -> bool {
     linkunbound_win::transparency_is_on() && linkunbound_win::blends_windows()
 }
 
-/// macOS blends every window whatever the person asks for; only the material can go.
+/// macOS blends every window; only the material can go.
 #[cfg(not(windows))]
 fn blends() -> bool {
     true
 }
 
 #[cfg(windows)]
+fn dwm_rounds() -> bool {
+    linkunbound_win::dwm_rounds_corners()
+}
+
+#[cfg(not(windows))]
+fn dwm_rounds() -> bool {
+    false
+}
+
+#[cfg(windows)]
 fn wear_solid(window: isize, dark: bool) {
-    linkunbound_win::wear_solid(window, dark);
+    if dwm_rounds() {
+        linkunbound_win::wear_solid(window, dark);
+    }
 }
 
 #[cfg(not(windows))]
@@ -269,11 +294,15 @@ mod tests {
         let clear = native_glass();
 
         style(&picker, PickerStyle::Sheet);
+
+        dress_for(&picker, false);
         assert_eq!(picker.global::<Palette>().get_clear(), clear);
         assert_eq!(picker.get_halo(), if clear { 0.0 } else { HALO });
         assert!((corner_of(&picker) - CORNER).abs() < f64::EPSILON);
 
         style(&picker, PickerStyle::Classic);
+
+        dress_for(&picker, false);
         assert_eq!(picker.get_halo(), 0.0);
         assert!((corner_of(&picker) - CLASSIC_CORNER).abs() < f64::EPSILON);
     }
@@ -287,9 +316,13 @@ mod tests {
         let near_the_top = (900, 2);
 
         style(&picker, PickerStyle::Classic);
+
+        dress_for(&picker, false);
         let (_, list_y) = place_near(&picker, near_the_top, screen);
 
         style(&picker, PickerStyle::Bear);
+
+        dress_for(&picker, false);
         picker.set_halo(0.0);
         let (_, bear_y) = place_near(&picker, near_the_top, screen);
         let rise = crate::mascot::rise(&picker);
@@ -308,6 +341,8 @@ mod tests {
         let palette = picker.global::<Palette>();
 
         style(&picker, PickerStyle::Sheet);
+
+        dress_for(&picker, false);
         palette.set_clear(true);
         picker.set_halo(0.0);
         assert!(wear_backdrop(&picker, 0), "the tiles grow by their shadow");
@@ -315,6 +350,8 @@ mod tests {
         assert_eq!(picker.get_halo(), HALO);
 
         style(&picker, PickerStyle::Classic);
+
+        dress_for(&picker, false);
         palette.set_clear(true);
         assert!(!wear_backdrop(&picker, 0), "the list has no shadow to add");
         assert!(!palette.get_clear());
@@ -325,8 +362,7 @@ mod tests {
         );
     }
 
-    /// Without blending the sheet fills its window: no shadow of its own, no material, no bear,
-    /// whatever the look.
+    /// Unblended, every look fills its window with no shadow, material or bear.
     #[test]
     fn a_system_that_blends_nothing_gets_an_opaque_sheet() {
         let picker = picker();

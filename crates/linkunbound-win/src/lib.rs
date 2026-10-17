@@ -23,9 +23,9 @@ pub use native::{
 };
 #[cfg(windows)]
 pub use registration::{
-    Registration, acrylic_is_available, association_report, default_apps_page, is_build_tree,
-    is_default_browser, sweep_legacy_edge_capture, taskbar_is_light, transparency_is_on,
-    windows_are_light,
+    Registration, acrylic_is_available, association_report, default_apps_page, dwm_rounds_corners,
+    is_build_tree, is_default_browser, sweep_legacy_edge_capture, taskbar_is_light,
+    transparency_is_on, windows_are_light,
 };
 #[cfg(windows)]
 pub use startup::{

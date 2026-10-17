@@ -24,7 +24,7 @@ export global Palette {
     in property <float> tint: 0.77;
     // DWM rounds Acrylic at its own 8px; on macOS the glass view is cut to the sheet's corner.
     in property <length> glass-corner: 8px;
-    // Windows blends no window: the opaque sheet fills it and takes DWM's corner and shadow.
+    // Windows blends no window: the opaque sheet fills it.
     in property <bool> solid: false;
     out property <brush> veil: light
         ? @linear-gradient(180deg, #FFFFFF.with-alpha(tint) 0%, #F3F5F9.with-alpha(tint + 0.03) 100%)

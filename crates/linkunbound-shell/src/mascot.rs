@@ -26,8 +26,7 @@ const COMPACT: Pose = Pose {
 };
 
 /// The pose the look calls for, if the bear shows at all. Its head sits under the picker, so on
-/// glass the hidden half shows blurred and on a painted sheet it is simply behind it; where the
-/// system blends no window it would stand in a black box.
+/// glass the hidden half shows blurred and on a painted sheet it is simply behind it.
 fn pose(picker: &Picker) -> Option<&'static Pose> {
     if picker.global::<Palette>().get_solid() {
         return None;

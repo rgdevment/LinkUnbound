@@ -137,8 +137,7 @@ pub fn wear_acrylic(window: isize, dark: bool) -> bool {
     framed_by_dwm(window, dark, &whole, DWMSBT_TRANSIENTWINDOW)
 }
 
-/// An opaque sheet with no material: DWM still rounds the window and casts its shadow, which
-/// needs some frame in the client area, and the material a previous showing wore comes off.
+/// DWM shadows only a window with some frame in its client area.
 pub fn wear_solid(window: isize, dark: bool) -> bool {
     let edge = MARGINS {
         cxLeftWidth: 1,
@@ -197,8 +196,7 @@ fn framed_by_dwm(
     }
 }
 
-/// Over Remote Desktop, in energy saver or in high contrast DWM may leave the material out and
-/// the see-through pixels of a window black, without the switch in Settings saying so.
+/// Remote Desktop, energy saver and high contrast can leave see-through pixels black.
 #[must_use]
 pub fn blends_windows() -> bool {
     let remote = unsafe { GetSystemMetrics(SM_REMOTESESSION) } != 0;
