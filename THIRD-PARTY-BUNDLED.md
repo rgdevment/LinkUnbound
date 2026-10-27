@@ -16,7 +16,7 @@ also under About → Licence texts.
 | `@tauri-apps/plugin-opener` | 2.5.5 | MIT OR Apache-2.0 |
 | `entities` | 8.1.0 | BSD-2-Clause |
 | `linkify-it` | 6.1.0 | MIT |
-| `markdown-it` | 15.0.2 | MIT |
+| `markdown-it` | 15.0.3 | MIT |
 | `mdurl` | 2.1.0 | MIT |
 | `punycode.js` | 2.3.1 | MIT |
 | `react` | 19.3.0 | MIT |
@@ -53,7 +53,7 @@ also under About → Licence texts.
 | `cfb` | 0.7.3 | MIT |
 | `cfg-if` | 1.0.5 | MIT OR Apache-2.0 |
 | `chrono` | 0.4.45 | MIT OR Apache-2.0 |
-| `clipboard-win` | 5.4.1 | BSL-1.0 |
+| `clipboard-win` | 5.4.3 | BSL-1.0 |
 | `clru` | 0.6.3 | MIT |
 | `color_quant` | 1.1.0 | MIT |
 | `const-field-offset` | 0.2.1 | MIT OR Apache-2.0 |
@@ -246,7 +246,7 @@ also under About → Licence texts.
 | `rustls-native-certs` | 0.8.4 | Apache-2.0 OR ISC OR MIT |
 | `rustls-pki-types` | 1.15.1 | MIT OR Apache-2.0 |
 | `rustls-platform-verifier` | 0.7.0 | MIT OR Apache-2.0 |
-| `rustls-webpki` | 0.103.15 | ISC |
+| `rustls-webpki` | 0.103.16 | ISC |
 | `rustls` | 0.23.46 | Apache-2.0 OR ISC OR MIT |
 | `ryu` | 1.0.23 | Apache-2.0 OR BSL-1.0 |
 | `same-file` | 1.0.6 | Unlicense/MIT |
