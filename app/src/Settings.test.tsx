@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Settings from "./Settings";
@@ -241,6 +241,23 @@ describe("settings", () => {
     expect(screen.getByRole("heading", { name: "Aplicación" })).toBeInTheDocument();
   });
 
+  it("keeps the page the person picked before the system answered", async () => {
+    let answer: (state: unknown) => void = () => {};
+    answers(
+      { ...BASE, is_default: false },
+      {
+        system_state: () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      },
+    );
+    render(<Settings />);
+    await go("Reglas");
+    await act(async () => answer({ ...BASE, is_default: false }));
+    expect(screen.getByRole("heading", { name: "Reglas" })).toBeInTheDocument();
+  });
+
   it("brings the welcome back from the links", async () => {
     answers({ ...BASE, is_default: false });
     await opened();
@@ -248,8 +265,7 @@ describe("settings", () => {
     expect(invoke).toHaveBeenCalledWith("welcome_show");
   });
 
-  /// A broken registration has its own remedy; asking to choose a copy that cannot take the
-  /// links would send the person to the wrong fix.
+  /// A broken registration has its own remedy; choosing a copy that cannot take links misleads.
   it("leaves the choice out while the registration is broken", async () => {
     answers({ ...BASE, is_default: false, health: "stale" });
     await opened();

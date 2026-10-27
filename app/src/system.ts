@@ -1,5 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useState } from "react";
+import { useSpoken } from "./i18n";
 import { platform } from "./platform";
+import { saidPlainly } from "./refusal";
 
 export type Association = { scheme: string; held: boolean };
 export type Health =
@@ -21,15 +24,30 @@ export type SystemState = {
   edge_installed: boolean;
 };
 
-/// macOS asks the person in its own prompt; Windows only lets them pick it in Settings, so the
-/// most this can do there is put LinkUnbound in the list and open its page.
-export async function chooseUs(state: SystemState): Promise<SystemState> {
+/// Windows only lets the person pick it in Settings; macOS asks in its own prompt.
+export async function chooseUs(state: SystemState | null): Promise<SystemState> {
   if (platform() === "macos") {
     return invoke<SystemState>("system_set_registered", { enabled: true });
   }
-  const listed = state.registered
-    ? state
+  const known = state ?? (await invoke<SystemState>("system_state"));
+  const listed = known.registered
+    ? known
     : await invoke<SystemState>("system_set_registered", { enabled: true });
   await invoke("system_open_default_apps");
   return listed;
+}
+
+export function useChooseUs(onChosen: (next: SystemState) => void) {
+  const language = useSpoken();
+  const [problem, setProblem] = useState<string | null>(null);
+  const choose = useCallback(
+    (state: SystemState | null) => {
+      setProblem(null);
+      chooseUs(state)
+        .then(onChosen)
+        .catch((e: unknown) => setProblem(saidPlainly(language, e)));
+    },
+    [language, onChosen],
+  );
+  return { choose, problem };
 }

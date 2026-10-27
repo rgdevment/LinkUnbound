@@ -276,8 +276,7 @@ impl Store {
         self.dir.join("picked")
     }
 
-    /// When the resident last opened a link, and nothing about which: the welcome only asks
-    /// whether its test link made it through.
+    /// When the resident last opened a link, never which one: all the welcome needs to know.
     pub fn note_picked(&self) {
         if let Ok(since) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
             let _ = save_atomically(&self.picked_path(), &since.as_secs().to_string());

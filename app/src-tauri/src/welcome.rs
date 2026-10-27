@@ -9,8 +9,7 @@ const TRY_ME: &str = "https://rgdevment.com";
 #[derive(Default)]
 pub struct Trying(Mutex<Option<u64>>);
 
-/// Due for anyone who never closed it and is not handing links over yet; someone already set
-/// up is marked as welcomed without being shown anything.
+/// Someone already handing links over is marked as welcomed without being shown anything.
 pub fn due() -> bool {
     if store().prefs().welcomed {
         return false;

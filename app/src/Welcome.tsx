@@ -1,9 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import bear from "./assets/linkunbound.svg";
-import { type Key, type Language, Speaking, spoken, useSpoken, useWords } from "./i18n";
-import { saidPlainly } from "./refusal";
-import { chooseUs, type SystemState } from "./system";
+import { type Key, type Language, Speaking, spoken, useWords } from "./i18n";
+import { type SystemState, useChooseUs } from "./system";
 
 type Step = "hello" | "links" | "try";
 type Progress = "idle" | "waiting" | "done";
@@ -73,9 +72,7 @@ function Tour({ shortcut }: { shortcut: string | null }) {
   return (
     <div className="flex h-full flex-col bg-white text-[#16181D] dark:bg-[#191A1F] dark:text-[#F0F1F4]">
       {step === "hello" && <Hello dots={dots} onSkip={close} onNext={next} />}
-      {step === "links" && state && (
-        <Links dots={dots} state={state} onState={setState} onNext={next} />
-      )}
+      {step === "links" && <Links dots={dots} state={state} onState={setState} onNext={next} />}
       {step === "try" && (
         <Try dots={dots} handing={state?.is_default ?? true} shortcut={shortcut} onDone={close} />
       )}
@@ -132,14 +129,20 @@ function Links({
   onNext,
 }: {
   dots: ReactNode;
-  state: SystemState;
+  state: SystemState | null;
   onState: (next: SystemState) => void;
   onNext: () => void;
 }) {
   const t = useWords();
-  const language = useSpoken();
-  const [progress, setProgress] = useState<Progress>(state.is_default ? "done" : "idle");
-  const [problem, setProblem] = useState<string | null>(null);
+  const [progress, setProgress] = useState<Progress>(state?.is_default ? "done" : "idle");
+  const chosen = useCallback(
+    (found: SystemState) => {
+      onState(found);
+      setProgress(found.is_default ? "done" : "waiting");
+    },
+    [onState],
+  );
+  const { choose, problem } = useChooseUs(chosen);
 
   // Windows answers in its own window, so the only way to hear it is to keep asking.
   useEffect(() => {
@@ -160,16 +163,6 @@ function Links({
     const onwards = setTimeout(onNext, LONG_ENOUGH_TO_READ);
     return () => clearTimeout(onwards);
   }, [progress, onNext]);
-
-  const choose = () => {
-    setProblem(null);
-    chooseUs(state)
-      .then((found) => {
-        onState(found);
-        setProgress(found.is_default ? "done" : "waiting");
-      })
-      .catch((e: unknown) => setProblem(saidPlainly(language, e)));
-  };
 
   return (
     <>
@@ -209,7 +202,7 @@ function Links({
               ? t("welcomeLinkAgain")
               : t("welcomeLinkGo")
         }
-        onStrong={progress === "done" ? onNext : choose}
+        onStrong={progress === "done" ? onNext : () => choose(state)}
       />
     </>
   );

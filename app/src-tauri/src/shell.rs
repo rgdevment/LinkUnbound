@@ -122,8 +122,7 @@ fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme, page: Option<&st
     }
 }
 
-/// Over settings, the first time it opens while links still go elsewhere, and again whenever
-/// the person asks for it there.
+/// Over settings on a first run, and again whenever the person asks for it there.
 pub fn open_welcome<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     if let Some(window) = app.get_webview_window(WELCOME) {
         let _ = window.show();
@@ -131,6 +130,10 @@ pub fn open_welcome<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
         let _ = window.set_focus();
         return;
     }
+    if BUILDING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let _building = Building;
     let url = tauri::WebviewUrl::App("index.html#welcome".into());
     let builder = hidden(app, WELCOME, url, theme)
         .inner_size(600.0, 460.0)

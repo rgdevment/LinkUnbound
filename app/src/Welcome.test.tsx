@@ -127,6 +127,13 @@ describe("welcome", () => {
     expect(invoke).toHaveBeenCalledWith("welcome_close");
   });
 
+  it("still offers the links step when the system could not be asked", async () => {
+    answers({ system_state: () => Promise.reject("unreadable") });
+    render(<Welcome />);
+    await press("Comenzar");
+    expect(await screen.findByRole("button", { name: "Elegir LinkUnbound" })).toBeInTheDocument();
+  });
+
   it("closes with Escape", async () => {
     render(<Welcome />);
     await screen.findByRole("button", { name: "Comenzar" });

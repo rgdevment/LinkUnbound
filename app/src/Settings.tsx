@@ -11,7 +11,7 @@ import News from "./settings/News";
 import { Card, Line, Section, Switch } from "./settings/parts";
 import Rules from "./settings/Rules";
 import { useUpdate } from "./settings/update";
-import { chooseUs, type Health, type SystemState } from "./system";
+import { type Health, type SystemState, useChooseUs } from "./system";
 
 type Spoken = { language: string };
 
@@ -207,22 +207,9 @@ function Legacy1x({ onRetired }: { onRetired: () => void }) {
   );
 }
 
-function Pending({
-  state,
-  run,
-}: {
-  state: SystemState;
-  run: (command: string, args?: Record<string, unknown>) => void;
-}) {
+function Pending({ state, onState }: { state: SystemState; onState: (next: SystemState) => void }) {
   const t = useWords();
-  const language = useSpoken();
-  const [problem, setProblem] = useState<string | null>(null);
-  const choose = () => {
-    setProblem(null);
-    chooseUs(state)
-      .then(() => run("system_state"))
-      .catch((e: unknown) => setProblem(saidPlainly(language, e)));
-  };
+  const { choose, problem } = useChooseUs(onState);
   return (
     <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
       <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">
@@ -232,7 +219,7 @@ function Pending({
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
         <button
           type="button"
-          onClick={choose}
+          onClick={() => choose(state)}
           className="rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
         >
           {t("welcomeLinkGo")}
@@ -256,10 +243,12 @@ function Pending({
 
 function Links({
   state,
+  onState,
   change,
   run,
 }: {
   state: SystemState | null;
+  onState: (next: SystemState) => void;
   change: (command: string, enabled: boolean) => void;
   run: (command: string, args?: Record<string, unknown>) => void;
 }) {
@@ -321,7 +310,7 @@ function Links({
           )}
         </div>
       )}
-      {pending && state && <Pending state={state} run={run} />}
+      {pending && state && <Pending state={state} onState={onState} />}
       <Section title={t("sectionDefault")}>
         <div className="flex items-center gap-2 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3 py-2.5 text-[11.5px] dark:border-white/[0.08] dark:bg-white/[0.02]">
           <span
@@ -426,20 +415,24 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const language = useSpoken();
   const { ready, step, look, settled } = useUpdate();
   const [page, setPage] = useState<Page>(() => asked() ?? "app");
+  // Opened on its own, it starts on Links while they are missing; a page already chosen wins.
+  const placed = useRef(asked() !== null);
+  const pick = useCallback((next: Page) => {
+    placed.current = true;
+    setPage(next);
+  }, []);
   useEffect(() => {
     const follow = () => {
       const next = asked();
-      if (next) setPage(next);
+      if (next) pick(next);
     };
     window.addEventListener("hashchange", follow);
     return () => window.removeEventListener("hashchange", follow);
-  }, []);
+  }, [pick]);
   const [state, setState] = useState<SystemState | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [starring, setStarring] = useState(false);
 
-  // Opened on its own, it starts where the one missing step is; a page asked for still wins.
-  const placed = useRef(asked() !== null);
   useEffect(() => {
     if (!state || placed.current) return;
     placed.current = true;
@@ -495,7 +488,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
             key={p.id}
             tab={p}
             on={page}
-            onPick={setPage}
+            onPick={pick}
             flagged={p.id === "links" && state !== null && !state.is_default}
           />
         ))}
@@ -503,7 +496,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
           {ready && (
             <button
               type="button"
-              onClick={() => setPage("about")}
+              onClick={() => pick("about")}
               aria-label={`${t("navAbout")} · ${t("updateWaiting")}`}
               className="flex items-center gap-1.5 rounded-md bg-[#2F62D8]/[0.11] px-2.5 py-1.5 text-[10.5px] font-medium text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
             >
@@ -511,7 +504,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
               {t("updateGoTo", ready.version)}
             </button>
           )}
-          <Tab tab={ABOUT} on={page} onPick={setPage} />
+          <Tab tab={ABOUT} on={page} onPick={pick} />
         </div>
       </nav>
 
@@ -526,7 +519,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
             {problem}
           </p>
         )}
-        {page === "links" && <Links state={state} change={change} run={run} />}
+        {page === "links" && <Links state={state} onState={setState} change={change} run={run} />}
         {page === "rules" && <Rules />}
         {page === "browsers" && <Browsers />}
         {page === "app" && (
