@@ -4,7 +4,7 @@
   "repository": "github:rgdevment/LinkUnbound",
   "devDependencies": {
     "js-yaml": "^5.4.2",
-    "markdownlint-cli2": "^0.23.3"
+    "markdownlint-cli2": "^0.24.0"
   },
   "scripts": {
     "prepare": "git config --local --get core.hooksPath || git config core.hooksPath hooks || echo the hooks are not set: this is not a git clone",
