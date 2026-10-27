@@ -1686,7 +1686,7 @@ limitations under the License.
 
 ## Text 28
 
-`clipboard-win` 5.4.1
+`clipboard-win` 5.4.3
 
 ```text
 Boost Software License - Version 1.0 - August 17th, 2003
@@ -10973,7 +10973,7 @@ SOFTWARE.
 
 ## Text 167
 
-`rustls-webpki` 0.103.15
+`rustls-webpki` 0.103.16
 
 ```text
 Except as otherwise noted, this project is licensed under the following
