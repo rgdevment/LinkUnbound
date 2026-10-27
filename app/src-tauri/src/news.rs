@@ -20,7 +20,13 @@ fn told() -> Vec<String> {
         .unwrap_or_default()
 }
 
-pub fn raise(app: &tauri::AppHandle) {
+/// The welcome comes first; what it covers for a newcomer, the news would only repeat.
+pub fn raise(app: &tauri::AppHandle, welcoming: bool) {
+    if welcoming {
+        mark();
+        app.manage(Waiting::default());
+        return;
+    }
     let prefs = store().prefs();
     let seen = prefs.news_seen.as_deref();
     // No star mark and no rule is a copy nobody has used yet, whatever version laid it down.

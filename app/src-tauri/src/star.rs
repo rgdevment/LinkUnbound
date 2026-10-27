@@ -2,7 +2,7 @@ use linkunbound_core::Asking;
 
 use crate::store;
 
-fn now_in_seconds() -> Option<u64> {
+pub fn now_in_seconds() -> Option<u64> {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()

@@ -272,6 +272,27 @@ impl Store {
         }
     }
 
+    fn picked_path(&self) -> PathBuf {
+        self.dir.join("picked")
+    }
+
+    /// When the resident last opened a link, and nothing about which: the welcome only asks
+    /// whether its test link made it through.
+    pub fn note_picked(&self) {
+        if let Ok(since) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            let _ = save_atomically(&self.picked_path(), &since.as_secs().to_string());
+        }
+    }
+
+    #[must_use]
+    pub fn picked_at(&self) -> Option<u64> {
+        fs::read_to_string(self.picked_path())
+            .ok()?
+            .trim()
+            .parse()
+            .ok()
+    }
+
     fn browsers_path(&self) -> PathBuf {
         self.dir.join("browsers.json")
     }
@@ -428,6 +449,7 @@ mod tests {
                 prefs.here_since = Some(1_700_000_000);
                 prefs.asked_for_a_star = true;
                 prefs.news_seen = Some("2.6.0".to_owned());
+                prefs.welcomed = true;
                 true
             })
             .expect("marked");
@@ -442,6 +464,7 @@ mod tests {
                 settled.here_since = kept.here_since;
                 settled.asked_for_a_star = kept.asked_for_a_star;
                 settled.news_seen.clone_from(&kept.news_seen);
+                settled.welcomed = kept.welcomed;
                 *kept = settled.clone();
                 true
             })
@@ -455,6 +478,7 @@ mod tests {
             "the mark it never saw"
         );
         assert!(read.asked_for_a_star, "and the answer it never saw");
+        assert!(read.welcomed, "and the welcome it never showed");
         assert_eq!(
             read.news_seen.as_deref(),
             Some("2.6.0"),
@@ -839,6 +863,21 @@ mod tests {
             store.shortcut_held(),
             None,
             "letting go twice is not a fault"
+        );
+    }
+
+    #[test]
+    fn the_settings_window_reads_when_the_resident_last_opened_a_link() {
+        let store = Store::at(scratch("picked"));
+        assert_eq!(store.picked_at(), None, "nothing opened yet");
+        let before = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        store.note_picked();
+        assert!(
+            Store::at(store.dir()).picked_at() >= Some(before),
+            "the moment it opened, read back"
         );
     }
 

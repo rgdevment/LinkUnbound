@@ -204,14 +204,57 @@ describe("settings", () => {
   it("opens the Windows panel when another browser holds the links", async () => {
     answers({ ...BASE, is_default: false });
     await opened();
-    await userEvent.click(await screen.findByRole("button", { name: "Abrir Configuración" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Elegir LinkUnbound" }));
     expect(invoke).toHaveBeenCalledWith("system_open_default_apps");
+    expect(invoke).not.toHaveBeenCalledWith("system_set_registered", { enabled: true });
+  });
+
+  /// Windows lists only what offers itself, so a copy taken out of the list is put back first.
+  it("offers itself to Windows before opening the panel when it is not listed", async () => {
+    answers({ ...BASE, is_default: false, registered: false });
+    await opened();
+    await userEvent.click(await screen.findByRole("button", { name: "Elegir LinkUnbound" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("system_open_default_apps"));
+    expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: true });
   });
 
   it("offers no Windows button once the links already arrive here", async () => {
     await opened();
     await screen.findByText(/recibe los enlaces/);
     expect(screen.queryByRole("button", { name: "Abrir Configuración" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Elegir LinkUnbound" })).toBeNull();
+  });
+
+  /// Installed and opened, the one thing missing is on the Links page, so that is where it starts.
+  it("opens on the links while they still go elsewhere", async () => {
+    answers({ ...BASE, is_default: false });
+    render(<Settings />);
+    expect(await screen.findByRole("heading", { name: "Enlaces" })).toBeInTheDocument();
+    expect(screen.getByText("LinkUnbound todavía no recibe tus enlaces")).toBeInTheDocument();
+  });
+
+  it("opens on the application once the links arrive here", async () => {
+    answers(BASE);
+    render(<Settings />);
+    expect(await screen.findByRole("heading", { name: "Aplicación" })).toBeInTheDocument();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("system_state"));
+    expect(screen.getByRole("heading", { name: "Aplicación" })).toBeInTheDocument();
+  });
+
+  it("brings the welcome back from the links", async () => {
+    answers({ ...BASE, is_default: false });
+    await opened();
+    await userEvent.click(await screen.findByRole("button", { name: "Ver la guía paso a paso" }));
+    expect(invoke).toHaveBeenCalledWith("welcome_show");
+  });
+
+  /// A broken registration has its own remedy; asking to choose a copy that cannot take the
+  /// links would send the person to the wrong fix.
+  it("leaves the choice out while the registration is broken", async () => {
+    answers({ ...BASE, is_default: false, health: "stale" });
+    await opened();
+    await screen.findByRole("button", { name: "Reparar" });
+    expect(screen.queryByRole("button", { name: "Elegir LinkUnbound" })).toBeNull();
   });
 
   /// Looking registered is not the same as working: the command can point at a
@@ -348,7 +391,7 @@ describe("settings", () => {
       answers({ ...BASE, is_default: false });
       await opened();
       expect(await screen.findByText(/macOS todavía no envía/)).toBeInTheDocument();
-      await userEvent.click(screen.getByRole("button", { name: "Establecer" }));
+      await userEvent.click(screen.getByRole("button", { name: "Elegir LinkUnbound" }));
       expect(invoke).toHaveBeenCalledWith("system_set_registered", { enabled: true });
       expect(screen.queryByRole("switch", { name: "Ofrecerse como navegador" })).toBeNull();
     });
@@ -365,7 +408,7 @@ describe("settings", () => {
     it("offers nothing to press once the links already arrive here", async () => {
       await opened();
       await screen.findByText(/recibe los enlaces/);
-      expect(screen.queryByRole("button", { name: "Establecer" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Elegir LinkUnbound" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Abrir Ajustes del Sistema" })).toBeNull();
     });
 
@@ -377,7 +420,7 @@ describe("settings", () => {
         },
       );
       await opened();
-      await userEvent.click(await screen.findByRole("button", { name: "Establecer" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Elegir LinkUnbound" }));
       expect(await screen.findByText(/Rechazaste el cambio/)).toBeInTheDocument();
     });
 
@@ -462,7 +505,8 @@ describe("settings", () => {
       { system_open_default_apps: () => Promise.resolve(null) },
     );
     await opened();
-    await userEvent.click(await screen.findByRole("button", { name: "Abrir Configuración" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Elegir LinkUnbound" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("system_open_default_apps"));
     expect(screen.getByText(/todavía no envía/)).toBeInTheDocument();
     expect(screen.queryByText(/Algo salió mal/)).toBeNull();
   });

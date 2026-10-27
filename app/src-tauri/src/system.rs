@@ -617,6 +617,36 @@ pub use platform::{
 };
 
 #[tauri::command]
+pub fn system_state() -> SystemState {
+    state()
+}
+
+#[tauri::command]
+pub fn system_legacy() -> Option<Legacy> {
+    legacy()
+}
+
+#[tauri::command(async)]
+pub fn system_retire_legacy() -> Result<(), String> {
+    retire_legacy()
+}
+
+#[tauri::command]
+pub fn system_reveal_legacy() {
+    reveal_legacy();
+}
+
+#[tauri::command(async)]
+pub fn system_set_registered(enabled: bool) -> Result<SystemState, String> {
+    set_registered(enabled)
+}
+
+#[tauri::command]
+pub fn system_set_startup(enabled: bool) -> Result<SystemState, String> {
+    set_starts_with_system(enabled)
+}
+
+#[tauri::command]
 pub fn system_open_default_apps() -> Result<(), String> {
     open_default_apps()
 }

@@ -6,6 +6,7 @@ mod shop;
 mod star;
 mod system;
 mod update;
+mod welcome;
 
 use editing::{BrowserView, Edit, added, edited, free_id, hidden_in, readable, views, without};
 use linkunbound_core::{
@@ -528,6 +529,7 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
             settled.here_since = kept.here_since;
             settled.asked_for_a_star = kept.asked_for_a_star;
             settled.news_seen.clone_from(&kept.news_seen);
+            settled.welcomed = kept.welcomed;
             *kept = settled.clone();
             true
         })
@@ -567,42 +569,7 @@ fn system_open_elsewhere(url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-fn system_state() -> system::SystemState {
-    system::state()
-}
-
-#[tauri::command]
-fn system_legacy() -> Option<system::Legacy> {
-    system::legacy()
-}
-
-#[tauri::command(async)]
-fn system_retire_legacy() -> Result<(), String> {
-    system::retire_legacy()
-}
-
-#[tauri::command]
-fn system_reveal_legacy() {
-    system::reveal_legacy();
-}
-
-#[tauri::command(async)]
-fn system_set_registered(enabled: bool) -> Result<system::SystemState, String> {
-    system::set_registered(enabled)
-}
-
-#[tauri::command]
-fn system_set_startup(enabled: bool) -> Result<system::SystemState, String> {
-    system::set_starts_with_system(enabled)
-}
-
 const HERE: &str = env!("CARGO_PKG_VERSION");
-
-#[tauri::command]
-fn settings_painted(window: tauri::WebviewWindow) {
-    shell::reveal(&window);
-}
 
 #[cfg(windows)]
 fn owner(app: &AppHandle) -> Option<isize> {
@@ -1092,12 +1059,12 @@ pub fn run() {
             prefs_get,
             prefs_set,
             shell::picker_preview,
-            system_state,
-            system_legacy,
-            system_retire_legacy,
-            system_reveal_legacy,
-            system_set_registered,
-            system_set_startup,
+            system::system_state,
+            system::system_legacy,
+            system::system_retire_legacy,
+            system::system_reveal_legacy,
+            system::system_set_registered,
+            system::system_set_startup,
             system::system_open_default_apps,
             system_repair,
             system_register_anyway,
@@ -1106,13 +1073,19 @@ pub fn run() {
             about::notices,
             news::news,
             news::news_seen,
-            settings_painted,
+            shell::settings_painted,
             update_ready,
             update_install,
             update_candidates,
             star::star_due,
-            star::star_done
+            star::star_done,
+            welcome::welcome_show,
+            welcome::welcome_close,
+            welcome::welcome_try,
+            welcome::welcome_tried
         ])
+        .manage(welcome::Trying::default())
+        .on_window_event(welcome::on_closed)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build());
 
@@ -1147,10 +1120,15 @@ pub fn run() {
             }
 
             system::reconcile();
-            news::raise(app.handle());
+            let welcoming = welcome::due();
+            news::raise(app.handle(), welcoming);
             #[cfg(target_os = "macos")]
             relay_links(app.handle().clone());
-            shell::open_settings(app.handle(), store().prefs().theme, shell::page_in(&args));
+            let theme = store().prefs().theme;
+            shell::open_settings(app.handle(), theme, shell::page_in(&args));
+            if welcoming {
+                shell::open_welcome(app.handle(), theme);
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
