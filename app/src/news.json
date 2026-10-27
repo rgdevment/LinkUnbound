@@ -1,5 +1,48 @@
 [
   {
+    "version": "2.8.0",
+    "headline": {
+      "es": "Una bienvenida que te deja todo listo",
+      "en": "A welcome that gets you set up"
+    },
+    "es": [
+      {
+        "title": "Bienvenida al instalar",
+        "said": "la primera vez, LinkBear te guía para que LinkUnbound reciba tus enlaces y te deja probar el selector con un enlace de prueba."
+      },
+      {
+        "title": "Ajustes te dice lo que falta",
+        "said": "si los enlaces todavía no llegan a LinkUnbound, Ajustes se abre en Enlaces con un aviso y un botón para elegirlo."
+      },
+      {
+        "title": "Vuelve a verla cuando quieras",
+        "said": "en Acerca de está «Ver la bienvenida de nuevo»."
+      },
+      {
+        "title": "Más seguro",
+        "said": "actualizamos componentes internos con correcciones de seguridad."
+      }
+    ],
+    "en": [
+      {
+        "title": "A welcome when you install",
+        "said": "the first time, LinkBear walks you through letting LinkUnbound get your links and lets you try the picker with a test link."
+      },
+      {
+        "title": "Settings tells you what is missing",
+        "said": "while links still go elsewhere, Settings opens on Links with a notice and a button to choose LinkUnbound."
+      },
+      {
+        "title": "See it again any time",
+        "said": "in About there is «Show the welcome again»."
+      },
+      {
+        "title": "Safer",
+        "said": "internal components were updated with security fixes."
+      }
+    ]
+  },
+  {
     "version": "2.7.1",
     "headline": {
       "es": "Tu tecla para cada navegador, y un Mosaico renovado",
