@@ -125,6 +125,10 @@ fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme, page: Option<&st
 /// Over settings on a first run, and again whenever the person asks for it there.
 pub fn open_welcome<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
     if let Some(window) = app.get_webview_window(WELCOME) {
+        // Still painting: it shows itself when done, never as a blank sheet.
+        if !window.is_visible().unwrap_or(false) {
+            return;
+        }
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();

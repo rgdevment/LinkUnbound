@@ -44,7 +44,7 @@ pub use rule::{
     Origin, Rule, RuleSet, Scope, Target, is_public_suffix, same_name, site_of, visible,
 };
 pub use star::{Asking, asking};
-pub use store::{Store, StoreError, data_dir, unmarked};
+pub use store::{Store, StoreError, data_dir, seconds_now, unmarked};
 pub use url::{
     OWN_SCHEME, host_of, is_launchable, is_own_scheme, local_file_parts, local_web_file,
     local_web_file_extensions, looks_unresolved, normalise, unwrap_edge_protocol,

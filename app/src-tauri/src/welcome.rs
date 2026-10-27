@@ -14,7 +14,7 @@ pub fn due() -> bool {
     if store().prefs().welcomed {
         return false;
     }
-    if system::state().is_default {
+    if system::is_default() {
         mark();
         return false;
     }
@@ -50,7 +50,7 @@ pub fn welcome_close(window: tauri::WebviewWindow) {
 #[tauri::command]
 pub fn welcome_try(trying: tauri::State<'_, Trying>) -> Result<(), String> {
     if let Ok(mut since) = trying.0.lock() {
-        *since = crate::star::now_in_seconds();
+        *since = linkunbound_core::seconds_now();
     }
     tauri_plugin_opener::open_url(TRY_ME, None::<&str>).map_err(|e| e.to_string())
 }

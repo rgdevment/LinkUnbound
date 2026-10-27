@@ -38,15 +38,11 @@ export default function Welcome() {
 function Tour({ shortcut }: { shortcut: string | null }) {
   const [steps, setSteps] = useState<Step[] | null>(null);
   const [at, setAt] = useState(0);
-  const [state, setState] = useState<SystemState | null>(null);
 
   // The step that hands the links over is left out for someone who already did.
   useEffect(() => {
-    void invoke<SystemState>("system_state")
-      .then((found) => {
-        setState(found);
-        setSteps(found.is_default ? ["hello", "try"] : ["hello", "links", "try"]);
-      })
+    void invoke<boolean>("system_is_default")
+      .then((handing) => setSteps(handing ? ["hello", "try"] : ["hello", "links", "try"]))
       .catch(() => setSteps(["hello", "links", "try"]));
   }, []);
 
@@ -72,10 +68,8 @@ function Tour({ shortcut }: { shortcut: string | null }) {
   return (
     <div className="flex h-full flex-col bg-white text-[#16181D] dark:bg-[#191A1F] dark:text-[#F0F1F4]">
       {step === "hello" && <Hello dots={dots} onSkip={close} onNext={next} />}
-      {step === "links" && <Links dots={dots} state={state} onState={setState} onNext={next} />}
-      {step === "try" && (
-        <Try dots={dots} handing={state?.is_default ?? true} shortcut={shortcut} onDone={close} />
-      )}
+      {step === "links" && <Links dots={dots} onNext={next} />}
+      {step === "try" && <Try dots={dots} shortcut={shortcut} onDone={close} />}
     </div>
   );
 }
@@ -122,25 +116,12 @@ function Hello({
   );
 }
 
-function Links({
-  dots,
-  state,
-  onState,
-  onNext,
-}: {
-  dots: ReactNode;
-  state: SystemState | null;
-  onState: (next: SystemState) => void;
-  onNext: () => void;
-}) {
+function Links({ dots, onNext }: { dots: ReactNode; onNext: () => void }) {
   const t = useWords();
-  const [progress, setProgress] = useState<Progress>(state?.is_default ? "done" : "idle");
+  const [progress, setProgress] = useState<Progress>("idle");
   const chosen = useCallback(
-    (found: SystemState) => {
-      onState(found);
-      setProgress(found.is_default ? "done" : "waiting");
-    },
-    [onState],
+    (found: SystemState) => setProgress(found.is_default ? "done" : "waiting"),
+    [],
   );
   const { choose, problem } = useChooseUs(chosen);
 
@@ -148,15 +129,14 @@ function Links({
   useEffect(() => {
     if (progress !== "waiting") return;
     const asking = setInterval(() => {
-      void invoke<SystemState>("system_state")
-        .then((found) => {
-          onState(found);
-          if (found.is_default) setProgress("done");
+      void invoke<boolean>("system_is_default")
+        .then((handing) => {
+          if (handing) setProgress("done");
         })
         .catch(noop);
     }, EVERY_SECOND);
     return () => clearInterval(asking);
-  }, [progress, onState]);
+  }, [progress]);
 
   useEffect(() => {
     if (progress !== "done") return;
@@ -202,7 +182,7 @@ function Links({
               ? t("welcomeLinkAgain")
               : t("welcomeLinkGo")
         }
-        onStrong={progress === "done" ? onNext : () => choose(state)}
+        onStrong={progress === "done" ? onNext : () => choose(null)}
       />
     </>
   );
@@ -210,17 +190,20 @@ function Links({
 
 function Try({
   dots,
-  handing,
   shortcut,
   onDone,
 }: {
   dots: ReactNode;
-  handing: boolean;
   shortcut: string | null;
   onDone: () => void;
 }) {
   const t = useWords();
   const [progress, setProgress] = useState<Progress>("idle");
+  const [handing, setHanding] = useState(true);
+
+  useEffect(() => {
+    void invoke<boolean>("system_is_default").then(setHanding).catch(noop);
+  }, []);
 
   // The picker lives in another process; it leaves word of each link it opens.
   useEffect(() => {
@@ -235,10 +218,12 @@ function Try({
     return () => clearInterval(asking);
   }, [progress]);
 
-  const go = () => {
-    void invoke("welcome_try")
-      .then(() => setProgress((was) => (was === "done" ? was : "waiting")))
-      .catch(noop);
+  // Asked at the click: a link that goes to the usual browser never reaches the picker to wait for.
+  const go = async () => {
+    const now = await invoke<boolean>("system_is_default").catch(() => false);
+    setHanding(now);
+    await invoke("welcome_try").catch(noop);
+    if (now) setProgress((was) => (was === "done" ? was : "waiting"));
   };
 
   return (
@@ -247,7 +232,7 @@ function Try({
         <div className="flex justify-center py-2">
           <button
             type="button"
-            onClick={go}
+            onClick={() => void go()}
             className="flex items-center gap-2 rounded-lg border border-[#2F62D8]/25 bg-[#2F62D8]/[0.06] px-4 py-3 text-[14px] text-[#24489F] hover:bg-[#2F62D8]/10 dark:border-[#6E9BFF]/30 dark:bg-[#6E9BFF]/10 dark:text-[#9DBBFF]"
           >
             <svg

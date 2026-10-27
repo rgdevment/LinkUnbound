@@ -16,7 +16,6 @@ const ELSEWHERE = {
   registered_path: null,
   edge_installed: false,
 };
-const HERE = { ...ELSEWHERE, is_default: true, health: "fine" };
 const PREFS = { language: "es", prefs: { shortcut: "Alt+Shift+L" } };
 
 function answers(overrides: Record<string, () => Promise<unknown>> = {}) {
@@ -24,6 +23,7 @@ function answers(overrides: Record<string, () => Promise<unknown>> = {}) {
     if (cmd in overrides) return overrides[cmd]();
     if (cmd === "prefs_get") return Promise.resolve(PREFS);
     if (cmd === "system_state") return Promise.resolve(ELSEWHERE);
+    if (cmd === "system_is_default") return Promise.resolve(false);
     if (cmd === "welcome_tried") return Promise.resolve(false);
     return Promise.resolve(null);
   });
@@ -59,7 +59,7 @@ describe("welcome", () => {
   });
 
   it("leaves out the links step for someone who already chose LinkUnbound", async () => {
-    answers({ system_state: () => Promise.resolve(HERE) });
+    answers({ system_is_default: () => Promise.resolve(true) });
     render(<Welcome />);
     await press("Comenzar");
     expect(
@@ -79,10 +79,10 @@ describe("welcome", () => {
     render(<Welcome />);
     await press("Comenzar");
     await press("Elegir LinkUnbound");
-    expect(invoke).toHaveBeenCalledWith("system_open_default_apps");
     expect(await screen.findByText("Esperando a Windows…")).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("system_open_default_apps");
 
-    answers({ system_state: () => Promise.resolve(HERE) });
+    answers({ system_is_default: () => Promise.resolve(true) });
     expect(
       await screen.findByText("¡Listo! LinkUnbound ya recibe tus enlaces", {}, { timeout: 2000 }),
     ).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe("welcome", () => {
 
   /// The picker runs in another process; only what it leaves behind says it was used.
   it("waits for the picker before saying the test link worked", async () => {
-    answers({ system_state: () => Promise.resolve(HERE) });
+    answers({ system_is_default: () => Promise.resolve(true) });
     render(<Welcome />);
     await press("Comenzar");
     await press(/rgdevment\.com/);
@@ -118,7 +118,7 @@ describe("welcome", () => {
     expect(screen.queryByText(/Eso es/)).toBeNull();
 
     answers({
-      system_state: () => Promise.resolve(HERE),
+      system_is_default: () => Promise.resolve(true),
       welcome_tried: () => Promise.resolve(true),
     });
     expect(await screen.findByText(/Eso es/, {}, { timeout: 2000 })).toBeInTheDocument();
@@ -127,8 +127,18 @@ describe("welcome", () => {
     expect(invoke).toHaveBeenCalledWith("welcome_close");
   });
 
+  it("does not wait for a picker that a link to the usual browser never reaches", async () => {
+    render(<Welcome />);
+    await press("Comenzar");
+    await press("Ahora no");
+    await press(/rgdevment\.com/);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("welcome_try"));
+    expect(screen.getByText(/se abrirá en tu navegador de siempre/)).toBeInTheDocument();
+    expect(screen.queryByText(/Esperando a que elijas/)).toBeNull();
+  });
+
   it("still offers the links step when the system could not be asked", async () => {
-    answers({ system_state: () => Promise.reject("unreadable") });
+    answers({ system_is_default: () => Promise.reject("unreadable") });
     render(<Welcome />);
     await press("Comenzar");
     expect(await screen.findByRole("button", { name: "Elegir LinkUnbound" })).toBeInTheDocument();

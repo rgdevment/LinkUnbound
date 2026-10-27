@@ -538,18 +538,6 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
     Ok(claim(&settled))
 }
 
-/// Re-registers against this executable, which is the only repair there is: the
-/// command pointed somewhere this binary no longer lives.
-#[tauri::command(async)]
-fn system_repair() -> Result<system::SystemState, String> {
-    system::set_registered(true)
-}
-
-#[tauri::command(async)]
-fn system_register_anyway() -> Result<system::SystemState, String> {
-    system::register_anyway()
-}
-
 /// A page opened the ordinary way goes to the default browser — which, on the one screen that
 /// offers this, is a LinkUnbound whose resident is missing. So it goes to the first browser the
 /// catalogue has instead, the way a rule would send it.
@@ -1060,14 +1048,15 @@ pub fn run() {
             prefs_set,
             shell::picker_preview,
             system::system_state,
+            system::system_is_default,
             system::system_legacy,
             system::system_retire_legacy,
             system::system_reveal_legacy,
             system::system_set_registered,
             system::system_set_startup,
             system::system_open_default_apps,
-            system_repair,
-            system_register_anyway,
+            system::system_repair,
+            system::system_register_anyway,
             system_open_elsewhere,
             about::about,
             about::notices,

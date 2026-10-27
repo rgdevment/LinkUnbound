@@ -195,6 +195,14 @@ where
     })
 }
 
+#[must_use]
+pub fn seconds_now() -> Option<u64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|since| since.as_secs())
+}
+
 /// Where the 1.x line kept its files, so an upgrade finds them where they are.
 #[must_use]
 pub fn data_dir() -> PathBuf {
@@ -278,8 +286,8 @@ impl Store {
 
     /// When the resident last opened a link, never which one: all the welcome needs to know.
     pub fn note_picked(&self) {
-        if let Ok(since) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-            let _ = save_atomically(&self.picked_path(), &since.as_secs().to_string());
+        if let Some(now) = seconds_now() {
+            let _ = save_atomically(&self.picked_path(), &now.to_string());
         }
     }
 
@@ -869,10 +877,7 @@ mod tests {
     fn the_settings_window_reads_when_the_resident_last_opened_a_link() {
         let store = Store::at(scratch("picked"));
         assert_eq!(store.picked_at(), None, "nothing opened yet");
-        let before = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let before = seconds_now().unwrap();
         store.note_picked();
         assert!(
             Store::at(store.dir()).picked_at() >= Some(before),
