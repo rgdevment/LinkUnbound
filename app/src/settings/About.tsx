@@ -366,6 +366,12 @@ export default function About({
         </div>
       </div>
 
+      <div className="row">
+        <button type="button" onClick={() => invoke("welcome_show").catch(noop)} className="mild">
+          {t("aboutWelcome")}
+        </button>
+      </div>
+
       {trouble && (
         <div className="alarm">
           <p role="alert">

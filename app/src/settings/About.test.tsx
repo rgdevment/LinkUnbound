@@ -100,6 +100,14 @@ describe("about", () => {
     expect(screen.getByRole("button", { name: /Tisty/ })).toBeInTheDocument();
   });
 
+  it("brings the welcome back whenever it is asked for", async () => {
+    show();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Ver la bienvenida de nuevo" }),
+    );
+    expect(invoke).toHaveBeenCalledWith("welcome_show");
+  });
+
   it("puts the bear and the motto beside the name", async () => {
     show();
     const name = await screen.findByRole("heading", { name: "LinkUnbound" });

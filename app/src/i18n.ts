@@ -53,6 +53,45 @@ const ES = {
   legacyLater: "Ahora no",
   legacyReveal: "Mostrarla en el Finder",
   legacyGone: "La versión anterior está en la papelera.",
+  pendingTitle: "LinkUnbound todavía no recibe tus enlaces",
+  pendingBody:
+    "Mientras no lo elijas en Windows, los enlaces se siguen abriendo en tu navegador de siempre y LinkBear no puede preguntarte nada.",
+  pendingGuide: "Ver la guía paso a paso",
+  aboutWelcome: "Ver la bienvenida de nuevo",
+
+  welcomeSkip: "Omitir",
+  welcomeStart: "Comenzar",
+  welcomeLater: "Ahora no",
+  welcomeNext: "Siguiente",
+  welcomeFinish: "Terminar",
+  welcomeHelloTitle: "Tú eliges dónde se abre cada enlace",
+  welcomeHelloBody:
+    "Cuando hagas clic en un enlace en cualquier aplicación, LinkBear te preguntará en qué navegador o perfil abrirlo. Te lo dejamos listo en dos pasos.",
+  welcomePillLocal: "Todo queda en tu equipo",
+  welcomePillAccount: "Sin cuenta",
+  welcomePillBrowsers: "Tus navegadores siguen igual",
+  welcomeLinkOver: "El paso importante",
+  welcomeLinkTitle: "Que los enlaces lleguen a LinkUnbound",
+  welcomeLinkBody:
+    "Para preguntarte en qué navegador abrir cada enlace, Windows tiene que enviárselos a LinkUnbound. Se hace una sola vez.",
+  welcomeLinkStep1: "Abrimos la Configuración de Windows en la página de LinkUnbound",
+  welcomeLinkStep2: "Presiona el botón «Establecer como predeterminado», arriba",
+  welcomeLinkStep3: "Vuelve aquí: seguimos solos",
+  welcomeLinkGo: "Elegir LinkUnbound",
+  welcomeLinkAgain: "Abrir Configuración otra vez",
+  welcomeLinkWaiting: "Esperando a Windows…",
+  welcomeLinkHint: "¿No ves el botón? Elige LinkUnbound para HTTP y para HTTPS.",
+  welcomeLinkDone: "¡Listo! LinkUnbound ya recibe tus enlaces",
+  welcomeLinkDoneNote: "Seguimos en un momento…",
+  welcomeTryOver: "Pruébalo",
+  welcomeTryTitle: "Así se ve cada vez que abras un enlace",
+  welcomeTryBody:
+    "Presiona el enlace de abajo. LinkBear aparecerá y te preguntará en qué navegador abrirlo: elige uno con un clic o con su tecla.",
+  welcomeTryNotYet:
+    "Como LinkUnbound todavía no recibe los enlaces, este se abrirá en tu navegador de siempre.",
+  welcomeTryWaiting: "Esperando a que elijas un navegador…",
+  welcomeTryDone: "¡Eso es! Se abrió en el navegador que elegiste",
+  welcomeTryDoneNote: "También puedes abrir LinkBear cuando quieras con {}.",
 
   kindAny: "Cualquiera",
   kindUrl: "Esta URL",
@@ -353,6 +392,45 @@ const EN: Record<Key, string> = {
   legacyLater: "Not now",
   legacyReveal: "Show it in Finder",
   legacyGone: "The older version is in the Trash.",
+  pendingTitle: "LinkUnbound is not getting your links yet",
+  pendingBody:
+    "Until you choose it in Windows, links keep opening in your usual browser and LinkBear cannot ask you anything.",
+  pendingGuide: "See the step-by-step guide",
+  aboutWelcome: "Show the welcome again",
+
+  welcomeSkip: "Skip",
+  welcomeStart: "Get started",
+  welcomeLater: "Not now",
+  welcomeNext: "Next",
+  welcomeFinish: "Finish",
+  welcomeHelloTitle: "You choose where every link opens",
+  welcomeHelloBody:
+    "When you click a link in any application, LinkBear will ask which browser or profile should open it. We will set it up in two steps.",
+  welcomePillLocal: "Everything stays on your computer",
+  welcomePillAccount: "No account",
+  welcomePillBrowsers: "Your browsers stay as they are",
+  welcomeLinkOver: "The important step",
+  welcomeLinkTitle: "Let links reach LinkUnbound",
+  welcomeLinkBody:
+    "To ask which browser should open each link, Windows has to send the links to LinkUnbound. You only do this once.",
+  welcomeLinkStep1: "We open Windows Settings on LinkUnbound's page",
+  welcomeLinkStep2: "Press the «Set default» button at the top",
+  welcomeLinkStep3: "Come back here: we carry on by ourselves",
+  welcomeLinkGo: "Choose LinkUnbound",
+  welcomeLinkAgain: "Open Settings again",
+  welcomeLinkWaiting: "Waiting for Windows…",
+  welcomeLinkHint: "Cannot see the button? Choose LinkUnbound for HTTP and for HTTPS.",
+  welcomeLinkDone: "All set! LinkUnbound now gets your links",
+  welcomeLinkDoneNote: "Carrying on in a moment…",
+  welcomeTryOver: "Try it",
+  welcomeTryTitle: "This is what you will see every time you open a link",
+  welcomeTryBody:
+    "Press the link below. LinkBear will show up and ask which browser should open it: pick one with a click or with its key.",
+  welcomeTryNotYet:
+    "As LinkUnbound is not getting links yet, this one will open in your usual browser.",
+  welcomeTryWaiting: "Waiting for you to pick a browser…",
+  welcomeTryDone: "That's it! It opened in the browser you picked",
+  welcomeTryDoneNote: "You can also bring up LinkBear any time with {}.",
 
   kindAny: "Anything",
   kindUrl: "This URL",
@@ -621,6 +699,17 @@ const MAC_ES: Partial<Record<Key, string>> = {
   unregisterNote: "Los enlaces vuelven al navegador que los abría antes",
   unregisterBody:
     "macOS te pedirá confirmación. Podrás volver a elegir LinkUnbound desde la pestaña Enlaces.",
+  pendingBody:
+    "Mientras no lo elijas en macOS, los enlaces se siguen abriendo en tu navegador de siempre y LinkBear no puede preguntarte nada.",
+  welcomeLinkBody:
+    "Para preguntarte en qué navegador abrir cada enlace, macOS tiene que enviárselos a LinkUnbound. Se hace una sola vez.",
+  welcomeLinkStep1: "Presiona «Elegir LinkUnbound»",
+  welcomeLinkStep2: "macOS te preguntará si quieres cambiar el navegador: elige «Usar LinkUnbound»",
+  welcomeLinkStep3: "Listo: seguimos solos",
+  welcomeLinkAgain: "Volver a intentarlo",
+  welcomeLinkWaiting: "Esperando a macOS…",
+  welcomeLinkHint:
+    "¿No apareció el aviso? Elígelo en Ajustes del Sistema › Escritorio y Dock › Navegador web por omisión.",
 };
 
 const MAC_EN: Partial<Record<Key, string>> = {
@@ -642,6 +731,16 @@ const MAC_EN: Partial<Record<Key, string>> = {
   unregisterNote: "Links go back to the browser that opened them before",
   unregisterBody:
     "macOS will ask you to confirm. You can pick LinkUnbound again from the Links tab.",
+  pendingBody:
+    "Until you choose it in macOS, links keep opening in your usual browser and LinkBear cannot ask you anything.",
+  welcomeLinkBody:
+    "To ask which browser should open each link, macOS has to send the links to LinkUnbound. You only do this once.",
+  welcomeLinkStep1: "Press «Choose LinkUnbound»",
+  welcomeLinkStep2: "macOS will ask whether to change the browser: choose «Use LinkUnbound»",
+  welcomeLinkStep3: "That's it: we carry on by ourselves",
+  welcomeLinkAgain: "Try again",
+  welcomeLinkWaiting: "Waiting for macOS…",
+  welcomeLinkHint: "No prompt? Pick it in System Settings › Desktop & Dock › Default web browser.",
 };
 
 export const MAC: Record<Language, Partial<Record<Key, string>>> = { es: MAC_ES, en: MAC_EN };

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type Key, type Language, Speaking, spoken, useSpoken, useWords } from "./i18n";
 import { platform } from "./platform";
 import { saidPlainly } from "./refusal";
@@ -11,26 +11,7 @@ import News from "./settings/News";
 import { Card, Line, Section, Switch } from "./settings/parts";
 import Rules from "./settings/Rules";
 import { useUpdate } from "./settings/update";
-
-type Association = { scheme: string; held: boolean };
-type Health =
-  | "fine"
-  | "stale"
-  | "build_tree"
-  | "wrong_binary"
-  | "no_resident"
-  | "mounted"
-  | "not_registered";
-type SystemState = {
-  registered: boolean;
-  is_default: boolean;
-  associations: Association[];
-  starts_with_system: boolean;
-  startup_is_ours: boolean;
-  health: Health;
-  registered_path: string | null;
-  edge_installed: boolean;
-};
+import { type Health, type SystemState, useChooseUs } from "./system";
 
 type Spoken = { language: string };
 
@@ -226,12 +207,48 @@ function Legacy1x({ onRetired }: { onRetired: () => void }) {
   );
 }
 
+function Pending({ state, onState }: { state: SystemState; onState: (next: SystemState) => void }) {
+  const t = useWords();
+  const { choose, problem } = useChooseUs(onState);
+  return (
+    <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
+      <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">
+        {t("pendingTitle")}
+      </p>
+      <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">{t("pendingBody")}</p>
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button
+          type="button"
+          onClick={() => choose(state)}
+          className="rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
+        >
+          {t("welcomeLinkGo")}
+        </button>
+        <button
+          type="button"
+          onClick={() => invoke("welcome_show").catch(noop)}
+          className="text-[11.5px] text-[#2F62D8] hover:underline dark:text-[#6E9BFF]"
+        >
+          {t("pendingGuide")}
+        </button>
+      </div>
+      {problem && (
+        <p role="alert" className="mt-2 text-[11.5px] text-[#C0362F] dark:text-[#FF8A85]">
+          {problem}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Links({
   state,
+  onState,
   change,
   run,
 }: {
   state: SystemState | null;
+  onState: (next: SystemState) => void;
   change: (command: string, enabled: boolean) => void;
   run: (command: string, args?: Record<string, unknown>) => void;
 }) {
@@ -255,6 +272,8 @@ function Links({
   // Launch Services registers bundles, not binaries: a build tree on a Mac has no way in.
   const remedy =
     ailment && !(state?.health === "build_tree" && platform() === "macos") ? ailment.remedy : null;
+  // With nothing broken, all that is missing is the person's choice: asked for up front.
+  const pending = state !== null && !ok && !ailment;
 
   return (
     <>
@@ -291,6 +310,7 @@ function Links({
           )}
         </div>
       )}
+      {pending && state && <Pending state={state} onState={onState} />}
       <Section title={t("sectionDefault")}>
         <div className="flex items-center gap-2 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3 py-2.5 text-[11.5px] dark:border-white/[0.08] dark:bg-white/[0.02]">
           <span
@@ -302,7 +322,8 @@ function Links({
           </span>
         </div>
         {platform() === "macos" ? (
-          !ok && (
+          !ok &&
+          !pending && (
             <Card>
               <Line title={t("makeDefaultTitle")} note={t("makeDefaultNote")}>
                 <button
@@ -326,7 +347,7 @@ function Links({
             </Line>
           </Card>
         )}
-        {!ok && (
+        {!ok && (!pending || platform() === "macos") && (
           <Card>
             <Line title={t("chooseTitle")} note={t("chooseNote")}>
               <button
@@ -394,17 +415,29 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const language = useSpoken();
   const { ready, step, look, settled } = useUpdate();
   const [page, setPage] = useState<Page>(() => asked() ?? "app");
+  // Opened on its own, it starts on Links while they are missing; a page already chosen wins.
+  const placed = useRef(asked() !== null);
+  const pick = useCallback((next: Page) => {
+    placed.current = true;
+    setPage(next);
+  }, []);
   useEffect(() => {
     const follow = () => {
       const next = asked();
-      if (next) setPage(next);
+      if (next) pick(next);
     };
     window.addEventListener("hashchange", follow);
     return () => window.removeEventListener("hashchange", follow);
-  }, []);
+  }, [pick]);
   const [state, setState] = useState<SystemState | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [starring, setStarring] = useState(false);
+
+  useEffect(() => {
+    if (!state || placed.current) return;
+    placed.current = true;
+    if (!state.is_default) setPage("links");
+  }, [state]);
 
   // Choosing the default browser happens in Windows, not here, so the answer to «does Windows
   // send links our way» changes while this window is in the background. Asked again every time
@@ -451,13 +484,19 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
         className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-black/[0.08] bg-black/[0.02] p-2 dark:border-white/[0.08] dark:bg-white/[0.02]"
       >
         {PAGES.map((p) => (
-          <Tab key={p.id} tab={p} on={page} onPick={setPage} />
+          <Tab
+            key={p.id}
+            tab={p}
+            on={page}
+            onPick={pick}
+            flagged={p.id === "links" && state !== null && !state.is_default}
+          />
         ))}
         <div className="mt-auto flex flex-col gap-0.5">
           {ready && (
             <button
               type="button"
-              onClick={() => setPage("about")}
+              onClick={() => pick("about")}
               aria-label={`${t("navAbout")} · ${t("updateWaiting")}`}
               className="flex items-center gap-1.5 rounded-md bg-[#2F62D8]/[0.11] px-2.5 py-1.5 text-[10.5px] font-medium text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
             >
@@ -465,7 +504,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
               {t("updateGoTo", ready.version)}
             </button>
           )}
-          <Tab tab={ABOUT} on={page} onPick={setPage} />
+          <Tab tab={ABOUT} on={page} onPick={pick} />
         </div>
       </nav>
 
@@ -480,7 +519,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
             {problem}
           </p>
         )}
-        {page === "links" && <Links state={state} change={change} run={run} />}
+        {page === "links" && <Links state={state} onState={setState} change={change} run={run} />}
         {page === "rules" && <Rules />}
         {page === "browsers" && <Browsers />}
         {page === "app" && (
@@ -514,7 +553,17 @@ function asked(): Page | null {
   return [...PAGES, ABOUT].some((p) => p.id === said) ? (said as Page) : null;
 }
 
-function Tab({ tab, on, onPick }: { tab: Entry; on: Page; onPick: (next: Page) => void }) {
+function Tab({
+  tab,
+  on,
+  onPick,
+  flagged = false,
+}: {
+  tab: Entry;
+  on: Page;
+  onPick: (next: Page) => void;
+  flagged?: boolean;
+}) {
   const t = useWords();
   const here = tab.id === on;
   return (
@@ -539,7 +588,13 @@ function Tab({ tab, on, onPick }: { tab: Entry; on: Page; onPick: (next: Page) =
       >
         {tab.icon}
       </svg>
-      {t(tab.label)}
+      <span className="flex-1">{t(tab.label)}</span>
+      {flagged && (
+        <span
+          aria-hidden="true"
+          className="size-[7px] shrink-0 rounded-full bg-[#A85B14] dark:bg-[#E9A05C]"
+        />
+      )}
     </button>
   );
 }

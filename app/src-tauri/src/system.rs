@@ -182,6 +182,10 @@ mod platform {
         done
     }
 
+    pub fn is_default() -> bool {
+        is_default_browser()
+    }
+
     pub fn state() -> SystemState {
         let startup = startup_state();
         let registration = Registration::default();
@@ -421,6 +425,10 @@ mod platform {
         }
     }
 
+    pub fn is_default() -> bool {
+        is_default_browser()
+    }
+
     pub fn state() -> SystemState {
         let startup = startup_state();
         let bundled = is_bundled();
@@ -567,6 +575,10 @@ mod platform {
         true
     }
 
+    pub fn is_default() -> bool {
+        false
+    }
+
     pub fn state() -> SystemState {
         SystemState {
             registered: false,
@@ -612,9 +624,58 @@ mod platform {
 }
 
 pub use platform::{
-    browsers, legacy, open_default_apps, reconcile, register_anyway, register_for_the_installer,
-    retire_legacy, reveal_legacy, set_registered, set_starts_with_system, state,
+    browsers, is_default, legacy, open_default_apps, reconcile, register_anyway,
+    register_for_the_installer, retire_legacy, reveal_legacy, set_registered,
+    set_starts_with_system, state,
 };
+
+#[tauri::command]
+pub fn system_state() -> SystemState {
+    state()
+}
+
+/// Only the one answer, off the main thread: the welcome asks it every second while it waits.
+#[tauri::command(async)]
+pub fn system_is_default() -> bool {
+    is_default()
+}
+
+#[tauri::command]
+pub fn system_legacy() -> Option<Legacy> {
+    legacy()
+}
+
+#[tauri::command(async)]
+pub fn system_retire_legacy() -> Result<(), String> {
+    retire_legacy()
+}
+
+#[tauri::command]
+pub fn system_reveal_legacy() {
+    reveal_legacy();
+}
+
+#[tauri::command(async)]
+pub fn system_set_registered(enabled: bool) -> Result<SystemState, String> {
+    set_registered(enabled)
+}
+
+#[tauri::command]
+pub fn system_set_startup(enabled: bool) -> Result<SystemState, String> {
+    set_starts_with_system(enabled)
+}
+
+/// Re-registers against this executable, which is the only repair there is: the
+/// command pointed somewhere this binary no longer lives.
+#[tauri::command(async)]
+pub fn system_repair() -> Result<SystemState, String> {
+    set_registered(true)
+}
+
+#[tauri::command(async)]
+pub fn system_register_anyway() -> Result<SystemState, String> {
+    register_anyway()
+}
 
 #[tauri::command]
 pub fn system_open_default_apps() -> Result<(), String> {

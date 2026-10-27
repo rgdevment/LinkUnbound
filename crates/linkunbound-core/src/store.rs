@@ -195,6 +195,14 @@ where
     })
 }
 
+#[must_use]
+pub fn seconds_now() -> Option<u64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|since| since.as_secs())
+}
+
 /// Where the 1.x line kept its files, so an upgrade finds them where they are.
 #[must_use]
 pub fn data_dir() -> PathBuf {
@@ -270,6 +278,26 @@ impl Store {
                 let _ = fs::remove_file(self.held_path());
             }
         }
+    }
+
+    fn picked_path(&self) -> PathBuf {
+        self.dir.join("picked")
+    }
+
+    /// When the resident last opened a link, never which one: all the welcome needs to know.
+    pub fn note_picked(&self) {
+        if let Some(now) = seconds_now() {
+            let _ = save_atomically(&self.picked_path(), &now.to_string());
+        }
+    }
+
+    #[must_use]
+    pub fn picked_at(&self) -> Option<u64> {
+        fs::read_to_string(self.picked_path())
+            .ok()?
+            .trim()
+            .parse()
+            .ok()
     }
 
     fn browsers_path(&self) -> PathBuf {
@@ -428,6 +456,7 @@ mod tests {
                 prefs.here_since = Some(1_700_000_000);
                 prefs.asked_for_a_star = true;
                 prefs.news_seen = Some("2.6.0".to_owned());
+                prefs.welcomed = true;
                 true
             })
             .expect("marked");
@@ -442,6 +471,7 @@ mod tests {
                 settled.here_since = kept.here_since;
                 settled.asked_for_a_star = kept.asked_for_a_star;
                 settled.news_seen.clone_from(&kept.news_seen);
+                settled.welcomed = kept.welcomed;
                 *kept = settled.clone();
                 true
             })
@@ -455,6 +485,7 @@ mod tests {
             "the mark it never saw"
         );
         assert!(read.asked_for_a_star, "and the answer it never saw");
+        assert!(read.welcomed, "and the welcome it never showed");
         assert_eq!(
             read.news_seen.as_deref(),
             Some("2.6.0"),
@@ -839,6 +870,18 @@ mod tests {
             store.shortcut_held(),
             None,
             "letting go twice is not a fault"
+        );
+    }
+
+    #[test]
+    fn the_settings_window_reads_when_the_resident_last_opened_a_link() {
+        let store = Store::at(scratch("picked"));
+        assert_eq!(store.picked_at(), None, "nothing opened yet");
+        let before = seconds_now().unwrap();
+        store.note_picked();
+        assert!(
+            Store::at(store.dir()).picked_at() >= Some(before),
+            "the moment it opened, read back"
         );
     }
 

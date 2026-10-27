@@ -59,6 +59,9 @@ pub struct Preferences {
     pub asked_for_a_star: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub news_seen: Option<String>,
+    /// Closing the welcome counts too: it is offered again from settings, never pushed twice.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub welcomed: bool,
 }
 
 fn default_shortcut() -> Option<String> {
@@ -83,6 +86,7 @@ impl Default for Preferences {
             here_since: None,
             asked_for_a_star: false,
             news_seen: None,
+            welcomed: false,
         }
     }
 }

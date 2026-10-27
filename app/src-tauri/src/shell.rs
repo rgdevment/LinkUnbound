@@ -4,6 +4,7 @@ use linkunbound_core::Theme;
 use tauri::{AppHandle, Manager, Runtime};
 
 pub const SETTINGS: &str = "settings";
+pub const WELCOME: &str = "welcome";
 
 #[must_use]
 pub fn dressed_as(theme: Theme) -> Option<tauri::Theme> {
@@ -23,10 +24,12 @@ pub fn ground(theme: Theme) -> Option<tauri::window::Color> {
 }
 
 pub fn repaint<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
-    if let Some(window) = app.get_webview_window(SETTINGS) {
-        let _ = window.set_theme(dressed_as(theme));
-        let _ = window.set_background_color(ground(theme));
-        dress_natively(&window, theme);
+    for label in [SETTINGS, WELCOME] {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.set_theme(dressed_as(theme));
+            let _ = window.set_background_color(ground(theme));
+            dress_natively(&window, theme);
+        }
     }
 }
 
@@ -36,9 +39,10 @@ pub fn repaint<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
 fn dress_natively<R: Runtime>(window: &tauri::WebviewWindow<R>, theme: Theme) {
     let dark = dressed_as(theme).map(|t| t == tauri::Theme::Dark);
     let app = window.app_handle().clone();
+    let label = window.label().to_owned();
     let _ = window.run_on_main_thread(move || {
         if let Some(handle) = app
-            .get_webview_window(SETTINGS)
+            .get_webview_window(&label)
             .and_then(|window| window.ns_window().ok())
         {
             linkunbound_mac::dress_window(handle as isize, dark);
@@ -109,26 +113,72 @@ fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme, page: Option<&st
     let url = page.map_or_else(tauri::WebviewUrl::default, |page| {
         tauri::WebviewUrl::App(format!("index.html#{page}").into())
     });
-    let mut builder = tauri::WebviewWindowBuilder::new(app, SETTINGS, url)
-        .title("LinkUnbound")
+    let builder = hidden(app, SETTINGS, url, theme)
         .inner_size(780.0, 560.0)
         .min_inner_size(640.0, 480.0)
-        .resizable(true)
+        .resizable(true);
+    if let Ok(window) = builder.build() {
+        dressed(&window, theme);
+    }
+}
+
+/// Over settings on a first run, and again whenever the person asks for it there.
+pub fn open_welcome<R: Runtime>(app: &AppHandle<R>, theme: Theme) {
+    if let Some(window) = app.get_webview_window(WELCOME) {
+        // Still painting: it shows itself when done, never as a blank sheet.
+        if !window.is_visible().unwrap_or(false) {
+            return;
+        }
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return;
+    }
+    if BUILDING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let _building = Building;
+    let url = tauri::WebviewUrl::App("index.html#welcome".into());
+    let builder = hidden(app, WELCOME, url, theme)
+        .inner_size(600.0, 460.0)
+        .resizable(false)
+        .maximizable(false)
+        .center();
+    if let Ok(window) = builder.build() {
+        dressed(&window, theme);
+    }
+}
+
+/// Shown only once the page has painted, so the window never flashes blank.
+fn hidden<'a, R: Runtime, M: Manager<R>>(
+    app: &'a M,
+    label: &str,
+    url: tauri::WebviewUrl,
+    theme: Theme,
+) -> tauri::WebviewWindowBuilder<'a, R, M> {
+    let builder = tauri::WebviewWindowBuilder::new(app, label, url)
+        .title("LinkUnbound")
         .visible(false)
         .theme(dressed_as(theme));
-    if let Some(color) = ground(theme) {
-        builder = builder.background_color(color);
+    match ground(theme) {
+        Some(color) => builder.background_color(color),
+        None => builder,
     }
-    let built = builder.build();
-    if let Ok(window) = built {
-        dress_natively(&window, theme);
-        drop_the_title_icon(&window);
-        let late = window.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(LONG_ENOUGH_TO_PAINT);
-            reveal(&late);
-        });
-    }
+}
+
+fn dressed<R: Runtime>(window: &tauri::WebviewWindow<R>, theme: Theme) {
+    dress_natively(window, theme);
+    drop_the_title_icon(window);
+    let late = window.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(LONG_ENOUGH_TO_PAINT);
+        reveal(&late);
+    });
+}
+
+#[tauri::command]
+pub fn settings_painted(window: tauri::WebviewWindow) {
+    reveal(&window);
 }
 
 pub fn reveal<R: Runtime>(window: &tauri::WebviewWindow<R>) {
@@ -137,6 +187,13 @@ pub fn reveal<R: Runtime>(window: &tauri::WebviewWindow<R>) {
     }
     let _ = window.show();
     let _ = window.set_focus();
+    // Settings may paint after the welcome, and must not cover it when it does.
+    if window.label() == SETTINGS
+        && let Some(welcome) = window.app_handle().get_webview_window(WELCOME)
+        && welcome.is_visible().unwrap_or(false)
+    {
+        let _ = welcome.set_focus();
+    }
 }
 
 #[cfg(test)]

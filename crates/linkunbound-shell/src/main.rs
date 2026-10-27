@@ -6,7 +6,7 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use linkunbound_core::{
-    Language, Origin, Rule, Store, Strings, Target, data_dir, host_of, is_own_scheme, normalise,
+    Language, Origin, Store, Strings, data_dir, host_of, is_own_scheme, normalise,
 };
 use linkunbound_shell::hotkey::Hotkey;
 use linkunbound_shell::tray::{Asked, Tray};
@@ -15,6 +15,7 @@ use slint::{ComponentHandle, Model};
 
 mod detected;
 mod held;
+mod kept;
 mod look;
 mod mascot;
 mod notice;
@@ -342,6 +343,7 @@ fn answered_by_rule(url: &str, source: Option<&Origin>) -> Option<Fired> {
         });
     })
     .ok()?;
+    store().note_picked();
     Some(Fired {
         rule_id: rule.id.clone(),
         browser,
@@ -356,62 +358,6 @@ fn prefs_touched_at() -> Option<std::time::SystemTime> {
     std::fs::metadata(store().dir().join("preferences.json"))
         .and_then(|m| m.modified())
         .ok()
-}
-
-fn forget(rule_id: &str) {
-    if let Err(why) = store().edit_rules(|rules| rules.remove(rule_id)) {
-        notice::noted("rules", &why.to_string());
-    }
-}
-
-/// Reports rather than swallows: the window says the choice was remembered, and
-/// a failed write would leave that claim false with nothing on screen to correct
-/// it.
-fn remember(
-    url: &str,
-    chosen: &Listed,
-    private: bool,
-    reach: Reaches,
-    source: Option<Origin>,
-) -> bool {
-    let key = source.as_ref().map(|origin| origin.key.clone());
-    let Some(rule) = rule_for(url, chosen, private, reach, key) else {
-        return true;
-    };
-    store()
-        .edit_rules(|rules| {
-            rules.upsert_from(rule.clone(), source.as_ref());
-            true
-        })
-        .map_err(|why| notice::noted("rules", &why.to_string()))
-        .is_ok()
-}
-
-/// `None` when there is nothing to remember. Only the origin reach carries the
-/// app: the others answer the same link whichever one produced it, and without
-/// a known origin that reach has nothing to bind to.
-fn rule_for(
-    url: &str,
-    chosen: &Listed,
-    private: bool,
-    reach: Reaches,
-    source_app: Option<String>,
-) -> Option<Rule> {
-    let host = host_of(url)?;
-    let scope = reach.scope(url, &host)?;
-    if reach.binds_to_the_source() && source_app.is_none() {
-        return None;
-    }
-    Some(Rule {
-        id: String::new(),
-        scope,
-        source_app: reach.binds_to_the_source().then_some(source_app).flatten(),
-        target: Target {
-            browser_id: chosen.browser_id.clone(),
-            profile_id: chosen.profile_id.clone(),
-        },
-        private,
-    })
 }
 
 fn open_settings() {
@@ -1212,11 +1158,12 @@ fn main() -> Result<(), slint::PlatformError> {
                 &url,
             ) {
                 Ok(()) => {
+                    store().note_picked();
                     if let Some(ui) = ui() {
                         ui.launched_at.set(Some(std::time::Instant::now()));
                     }
                     let words = ui().map(|ui| ui.words.get());
-                    if remember(&url, chosen, private, reach, source) {
+                    if kept::remember(&url, chosen, private, reach, source) {
                         look::put_away(&window);
                         drop(held);
                         if let Some(words) = words {
@@ -1267,7 +1214,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let handle = notice.as_weak();
         notice.on_undo(move || {
             if let Some(id) = ui().and_then(|ui| ui.firing.borrow_mut().take()) {
-                forget(&id);
+                kept::forget(&id);
             }
             if let Some(window) = handle.upgrade() {
                 let _ = window.hide();
@@ -1382,10 +1329,9 @@ fn main() -> Result<(), slint::PlatformError> {
 mod tests {
     use super::{
         Arrival, FRONT_SETTLES_WITHIN, INPUT_SETTLES_WITHIN, Listed, Shown, UI, Ui, WAITING_ROOM,
-        claims_the_window, host, link_from, next_in_line, physical, present, rule_for,
-        still_settling, too_soon, wants_no_window, with_icons,
+        claims_the_window, host, link_from, next_in_line, physical, present, still_settling,
+        too_soon, wants_no_window, with_icons,
     };
-    use linkunbound_core::Scope;
     use linkunbound_core::{Language, normalise};
     use linkunbound_shell::{Notice, Picker, Reaches};
     use slint::ComponentHandle;
@@ -1787,87 +1733,6 @@ mod tests {
         };
         assert!(claims_the_window(&mut shown, from_slack.clone(), true).is_none());
         assert_eq!(shown.waiting.pop_front(), Some(from_slack));
-    }
-
-    fn chosen() -> Listed {
-        Listed {
-            browser_id: "chrome".to_owned(),
-            profile_id: Some("Default".to_owned()),
-            name: "Google Chrome".to_owned(),
-            profile: "Personal".to_owned(),
-            icon: None,
-            can_private: true,
-            key: None,
-        }
-    }
-
-    /// The origin is read when the link arrives, because by the time the user
-    /// picks, the picker itself is the foreground window.
-    #[test]
-    fn only_the_origin_reach_binds_the_rule_to_an_app() {
-        let url = "https://github.com/a";
-
-        let bound = rule_for(
-            url,
-            &chosen(),
-            false,
-            Reaches::FromApp,
-            Some("teams".to_owned()),
-        )
-        .expect("an origin reach with a known origin makes a rule");
-        assert_eq!(bound.source_app.as_deref(), Some("teams"));
-        assert_eq!(bound.scope, Scope::Any, "it covers any address");
-
-        let site = rule_for(
-            url,
-            &chosen(),
-            false,
-            Reaches::Site,
-            Some("teams".to_owned()),
-        )
-        .expect("a site reach makes a rule too");
-        assert_eq!(
-            site.source_app, None,
-            "but it answers whichever app produced the link"
-        );
-        assert_eq!(site.scope, Scope::Site("github.com".to_owned()));
-    }
-
-    #[test]
-    fn an_origin_rule_is_not_written_without_an_origin() {
-        assert!(
-            rule_for(
-                "https://github.com/a",
-                &chosen(),
-                false,
-                Reaches::FromApp,
-                None
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn just_this_time_leaves_nothing_behind() {
-        assert!(
-            rule_for(
-                "https://github.com/a",
-                &chosen(),
-                false,
-                Reaches::Once,
-                None
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn the_rule_carries_the_profile_and_the_private_choice() {
-        let rule = rule_for("https://github.com/a", &chosen(), true, Reaches::Site, None)
-            .expect("should make a rule");
-        assert_eq!(rule.target.browser_id, "chrome");
-        assert_eq!(rule.target.profile_id.as_deref(), Some("Default"));
-        assert!(rule.private);
     }
 
     #[test]
