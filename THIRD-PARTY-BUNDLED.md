@@ -226,7 +226,7 @@ also under About → Licence texts.
 | `powerfmt` | 0.2.0 | MIT OR Apache-2.0 |
 | `psl-types` | 2.0.11 | MIT/Apache-2.0 |
 | `psl` | 2.1.238 | MIT/Apache-2.0 |
-| `pulldown-cmark` | 0.13.4 | MIT |
+| `pulldown-cmark` | 0.13.6 | MIT |
 | `pxfm` | 0.1.30 | BSD-3-Clause OR Apache-2.0 |
 | `quick-error` | 2.0.1 | MIT/Apache-2.0 |
 | `quick-xml` | 0.42.0 | MIT |

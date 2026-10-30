@@ -9651,7 +9651,7 @@ SOFTWARE.
 
 ## Text 147
 
-`pulldown-cmark` 0.13.4
+`pulldown-cmark` 0.13.6
 
 ```text
 The MIT License
