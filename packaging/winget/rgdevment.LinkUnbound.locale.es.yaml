@@ -1,7 +1,7 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.12.0.schema.json
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.28.0.schema.json
 
 PackageIdentifier: rgdevment.LinkUnbound
-PackageVersion: 2.1.0
+PackageVersion: 2.8.0
 PackageLocale: es
 Publisher: rgdevment
 PublisherUrl: https://github.com/rgdevment
@@ -31,6 +31,6 @@ Tags:
   - productividad
   - sin-conexion
   - utilidad
-ReleaseNotesUrl: https://github.com/rgdevment/LinkUnbound/releases/tag/v2.1.0
+ReleaseNotesUrl: https://github.com/rgdevment/LinkUnbound/releases/tag/v2.8.0
 ManifestType: locale
-ManifestVersion: 1.12.0
+ManifestVersion: 1.28.0
