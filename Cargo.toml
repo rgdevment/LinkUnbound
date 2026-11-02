@@ -25,19 +25,21 @@ slint = { version = "1.17", default-features = false, features = [
 ] }
 slint-build = "1.17"
 tray-icon = "0.24"
-global-hotkey = "0.8"
+global-hotkey = "0.9"
 muda = "0.19"
 interprocess = "2.4"
 # No tray feature: the resident owns the tray, through the `tray-icon` crate.
 # `common-controls-v6` is a default feature, and Cargo unifies features across
 # the workspace: it put a TaskDialogIndirect import into the resident, whose
 # test binaries carry no manifest to satisfy it.
-tauri = { version = "2", default-features = false, features = ["wry", "compression"] }
+# tauri 2.12 moves to muda 0.20 while slint stays on 0.19: two muda break the macOS link.
+tauri = { version = "~2.11", default-features = false, features = ["wry", "compression"] }
 tauri-build = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-updater = "2"
+# Without `zip`: the updater only unzips v1-style Windows bundles, and ours ship the bare installer.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
 reqwest = { version = "0.12", default-features = false, features = [
   "blocking",
   "rustls-tls-native-roots",
