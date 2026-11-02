@@ -19,12 +19,12 @@ also under About → Licence texts.
 | `markdown-it` | 15.0.3 | MIT |
 | `mdurl` | 2.1.0 | MIT |
 | `punycode.js` | 2.3.1 | MIT |
-| `react` | 19.3.0 | MIT |
-| `react-dom` | 19.3.0 | MIT |
+| `react` | 19.3.1 | MIT |
+| `react-dom` | 19.3.1 | MIT |
 | `scheduler` | 0.28.0 | MIT |
 | `uc.micro` | 3.0.0 | MIT |
 
-## In the core (367 crates)
+## In the core (364 crates)
 
 | Crate | Version | Licence |
 | --- | --- | --- |
@@ -113,7 +113,7 @@ also under About → Licence texts.
 | `getrandom` | 0.4.3 | MIT OR Apache-2.0 |
 | `gif` | 0.14.2 | MIT OR Apache-2.0 |
 | `glob` | 0.3.4 | MIT OR Apache-2.0 |
-| `global-hotkey` | 0.8.0 | Apache-2.0 OR MIT |
+| `global-hotkey` | 0.9.0 | Apache-2.0 OR MIT |
 | `h2` | 0.4.19 | MIT |
 | `harfrust` | 0.12.0 | MIT |
 | `hashbrown` | 0.16.1 | MIT OR Apache-2.0 |
@@ -154,7 +154,7 @@ also under About → Licence texts.
 | `imgref` | 1.12.3 | CC0-1.0 OR Apache-2.0 |
 | `indexmap` | 2.14.2 | Apache-2.0 OR MIT |
 | `infer` | 0.22.0 | MIT |
-| `interprocess` | 2.4.4 | 0BSD OR Apache-2.0 |
+| `interprocess` | 2.4.7 | 0BSD OR Apache-2.0 |
 | `ipnet` | 2.12.2 | MIT OR Apache-2.0 |
 | `itoa` | 1.0.18 | MIT OR Apache-2.0 |
 | `json-patch` | 4.2.0 | MIT/Apache-2.0 |
@@ -162,7 +162,7 @@ also under About → Licence texts.
 | `keyboard-types` | 0.7.0 | MIT OR Apache-2.0 |
 | `keyboard-types` | 0.8.3 | MIT OR Apache-2.0 |
 | `kurbo` | 0.13.1 | Apache-2.0 OR MIT |
-| `libc` | 0.2.189 | MIT OR Apache-2.0 |
+| `libc` | 0.2.191 | MIT OR Apache-2.0 |
 | `libm` | 0.2.16 | MIT |
 | `linebender_resource_handle` | 0.1.1 | Apache-2.0 OR MIT |
 | `litemap` | 0.8.3 | Unicode-3.0 |
@@ -203,7 +203,7 @@ also under About → Licence texts.
 | `objc2-uniform-type-identifiers` | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | `objc2-web-kit` | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | `objc2` | 0.5.2 | MIT |
-| `objc2` | 0.6.4 | MIT |
+| `objc2` | 0.6.5 | MIT |
 | `once_cell` | 1.21.4 | MIT OR Apache-2.0 |
 | `open` | 5.4.4 | MIT |
 | `option-ext` | 0.2.0 | MPL-2.0 |
@@ -227,7 +227,7 @@ also under About → Licence texts.
 | `potential_utf` | 0.1.6 | Unicode-3.0 |
 | `powerfmt` | 0.2.0 | MIT OR Apache-2.0 |
 | `psl-types` | 2.0.11 | MIT/Apache-2.0 |
-| `psl` | 2.1.238 | MIT/Apache-2.0 |
+| `psl` | 2.1.245 | MIT/Apache-2.0 |
 | `pulldown-cmark` | 0.13.6 | MIT |
 | `pxfm` | 0.1.30 | BSD-3-Clause OR Apache-2.0 |
 | `quick-error` | 2.0.1 | MIT/Apache-2.0 |
@@ -259,7 +259,7 @@ also under About → Licence texts.
 | `security-framework` | 3.7.0 | MIT OR Apache-2.0 |
 | `semver` | 1.0.28 | MIT OR Apache-2.0 |
 | `serde_core` | 1.0.229 | MIT OR Apache-2.0 |
-| `serde_json` | 1.0.151 | MIT OR Apache-2.0 |
+| `serde_json` | 1.0.154 | MIT OR Apache-2.0 |
 | `serde_spanned` | 1.1.1 | MIT OR Apache-2.0 |
 | `serde_urlencoded` | 0.7.1 | MIT/Apache-2.0 |
 | `serde_with` | 3.23.0 | MIT OR Apache-2.0 |
@@ -346,7 +346,6 @@ also under About → Licence texts.
 | `widestring` | 1.2.1 | MIT OR Apache-2.0 |
 | `winapi-util` | 0.1.11 | Unlicense OR MIT |
 | `window-vibrancy` | 0.8.1 | Apache-2.0 OR MIT |
-| `windows_x86_64_msvc` | 0.48.5 | MIT OR Apache-2.0 |
 | `windows_x86_64_msvc` | 0.52.6 | MIT OR Apache-2.0 |
 | `windows_x86_64_msvc` | 0.53.1 | MIT OR Apache-2.0 |
 | `windows-collections` | 0.2.0 | MIT OR Apache-2.0 |
@@ -364,12 +363,10 @@ also under About → Licence texts.
 | `windows-result` | 0.4.1 | MIT OR Apache-2.0 |
 | `windows-strings` | 0.4.2 | MIT OR Apache-2.0 |
 | `windows-strings` | 0.5.1 | MIT OR Apache-2.0 |
-| `windows-sys` | 0.48.0 | MIT OR Apache-2.0 |
 | `windows-sys` | 0.52.0 | MIT OR Apache-2.0 |
 | `windows-sys` | 0.59.0 | MIT OR Apache-2.0 |
 | `windows-sys` | 0.60.2 | MIT OR Apache-2.0 |
 | `windows-sys` | 0.61.2 | MIT OR Apache-2.0 |
-| `windows-targets` | 0.48.5 | MIT OR Apache-2.0 |
 | `windows-targets` | 0.52.6 | MIT OR Apache-2.0 |
 | `windows-targets` | 0.53.5 | MIT OR Apache-2.0 |
 | `windows-threading` | 0.1.0 | MIT OR Apache-2.0 |

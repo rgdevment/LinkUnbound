@@ -4,7 +4,7 @@
 
 Every crate in [THIRD-PARTY-BUNDLED.md](https://github.com/rgdevment/LinkUnbound/blob/main/THIRD-PARTY-BUNDLED.md)
 comes with the licence text it ships, or, when it ships none, the text of the licence it declares.
-Each text appears once, under the crates that carry it: 236 texts for 367 crates.
+Each text appears once, under the crates that carry it: 236 texts for 364 crates.
 
 ## Text 1
 
@@ -235,7 +235,7 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ## Text 3
 
-`adler2` 2.0.1, `allocator-api2` 0.2.21, `anyhow` 1.0.104, `atomic-waker` 1.1.2, `erased-serde` 0.4.10, `fastrand` 2.5.0, `itoa` 1.0.18, `once_cell` 1.21.4, `pin-project-lite` 0.2.17, `pin-project` 1.1.13, `portable-atomic` 1.15.0, `rustix` 1.1.5, `semver` 1.0.28, `serde_core` 1.0.229, `serde_json` 1.0.151, `serde-untagged` 0.1.9, `serde` 1.0.229, `smol_str` 0.2.2, `thiserror` 2.0.21, `typed-path` 0.13.0, `typeid` 1.0.3, `zmij` 1.0.23
+`adler2` 2.0.1, `allocator-api2` 0.2.21, `anyhow` 1.0.104, `atomic-waker` 1.1.2, `erased-serde` 0.4.10, `fastrand` 2.5.0, `itoa` 1.0.18, `once_cell` 1.21.4, `pin-project-lite` 0.2.17, `pin-project` 1.1.13, `portable-atomic` 1.15.0, `rustix` 1.1.5, `semver` 1.0.28, `serde_core` 1.0.229, `serde_json` 1.0.154, `serde-untagged` 0.1.9, `serde` 1.0.229, `smol_str` 0.2.2, `thiserror` 2.0.21, `typed-path` 0.13.0, `typeid` 1.0.3, `zmij` 1.0.23
 
 ```text
 Permission is hereby granted, free of charge, to any
@@ -357,7 +357,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Text 8
 
-`allocator-api2` 0.2.21, `anyhow` 1.0.104, `erased-serde` 0.4.10, `itoa` 1.0.18, `libc` 0.2.189, `osakit` 0.3.1, `ryu` 1.0.23, `semver` 1.0.28, `serde_core` 1.0.229, `serde_json` 1.0.151, `serde_urlencoded` 0.7.1, `serde-untagged` 0.1.9, `serde` 1.0.229, `thiserror` 2.0.21, `typed-path` 0.13.0, `typeid` 1.0.3
+`allocator-api2` 0.2.21, `anyhow` 1.0.104, `erased-serde` 0.4.10, `itoa` 1.0.18, `libc` 0.2.191, `osakit` 0.3.1, `ryu` 1.0.23, `semver` 1.0.28, `serde_core` 1.0.229, `serde_json` 1.0.154, `serde_urlencoded` 0.7.1, `serde-untagged` 0.1.9, `serde` 1.0.229, `thiserror` 2.0.21, `typed-path` 0.13.0, `typeid` 1.0.3
 
 ```text
 Apache License
@@ -784,7 +784,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Text 12
 
-`arrayvec` 0.7.8, `atomic-waker` 1.1.2, `base64` 0.22.1, `base64` 0.23.1, `bitflags` 1.3.2, `bitflags` 2.13.2, `cfg-if` 1.0.5, `core_detect` 1.0.0, `core-foundation-sys` 0.8.7, `core-foundation` 0.10.1, `core-foundation` 0.9.4, `core-graphics-types` 0.1.3, `core-graphics-types` 0.2.0, `core-graphics` 0.23.2, `core-graphics` 0.25.0, `critical-section` 1.2.0, `crossbeam-channel` 0.5.17, `crossbeam-utils` 0.8.23, `data-url` 0.3.2, `equivalent` 1.0.2, `errno` 0.3.14, `euclid` 0.22.14, `fastrand` 2.5.0, `filetime` 0.2.29, `flate2` 1.1.10, `fnv` 1.0.7, `fontique` 0.11.1, `form_urlencoded` 1.2.2, `gif` 0.14.2, `glob` 0.3.4, `global-hotkey` 0.8.0, `hashbrown` 0.16.1, `hashbrown` 0.17.1, `heck` 0.5.0, `htmlparser` 0.2.1, `httparse` 1.10.1, `hyper-rustls` 0.27.10, `idna_adapter` 1.2.2, `idna` 1.1.0, `indexmap` 2.14.2, `keyboard-types` 0.7.0, `keyboard-types` 0.8.3, `lock_api` 0.4.14, `log` 0.4.34, `mime` 0.3.17, `muda` 0.19.3, `muda` 0.20.0, `num-traits` 0.2.19, `once_cell` 1.21.4, `parking_lot_core` 0.9.12, `parking_lot` 0.12.5, `parlance` 0.1.0, `parley_data` 0.11.1, `parley` 0.11.1, `percent-encoding` 2.3.2, `png` 0.18.1, `psl-types` 2.0.11, `regex-automata` 0.4.18, `regex-syntax` 0.8.11, `regex` 1.13.1, `roxmltree` 0.21.1, `rustix` 1.1.5, `rustls-native-certs` 0.8.4, `rustls` 0.23.46, `scoped-tls-hkt` 0.1.5, `scopeguard` 1.2.0, `security-framework-sys` 2.17.0, `security-framework` 3.7.0, `serde_with` 3.23.0, `simplecss` 0.2.2, `smallvec` 1.16.1, `smol_str` 0.2.2, `socket2` 0.6.5, `stable_deref_trait` 1.2.1, `svgtypes` 0.16.1, `swash` 0.2.10, `system-configuration-sys` 0.6.0, `system-configuration` 0.7.0, `tar` 0.4.46, `tempfile` 3.27.0, `tray-icon` 0.24.2, `unicase` 2.9.0, `unicode-bidi` 0.3.18, `unicode-segmentation` 1.13.3, `unicode-vo` 0.1.0, `url` 2.5.8, `uuid` 1.26.1, `weezl` 0.1.12, `window-vibrancy` 0.8.1, `wry` 0.57.1, `xattr` 1.6.1, `yazi` 0.2.1, `zeno` 0.3.3
+`arrayvec` 0.7.8, `atomic-waker` 1.1.2, `base64` 0.22.1, `base64` 0.23.1, `bitflags` 1.3.2, `bitflags` 2.13.2, `cfg-if` 1.0.5, `core_detect` 1.0.0, `core-foundation-sys` 0.8.7, `core-foundation` 0.10.1, `core-foundation` 0.9.4, `core-graphics-types` 0.1.3, `core-graphics-types` 0.2.0, `core-graphics` 0.23.2, `core-graphics` 0.25.0, `critical-section` 1.2.0, `crossbeam-channel` 0.5.17, `crossbeam-utils` 0.8.23, `data-url` 0.3.2, `equivalent` 1.0.2, `errno` 0.3.14, `euclid` 0.22.14, `fastrand` 2.5.0, `filetime` 0.2.29, `flate2` 1.1.10, `fnv` 1.0.7, `fontique` 0.11.1, `form_urlencoded` 1.2.2, `gif` 0.14.2, `glob` 0.3.4, `global-hotkey` 0.9.0, `hashbrown` 0.16.1, `hashbrown` 0.17.1, `heck` 0.5.0, `htmlparser` 0.2.1, `httparse` 1.10.1, `hyper-rustls` 0.27.10, `idna_adapter` 1.2.2, `idna` 1.1.0, `indexmap` 2.14.2, `keyboard-types` 0.7.0, `keyboard-types` 0.8.3, `lock_api` 0.4.14, `log` 0.4.34, `mime` 0.3.17, `muda` 0.19.3, `muda` 0.20.0, `num-traits` 0.2.19, `once_cell` 1.21.4, `parking_lot_core` 0.9.12, `parking_lot` 0.12.5, `parlance` 0.1.0, `parley_data` 0.11.1, `parley` 0.11.1, `percent-encoding` 2.3.2, `png` 0.18.1, `psl-types` 2.0.11, `regex-automata` 0.4.18, `regex-syntax` 0.8.11, `regex` 1.13.1, `roxmltree` 0.21.1, `rustix` 1.1.5, `rustls-native-certs` 0.8.4, `rustls` 0.23.46, `scoped-tls-hkt` 0.1.5, `scopeguard` 1.2.0, `security-framework-sys` 2.17.0, `security-framework` 3.7.0, `serde_with` 3.23.0, `simplecss` 0.2.2, `smallvec` 1.16.1, `smol_str` 0.2.2, `socket2` 0.6.5, `stable_deref_trait` 1.2.1, `svgtypes` 0.16.1, `swash` 0.2.10, `system-configuration-sys` 0.6.0, `system-configuration` 0.7.0, `tar` 0.4.46, `tempfile` 3.27.0, `tray-icon` 0.24.2, `unicase` 2.9.0, `unicode-bidi` 0.3.18, `unicode-segmentation` 1.13.3, `unicode-vo` 0.1.0, `url` 2.5.8, `uuid` 1.26.1, `weezl` 0.1.12, `window-vibrancy` 0.8.1, `wry` 0.57.1, `xattr` 1.6.1, `yazi` 0.2.1, `zeno` 0.3.3
 
 ```text
 Apache License
@@ -1192,7 +1192,7 @@ SOFTWARE.
 
 ## Text 19
 
-`block2` 0.6.2, `objc-sys` 0.3.5, `objc2-encode` 4.1.0, `objc2` 0.6.4
+`block2` 0.6.2, `objc-sys` 0.3.5, `objc2-encode` 4.1.0, `objc2` 0.6.5
 
 ```text
 MIT License
@@ -5462,7 +5462,7 @@ SOFTWARE.
 
 ## Text 82
 
-`global-hotkey` 0.8.0, `muda` 0.19.3, `muda` 0.20.0, `tray-icon` 0.24.2
+`global-hotkey` 0.9.0, `muda` 0.19.3, `muda` 0.20.0, `tray-icon` 0.24.2
 
 ```text
 MIT License
@@ -5490,7 +5490,7 @@ SOFTWARE.
 
 ## Text 83
 
-`global-hotkey` 0.8.0
+`global-hotkey` 0.9.0
 
 ```text
 SPDXVersion: SPDX-2.1
@@ -6846,7 +6846,7 @@ SOFTWARE.
 
 ## Text 106
 
-`interprocess` 2.4.4
+`interprocess` 2.4.7
 
 ```text
 Apache License
@@ -7029,7 +7029,7 @@ END OF TERMS AND CONDITIONS
 
 ## Text 107
 
-`interprocess` 2.4.4
+`interprocess` 2.4.7
 
 ```text
 BSD Zero Clause License
@@ -7594,7 +7594,7 @@ DEALINGS IN THE SOFTWARE.
 
 ## Text 115
 
-`libc` 0.2.189
+`libc` 0.2.191
 
 ```text
 Copyright (c) The Rust Project Developers
@@ -9656,7 +9656,7 @@ SOFTWARE.
 
 ## Text 147
 
-`psl` 2.1.238
+`psl` 2.1.245
 
 ```text
 MIT License
@@ -13523,7 +13523,7 @@ Creator: Person: Daniel Thompson-Yvetot
 
 ## Text 225
 
-`windows_x86_64_msvc` 0.48.5, `windows_x86_64_msvc` 0.52.6, `windows_x86_64_msvc` 0.53.1, `windows-collections` 0.2.0, `windows-collections` 0.3.2, `windows-core` 0.61.2, `windows-core` 0.62.2, `windows-future` 0.2.1, `windows-future` 0.3.2, `windows-link` 0.1.3, `windows-link` 0.2.1, `windows-numerics` 0.2.0, `windows-numerics` 0.3.1, `windows-registry` 0.6.1, `windows-result` 0.3.4, `windows-result` 0.4.1, `windows-strings` 0.4.2, `windows-strings` 0.5.1, `windows-sys` 0.48.0, `windows-sys` 0.52.0, `windows-sys` 0.59.0, `windows-sys` 0.60.2, `windows-sys` 0.61.2, `windows-targets` 0.48.5, `windows-targets` 0.52.6, `windows-targets` 0.53.5, `windows-threading` 0.1.0, `windows-threading` 0.2.1, `windows-version` 0.1.7, `windows` 0.61.3, `windows` 0.62.2
+`windows_x86_64_msvc` 0.52.6, `windows_x86_64_msvc` 0.53.1, `windows-collections` 0.2.0, `windows-collections` 0.3.2, `windows-core` 0.61.2, `windows-core` 0.62.2, `windows-future` 0.2.1, `windows-future` 0.3.2, `windows-link` 0.1.3, `windows-link` 0.2.1, `windows-numerics` 0.2.0, `windows-numerics` 0.3.1, `windows-registry` 0.6.1, `windows-result` 0.3.4, `windows-result` 0.4.1, `windows-strings` 0.4.2, `windows-strings` 0.5.1, `windows-sys` 0.52.0, `windows-sys` 0.59.0, `windows-sys` 0.60.2, `windows-sys` 0.61.2, `windows-targets` 0.52.6, `windows-targets` 0.53.5, `windows-threading` 0.1.0, `windows-threading` 0.2.1, `windows-version` 0.1.7, `windows` 0.61.3, `windows` 0.62.2
 
 ```text
 Apache License
@@ -13731,7 +13731,7 @@ Apache License
 
 ## Text 226
 
-`windows_x86_64_msvc` 0.48.5, `windows_x86_64_msvc` 0.52.6, `windows_x86_64_msvc` 0.53.1, `windows-collections` 0.2.0, `windows-collections` 0.3.2, `windows-core` 0.61.2, `windows-core` 0.62.2, `windows-future` 0.2.1, `windows-future` 0.3.2, `windows-link` 0.1.3, `windows-link` 0.2.1, `windows-numerics` 0.2.0, `windows-numerics` 0.3.1, `windows-registry` 0.6.1, `windows-result` 0.3.4, `windows-result` 0.4.1, `windows-strings` 0.4.2, `windows-strings` 0.5.1, `windows-sys` 0.48.0, `windows-sys` 0.52.0, `windows-sys` 0.59.0, `windows-sys` 0.60.2, `windows-sys` 0.61.2, `windows-targets` 0.48.5, `windows-targets` 0.52.6, `windows-targets` 0.53.5, `windows-threading` 0.1.0, `windows-threading` 0.2.1, `windows-version` 0.1.7, `windows` 0.61.3, `windows` 0.62.2
+`windows_x86_64_msvc` 0.52.6, `windows_x86_64_msvc` 0.53.1, `windows-collections` 0.2.0, `windows-collections` 0.3.2, `windows-core` 0.61.2, `windows-core` 0.62.2, `windows-future` 0.2.1, `windows-future` 0.3.2, `windows-link` 0.1.3, `windows-link` 0.2.1, `windows-numerics` 0.2.0, `windows-numerics` 0.3.1, `windows-registry` 0.6.1, `windows-result` 0.3.4, `windows-result` 0.4.1, `windows-strings` 0.4.2, `windows-strings` 0.5.1, `windows-sys` 0.52.0, `windows-sys` 0.59.0, `windows-sys` 0.60.2, `windows-sys` 0.61.2, `windows-targets` 0.52.6, `windows-targets` 0.53.5, `windows-threading` 0.1.0, `windows-threading` 0.2.1, `windows-version` 0.1.7, `windows` 0.61.3, `windows` 0.62.2
 
 ```text
 MIT License
