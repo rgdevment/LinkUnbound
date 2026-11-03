@@ -3,19 +3,4 @@ set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)" || exit 0
 
-written=$(sed '/^# -* >8 -*$/,$d' "$1" | git stripspace --strip-comments)
-[ -n "$written" ] || exit 0
-# Git folds the whole first paragraph into the subject, so a wrapped one is measured as one line.
-said=$(printf '%s\n' "$written" | sed -n '1,/^$/p' | paste -sd' ' -)
-
-case $said in
-  "Merge "* | 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*) ;;
-  *)
-    if [ -n "$(printf '%s\n' "$written" | sed '1,/^$/d')" ]; then
-      echo "x  a commit is one line, with nothing under it"
-      exit 1
-    fi
-    ;;
-esac
-
-exec bash scripts/commits.sh --subject "$said"
+exec bash scripts/commits.sh --message "$1"

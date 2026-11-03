@@ -16,9 +16,17 @@ amiss() {
   status=1
 }
 
+# What git writes on its own for a merge, a revert or a fixup keeps the shape git gave it.
+written_by_git() {
+  case $1 in
+    "Merge "* | 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*) return 0 ;;
+  esac
+  return 1
+}
+
 # Strict is for a title, which reaches main: only a revert keeps its shape there, and it is measured.
 weighed() {
-  local who=$1 said=$2 strict=${3:-}
+  local who=$1 said=$2 strict=${3:-} roomy=${4:-}
   said=$(printf '%s' "$said" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   case $said in
     *$'\n'*)
@@ -27,12 +35,8 @@ weighed() {
       return
       ;;
   esac
-  if [ -z "$strict" ]; then
-    case $said in
-      "Merge "* | 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*)
-        return
-        ;;
-    esac
+  if [ -z "$strict" ] && written_by_git "$said"; then
+    return
   fi
   case $said in
     'Revert "'*) ;;
@@ -49,23 +53,13 @@ weighed() {
   long=$(printf '%s' "$said" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
   # A subject can become the squash title, and GitHub ends that with " (#1234)", so it leaves the room.
   local room=$most
-  [ -n "$strict" ] || room=$((most - 8))
+  [ -n "$strict$roomy" ] || room=$((most - 8))
   if [ "$long" -gt "$room" ]; then
     amiss "$who is $long characters, keep it under $room"
     printf '  %s\n' "$said"
   fi
 }
 
-# A commit is one line; what git wrote for a revert, a fixup or Dependabot is let through.
-nothing_under() {
-  local author subject body
-  IFS=$'\x1f' read -r -d '' author subject body < <(git log -1 -z --format='%an%x1f%s%x1f%b' "$1")
-  case $subject in 'Revert "'* | "fixup! "* | "squash! "* | "amend! "*) return ;; esac
-  [ "$author" != "dependabot[bot]" ] || return
-  if [ -n "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
-    amiss "${1:0:8} carries lines under its subject; a commit is one line"
-  fi
-}
 
 said_so() {
   if [ "$status" -eq 1 ]; then
@@ -84,8 +78,21 @@ if [ "${1:-}" = "--subject" ] || [ "${1:-}" = "--title" ]; then
   said_so
 fi
 
-# A branch says what kind of change it carries, the way its commits do; main, a detached head and
-# the branches GitHub names for Dependabot say nothing.
+# Git folds the whole first paragraph into the subject, so a wrapped one is measured as one line.
+if [ "${1:-}" = "--message" ]; then
+  [ -f "${2:-}" ] || { echo "usage: commits.sh --message <file>"; exit 2; }
+  written=$(sed '/^# -* >8 -*$/,$d' "$2" | git stripspace --strip-comments)
+  [ -n "$written" ] || exit 0
+  said=$(printf '%s\n' "$written" | sed -n '1,/^$/p' | paste -sd' ' -)
+  if ! written_by_git "$said" && [ -n "$(printf '%s\n' "$written" | sed '1,/^$/d')" ]; then
+    amiss "a commit is one line, with nothing under it"
+  fi
+  weighed "the subject" "$said"
+  [ "$status" -eq 0 ] && printf 'ok the subject is well formed\n'
+  said_so
+fi
+
+# Main, a detached head and the branches GitHub names for Dependabot say no kind of change.
 if [ "${1:-}" = "--branch" ]; then
   shift
   for name in "$@"; do
@@ -105,22 +112,34 @@ if [ "${1:-}" = "--landed" ]; then
   shift
 fi
 range=${1:-}
-[ -n "$range" ] || { echo "usage: commits.sh [--landed] <range> | --subject <text> | --title <text> | --branch <name>..."; exit 2; }
+[ -n "$range" ] || {
+  echo "usage: commits.sh [--landed] <range> | --subject <text> | --title <text> | --message <file> | --branch <name>..."
+  exit 2
+}
 
-listed=$(git rev-list --no-merges "$range" 2>&1) || {
-  printf '%s\n' "$listed"
+listed=$(mktemp) || { amiss "no temporary file could be made, so no subject was looked at"; exit 1; }
+trap 'rm -f "$listed"' EXIT
+said=$(git log -z --no-merges --format='%H%x1f%an%x1f%s%x1f%b' "$range" 2>&1 > "$listed") || {
+  printf '%s\n' "$said"
   amiss "the commits between $range could not be listed, so no subject was looked at"
   exit 1
 }
 
 seen=0
-while read -r sha; do
+while IFS=$'\x1f' read -r -d '' sha author subject body; do
   [ -n "$sha" ] || continue
   seen=$((seen + 1))
-  weighed "${sha:0:8}" "$(git log -1 --format=%s "$sha")" "$strict"
+  # Dependabot cannot be told to write shorter subjects; commits.yml cuts its title instead.
+  bot=
+  [ "$author" != "dependabot[bot]" ] || bot=bot
+  weighed "${sha:0:8}" "$subject" "$strict" "$bot"
   # On main a squash carries the pull request's body, so only a branch's own commits are held to one line.
-  [ -n "$strict" ] || nothing_under "$sha"
-done <<< "$listed"
+  [ -z "$strict$bot" ] || continue
+  written_by_git "$subject" && continue
+  if [ -n "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
+    amiss "${sha:0:8} carries lines under its subject; a commit is one line"
+  fi
+done < "$listed"
 
 [ "$status" -eq 0 ] && [ -z "${GITHUB_ACTIONS:-}" ] && printf 'ok %s commit subject(s) well formed\n' "$seen"
 said_so

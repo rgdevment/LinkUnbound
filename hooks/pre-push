@@ -21,6 +21,9 @@ remote=${1:-origin}
 # A push straight to a URL names no remote, and is measured against origin's.
 git remote get-url "$remote" > /dev/null 2>&1 || remote=origin
 main=$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2> /dev/null || echo "$remote/main")
+# A remote never fetched here has no main to measure by, and origin's is the nearest.
+git rev-parse -q --verify "$main^{commit}" > /dev/null \
+  || main=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2> /dev/null || echo origin/main)
 
 nothing=0000000000000000000000000000000000000000
 status=0

@@ -17,7 +17,7 @@ git checkout-index --all --ignore-skip-worktree-bits --prefix="$staged/" || {
 biome="$PWD/app/node_modules/.bin/biome"
 
 bash "$staged/scripts/rules.sh" < /dev/null || status=1
-bash "$staged/scripts/commits.sh" --branch "$(git rev-parse --abbrev-ref HEAD)" || status=1
+bash "$staged/scripts/commits.sh" --branch "$(git symbolic-ref -q --short HEAD || echo HEAD)" || status=1
 
 quietly() {
   local said
@@ -41,14 +41,11 @@ else
   echo "!  app/node_modules is not here, so biome did not look at the window"
 fi
 
-# The rules job refuses a lockfile the notices do not follow; written here, the fix is one `git add` away.
-if git diff --cached --name-only | grep -qE '(^|/)(Cargo\.lock|package-lock\.json)$'; then
-  if [ -d app/node_modules ]; then
-    quietly 'node scripts/third-party.mjs > /dev/null && git diff --quiet -- THIRD-PARTY-BUNDLED.md THIRD-PARTY-LICENSES.md' \
-      "the notices were behind the lockfiles; npm run notices just wrote them, so stage them"
-  else
-    echo "!  app/node_modules is not here, so the notices were not checked against the lockfiles"
-  fi
+# Writing the notices takes a build, which belongs to CI; a staged lockfile without them only gets a reminder.
+moved=$(git diff --cached --name-only)
+if grep -qE '(^|/)(Cargo\.lock|package-lock\.json)$' <<< "$moved" \
+  && ! grep -qE '^THIRD-PARTY-(BUNDLED|LICENSES)\.md$' <<< "$moved"; then
+  echo "!  a lockfile is staged without the notices; npm run notices writes them, and the rules job compares them"
 fi
 
 exit $status

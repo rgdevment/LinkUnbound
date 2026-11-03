@@ -115,9 +115,7 @@ jobs:
             cargo test -p linkunbound-core --quiet || exit 1
           done
 
-  # An advisory or a yank lands on crates.io any day, and the first anyone heard of it was a red
-  # main. Every morning this reads the lock the way CI does and, when something fails, moves only
-  # the crates named to their newest compatible release and leaves the branch ready to open.
+  # An advisory lands any day; this moves only the crates it names, so a branch is ready before a red main is news.
   advisories:
     name: The crates an advisory names move past it
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -187,13 +185,22 @@ jobs:
           CRATES: ${{ steps.move.outputs.crates }}
         run: |
           set -euo pipefail
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # A commit someone added to the open branch is work; forcing today's lock over it would throw it away.
+          if git ls-remote --exit-code --heads "$remote" "$BRANCH" > /dev/null; then
+            git fetch -q "$remote" "$BRANCH"
+            if git log --no-merges --format=%an HEAD..FETCH_HEAD | grep -vqx 'github-actions\[bot\]'; then
+              echo "::error::$BRANCH carries commits by hand, so it was left as it is; merge or close it: https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}"
+              exit 1
+            fi
+          fi
           subject="fix(deps): $CRATES past today's advisories"
           [ "$(printf '%s' "$subject" | wc -m)" -le 110 ] || subject="fix(deps): the crates past today's advisories"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
           git commit -qm "$subject" Cargo.lock THIRD-PARTY-BUNDLED.md THIRD-PARTY-LICENSES.md
-          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+          git push -f "$remote" "$BRANCH"
           # Red on purpose: main fails the same check until this is merged, and a red run is what reaches the inbox.
           echo "::error::$subject — open it: https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}?expand=1"
           exit 1
