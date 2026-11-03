@@ -46,17 +46,33 @@ jobs:
           exit $status
 
       # Parsing says nothing of a needs that names a job that is gone, or of input expanded into a shell.
-      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: zizmor@1.30.1
+      # Offline, so a pull request is judged on its own lines and never on whether GitHub's API answered.
       - name: The workflows mean what they say
         env:
-          GH_TOKEN: ${{ github.token }}
           SHELLCHECK_OPTS: --severity=warning
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$(go env GOPATH)/bin/actionlint"
-          zizmor --min-severity medium .github
+          zizmor --offline --min-severity medium .github
+
+      - name: No action pinned here has a known vulnerability
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          # zizmor exits 1 only when it could not finish; findings exit 10 or more and are not retried.
+          for try in 1 2 3; do
+            code=0
+            zizmor --min-severity medium .github || code=$?
+            [ "$code" -ne 1 ] && exit "$code"
+            echo "::warning::try $try did not finish; asking GitHub again in a minute"
+            sleep 60
+          done
+          exit 1
 
       # One implementation for the conventions a person can break in a second: the hook runs
       # the same file, so local and CI can never drift into saying different things.
@@ -98,6 +114,96 @@ jobs:
           for _ in $(seq 1 20); do
             cargo test -p linkunbound-core --quiet || exit 1
           done
+
+  # An advisory lands any day; this moves only the crates it names, so a branch is ready before a red main is news.
+  advisories:
+    name: The crates an advisory names move past it
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      BRANCH: fix/advisories
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: ./.github/actions/toolchain
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-deny
+
+      - name: Read the lock and move what it names
+        id: move
+        run: |
+          set -uo pipefail
+          if cargo deny --format json check advisories 2> "$RUNNER_TEMP/deny.json"; then
+            echo "Nothing in the lock has an advisory or a yank against it."
+            exit 0
+          fi
+          mapfile -t named < <(jq -r 'select(.type == "diagnostic" and .fields.severity == "error")
+            | .fields.graphs[]?.Krate | "\(.name)@\(.version)"' "$RUNNER_TEMP/deny.json" | sort -u)
+          if [ "${#named[@]}" -eq 0 ]; then
+            cat "$RUNNER_TEMP/deny.json"
+            echo "::error::cargo-deny failed without naming a crate; read the log above."
+            exit 1
+          fi
+          for one in "${named[@]}"; do
+            cargo update -p "$one" || echo "::warning::$one has no compatible release to move to"
+          done
+          if git diff --quiet Cargo.lock; then
+            echo "::error::no compatible release moves past ${named[*]}: it needs a hand, or an entry in deny.toml."
+            exit 1
+          fi
+          if ! cargo deny check advisories; then
+            echo "::error::the lock moved but still fails; the branch was not pushed."
+            exit 1
+          fi
+          crates=$(printf '%s\n' "${named[@]}" | sed 's/@.*//' | sort -u | paste -sd, - | sed 's/,/, /g')
+          echo "crates=$crates" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.move.outputs.crates != ''
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # The notices job refuses a lock the notices do not match, so they move with it.
+      - name: The notices the new lock carries
+        if: steps.move.outputs.crates != ''
+        run: |
+          npm ci --prefix app
+          npm run notices
+
+      - name: Leave the branch ready
+        if: steps.move.outputs.crates != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CRATES: ${{ steps.move.outputs.crates }}
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # A commit someone added to the open branch is work; forcing today's lock over it would throw it away.
+          if git ls-remote --exit-code --heads "$remote" "$BRANCH" > /dev/null; then
+            git fetch -q "$remote" "$BRANCH"
+            if git log --no-merges --format=%an HEAD..FETCH_HEAD | grep -vqx 'github-actions\[bot\]'; then
+              echo "::error::$BRANCH carries commits by hand, so it was left as it is; merge or close it: https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}"
+              exit 1
+            fi
+          fi
+          subject="fix(deps): $CRATES past today's advisories"
+          [ "$(printf '%s' "$subject" | wc -m)" -le 110 ] || subject="fix(deps): the crates past today's advisories"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git commit -qm "$subject" Cargo.lock THIRD-PARTY-BUNDLED.md THIRD-PARTY-LICENSES.md
+          git push -f "$remote" "$BRANCH"
+          # Red on purpose: main fails the same check until this is merged, and a red run is what reaches the inbox.
+          echo "::error::$subject — open it: https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}?expand=1"
+          exit 1
 
   # The release refuses notices behind the lockfiles; this says so on the pull request that moves them, not on the tag.
   notices:

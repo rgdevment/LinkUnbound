@@ -19,10 +19,10 @@ build() {
   local triple="$1"
   if [ -z "$triple" ]; then
     cargo build ${flags[@]+"${flags[@]}"} --bin linkunbound-shell
-    echo "target/$profile/linkunbound-shell$suffix"
+    echo "${CARGO_TARGET_DIR:-target}/$profile/linkunbound-shell$suffix"
   else
     cargo build ${flags[@]+"${flags[@]}"} --bin linkunbound-shell --target "$triple"
-    echo "target/$triple/$profile/linkunbound-shell$suffix"
+    echo "${CARGO_TARGET_DIR:-target}/$triple/$profile/linkunbound-shell$suffix"
   fi
 }
 

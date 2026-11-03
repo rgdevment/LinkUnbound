@@ -17,6 +17,7 @@ git checkout-index --all --ignore-skip-worktree-bits --prefix="$staged/" || {
 biome="$PWD/app/node_modules/.bin/biome"
 
 bash "$staged/scripts/rules.sh" < /dev/null || status=1
+bash "$staged/scripts/commits.sh" --branch "$(git symbolic-ref -q --short HEAD || echo HEAD)" || status=1
 
 quietly() {
   local said
@@ -38,6 +39,13 @@ if [ -x "$biome" ]; then
     "biome would change files; it is the first thing CI runs on the window"
 else
   echo "!  app/node_modules is not here, so biome did not look at the window"
+fi
+
+# Writing the notices takes a build, which belongs to CI; a staged lockfile without them only gets a reminder.
+moved=$(git diff --cached --name-only)
+if grep -qE '(^|/)(Cargo\.lock|package-lock\.json)$' <<< "$moved" \
+  && ! grep -qE '^THIRD-PARTY-(BUNDLED|LICENSES)\.md$' <<< "$moved"; then
+  echo "!  a lockfile is staged without the notices; npm run notices writes them, and the rules job compares them"
 fi
 
 exit $status
