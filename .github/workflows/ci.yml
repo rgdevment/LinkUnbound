@@ -17,23 +17,76 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  # Anything not known to stay out of Rust's way counts as Rust, so a new path runs the whole suite.
+  changes:
+    name: what the branch touched
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.look.outputs.rust }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: look
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          aside='^(app/src/|app/(\.gitignore|biome\.json|index\.html|package(-lock)?\.json|stryker\.config\.json|tsconfig(\.node)?\.json|vite\.config\.ts)$|hooks/|packaging/|resources/|(CLA|COMMERCIAL|CONTRIBUTING|PRIVACY|README|SECURITY)\.md$|package(-lock)?\.json$|\.markdownlint-cli2\.jsonc$|\.editorconfig$|\.github/(FUNDING|dependabot)\.yml$|\.github/(not-this-spanish|oversized)\.txt$|\.github/workflows/(bundle|caches|cla|commits|feed|mutants|mutants-sweep|release|rules|update-badge)\.yml$)'
+          from=$(git merge-base "$BASE" HEAD)
+          changed=$(git diff --name-only "$from" HEAD)
+          # The resident embeds the news, so it is Rust's though it lives beside the picker.
+          first=$( { echo "$changed" | grep -x 'app/src/news.json'; echo "$changed" | grep -vE "$aside"; } \
+            | grep -v '^$' | head -1 || true)
+          [ -n "$first" ] && rust=true || rust=false
+          echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          echo "the first path Rust has to answer for: ${first:-none}"
+
   test:
     name: test / ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
+    env:
+      # A failing test needs a file and a line, not the whole debug info, which is most of what a build writes.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # NTFS and the virus scanner are most of why Windows builds and tests slower; a trusted Dev Drive spares both.
+      - uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0 # v4.1.0
+        if: runner.os == 'Windows'
+        with:
+          drive-size: 25GB
+          drive-format: ReFS
+          drive-type: Dynamic
+          trusted-dev-drive: true
+          env-mapping: |
+            CARGO_TARGET_DIR,{{ DEV_DRIVE }}/target
+            TEMP,{{ DEV_DRIVE }}/tmp
+            TMP,{{ DEV_DRIVE }}/tmp
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: mkdir -p "$TEMP" "$CARGO_TARGET_DIR"
       - uses: ./.github/actions/toolchain
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: workspace
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: ${{ runner.os == 'Windows' && format('. -> {0}/target', env.DEV_DRIVE) || '. -> target' }}
       - uses: ./.github/actions/sidecar
       - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
@@ -49,6 +102,24 @@ jobs:
       # Compiling the doc tests is most of what they cost, and macOS is the job with time to spare.
       - if: runner.os == 'macOS'
         run: cargo test --doc --workspace
+
+  # A skipped matrix never reports the names it would have had, so the required check is this one.
+  tests:
+    name: tests
+    if: always()
+    needs: [changes, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every system passed, or the branch never touched what they test
+        env:
+          LOOKED: ${{ needs.changes.result }}
+          RUST: ${{ needs.changes.outputs.rust }}
+          RESULT: ${{ needs.test.result }}
+        run: |
+          [ "$LOOKED" = "success" ] || { echo "::error::what the branch touched could not be read ($LOOKED)"; exit 1; }
+          [ "$RESULT" = "success" ] || { [ "$RUST" = "false" ] && [ "$RESULT" = "skipped" ]; } \
+            || { echo "::error::the tests ended as $RESULT"; exit 1; }
 
   lint:
     name: fmt
@@ -106,10 +177,20 @@ jobs:
         with:
           persist-credentials: false
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          command: check bans licenses sources
+      # A warning on a pull request: an advisory published today would otherwise fail every one at once.
+      # Main stays red until the branch the Rules advisories job leaves is merged.
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
+        with:
+          command: check advisories
       - name: npm advisories in the picker
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         working-directory: app
         run: npm audit --package-lock-only --audit-level=moderate
       - name: npm advisories in the repository tooling
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         env:
           # braces has no patched release; it reaches markdownlint-cli2 through globby, dev tooling only.
           KNOWN: GHSA-vfj7-8cjw-p6xm
@@ -130,6 +211,9 @@ jobs:
 
   coverage:
     name: coverage
+    needs: changes
+    # A dependency bump changes no line of ours, so it pays for neither coverage nor Sonar.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -138,16 +222,25 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/toolchain
+        if: needs.changes.outputs.rust == 'true'
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: needs.changes.outputs.rust == 'true'
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        if: needs.changes.outputs.rust == 'true'
         with:
           tool: cargo-llvm-cov,nextest
 
+      # Sonar measures a pull request on its new lines only, and a branch that never touched Rust has none there.
+      - name: No Rust lines to measure on this branch
+        if: needs.changes.outputs.rust != 'true'
+        run: touch lcov-rust.info
+
       - name: What a desktop is not needed to build
+        if: needs.changes.outputs.rust == 'true'
         run: |
           # The picker pulls in a tray and a window: tray-icon wants GTK and winit wants the
           # display libraries. All of it has to link; none of it has to run, because the tests
@@ -184,8 +277,9 @@ jobs:
 
   coverage-mac:
     name: coverage / the Mac crate
+    needs: changes
     runs-on: macos-latest
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.rust == 'true'
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -215,8 +309,12 @@ jobs:
     needs: [coverage, coverage-mac]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # The Mac crate is skipped on a branch that never touched Rust, and Sonar still reads the window.
     if: >-
-      github.actor != 'dependabot[bot]'
+      !cancelled()
+      && needs.coverage.result == 'success'
+      && (needs.coverage-mac.result == 'success' || needs.coverage-mac.result == 'skipped')
+      && github.actor != 'dependabot[bot]'
       && (github.event_name == 'push'
       || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
@@ -231,9 +329,12 @@ jobs:
           path: .
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.coverage-mac.result == 'success'
         with:
           name: coverage-mac
           path: .
+      - if: needs.coverage-mac.result != 'success'
+        run: touch lcov-mac.info
 
       - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
