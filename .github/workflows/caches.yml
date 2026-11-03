@@ -18,6 +18,28 @@ on: # zizmor: ignore[dangerous-triggers] the sweep deletes caches by ref and nev
 permissions: {}
 
 jobs:
+  stop:
+    name: a closed pull request stops what still runs for it
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      # Merged or not, nothing a closed pull request still runs is read again: main runs its own.
+      - name: Every run still going for its last commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh run list --commit "$HEAD_SHA" --event pull_request --limit 100 \
+            --json databaseId,status \
+            --jq '.[] | select(.status != "completed") | .databaseId' |
+            while read -r run; do
+              gh run cancel "$run" || echo "::notice::run $run had already ended"
+            done
+
   sweep:
     name: a closed pull request takes its caches with it
     if: github.event_name == 'pull_request_target'

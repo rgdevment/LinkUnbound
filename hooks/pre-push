@@ -16,11 +16,24 @@ pushed() {
   return $said
 }
 
+# Measured against the branch the remote being pushed to calls its own, not a name taken for granted.
+remote=${1:-origin}
+# A push straight to a URL names no remote, and is measured against origin's.
+git remote get-url "$remote" > /dev/null 2>&1 || remote=origin
+main=$(git symbolic-ref -q --short "refs/remotes/$remote/HEAD" 2> /dev/null || echo "$remote/main")
+# A remote never fetched here has no main to measure by, and origin's is the nearest.
+git rev-parse -q --verify "$main^{commit}" > /dev/null \
+  || main=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2> /dev/null || echo origin/main)
+
 nothing=0000000000000000000000000000000000000000
 status=0
-while read -r ref mine _ theirs; do
+while read -r ref mine where theirs; do
   [ -n "${mine:-}" ] || continue
   [ "$mine" != "$nothing" ] || continue
+  # The name it takes on the remote, which is the one everybody sees.
+  case ${where:-} in
+    refs/heads/*) bash scripts/commits.sh --branch "${where#refs/heads/}" || status=1 ;;
+  esac
   # A tag is the last moment to notice the version it names has nothing to tell whoever installs it.
   case ${ref:-} in
     refs/tags/v*)
@@ -34,10 +47,10 @@ while read -r ref mine _ theirs; do
   # A remote commit never fetched here cannot start a range; main can.
   if [ "${theirs:-$nothing}" != "$nothing" ] && git cat-file -e "$theirs^{commit}" 2> /dev/null; then
     range="$theirs..$mine"
-  elif base=$(git merge-base "$mine" origin/main 2> /dev/null) && [ -n "$base" ]; then
+  elif base=$(git merge-base "$mine" "$main" 2> /dev/null) && [ -n "$base" ]; then
     range="$base..$mine"
   else
-    echo "!  origin/main is not here, so the subjects were not looked at"
+    echo "!  $main is not here, so the subjects were not looked at"
     continue
   fi
   bash scripts/commits.sh "$range" || status=1

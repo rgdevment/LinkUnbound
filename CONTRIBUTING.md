@@ -44,7 +44,7 @@ We believe in:
 2. **Choose the base branch:**
    - `main` — active development. The 2.x line lands here.
    - `v1-stable` — the frozen 1.4.x line. Security and crash fixes only, no new features.
-3. **Create a branch** from it (`git checkout -b feature/my-improvement`).
+3. **Create a branch** from it, named `kind/what` (`git checkout -b feat/my-improvement`).
 4. **Make your changes** following the style guide below.
 5. **Run checks:**
 
@@ -190,27 +190,35 @@ application and dies with the console it was started from.
 ### Commits and the checks that run before them
 
 Subjects follow [Conventional Commits](https://www.conventionalcommits.org/)
-(`feat:`, `fix:`, `docs:`, `ci:`…), under 120 characters: CI refuses a longer one,
-and a squash keeps only the pull request's title, number included, so that is
-held to the same shape.
+(`feat:`, `fix:`, `docs:`, `ci:`…), on one line with nothing under it, under 112
+characters: a subject can become the squash title, and GitHub ends that with the
+pull request's number. A squash keeps only that title, number included, so it is
+held to the same shape, under 120.
+
+A branch is named `kind/what`, in lowercase, where the kind is one of the commit
+types above, `hotfix` or `release`, as in `feat/picker-tiles`. Its name is public
+from its first push and stays in its pull request after that.
 
 `scripts/rules.sh` holds the conventions a person can break in a second: four
 lines of comment in a row, a file grown past what anybody reads through, Spanish
 where the code should be English or Spanish that is not neutral, the core
 printing to a terminal the picker inherits or panicking where it should answer,
 and unsafe outside the files audited for it. `scripts/commits.sh` holds the
-shape and the length of a subject. Run either whenever you like; the `npm ci`
+shape and the length of a subject, and the shape of a branch name. Run either whenever you like; the `npm ci`
 at the root of a fresh clone also points git at `hooks/`, which is the same as:
 
 ```sh
 git config core.hooksPath hooks
 ```
 
-That gives you three. `pre-commit` runs the conventions, `cargo fmt --all
---check` and biome, in about two seconds. `commit-msg` weighs the subject while
-the fix is still an `--amend` rather than a rebase. `pre-push` runs the
-conventions again and the subjects of everything you are about to send, and when
-what you send is a tag it asks `scripts/news.sh` whether `app/src/news.json` says
+That gives you three. `pre-commit` runs the conventions, the name of the branch
+being committed on, `cargo fmt --all --check` and biome, in about two seconds,
+and reminds you to run `npm run notices` when a lockfile is staged without the
+third-party notices. `commit-msg` weighs the subject and refuses lines under it
+while the fix is still an `--amend` rather than a rebase. `pre-push` runs the
+conventions again, the name each branch takes on the remote and the subjects of
+everything you are about to send, and when what you send is a tag it asks
+`scripts/news.sh` whether `app/src/news.json` says
 what changed in that version: the window Settings opens with after an update is
 the only place the app says it. A candidate is exempt, and so is a patch whose
 minor release already has its entry, since the window tells that release's news
