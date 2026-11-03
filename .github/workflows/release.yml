@@ -152,9 +152,6 @@ jobs:
           if [ "$HAS_UPDATER_KEY" = "true" ] && [ "$HAS_UPDATER_PASSWORD" != "true" ]; then
             echo "::notice::the updater key carries no password; that is fine if it was made without one"
           fi
-          if [ "$HAS_UPDATER_KEY" != "true" ]; then
-            echo "::warning::no updater key; this release cannot be installed by an existing copy"
-          fi
 
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             missing=""
@@ -236,7 +233,7 @@ jobs:
 
   bundle-windows:
     name: linkunbound-windows-installer
-    needs: [version, tested]
+    needs: [version]
     runs-on: windows-latest
     timeout-minutes: 60
     outputs:
@@ -244,7 +241,6 @@ jobs:
     env:
       TARGET: x86_64-pc-windows-msvc
       HAS_PFX: ${{ secrets.PFX_BASE64 != '' }}
-      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -299,18 +295,14 @@ jobs:
           "CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "the bundler signs with $($cert.Thumbprint)"
 
+      # No updater key here: build scripts run in this step, and sign-updater signs the result.
       - name: Bundle
         working-directory: app
         shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          sign=""
-          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then sign="--no-sign"; fi
           packs=""
           if [ -f sign.json ]; then packs="--config sign.json"; fi
-          npm run tauri build -- --bundles nsis $sign $packs
+          npm run tauri build -- --bundles nsis $packs
 
       - name: The installer carries both binaries
         shell: bash
@@ -447,24 +439,17 @@ jobs:
           cp "$setup" "dist/linkunbound-installer-$v-windows-x86_64.exe"
           ls -l dist
 
-      - name: Sign it for the updater
-        if: env.HAS_UPDATER_KEY == 'true'
-        working-directory: app
-        shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          v="${{ needs.version.outputs.version }}"
-          exe="../dist/linkunbound-installer-$v-windows-x86_64.exe"
-          rm -f "$exe.sig"
-          npm run tauri -- signer sign "$exe"
-          test -s "$exe.sig" || { echo "::error::no updater signature was written"; exit 1; }
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bundle-windows
           path: dist/*
+          retention-days: 7
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: updater-windows
+          path: dist/linkunbound-installer-*-windows-x86_64.exe
           retention-days: 7
           if-no-files-found: error
 
@@ -479,7 +464,7 @@ jobs:
 
   bundle-macos:
     name: linkunbound-macos-installer (${{ matrix.arch }})
-    needs: [version, tested]
+    needs: [version]
     if: needs.version.outputs.macos == 'true'
     runs-on: macos-latest
     timeout-minutes: 60
@@ -496,7 +481,6 @@ jobs:
       ARCH: ${{ matrix.arch }}
       HAS_P12: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
       HAS_APPLE_ID: ${{ secrets.APPLE_ID != '' }}
-      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -563,12 +547,7 @@ jobs:
         working-directory: app
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          sign=""
-          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then sign="--no-sign"; fi
-          npm run tauri bundle -- --target "$TARGET" --bundles app,dmg $sign
+        run: npm run tauri bundle -- --target "$TARGET" --bundles app,dmg
 
       - name: It launches the resident, for a link, from the menu bar, on one chip
         run: |
@@ -639,24 +618,13 @@ jobs:
           xcrun stapler staple "$app"
           xcrun stapler validate "$app"
 
-          rm -f "$out"/*.app.tar.gz "$out"/*.app.tar.gz.sig
+          rm -f "$out"/*.app.tar.gz
           COPYFILE_DISABLE=1 tar --no-xattrs -czf "$out/LinkUnbound.app.tar.gz" -C "$out" LinkUnbound.app
 
           rm -rf "$RUNNER_TEMP/rt" && mkdir -p "$RUNNER_TEMP/rt"
           tar -xzf "$out/LinkUnbound.app.tar.gz" -C "$RUNNER_TEMP/rt"
           codesign --verify --deep --strict "$RUNNER_TEMP/rt/LinkUnbound.app"
           xcrun stapler validate "$RUNNER_TEMP/rt/LinkUnbound.app"
-
-      - name: Sign it for the updater
-        if: env.HAS_UPDATER_KEY == 'true' && env.HAS_APPLE_ID == 'true'
-        working-directory: app
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          out="../target/$TARGET/release/bundle/macos"
-          npm run tauri -- signer sign "$out/LinkUnbound.app.tar.gz"
-          test -s "$out/LinkUnbound.app.tar.gz.sig"
 
       - name: Name it after the release
         run: |
@@ -665,12 +633,11 @@ jobs:
           out="target/$TARGET/release/bundle/macos"
           app="$out/LinkUnbound.app"
           if xcrun stapler validate "$app" >/dev/null 2>&1 \
-            && [ -s "$out/LinkUnbound.app.tar.gz.sig" ]; then
+            && [ -s "$out/LinkUnbound.app.tar.gz" ]; then
             cp "$out/LinkUnbound.app.tar.gz" "dist/linkunbound-$v-macos-$ARCH.app.tar.gz"
-            cp "$out/LinkUnbound.app.tar.gz.sig" "dist/linkunbound-$v-macos-$ARCH.app.tar.gz.sig"
           else
-            echo "::warning::no stapled, signed tarball; macOS $ARCH gets no self-update this release"
-            rm -f "$out/LinkUnbound.app.tar.gz" "$out/LinkUnbound.app.tar.gz.sig"
+            echo "::warning::no stapled tarball; macOS $ARCH gets no self-update this release"
+            rm -f "$out/LinkUnbound.app.tar.gz"
           fi
           dmg=$(ls target/$TARGET/release/bundle/dmg/*.dmg 2>/dev/null | head -1) || true
           if [ -z "$dmg" ]; then
@@ -686,6 +653,13 @@ jobs:
           path: dist/*
           retention-days: 7
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: updater-macos-${{ matrix.arch }}
+          path: dist/*.app.tar.gz
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Cleanup keychain
         if: always() && env.KEYCHAIN_PATH != ''
@@ -809,9 +783,95 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # The only job that holds the updater key: it builds nothing and runs nobody else's scripts.
+  sign-updater:
+    name: Signed for the updater
+    needs: [version, tested, bundle-windows, bundle-macos]
+    if: >-
+      !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      && needs.version.result == 'success'
+      && needs.tested.result == 'success'
+      && needs.bundle-windows.result == 'success'
+      && (needs.bundle-macos.result == 'success' || needs.bundle-macos.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: app/package-lock.json
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: updater-*
+          path: dist
+          merge-multiple: true
+
+      - name: The signer the app was built with, and nothing else
+        run: |
+          lock=app/package-lock.json
+          v=$(jq -r '.packages["node_modules/@tauri-apps/cli"].version // ""' "$lock")
+          if [ -z "$v" ]; then
+            echo "::error::the lockfile names no @tauri-apps/cli"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/signer"
+          npm install --prefix "$RUNNER_TEMP/signer" --ignore-scripts --no-audit --no-fund \
+            "@tauri-apps/cli@$v"
+          for pkg in @tauri-apps/cli @tauri-apps/cli-linux-x64-gnu; do
+            want=$(jq -r --arg k "node_modules/$pkg" '.packages[$k].integrity // ""' "$lock")
+            got=$(jq -r --arg k "node_modules/$pkg" '.packages[$k].integrity // ""' \
+              "$RUNNER_TEMP/signer/package-lock.json")
+            if [ -z "$want" ] || [ "$want" != "$got" ]; then
+              echo "::error::$pkg is not the one the lockfile names"
+              exit 1
+            fi
+          done
+
+      - name: Sign what ships
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::no updater key, so nothing out there could update to this release"
+            exit 1
+          fi
+          v="${{ needs.version.outputs.version }}"
+          ships="dist/linkunbound-installer-$v-windows-x86_64.exe"
+          if [ "${{ needs.version.outputs.macos }}" = "true" ]; then
+            ships="$ships dist/linkunbound-$v-macos-aarch64.app.tar.gz dist/linkunbound-$v-macos-x86_64.app.tar.gz"
+          fi
+          mkdir -p signatures
+          for f in $ships; do
+            if [ ! -s "$f" ]; then
+              echo "::error::$f was not built, so nothing out there could update to it"
+              exit 1
+            fi
+            "$RUNNER_TEMP/signer/node_modules/.bin/tauri" signer sign --app-version "$v" "$f"
+            test -s "$f.sig" || { echo "::error::no signature for $f"; exit 1; }
+            mv "$f.sig" signatures/
+          done
+          ls -l signatures
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-signatures
+          path: signatures/*
+          retention-days: 7
+          if-no-files-found: error
+
   publish:
     name: GitHub Release
-    needs: [tested, version, bundle-windows, bundle-macos, bundle-msix]
+    needs: [tested, version, bundle-windows, bundle-macos, bundle-msix, sign-updater]
     if: >-
       !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
       && needs.tested.result == 'success'
@@ -819,6 +879,7 @@ jobs:
       && needs.bundle-windows.result == 'success'
       && (needs.bundle-macos.result == 'success' || needs.bundle-macos.result == 'skipped')
       && (needs.bundle-msix.result == 'success' || needs.bundle-msix.result == 'skipped')
+      && needs.sign-updater.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     # Global: one manifest branch and one Latest flag; a third tag cancels the waiting one, re-run it by hand.
@@ -888,15 +949,19 @@ jobs:
                      "dist/linkunbound-$v-macos-x86_64.app.tar.gz"; do
             [ -s "$one" ] || continue
             base64 -d < "$one.sig" > one.minisig
-            if ! minisign -Vm "$one" -p feed.pub -x one.minisig; then
+            if ! signed=$(bash scripts/signed-version.sh "$one" one.minisig feed.pub); then
               echo "::error::$one was signed with a key that is not the one in \
           tauri.conf.json. Every copy built from this tree carries that public key, so nothing \
           could ever verify this update. Nothing was published."
               exit 1
             fi
+            if [ "$signed" != "${v%%+*}" ]; then
+              echo "::error::$one is signed for «${signed:-no version}», not $v. Nothing was published."
+              exit 1
+            fi
           done
           rm -f feed.pub one.minisig
-          echo "the signatures and the shipped key are halves of the same pair"
+          echo "the signatures answer to the shipped key and name $v"
 
       - name: Checksums
         run: cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
@@ -1189,12 +1254,15 @@ jobs:
             esac
 
             curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o one.bin "$url"
-            if minisign -Vm one.bin -p feed.pub -x one.sig; then
-              echo "$os verifies"
-            else
+            if ! signed=$(bash scripts/signed-version.sh one.bin one.sig feed.pub); then
               echo "::error::$os does not verify against the key this build ships"
               exit 1
             fi
+            if [ "$signed" != "${v%%+*}" ]; then
+              echo "::error::$os verifies but is signed for «${signed:-no version}», not $v"
+              exit 1
+            fi
+            echo "$os verifies, signed for $v"
           done
 
   msstore:
