@@ -36,6 +36,10 @@
     <img src="https://img.shields.io/badge/Windows-Microsoft_Store-0078D4?style=for-the-badge&logo=microsoft" alt="Get LinkUnbound browser picker from Microsoft Store"/>
   </a>
   &nbsp;
+  <a href="#installation">
+    <img src="https://img.shields.io/badge/Windows-winget-0078D4?style=for-the-badge&logo=windows" alt="Install LinkUnbound browser picker with winget on Windows"/>
+  </a>
+  &nbsp;
   <a href="#getting-started">
     <img src="https://img.shields.io/badge/macOS-Homebrew-FBB040?style=for-the-badge&logo=homebrew&logoColor=black" alt="Install LinkUnbound browser picker via Homebrew on macOS"/>
   </a>
@@ -121,6 +125,14 @@ If you only ever use one browser, LinkUnbound has nothing to choose between, and
 ### Installation
 
 **Windows — Microsoft Store** (recommended): [Get it from Microsoft Store](https://apps.microsoft.com/detail/9N9F7C8Q43KC) — one click, auto-updates, no security warnings.
+
+**Windows — winget**: the Windows Package Manager takes the same installer from GitHub Releases and checks it against the hash in its catalogue:
+
+```powershell
+winget install rgdevment.LinkUnbound
+```
+
+LinkUnbound keeps itself up to date from then on, so `winget upgrade --all` leaves it alone; `winget upgrade rgdevment.LinkUnbound` still works when you name it.
 
 **Windows — standalone installer**: download from [GitHub Releases](https://github.com/rgdevment/LinkUnbound/releases/latest).
 
@@ -245,7 +257,7 @@ For responsible disclosure and security contact info, see [SECURITY.md](SECURITY
 - **Maintenance** — the two that destroy something: reset the configuration, and remove LinkUnbound from the system's list
 - **About** — version, licence, the update button, the candidate-versions switch, the diagnostic report when something goes wrong, and support links
 
-**Updates.** Every six hours the resident asks the release feed, without a window. A newer version shows up as a strip atop the picker and in About; **Update** downloads the signed installer and runs it, and the resident comes back on its own. A copy from the Microsoft Store updates through the Store; a Homebrew copy updates itself the same way as a downloaded one (the cask says `auto_updates`), and `brew upgrade` works as well. Turn the background check off under Application if you prefer to ask by hand.
+**Updates.** Every six hours the resident asks the release feed, without a window. A newer version shows up as a strip atop the picker and in About; **Update** downloads the signed installer and runs it, and the resident comes back on its own. A copy from the Microsoft Store updates through the Store; a Homebrew copy updates itself the same way as a downloaded one (the cask says `auto_updates`), and `brew upgrade` works as well. A winget copy updates itself too; its manifest keeps it out of `winget upgrade --all`, and `winget upgrade rgdevment.LinkUnbound` works when named. Turn the background check off under Application if you prefer to ask by hand.
 
 **From another app.** An application can send a link to LinkUnbound even when it is not the default browser: open `linkunbound://open?url=` followed by the whole link encoded as one component — what `encodeURIComponent` does, or `utf8_percent_encode(url, NON_ALPHANUMERIC)` in Rust — `linkunbound://open?url=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1`. Every `:`, `/`, `?`, `&`, `=`, `#`, `%` and `+` has to be encoded: an unencoded `&` or `#` cuts the link and an unencoded `+` arrives as a space. It goes through the same rules and picker as a click. Only `http` and `https` links are accepted; anything else is dropped. Ask the system whether the scheme exists before using it, and open the plain link when nothing answers: on Windows ask `AssocQueryStringW(ASSOCF_IS_PROTOCOL, …, L"linkunbound", L"open", …)` twice: `ASSOCSTR_EXECUTABLE` answers for the downloaded copy, and `ASSOCSTR_APPID` for the Microsoft Store one, which has no executable to name. Treat `OpenWith.exe` as no answer: that is Windows offering to choose an app; on macOS `NSWorkspace.urlForApplication(toOpen: URL(string: "linkunbound:")!)` is not `nil` while the app is installed.
 
