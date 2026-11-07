@@ -216,7 +216,9 @@ made by hand from the releases page would.
 
 A copy installed from the Microsoft Store takes its update from the Store
 instead, and never reads the feed above. A copy installed with Homebrew updates
-itself the same way as a downloaded one; `brew upgrade` works as well.
+itself the same way as a downloaded one; `brew upgrade` works as well. A copy
+installed with winget came from the same releases page and updates itself the
+same way too.
 
 ---
 
@@ -246,7 +248,7 @@ Settings → **Maintenance** tab provides:
 
 **Windows:**
 
-1. Uninstall LinkUnbound (via Settings → Apps or the standalone uninstaller).
+1. Uninstall LinkUnbound (via Settings → Apps, the standalone uninstaller, or `winget uninstall rgdevment.LinkUnbound`).
 2. Delete the data folder: `%LOCALAPPDATA%\LinkUnbound\` (and the legacy `%APPDATA%\LinkUnbound\` if present from older versions)
 
 **macOS:**
