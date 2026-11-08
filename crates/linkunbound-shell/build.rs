@@ -1,5 +1,11 @@
 fn main() {
-    slint_build::compile("ui/shell.slint").expect("the interface must compile");
+    // Tests find the picker's buttons by id; a release build carries no ids it would never use.
+    let debug = std::env::var("PROFILE").as_deref() == Ok("debug");
+    slint_build::compile_with_config(
+        "ui/shell.slint",
+        slint_build::CompilerConfiguration::new().with_debug_info(debug),
+    )
+    .expect("the interface must compile");
 
     #[cfg(windows)]
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {

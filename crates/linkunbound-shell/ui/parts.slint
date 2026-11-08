@@ -330,13 +330,47 @@ export component MaskButton inherits Rectangle {
     }
 }
 
+export component CloseMark inherits Rectangle {
+    in property <string> label;
+    callback pressed();
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.pressed(); }
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: touch.has-hover ? Palette.hover : transparent;
+    Path {
+        x: 9px;
+        y: 9px;
+        width: 10px;
+        height: 10px;
+        viewbox-width: 10;
+        viewbox-height: 10;
+        commands: "M1 1 L9 9 M9 1 L1 9";
+        stroke: touch.has-hover ? Palette.ink : Palette.faint;
+        stroke-width: 1.5px;
+    }
+    touch := TouchArea {
+        clicked => { root.pressed(); }
+    }
+}
+
+export global Measures {
+    out property <length> tools-width: 3 * 28px + 9px + 3 * 2px;
+}
+
 export component Tools inherits HorizontalLayout {
+    width: Measures.tools-width;
     in property <bool> private-on;
     in property <string> private-label;
     in property <bool> copied;
     in property <string> copy-label;
+    in property <string> close-label;
     callback toggle-private();
     callback copy();
+    callback close();
     spacing: 2px;
     MaskButton {
         on: root.private-on;
@@ -347,6 +381,20 @@ export component Tools inherits HorizontalLayout {
         label: root.copy-label;
         done: root.copied;
         pressed => { root.copy(); }
+    }
+    Rectangle {
+        width: 9px;
+        Rectangle {
+            x: 4px;
+            y: (parent.height - self.height) / 2;
+            width: 1px;
+            height: 16px;
+            background: Palette.hair;
+        }
+    }
+    CloseMark {
+        label: root.close-label;
+        pressed => { root.close(); }
     }
 }
 
@@ -360,8 +408,10 @@ export component AddressHead inherits Rectangle {
     in property <string> private-label;
     in property <bool> copied;
     in property <string> copy-label;
+    in property <string> close-label;
     callback toggle-private();
     callback copy();
+    callback close();
     height: 60px;
 
     HorizontalLayout {
@@ -402,8 +452,10 @@ export component AddressHead inherits Rectangle {
             private-label: root.private-label;
             copied: root.copied;
             copy-label: root.copy-label;
+            close-label: root.close-label;
             toggle-private => { root.toggle-private(); }
             copy => { root.copy(); }
+            close => { root.close(); }
         }
     }
 }
@@ -419,23 +471,31 @@ export component AskHead inherits Rectangle {
     in property <string> private-label;
     in property <bool> copied;
     in property <string> copy-label;
+    in property <string> close-label;
     callback toggle-private();
     callback copy();
+    callback close();
     height: 80px;
+    in property <length> ask-margin: 72px;
 
     VerticalLayout {
-        padding-top: 20px;
+        padding-top: 18px;
         padding-left: 72px;
         padding-right: 72px;
         spacing: 3px;
         alignment: start;
-        Text {
-            text: root.ask;
-            font-size: 17px;
-            font-weight: 700;
-            color: root.private-on ? Palette.secret : Palette.ink;
-            horizontal-alignment: center;
-            overflow: elide;
+        HorizontalLayout {
+            padding-left: root.ask-margin - 72px;
+            padding-right: root.ask-margin - 72px;
+            padding-bottom: 2px;
+            Text {
+                text: root.ask;
+                font-size: 17px;
+                font-weight: 700;
+                color: root.private-on ? Palette.secret : Palette.ink;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
         }
         HorizontalLayout {
             alignment: center;
@@ -463,15 +523,16 @@ export component AskHead inherits Rectangle {
     }
     Tools {
         x: root.width - 8px - self.width;
-        y: 16px;
-        width: 58px;
+        y: 14px;
         height: 28px;
         private-on: root.private-on;
         private-label: root.private-label;
         copied: root.copied;
         copy-label: root.copy-label;
+        close-label: root.close-label;
         toggle-private => { root.toggle-private(); }
         copy => { root.copy(); }
+        close => { root.close(); }
     }
 }
 
