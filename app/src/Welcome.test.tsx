@@ -112,7 +112,7 @@ describe("welcome", () => {
     answers({ system_is_default: () => Promise.resolve(true) });
     render(<Welcome />);
     await press("Comenzar");
-    await press(/rgdevment\.com/);
+    await press(/rgdevment\.dev/);
     expect(invoke).toHaveBeenCalledWith("welcome_try");
     expect(await screen.findByText(/Esperando a que elijas/)).toBeInTheDocument();
     expect(screen.queryByText(/Eso es/)).toBeNull();
@@ -131,7 +131,7 @@ describe("welcome", () => {
     render(<Welcome />);
     await press("Comenzar");
     await press("Ahora no");
-    await press(/rgdevment\.com/);
+    await press(/rgdevment\.dev/);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("welcome_try"));
     expect(screen.getByText(/se abrirá en tu navegador de siempre/)).toBeInTheDocument();
     expect(screen.queryByText(/Esperando a que elijas/)).toBeNull();

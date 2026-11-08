@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use crate::{shell, store, system};
 
 /// The page the third step opens: any link would do, as long as it goes through the system.
-const TRY_ME: &str = "https://rgdevment.com";
+const TRY_ME: &str = "https://rgdevment.dev";
 
 /// When the test link was sent, so an older pick does not answer for it.
 #[derive(Default)]
