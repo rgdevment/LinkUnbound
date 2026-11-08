@@ -12,6 +12,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  NOT_ON_LINUX: "mac::|local_web_file|launchable_file|host::|reaction_to|sent_by_launch_services|platform::|dress_natively|replace is_bundle|relaunch_resident|relay_links|hand_to_the_resident|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room|replace forget with"
+  # The same Mac branches of the core and the picker the weekly sweep weighs on a Mac; Linux weighs the rest.
+  MAC_BRANCHES: "mac::|local_web_file|launchable_file|reaction_to|sent_by_launch_services|replace drawing|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room"
 
 jobs:
   # `paths` on the trigger leaves a required check unreported for good; a skipped job counts as met.
@@ -20,7 +23,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      mutable: ${{ steps.look.outputs.mutable }}
+      crates: ${{ steps.look.outputs.crates }}
+      mac: ${{ steps.look.outputs.mac }}
+      settings: ${{ steps.look.outputs.settings }}
+      window: ${{ steps.look.outputs.window }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,20 +36,27 @@ jobs:
       - id: look
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
+          ACTOR: ${{ github.actor }}
         run: |
-          watched='^(crates/|app/src/|\.cargo/mutants\.toml$|app/stryker\.config\.json$|\.github/workflows/mutants\.yml$)'
-          from=$(git merge-base "$BASE" HEAD)
-          if git diff --name-only --diff-filter=d "$from" HEAD | grep -qE "$watched"; then
-            echo "mutable=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "mutable=false" >> "$GITHUB_OUTPUT"
+          # A dependency bump changes no line of ours, even when it touches a crate's manifest.
+          if [ "$ACTOR" = "dependabot[bot]" ]; then
+            printf 'crates=false\nmac=false\nsettings=false\nwindow=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          from=$(git merge-base "$BASE" HEAD)
+          touched() { git diff --quiet "$from" HEAD -- "$@" && echo false || echo true; }
+          {
+            echo "crates=$(touched crates/linkunbound-core crates/linkunbound-shell)"
+            echo "mac=$(touched crates)"
+            echo "settings=$(touched app/src-tauri/src)"
+            echo "window=$(touched app/src)"
+          } | tee -a "$GITHUB_OUTPUT"
 
   crates-on-the-branch:
     name: crates / the lines this branch changed
     runs-on: ubuntu-24.04
     needs: changes
-    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
+    if: needs.changes.outputs.crates == 'true'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,60 +65,51 @@ jobs:
           persist-credentials: false
 
       - name: What the branch changed in the crates
-        id: touched
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          from=$(git merge-base "$BASE" HEAD)
-          git diff "$from" -- crates/linkunbound-core crates/linkunbound-shell > branch.diff
-          if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
+        run: git diff "$(git merge-base "$BASE" HEAD)" -- crates/linkunbound-core crates/linkunbound-shell > branch.diff
 
       - uses: ./.github/actions/toolchain
-        if: steps.touched.outputs.any == 'yes'
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: workspace
           save-if: false
-        if: steps.touched.outputs.any == 'yes'
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
-        if: steps.touched.outputs.any == 'yes'
         with:
           tool: nextest,cargo-mutants
 
       - name: What a desktop is not needed to build
-        if: steps.touched.outputs.any == 'yes'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libgtk-3-dev libayatana-appindicator3-dev libxdo-dev libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libwayland-dev libxcb1-dev
 
       - name: A mutant that lives on a line this branch wrote
         id: run
-        if: steps.touched.outputs.any == 'yes'
         run: |
           set +e
-          cargo mutants --in-diff branch.diff -p linkunbound-core -p linkunbound-shell -j 2 \
-            --exclude-re 'mac::|local_web_file|launchable_file|host::|reaction_to|sent_by_launch_services|platform::|dress_natively|replace is_bundle|relaunch_resident|relay_links|hand_to_the_resident|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room|replace forget with'
+          cargo mutants --in-diff branch.diff -p linkunbound-core -p linkunbound-shell -j 2 --exclude-re "$NOT_ON_LINUX"
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived
-        if: always() && steps.touched.outputs.any == 'yes'
+        if: always()
         env:
           CODE: ${{ steps.run.outputs.code }}
           TITLE: The lines this branch changed
         run: bash scripts/mutants-report.sh
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always() && steps.touched.outputs.any == 'yes'
+        if: always()
         with:
           name: mutants-branch-crates
           path: mutants.out/
           retention-days: 7
 
+  # Weighing the core and the picker again here, all of it, outlasted everything else a pull request runs.
   mac-on-the-branch:
     name: mac / the lines this branch changed
     runs-on: macos-latest
     needs: changes
-    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
+    if: needs.changes.outputs.mac == 'true'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -114,54 +118,47 @@ jobs:
           persist-credentials: false
 
       - name: What the branch changed in the crates, read with a Mac's eyes
-        id: touched
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          from=$(git merge-base "$BASE" HEAD)
-          git diff "$from" -- crates > branch.diff
-          if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
+        run: git diff "$(git merge-base "$BASE" HEAD)" -- crates > branch.diff
 
       - uses: ./.github/actions/toolchain
-        if: steps.touched.outputs.any == 'yes'
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: workspace
           save-if: false
-        if: steps.touched.outputs.any == 'yes'
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
-        if: steps.touched.outputs.any == 'yes'
         with:
           tool: nextest,cargo-mutants
 
       - name: A mutant that lives on a line this branch wrote
         id: run
-        if: steps.touched.outputs.any == 'yes'
         run: |
           set +e
           cargo mutants --in-diff branch.diff -p linkunbound-mac -p linkunbound-core -p linkunbound-shell -j 2 \
-            --exclude-re 'replace forget with'
+            --re "^crates/linkunbound-mac/|$MAC_BRANCHES" --exclude-re 'replace forget with'
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived
-        if: always() && steps.touched.outputs.any == 'yes'
+        if: always()
         env:
           CODE: ${{ steps.run.outputs.code }}
           TITLE: The lines this branch changed, on a Mac
         run: bash scripts/mutants-report.sh
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always() && steps.touched.outputs.any == 'yes'
+        if: always()
         with:
           name: mutants-branch-mac
           path: mutants.out/
           retention-days: 7
+          if-no-files-found: ignore
 
   settings-on-the-branch:
     name: settings / the lines this branch changed
     runs-on: ubuntu-24.04
     needs: changes
-    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
+    if: needs.changes.outputs.settings == 'true'
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -170,54 +167,43 @@ jobs:
           persist-credentials: false
 
       - name: What the branch changed in the settings backend
-        id: touched
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          from=$(git merge-base "$BASE" HEAD)
-          git diff "$from" -- app/src-tauri/src > branch.diff
-          if [ -s branch.diff ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
+        run: git diff "$(git merge-base "$BASE" HEAD)" -- app/src-tauri/src > branch.diff
 
       - uses: ./.github/actions/toolchain
-        if: steps.touched.outputs.any == 'yes'
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: workspace
           save-if: false
-        if: steps.touched.outputs.any == 'yes'
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
-        if: steps.touched.outputs.any == 'yes'
         with:
           tool: nextest,cargo-mutants
 
       - name: What a desktop is not needed to build
-        if: steps.touched.outputs.any == 'yes'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libgtk-3-dev libayatana-appindicator3-dev libxdo-dev libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libwayland-dev libxcb1-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
 
       - name: The resident rides along
-        if: steps.touched.outputs.any == 'yes'
         run: bash scripts/sidecar.sh
 
       - name: A mutant that lives on a line this branch wrote
         id: run
-        if: steps.touched.outputs.any == 'yes'
         run: |
           set +e
-          cargo mutants --in-diff branch.diff -p linkunbound-settings --in-place \
-            --exclude-re 'mac::|local_web_file|launchable_file|host::|reaction_to|sent_by_launch_services|platform::|dress_natively|replace is_bundle|relaunch_resident|relay_links|hand_to_the_resident|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room|replace forget with'
+          cargo mutants --in-diff branch.diff -p linkunbound-settings --in-place --exclude-re "$NOT_ON_LINUX"
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived
-        if: always() && steps.touched.outputs.any == 'yes'
+        if: always()
         env:
           CODE: ${{ steps.run.outputs.code }}
           TITLE: The lines this branch changed in settings
         run: bash scripts/mutants-report.sh
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always() && steps.touched.outputs.any == 'yes'
+        if: always()
         with:
           name: mutants-branch-settings
           path: mutants.out/
@@ -227,7 +213,7 @@ jobs:
     name: window / the lines this branch changed
     runs-on: ubuntu-24.04
     needs: changes
-    if: github.actor != 'dependabot[bot]' && needs.changes.outputs.mutable == 'true'
+    if: needs.changes.outputs.window == 'true'
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

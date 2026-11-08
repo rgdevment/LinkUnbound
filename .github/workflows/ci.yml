@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       rust: ${{ steps.look.outputs.rust }}
+      picker: ${{ steps.look.outputs.picker }}
+      deps: ${{ steps.look.outputs.deps }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,7 +38,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ "$EVENT" != "pull_request" ]; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
+            printf 'rust=true\npicker=true\ndeps=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
           aside='^(app/src/|app/(\.gitignore|biome\.json|index\.html|package(-lock)?\.json|stryker\.config\.json|tsconfig(\.node)?\.json|vite\.config\.ts)$|hooks/|packaging/|resources/|(CLA|COMMERCIAL|CONTRIBUTING|PRIVACY|README|SECURITY)\.md$|package(-lock)?\.json$|\.markdownlint-cli2\.jsonc$|\.editorconfig$|\.github/(FUNDING|dependabot)\.yml$|\.github/(not-this-spanish|oversized)\.txt$|\.github/workflows/(bundle|caches|cla|commits|feed|mutants|mutants-sweep|release|rules|update-badge)\.yml$)'
@@ -48,6 +50,13 @@ jobs:
           [ -n "$first" ] && rust=true || rust=false
           echo "rust=$rust" >> "$GITHUB_OUTPUT"
           echo "the first path Rust has to answer for: ${first:-none}"
+          self='^\.github/workflows/ci\.yml$'
+          picker=false
+          grep -qE "^app/([^/]+|src/.*)$|$self" <<< "$changed" && picker=true
+          deps=false
+          grep -qE "(^|/)(Cargo\.(toml|lock)|package(-lock)?\.json)$|^deny\.toml$|$self" <<< "$changed" && deps=true
+          printf 'picker=%s\ndeps=%s\n' "$picker" "$deps" >> "$GITHUB_OUTPUT"
+          echo "the picker: $picker; the dependencies: $deps"
 
   test:
     name: test / ${{ matrix.os }}
@@ -123,6 +132,8 @@ jobs:
 
   lint:
     name: fmt
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -134,6 +145,8 @@ jobs:
 
   picker:
     name: frontend
+    needs: changes
+    if: needs.changes.outputs.picker == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -151,6 +164,9 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      # Coverage, which runs the tests everywhere else, skips Dependabot's bumps.
+      - if: github.actor == 'dependabot[bot]'
+        run: npm test
 
   prose:
     name: markdown
@@ -168,8 +184,11 @@ jobs:
       - run: npm ci
       - run: npm run lint:md
 
+  # On a pull request only the manifests, the locks and deny.toml can change what this says; main reads it every push.
   audit:
     name: advisories + licences
+    needs: changes
+    if: needs.changes.outputs.deps == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -211,8 +230,10 @@ jobs:
   coverage:
     name: coverage
     needs: changes
-    # A dependency bump changes no line of ours, so it pays for neither coverage nor Sonar.
-    if: github.actor != 'dependabot[bot]'
+    # A dependency bump changes no line of ours, and neither does prose, so they pay for neither coverage nor Sonar.
+    if: >-
+      github.actor != 'dependabot[bot]'
+      && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.picker == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -248,13 +269,19 @@ jobs:
           sudo apt-get install -y -qq libgtk-3-dev libayatana-appindicator3-dev libxdo-dev libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libwayland-dev libxcb1-dev
           cargo llvm-cov nextest -p linkunbound-core -p linkunbound-shell --lcov --output-path lcov-rust.info
 
+      - name: No picker lines to measure on this branch
+        if: needs.changes.outputs.picker != 'true'
+        run: mkdir -p app/coverage && touch app/coverage/lcov.info
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: needs.changes.outputs.picker == 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
 
       - name: The picker
+        if: needs.changes.outputs.picker == 'true'
         working-directory: app
         run: |
           npm ci
