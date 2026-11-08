@@ -349,6 +349,53 @@ mod tests {
         assert!(bear_y > list_y, "the list needs no room above it");
     }
 
+    fn click(picker: &Picker, at: slint::LogicalPosition) {
+        use slint::platform::{PointerEventButton, WindowEvent};
+        let window = picker.window();
+        window.dispatch_event(WindowEvent::PointerMoved { position: at });
+        let button = PointerEventButton::Left;
+        window.dispatch_event(WindowEvent::PointerPressed {
+            position: at,
+            button,
+        });
+        window.dispatch_event(WindowEvent::PointerReleased {
+            position: at,
+            button,
+        });
+    }
+
+    #[test]
+    fn the_close_button_dismisses_the_picker_in_every_look() {
+        let picker = picker();
+        picker.show().expect("shown");
+        let closed = std::rc::Rc::new(std::cell::Cell::new(0));
+        let counted = closed.clone();
+        picker.on_dismissed(move || counted.set(counted.get() + 1));
+        let looks = [
+            PickerStyle::Classic,
+            PickerStyle::Sheet,
+            PickerStyle::Compact,
+            PickerStyle::Bear,
+        ];
+
+        for chosen in looks {
+            style(&picker, chosen);
+            let right_half = picker.get_wanted_width() / 2.0;
+            let close = i_slint_backend_testing::ElementHandle::find_by_element_id(
+                &picker,
+                "CloseMark::touch",
+            )
+            .find(|found| found.absolute_position().x > right_half)
+            .unwrap_or_else(|| panic!("{chosen:?} shows no close button"));
+            let (at, size) = (close.absolute_position(), close.size());
+            click(
+                &picker,
+                slint::LogicalPosition::new(at.x + size.width / 2.0, at.y + size.height / 2.0),
+            );
+        }
+        assert_eq!(closed.get(), looks.len());
+    }
+
     #[test]
     fn a_centered_picker_ignores_the_pointer_and_centres_the_sheet() {
         let picker = picker();

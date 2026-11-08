@@ -471,20 +471,25 @@ export component AskHead inherits Rectangle {
     callback copy();
     callback close();
     height: 80px;
+    in property <length> ask-margin: 72px;
 
     VerticalLayout {
         padding-top: 20px;
-        padding-left: 112px;
-        padding-right: 112px;
+        padding-left: 72px;
+        padding-right: 72px;
         spacing: 3px;
         alignment: start;
-        Text {
-            text: root.ask;
-            font-size: 17px;
-            font-weight: 700;
-            color: root.private-on ? Palette.secret : Palette.ink;
-            horizontal-alignment: center;
-            overflow: elide;
+        HorizontalLayout {
+            padding-left: root.ask-margin - 72px;
+            padding-right: root.ask-margin - 72px;
+            Text {
+                text: root.ask;
+                font-size: 17px;
+                font-weight: 700;
+                color: root.private-on ? Palette.secret : Palette.ink;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
         }
         HorizontalLayout {
             alignment: center;
@@ -498,7 +503,7 @@ export component AskHead inherits Rectangle {
                 text: root.trail;
                 font-size: 13px;
                 color: Palette.dimmer;
-                max-width: root.width - 280px;
+                max-width: root.width - 200px;
                 overflow: elide;
             }
         }
@@ -513,7 +518,7 @@ export component AskHead inherits Rectangle {
     Tools {
         x: root.width - 8px - self.width;
         y: 16px;
-        width: 97px;
+        width: self.preferred-width;
         height: 28px;
         private-on: root.private-on;
         private-label: root.private-label;
