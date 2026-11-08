@@ -8,6 +8,7 @@ import { Card, Line, Section, Switch } from "./parts";
 type Theme = "system" | "light" | "dark";
 type Locale = "system" | "spanish" | "english";
 type PickerStyle = "bear" | "classic" | "sheet" | "compact";
+type PickerPosition = "pointer" | "center";
 
 type Preferences = {
   schema_version: number;
@@ -16,6 +17,7 @@ type Preferences = {
   shortcut: string | null;
   notify_on_rule: boolean;
   picker_style: PickerStyle;
+  picker_position: PickerPosition;
   looks_for_updates: boolean;
 };
 
@@ -38,6 +40,11 @@ const PICKERS: { id: PickerStyle; label: Key }[] = [
   { id: "classic", label: "pickerClassic" },
   { id: "sheet", label: "pickerSheet" },
   { id: "compact", label: "pickerCompact" },
+];
+
+const POSITIONS: { id: PickerPosition; label: Key }[] = [
+  { id: "pointer", label: "pickerByPointer" },
+  { id: "center", label: "pickerCentered" },
 ];
 
 const MODIFIERS = new Set(["Control", "Alt", "Shift", "Meta"]);
@@ -179,12 +186,17 @@ export default function Application({
               onPick={(locale) => apply({ locale })}
             />
           </Line>
-          <Line title={t("appPicker")}>
+        </Card>
+      </Section>
+
+      <Section title={t("appPicker")}>
+        <Card>
+          <Line title={t("pickerLook")}>
             <div className="flex shrink-0 flex-col items-end gap-1.5">
               <Choice
                 options={PICKERS}
                 value={prefs.picker_style}
-                label={t("appPicker")}
+                label={t("pickerLook")}
                 onPick={(picker_style) => apply({ picker_style }, previewing ? preview : undefined)}
               />
               <button
@@ -195,6 +207,16 @@ export default function Application({
                 {t("pickerPreview")}
               </button>
             </div>
+          </Line>
+          <Line title={t("appPickerPosition")} note={t("appPickerPositionNote")}>
+            <Choice
+              options={POSITIONS}
+              value={prefs.picker_position}
+              label={t("appPickerPosition")}
+              onPick={(picker_position) =>
+                apply({ picker_position }, previewing ? preview : undefined)
+              }
+            />
           </Line>
         </Card>
       </Section>

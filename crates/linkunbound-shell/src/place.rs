@@ -24,6 +24,23 @@ pub fn beside(cursor: (i32, i32), window: (i32, i32), screen: Bounds) -> (i32, i
         y = cy - h - OFFSET;
     }
 
+    inside((x, y), window, screen)
+}
+
+#[must_use]
+pub fn centered(window: (i32, i32), screen: Bounds) -> (i32, i32) {
+    let (w, h) = window;
+    inside(
+        (
+            screen.x + (screen.width - w) / 2,
+            screen.y + (screen.height - h) / 2,
+        ),
+        window,
+        screen,
+    )
+}
+
+fn inside((x, y): (i32, i32), (w, h): (i32, i32), screen: Bounds) -> (i32, i32) {
     let max_x = (screen.x + screen.width - w).max(screen.x);
     let max_y = (screen.y + screen.height - h).max(screen.y);
     (x.clamp(screen.x, max_x), y.clamp(screen.y, max_y))
@@ -114,5 +131,22 @@ mod tests {
         };
         let (x, y) = beside((150, 100), WINDOW, tiny);
         assert_eq!((x, y), (0, 0));
+        assert_eq!(centered(WINDOW, tiny), (0, 0));
+    }
+
+    #[test]
+    fn centered_it_sits_in_the_middle_of_the_work_area() {
+        assert_eq!(centered(WINDOW, SCREEN), (778, 390));
+    }
+
+    #[test]
+    fn centered_on_another_monitor_it_stays_on_that_monitor() {
+        let left = Bounds {
+            x: -1920,
+            y: 0,
+            width: 1920,
+            height: 1040,
+        };
+        assert_eq!(centered(WINDOW, left), (-1142, 370));
     }
 }

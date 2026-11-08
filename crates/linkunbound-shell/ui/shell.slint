@@ -1,4 +1,4 @@
-import { Destination, Reach, Palette, Look, UpdateStrip, Hair, AddressHead, AskHead, RememberFoot, ReachMenu } from "parts.slint";
+import { Destination, Reach, Palette, Look, UpdateStrip, Hair, AddressHead, AskHead, RememberFoot, ReachMenu, Measures } from "parts.slint";
 import { ListLook, CardsLook, CompactLook } from "looks.slint";
 
 export { Palette, Look } from "parts.slint";
@@ -37,6 +37,7 @@ export component Picker inherits Window {
 
     in property <Look> look: Look.bear;
     in property <bool> on-mac: false;
+    in property <bool> centered: false;
     // Room around the sheet for the shadow it draws itself. Zero where the system draws one.
     in property <length> halo: 0px;
 
@@ -55,6 +56,7 @@ export component Picker inherits Window {
     in property <string> update-button;
     in property <string> update-later;
     in property <string> copy-label;
+    in property <string> close-label;
     in property <int> update-far: 0;
     property <bool> update-shown: root.update-stage != "";
     property <bool> update-busy: root.update-stage == "starting" || root.update-stage == "getting" || root.update-stage == "installing";
@@ -114,17 +116,35 @@ export component Picker inherits Window {
         visible: false;
     }
 
+    property <length> ask-margin: max(72px, Measures.tools-width + 8px);
+    // Rounding at fractional scales can shave the exact width and elide the last letter.
+    property <length> ask-slack: 4px;
+    property <length> ask-need: max(ask-ruler.preferred-width, ask-private-ruler.preferred-width) + root.ask-slack + 2 * root.ask-margin;
+    ask-ruler := Text {
+        text: root.ask;
+        font-size: 17px;
+        font-weight: 700;
+        visible: false;
+    }
+    ask-private-ruler := Text {
+        text: root.ask-private;
+        font-size: 17px;
+        font-weight: 700;
+        visible: false;
+    }
+
     // Three columns of cards; four rows on screen and the rest scroll.
     property <length> cards-room: min(4, max(1, Math.ceil(root.count / 3))) * 58px + 10px;
 
     property <float> icons-shown: max(1, root.count);
-    property <length> compact-width: max(280px, root.icons-shown * 54px - 4px + 20px);
+    property <length> compact-address-room: 196px;
+    property <length> compact-width: max(root.compact-address-room + Measures.tools-width + 2 * 10px + 6px, root.icons-shown * 54px - 4px + 20px);
     property <length> compact-height: 12px + 28px + 6px + 72px + 6px + 20px + 6px + 26px + 10px;
 
     property <length> foot-room: 74px;
     property <length> sheet-width:
         root.look == Look.list ? root.list-width
-        : root.cards ? max(500px, root.list-width)
+        : root.cards ? max(500px, root.list-width, root.ask-need)
         : root.compact-width;
     property <length> head-room: root.cards ? 80px : 60px;
     property <length> body-room:
@@ -283,6 +303,7 @@ export component Picker inherits Window {
                 private-label: root.private-label;
                 copied: root.copied;
                 copy-label: root.copy-label;
+                close-label: root.close-label;
                 remember-label: root.remember-short;
                 reach-said: root.reach-said;
                 reach-keeps: root.all-reaches[root.reach-index].keeps;
@@ -290,6 +311,7 @@ export component Picker inherits Window {
                 hovered(i) => { root.hovered-at = i; }
                 toggle-private => { root.toggle-private(); }
                 copy => { root.copy(); }
+                close => { root.dismissed(); }
                 turn-reach => { root.reach-index = root.step-reach(1); }
             }
 
@@ -297,6 +319,7 @@ export component Picker inherits Window {
                 y: root.strip-room;
                 height: parent.height - root.strip-room;
                 if root.cards: AskHead {
+                    ask-margin: root.ask-margin;
                     ask: root.private-on ? root.ask-private : root.ask;
                     host: root.host;
                     trail: root.trail;
@@ -306,8 +329,10 @@ export component Picker inherits Window {
                     private-label: root.private-label;
                     copied: root.copied;
                     copy-label: root.copy-label;
+                    close-label: root.close-label;
                     toggle-private => { root.toggle-private(); }
                     copy => { root.copy(); }
+                    close => { root.dismissed(); }
                 }
                 if !root.cards: AddressHead {
                     host: root.host;
@@ -318,8 +343,10 @@ export component Picker inherits Window {
                     private-label: root.private-label;
                     copied: root.copied;
                     copy-label: root.copy-label;
+                    close-label: root.close-label;
                     toggle-private => { root.toggle-private(); }
                     copy => { root.copy(); }
+                    close => { root.dismissed(); }
                 }
                 Hair {}
                 if root.cards: CardsLook {

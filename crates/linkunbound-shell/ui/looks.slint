@@ -269,6 +269,7 @@ export component CompactLook inherits Rectangle {
     in property <string> private-label;
     in property <bool> copied;
     in property <string> copy-label;
+    in property <string> close-label;
     in property <string> remember-label;
     in property <string> reach-said;
     in property <bool> reach-keeps;
@@ -276,6 +277,7 @@ export component CompactLook inherits Rectangle {
     callback hovered(int);
     callback toggle-private();
     callback copy();
+    callback close();
     callback turn-reach();
     property <int> aimed: root.hovered-at >= 0 ? root.hovered-at : root.chosen-at;
 
@@ -312,8 +314,10 @@ export component CompactLook inherits Rectangle {
                 private-label: root.private-label;
                 copied: root.copied;
                 copy-label: root.copy-label;
+                close-label: root.close-label;
                 toggle-private => { root.toggle-private(); }
                 copy => { root.copy(); }
+                close => { root.close(); }
             }
         }
         HorizontalLayout {

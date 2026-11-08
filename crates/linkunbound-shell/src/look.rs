@@ -1,8 +1,13 @@
 //! How the picker is drawn: which look, and the material behind it where the system lends one.
 
-use linkunbound_core::PickerStyle;
+use linkunbound_core::{PickerPosition, PickerStyle, Preferences};
 use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, place};
 use slint::ComponentHandle;
+
+pub fn obey(picker: &Picker, prefs: &Preferences) {
+    style(picker, prefs.picker_style);
+    picker.set_centered(prefs.picker_position == PickerPosition::Center);
+}
 
 pub fn style(picker: &Picker, chosen: PickerStyle) {
     picker.set_look(match chosen {
@@ -98,26 +103,26 @@ pub fn dress_the_window(picker: &Picker) {
     };
     crate::host::keep_off_the_taskbar(handle, corner_of(picker));
     if wear_backdrop(picker, handle) {
-        beside_the_pointer(picker);
+        put_in_place(picker);
     }
     follow(picker);
     crate::host::take_the_keyboard(handle);
 }
 
-/// The picker belongs to the click that summoned it, not to the middle of a screen.
-pub fn beside_the_pointer(picker: &Picker) {
+/// Centered or not, the picker opens on the pointer's screen, the one the person is looking at.
+pub fn put_in_place(picker: &Picker) {
     let Some(pointer) = crate::host::cursor() else {
         return;
     };
     let Some(area) = crate::host::work_area_at(pointer.0, pointer.1) else {
         return;
     };
-    place_near(picker, pointer, area);
+    place_for(picker, pointer, area);
 }
 
 /// Where the picker goes for a pointer and the screen area around it, in the units the window is
 /// placed in. Returns the corner it was put at.
-fn place_near(
+fn place_for(
     picker: &Picker,
     (cx, cy): (i32, i32),
     (x, y, width, height): (i32, i32, i32, i32),
@@ -130,20 +135,22 @@ fn place_near(
     let size = |logical: f32| crate::physical(logical, scale);
 
     let halo = size(picker.get_halo());
-    let (at_x, at_y) = place::beside(
-        (cx, cy),
-        (
-            size(picker.get_wanted_width()),
-            size(picker.get_wanted_height()),
-        ),
-        // The bear rises over the sheet, so the screen it may use starts that much lower.
-        place::Bounds {
-            x,
-            y: y + size(crate::mascot::rise(picker)),
-            width,
-            height: height - size(crate::mascot::rise(picker)),
-        },
+    let window = (
+        size(picker.get_wanted_width()),
+        size(picker.get_wanted_height()),
     );
+    // The bear rises over the sheet, so the screen it may use starts that much lower.
+    let screen = place::Bounds {
+        x,
+        y: y + size(crate::mascot::rise(picker)),
+        width,
+        height: height - size(crate::mascot::rise(picker)),
+    };
+    let (at_x, at_y) = if picker.get_centered() {
+        place::centered((window.0 - 2 * halo, window.1 - 2 * halo), screen)
+    } else {
+        place::beside((cx, cy), window, screen)
+    };
     // The margin holds the shadow, not the sheet: the sheet's edge is what sits by the pointer,
     // and the transparent rim may hang past the screen without anyone seeing it.
     let (at_x, at_y) = (at_x - halo, at_y - halo);
@@ -285,7 +292,7 @@ fn wear_glass(_window: isize, _dark: bool, _corner: f64) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{corner_of, dress_for, native_glass, place_near, style, wear_backdrop};
+    use super::{corner_of, dress_for, native_glass, place_for, style, wear_backdrop};
     use linkunbound_core::PickerStyle;
     use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
     use slint::ComponentHandle;
@@ -327,19 +334,85 @@ mod tests {
         style(&picker, PickerStyle::Classic);
 
         dress_for(&picker, false);
-        let (_, list_y) = place_near(&picker, near_the_top, screen);
+        let (_, list_y) = place_for(&picker, near_the_top, screen);
 
         style(&picker, PickerStyle::Bear);
 
         dress_for(&picker, false);
         picker.set_halo(0.0);
-        let (_, bear_y) = place_near(&picker, near_the_top, screen);
+        let (_, bear_y) = place_for(&picker, near_the_top, screen);
         let rise = crate::mascot::rise(&picker);
         assert!(
             f64::from(bear_y) >= f64::from(rise) * f64::from(picker.window().scale_factor()) - 1.0,
             "the bear's head stays on the screen: {bear_y} for a rise of {rise}"
         );
         assert!(bear_y > list_y, "the list needs no room above it");
+    }
+
+    fn click(picker: &Picker, at: slint::LogicalPosition) {
+        use slint::platform::{PointerEventButton, WindowEvent};
+        let window = picker.window();
+        window.dispatch_event(WindowEvent::PointerMoved { position: at });
+        let button = PointerEventButton::Left;
+        window.dispatch_event(WindowEvent::PointerPressed {
+            position: at,
+            button,
+        });
+        window.dispatch_event(WindowEvent::PointerReleased {
+            position: at,
+            button,
+        });
+    }
+
+    #[test]
+    fn the_close_button_dismisses_the_picker_in_every_look() {
+        let picker = picker();
+        picker.show().expect("shown");
+        let closed = std::rc::Rc::new(std::cell::Cell::new(0));
+        let counted = closed.clone();
+        picker.on_dismissed(move || counted.set(counted.get() + 1));
+        let looks = [
+            PickerStyle::Classic,
+            PickerStyle::Sheet,
+            PickerStyle::Compact,
+            PickerStyle::Bear,
+        ];
+
+        for chosen in looks {
+            style(&picker, chosen);
+            let found: Vec<_> = i_slint_backend_testing::ElementHandle::find_by_element_id(
+                &picker,
+                "CloseMark::touch",
+            )
+            .collect();
+            assert_eq!(found.len(), 1, "{chosen:?}");
+            let (at, size) = (found[0].absolute_position(), found[0].size());
+            click(
+                &picker,
+                slint::LogicalPosition::new(at.x + size.width / 2.0, at.y + size.height / 2.0),
+            );
+        }
+        assert_eq!(closed.get(), looks.len());
+    }
+
+    #[test]
+    fn a_centered_picker_ignores_the_pointer_and_centres_the_sheet() {
+        let picker = picker();
+        let screen = (0, 0, 1920, 1080);
+        style(&picker, PickerStyle::Sheet);
+        dress_for(&picker, true);
+        picker.set_halo(HALO);
+        picker.set_centered(true);
+
+        let scale = f64::from(picker.window().scale_factor());
+        let size = |logical: f32| crate::physical(logical, scale);
+        let halo = size(picker.get_halo());
+        let sheet = size(picker.get_wanted_width()) - 2 * halo;
+
+        let one = place_for(&picker, (10, 10), screen);
+        let other = place_for(&picker, (1900, 1000), screen);
+        assert_eq!(one, other);
+        assert!(((one.0 + halo) - (1920 - sheet) / 2).abs() <= 1, "{one:?}");
     }
 
     /// A window the system will not dress gets the painted sheet back, and the tiles their

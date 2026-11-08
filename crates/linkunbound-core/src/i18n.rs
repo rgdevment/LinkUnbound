@@ -28,6 +28,7 @@ catalogue! {
     picker_remember: "Recordar esta elección" | "Remember this choice",
     picker_private: "Privada" | "Private",
     picker_copy: "Copiar la dirección" | "Copy the address",
+    picker_close: "Cerrar" | "Close",
     picker_ask: "¿Dónde abro este enlace?" | "Where should this link open?",
     picker_ask_private: "¿Dónde lo abro en privado?" | "Where should it open privately?",
     picker_private_line: "Se abrirá en una ventana privada" | "It will open in a private window",

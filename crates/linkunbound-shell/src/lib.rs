@@ -419,6 +419,7 @@ pub fn dress(window: &Picker, words: &Strings, url: &str, source: Option<&str>, 
     window.set_chosen_at(-1);
     window.set_preview(false);
     window.set_copy_label(words.picker_copy.into());
+    window.set_close_label(words.picker_close.into());
     window.set_update_later(words.update_later.into());
     window.set_private_on(false);
     // Pinned for a link, not for the day: left set, every later picker opened privately.
