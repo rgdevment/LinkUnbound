@@ -205,6 +205,7 @@ jobs:
           path: mutants-elsewhere/mutants.out/
           retention-days: 14
 
+  # Stryker runs in place: the notices markdown.test.ts reads live outside app/, where no sandbox reaches.
   window:
     name: window / shard ${{ matrix.shard }} of 4
     runs-on: ubuntu-24.04
@@ -249,7 +250,7 @@ jobs:
                 }' \
             | paste -sd, -)
           echo "$list"
-          npx stryker run --mutate "$list" --concurrency 4 \
+          npx stryker run --inPlace --mutate "$list" --concurrency 4 \
             --reporters progress-append-only,clear-text,json
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

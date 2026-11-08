@@ -192,6 +192,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # Stryker runs in place: the notices markdown.test.ts reads live outside app/, where no sandbox reaches.
   window-on-the-branch:
     name: window / the lines this branch changed
     runs-on: ubuntu-24.04
@@ -250,13 +251,13 @@ jobs:
         env:
           TOUCHED: ${{ steps.touched.outputs.list }}
         run: |
-          npx stryker run --mutate "$TOUCHED"
+          npx stryker run --inPlace --mutate "$TOUCHED"
           echo "::notice::survivors are in the report above and the artifact; this check does not fail on them"
 
       - name: Only the configuration changed, and Stryker still starts with it
         if: steps.touched.outputs.list == '' && steps.touched.outputs.any == 'yes'
         working-directory: app
-        run: npx stryker run --dryRunOnly
+        run: npx stryker run --inPlace --dryRunOnly
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.touched.outputs.list != ''
