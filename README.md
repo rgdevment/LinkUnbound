@@ -140,8 +140,8 @@ LinkUnbound keeps itself up to date from then on, so `winget upgrade --all` leav
 
 ```bash
 brew tap rgdevment/tap
-brew install --cask linkunbound          # stable
-brew install --cask linkunbound-beta     # pre-release
+brew trust rgdevment/tap
+brew install --cask linkunbound
 ```
 
 Or download the `.dmg` directly from [GitHub Releases](https://github.com/rgdevment/LinkUnbound/releases/latest). There are two: `aarch64` for Apple Silicon and `x86_64` for Intel — Apple menu › *About This Mac* says which one yours is. Homebrew picks by itself.
