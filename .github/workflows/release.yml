@@ -22,36 +22,6 @@ env:
   BUILD_MACOS: "true"
 
 jobs:
-  # Markdown and the picker's style are CI's on main, which the tested job waits for; the notices are read here.
-  gate:
-    name: The notices name what ships
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      TAGGED: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: env.TAGGED == 'true'
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: env.TAGGED == 'true'
-        with:
-          node-version: 22
-          package-manager-cache: false
-      # About carries both files inside the binary, so the tag ships whatever the tree holds.
-      - uses: ./.github/actions/toolchain
-        if: env.TAGGED == 'true'
-      - name: The notices on main name what this build ships
-        if: env.TAGGED == 'true'
-        run: |
-          (cd app && npm ci)
-          npm run notices
-          if ! git diff --exit-code THIRD-PARTY-BUNDLED.md THIRD-PARTY-LICENSES.md; then
-            echo "::error::THIRD-PARTY-BUNDLED.md or THIRD-PARTY-LICENSES.md is behind the lockfiles; run npm run notices and land them before tagging"
-            exit 1
-          fi
-
   tested:
     name: Tested when it landed
     runs-on: ubuntu-24.04
@@ -100,11 +70,11 @@ jobs:
             ran: a tag belongs on a commit that reached main and was tested there"
           exit 1
 
+  # Markdown and the picker's style are CI's on main, which the tested job waits for; the notices are read here.
   version:
     name: Resolve the version
-    needs: [gate]
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
@@ -230,6 +200,24 @@ jobs:
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
         run: bash scripts/news.sh "$VERSION"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: ./.github/actions/toolchain
+        if: startsWith(github.ref, 'refs/tags/v')
+      # About carries both files inside the binary, so the tag ships whatever the tree holds.
+      - name: The notices on main name what this build ships
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          (cd app && npm ci)
+          npm run notices
+          if ! git diff --exit-code THIRD-PARTY-BUNDLED.md THIRD-PARTY-LICENSES.md; then
+            echo "::error::THIRD-PARTY-BUNDLED.md or THIRD-PARTY-LICENSES.md is behind the lockfiles; run npm run notices and land them before tagging"
+            exit 1
+          fi
 
   bundle-windows:
     name: linkunbound-windows-installer

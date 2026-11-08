@@ -13,8 +13,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   NOT_ON_LINUX: "mac::|local_web_file|launchable_file|host::|reaction_to|sent_by_launch_services|platform::|dress_natively|replace is_bundle|relaunch_resident|relay_links|hand_to_the_resident|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room|replace forget with"
-  # The same Mac branches of the core and the picker the weekly sweep weighs on a Mac; Linux weighs the rest.
-  MAC_BRANCHES: "mac::|local_web_file|launchable_file|reaction_to|sent_by_launch_services|replace drawing|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room"
+  MAC_BRANCHES: "mac::|host::|local_web_file|launchable_file|reaction_to|sent_by_launch_services|replace drawing|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room"
 
 jobs:
   # `paths` on the trigger leaves a required check unreported for good; a skipped job counts as met.
@@ -27,6 +26,7 @@ jobs:
       mac: ${{ steps.look.outputs.mac }}
       settings: ${{ steps.look.outputs.settings }}
       window: ${{ steps.look.outputs.window }}
+      stryker: ${{ steps.look.outputs.stryker }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,17 +40,10 @@ jobs:
         run: |
           # A dependency bump changes no line of ours, even when it touches a crate's manifest.
           if [ "$ACTOR" = "dependabot[bot]" ]; then
-            printf 'crates=false\nmac=false\nsettings=false\nwindow=false\n' >> "$GITHUB_OUTPUT"
+            printf 'crates=false\nmac=false\nsettings=false\nwindow=false\nstryker=false\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          from=$(git merge-base "$BASE" HEAD)
-          touched() { git diff --quiet "$from" HEAD -- "$@" && echo false || echo true; }
-          {
-            echo "crates=$(touched crates/linkunbound-core crates/linkunbound-shell)"
-            echo "mac=$(touched crates)"
-            echo "settings=$(touched app/src-tauri/src)"
-            echo "window=$(touched app/src)"
-          } | tee -a "$GITHUB_OUTPUT"
+          bash scripts/touched.sh "$BASE" | tee -a "$GITHUB_OUTPUT"
 
   crates-on-the-branch:
     name: crates / the lines this branch changed
@@ -70,10 +63,6 @@ jobs:
         run: git diff "$(git merge-base "$BASE" HEAD)" -- crates/linkunbound-core crates/linkunbound-shell > branch.diff
 
       - uses: ./.github/actions/toolchain
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: workspace
-          save-if: false
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: nextest,cargo-mutants
@@ -87,7 +76,7 @@ jobs:
         id: run
         run: |
           set +e
-          cargo mutants --in-diff branch.diff -p linkunbound-core -p linkunbound-shell -j 2 --exclude-re "$NOT_ON_LINUX"
+          bash scripts/mutants-branch.sh -p linkunbound-core -p linkunbound-shell -j 2 --exclude-re "$NOT_ON_LINUX"
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived
@@ -103,8 +92,9 @@ jobs:
           name: mutants-branch-crates
           path: mutants.out/
           retention-days: 7
+          if-no-files-found: ignore
 
-  # Weighing the core and the picker again here, all of it, outlasted everything else a pull request runs.
+  # Linux weighs everything it compiles; a Mac adds only what compiles nowhere else.
   mac-on-the-branch:
     name: mac / the lines this branch changed
     runs-on: macos-latest
@@ -120,13 +110,9 @@ jobs:
       - name: What the branch changed in the crates, read with a Mac's eyes
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: git diff "$(git merge-base "$BASE" HEAD)" -- crates > branch.diff
+        run: git diff "$(git merge-base "$BASE" HEAD)" -- crates/linkunbound-mac crates/linkunbound-core crates/linkunbound-shell > branch.diff
 
       - uses: ./.github/actions/toolchain
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: workspace
-          save-if: false
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: nextest,cargo-mutants
@@ -135,7 +121,7 @@ jobs:
         id: run
         run: |
           set +e
-          cargo mutants --in-diff branch.diff -p linkunbound-mac -p linkunbound-core -p linkunbound-shell -j 2 \
+          bash scripts/mutants-branch.sh -p linkunbound-mac -p linkunbound-core -p linkunbound-shell -j 2 \
             --re "^crates/linkunbound-mac/|$MAC_BRANCHES" --exclude-re 'replace forget with'
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
@@ -172,10 +158,6 @@ jobs:
         run: git diff "$(git merge-base "$BASE" HEAD)" -- app/src-tauri/src > branch.diff
 
       - uses: ./.github/actions/toolchain
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: workspace
-          save-if: false
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: nextest,cargo-mutants
@@ -192,7 +174,7 @@ jobs:
         id: run
         run: |
           set +e
-          cargo mutants --in-diff branch.diff -p linkunbound-settings --in-place --exclude-re "$NOT_ON_LINUX"
+          bash scripts/mutants-branch.sh -p linkunbound-settings --in-place --exclude-re "$NOT_ON_LINUX"
           echo "code=$?" >> "$GITHUB_OUTPUT"
 
       - name: What survived
@@ -208,6 +190,7 @@ jobs:
           name: mutants-branch-settings
           path: mutants.out/
           retention-days: 7
+          if-no-files-found: ignore
 
   window-on-the-branch:
     name: window / the lines this branch changed
@@ -226,6 +209,7 @@ jobs:
         working-directory: app
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
+          STRYKER: ${{ needs.changes.outputs.stryker }}
         run: |
           from=$(git merge-base "$BASE" HEAD)
           list=$(git diff --unified=0 --relative --diff-filter=d "$from" -- src \
@@ -245,15 +229,16 @@ jobs:
                 }' \
             | paste -sd, -)
           echo "list=$list" >> "$GITHUB_OUTPUT"
+          if [ -n "$list" ] || [ "$STRYKER" = "true" ]; then echo "any=yes" >> "$GITHUB_OUTPUT"; fi
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: steps.touched.outputs.list != ''
+        if: steps.touched.outputs.any == 'yes'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - if: steps.touched.outputs.list != ''
+      - if: steps.touched.outputs.any == 'yes'
         working-directory: app
         run: npm ci
 
@@ -267,6 +252,11 @@ jobs:
         run: |
           npx stryker run --mutate "$TOUCHED"
           echo "::notice::survivors are in the report above and the artifact; this check does not fail on them"
+
+      - name: Only the configuration changed, and Stryker still starts with it
+        if: steps.touched.outputs.list == '' && steps.touched.outputs.any == 'yes'
+        working-directory: app
+        run: npx stryker run --dryRunOnly
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.touched.outputs.list != ''

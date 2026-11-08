@@ -16,7 +16,7 @@ env:
   CARGO_TERM_COLOR: always
   DESKTOP_LIBS: libgtk-3-dev libayatana-appindicator3-dev libxdo-dev libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libwayland-dev libxcb1-dev
   NOT_ON_LINUX: "mac::|local_web_file|launchable_file|host::|reaction_to|sent_by_launch_services|platform::|dress_natively|replace is_bundle|relaunch_resident|relay_links|hand_to_the_resident|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room|replace forget with"
-  MAC_BRANCHES: "mac::|local_web_file|launchable_file|reaction_to|sent_by_launch_services|replace drawing|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room"
+  MAC_BRANCHES: "mac::|host::|local_web_file|launchable_file|reaction_to|sent_by_launch_services|replace drawing|replace base -> Option|replace address -> String|replace named -> Option<Name|replace make_room"
 
 jobs:
   core:
@@ -28,10 +28,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: workspace
-          save-if: false
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: nextest,cargo-mutants
@@ -70,10 +66,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: workspace
-          save-if: false
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: nextest,cargo-mutants
@@ -118,10 +110,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: workspace
-          save-if: false
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: nextest,cargo-mutants

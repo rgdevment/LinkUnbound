@@ -17,7 +17,6 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
-  # Anything not known to stay out of Rust's way counts as Rust, so a new path runs the whole suite.
   changes:
     name: what the branch touched
     runs-on: ubuntu-24.04
@@ -34,29 +33,8 @@ jobs:
 
       - id: look
         env:
-          EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [ "$EVENT" != "pull_request" ]; then
-            printf 'rust=true\npicker=true\ndeps=true\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          aside='^(app/src/|app/(\.gitignore|biome\.json|index\.html|package(-lock)?\.json|stryker\.config\.json|tsconfig(\.node)?\.json|vite\.config\.ts)$|hooks/|packaging/|resources/|(CLA|COMMERCIAL|CONTRIBUTING|PRIVACY|README|SECURITY)\.md$|package(-lock)?\.json$|\.markdownlint-cli2\.jsonc$|\.editorconfig$|\.github/(FUNDING|dependabot)\.yml$|\.github/(not-this-spanish|oversized)\.txt$|\.github/workflows/(bundle|caches|cla|commits|feed|mutants|mutants-sweep|release|rules|update-badge)\.yml$)'
-          from=$(git merge-base "$BASE" HEAD)
-          changed=$(git diff --name-only "$from" HEAD)
-          # The resident embeds the news, so it is Rust's though it lives beside the picker.
-          first=$( { echo "$changed" | grep -x 'app/src/news.json'; echo "$changed" | grep -vE "$aside"; } \
-            | grep -v '^$' | head -1 || true)
-          [ -n "$first" ] && rust=true || rust=false
-          echo "rust=$rust" >> "$GITHUB_OUTPUT"
-          echo "the first path Rust has to answer for: ${first:-none}"
-          self='^\.github/workflows/ci\.yml$'
-          picker=false
-          grep -qE "^app/([^/]+|src/.*)$|$self" <<< "$changed" && picker=true
-          deps=false
-          grep -qE "(^|/)(Cargo\.(toml|lock)|package(-lock)?\.json)$|^deny\.toml$|$self" <<< "$changed" && deps=true
-          printf 'picker=%s\ndeps=%s\n' "$picker" "$deps" >> "$GITHUB_OUTPUT"
-          echo "the picker: $picker; the dependencies: $deps"
+        run: bash scripts/touched.sh "$BASE" | tee -a "$GITHUB_OUTPUT"
 
   test:
     name: test / ${{ matrix.os }}

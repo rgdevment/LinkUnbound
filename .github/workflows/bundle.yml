@@ -42,19 +42,7 @@ jobs:
       - id: look
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [ -z "$BASE" ]; then
-            echo "packaging=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # release.yml runs none of what is below; actionlint and zizmor in Rules are what read it.
-          watched='^(app/src-tauri/(nsis/|Info\.plist|tauri\.conf\.json|Cargo\.toml|build\.rs)|scripts/sidecar\.sh|Cargo\.toml$|\.github/workflows/bundle\.yml$)'
-          from=$(git merge-base "$BASE" HEAD)
-          if git diff --name-only --diff-filter=d "$from" HEAD | grep -qE "$watched"; then
-            echo "packaging=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "packaging=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: bash scripts/touched.sh "$BASE" | tee -a "$GITHUB_OUTPUT"
 
   nsis:
     name: the installer builds
