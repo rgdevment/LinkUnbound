@@ -37,6 +37,7 @@ export component Picker inherits Window {
 
     in property <Look> look: Look.bear;
     in property <bool> on-mac: false;
+    in property <bool> centered: false;
     // Room around the sheet for the shadow it draws itself. Zero where the system draws one.
     in property <length> halo: 0px;
 
@@ -55,6 +56,7 @@ export component Picker inherits Window {
     in property <string> update-button;
     in property <string> update-later;
     in property <string> copy-label;
+    in property <string> close-label;
     in property <int> update-far: 0;
     property <bool> update-shown: root.update-stage != "";
     property <bool> update-busy: root.update-stage == "starting" || root.update-stage == "getting" || root.update-stage == "installing";
@@ -283,6 +285,7 @@ export component Picker inherits Window {
                 private-label: root.private-label;
                 copied: root.copied;
                 copy-label: root.copy-label;
+                close-label: root.close-label;
                 remember-label: root.remember-short;
                 reach-said: root.reach-said;
                 reach-keeps: root.all-reaches[root.reach-index].keeps;
@@ -290,6 +293,7 @@ export component Picker inherits Window {
                 hovered(i) => { root.hovered-at = i; }
                 toggle-private => { root.toggle-private(); }
                 copy => { root.copy(); }
+                close => { root.dismissed(); }
                 turn-reach => { root.reach-index = root.step-reach(1); }
             }
 
@@ -306,8 +310,10 @@ export component Picker inherits Window {
                     private-label: root.private-label;
                     copied: root.copied;
                     copy-label: root.copy-label;
+                    close-label: root.close-label;
                     toggle-private => { root.toggle-private(); }
                     copy => { root.copy(); }
+                    close => { root.dismissed(); }
                 }
                 if !root.cards: AddressHead {
                     host: root.host;
@@ -318,8 +324,10 @@ export component Picker inherits Window {
                     private-label: root.private-label;
                     copied: root.copied;
                     copy-label: root.copy-label;
+                    close-label: root.close-label;
                     toggle-private => { root.toggle-private(); }
                     copy => { root.copy(); }
+                    close => { root.dismissed(); }
                 }
                 Hair {}
                 if root.cards: CardsLook {

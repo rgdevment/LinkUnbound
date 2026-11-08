@@ -14,6 +14,7 @@ const PREFS = {
   shortcut: "Alt+Shift+L" as string | null,
   notify_on_rule: true,
   picker_style: "classic" as "bear" | "classic" | "sheet" | "compact",
+  picker_position: "pointer" as "pointer" | "center",
   looks_for_updates: true,
 };
 
@@ -69,7 +70,7 @@ describe("application settings", () => {
 
   it("offers the tiles, and keeps the classic picker marked until they are chosen", async () => {
     mount();
-    const picker = within(await screen.findByRole("group", { name: "Selector" }));
+    const picker = within(await screen.findByRole("group", { name: "Estilo" }));
     expect(picker.getByRole("radio", { name: "Clásico" })).toBeChecked();
     await userEvent.click(picker.getByRole("radio", { name: "Mosaico" }));
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
@@ -78,9 +79,19 @@ describe("application settings", () => {
   });
 
   /// Every look is offered, the bear among them, and each can be seen before it is kept.
+  it("opens the picker by the pointer until the center is chosen", async () => {
+    mount();
+    const where = within(await screen.findByRole("group", { name: "Dónde aparece" }));
+    expect(where.getByRole("radio", { name: "Junto al puntero" })).toBeChecked();
+    await userEvent.click(where.getByRole("radio", { name: "Al centro" }));
+    expect(invoke).toHaveBeenCalledWith("prefs_set", {
+      prefs: { ...PREFS, picker_position: "center" },
+    });
+  });
+
   it("offers the four looks and shows the picker over a sample link", async () => {
     mount();
-    const picker = within(await screen.findByRole("group", { name: "Selector" }));
+    const picker = within(await screen.findByRole("group", { name: "Estilo" }));
     for (const look of ["LinkBear", "Clásico", "Mosaico", "Compacto"]) {
       expect(picker.getByRole("radio", { name: look })).toBeInTheDocument();
     }
@@ -91,7 +102,7 @@ describe("application settings", () => {
   /// Once a preview is up, choosing another look redraws it rather than leaving the old one open.
   it("redraws the preview when another look is chosen", async () => {
     mount();
-    const picker = within(await screen.findByRole("group", { name: "Selector" }));
+    const picker = within(await screen.findByRole("group", { name: "Estilo" }));
     await userEvent.click(picker.getByRole("radio", { name: "Mosaico" }));
     expect(invoke.mock.calls.filter(([cmd]) => cmd === "picker_preview")).toHaveLength(0);
 

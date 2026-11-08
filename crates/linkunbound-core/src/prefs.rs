@@ -30,6 +30,14 @@ pub enum PickerStyle {
     Bear,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PickerPosition {
+    #[default]
+    Pointer,
+    Center,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(default)]
@@ -49,6 +57,8 @@ pub struct Preferences {
     pub edge_warning_dismissed: bool,
     #[serde(default)]
     pub picker_style: PickerStyle,
+    #[serde(default)]
+    pub picker_position: PickerPosition,
     /// Whether the resident asks about releases on its own, every few hours; off, only the
     /// settings window ever asks, and only while it is open.
     #[serde(default = "yes")]
@@ -82,6 +92,7 @@ impl Default for Preferences {
             notify_on_rule: true,
             edge_warning_dismissed: false,
             picker_style: PickerStyle::default(),
+            picker_position: PickerPosition::default(),
             looks_for_updates: true,
             here_since: None,
             asked_for_a_star: false,
@@ -163,7 +174,7 @@ fn shortcut_of(said: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Locale, PickerStyle, Preferences, Theme};
+    use super::{Locale, PickerPosition, PickerStyle, Preferences, Theme};
 
     #[test]
     fn a_fresh_install_follows_the_system_and_claims_the_default_shortcut() {
@@ -280,6 +291,21 @@ mod tests {
 
         let written = serde_json::to_string(&asked).unwrap();
         assert!(written.contains(r#""picker_style":"sheet""#), "{written}");
+    }
+
+    #[test]
+    fn the_picker_opens_by_the_pointer_unless_the_center_was_asked_for() {
+        let fresh: Preferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(fresh.picker_position, PickerPosition::Pointer);
+
+        let asked: Preferences = serde_json::from_str(r#"{"picker_position": "center"}"#).unwrap();
+        assert_eq!(asked.picker_position, PickerPosition::Center);
+
+        let written = serde_json::to_string(&asked).unwrap();
+        assert!(
+            written.contains(r#""picker_position":"center""#),
+            "{written}"
+        );
     }
 
     /// Everybody moves to the bear once; after that, what they pick stays picked.

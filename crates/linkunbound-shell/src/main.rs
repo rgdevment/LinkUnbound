@@ -467,7 +467,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
             held.rows = listed;
             held.source = source;
         }
-        look::beside_the_pointer(picker);
+        look::put_in_place(picker);
         let _ = picker.show();
         look::dress_the_window(picker);
         return true;
@@ -482,7 +482,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
     if let Some(ui) = ui() {
         ui.refresh_strip();
     }
-    look::beside_the_pointer(picker);
+    look::put_in_place(picker);
     let asked_at = physical_icon_side(picker);
     let _ = picker.show();
     if let Some(ui) = ui() {
@@ -494,7 +494,7 @@ fn present(picker: &Picker, words: &Strings, shown: &Rc<RefCell<Shown>>, arrival
     // asked for at the wrong side.
     let drawn_at = physical_icon_side(picker);
     if drawn_at != asked_at {
-        look::beside_the_pointer(picker);
+        look::put_in_place(picker);
         let redrawn = rows(drawn_at);
         let held = shown.borrow();
         if let Some(url) = held.url.as_deref() {
@@ -786,7 +786,7 @@ impl Ui {
         let light = wants_light(prefs.theme);
         self.light_seen.set(light);
         paint(&self.picker, &self.notice, light);
-        look::style(&self.picker, prefs.picker_style);
+        look::obey(&self.picker, prefs);
         if let Some(tray) = self.tray.as_ref() {
             tray.show(true);
             tray.relabel(&self.words.get());

@@ -330,13 +330,42 @@ export component MaskButton inherits Rectangle {
     }
 }
 
+export component CloseMark inherits Rectangle {
+    in property <string> label;
+    callback pressed();
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.pressed(); }
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: touch.has-hover ? Palette.hover : transparent;
+    Path {
+        x: 9px;
+        y: 9px;
+        width: 10px;
+        height: 10px;
+        viewbox-width: 10;
+        viewbox-height: 10;
+        commands: "M1 1 L9 9 M9 1 L1 9";
+        stroke: touch.has-hover ? Palette.ink : Palette.faint;
+        stroke-width: 1.5px;
+    }
+    touch := TouchArea {
+        clicked => { root.pressed(); }
+    }
+}
+
 export component Tools inherits HorizontalLayout {
     in property <bool> private-on;
     in property <string> private-label;
     in property <bool> copied;
     in property <string> copy-label;
+    in property <string> close-label;
     callback toggle-private();
     callback copy();
+    callback close();
     spacing: 2px;
     MaskButton {
         on: root.private-on;
@@ -347,6 +376,20 @@ export component Tools inherits HorizontalLayout {
         label: root.copy-label;
         done: root.copied;
         pressed => { root.copy(); }
+    }
+    Rectangle {
+        width: 9px;
+        Rectangle {
+            x: 4px;
+            y: (parent.height - self.height) / 2;
+            width: 1px;
+            height: 16px;
+            background: Palette.hair;
+        }
+    }
+    CloseMark {
+        label: root.close-label;
+        pressed => { root.close(); }
     }
 }
 
@@ -360,8 +403,10 @@ export component AddressHead inherits Rectangle {
     in property <string> private-label;
     in property <bool> copied;
     in property <string> copy-label;
+    in property <string> close-label;
     callback toggle-private();
     callback copy();
+    callback close();
     height: 60px;
 
     HorizontalLayout {
@@ -402,8 +447,10 @@ export component AddressHead inherits Rectangle {
             private-label: root.private-label;
             copied: root.copied;
             copy-label: root.copy-label;
+            close-label: root.close-label;
             toggle-private => { root.toggle-private(); }
             copy => { root.copy(); }
+            close => { root.close(); }
         }
     }
 }
@@ -419,14 +466,16 @@ export component AskHead inherits Rectangle {
     in property <string> private-label;
     in property <bool> copied;
     in property <string> copy-label;
+    in property <string> close-label;
     callback toggle-private();
     callback copy();
+    callback close();
     height: 80px;
 
     VerticalLayout {
         padding-top: 20px;
-        padding-left: 72px;
-        padding-right: 72px;
+        padding-left: 112px;
+        padding-right: 112px;
         spacing: 3px;
         alignment: start;
         Text {
@@ -449,7 +498,7 @@ export component AskHead inherits Rectangle {
                 text: root.trail;
                 font-size: 13px;
                 color: Palette.dimmer;
-                max-width: root.width - 200px;
+                max-width: root.width - 280px;
                 overflow: elide;
             }
         }
@@ -464,14 +513,16 @@ export component AskHead inherits Rectangle {
     Tools {
         x: root.width - 8px - self.width;
         y: 16px;
-        width: 58px;
+        width: 97px;
         height: 28px;
         private-on: root.private-on;
         private-label: root.private-label;
         copied: root.copied;
         copy-label: root.copy-label;
+        close-label: root.close-label;
         toggle-private => { root.toggle-private(); }
         copy => { root.copy(); }
+        close => { root.close(); }
     }
 }
 
