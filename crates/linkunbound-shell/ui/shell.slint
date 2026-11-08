@@ -1,4 +1,4 @@
-import { Destination, Reach, Palette, Look, UpdateStrip, Hair, AddressHead, AskHead, RememberFoot, ReachMenu, Tools } from "parts.slint";
+import { Destination, Reach, Palette, Look, UpdateStrip, Hair, AddressHead, AskHead, RememberFoot, ReachMenu, Measures } from "parts.slint";
 import { ListLook, CardsLook, CompactLook } from "looks.slint";
 
 export { Palette, Look } from "parts.slint";
@@ -116,9 +116,10 @@ export component Picker inherits Window {
         visible: false;
     }
 
-    // The bear's question is centred between the tools and their mirror, and never elided.
-    property <length> ask-margin: max(72px, tools-ruler.preferred-width + 8px);
-    property <length> ask-need: max(ask-ruler.preferred-width, ask-private-ruler.preferred-width) + 2 * root.ask-margin;
+    property <length> ask-margin: max(72px, Measures.tools-width + 8px);
+    // Rounding at fractional scales can shave the exact width and elide the last letter.
+    property <length> ask-slack: 4px;
+    property <length> ask-need: max(ask-ruler.preferred-width, ask-private-ruler.preferred-width) + root.ask-slack + 2 * root.ask-margin;
     ask-ruler := Text {
         text: root.ask;
         font-size: 17px;
@@ -131,18 +132,13 @@ export component Picker inherits Window {
         font-weight: 700;
         visible: false;
     }
-    Rectangle {
-        visible: false;
-        width: 0px;
-        height: 0px;
-        tools-ruler := Tools {}
-    }
 
     // Three columns of cards; four rows on screen and the rest scroll.
     property <length> cards-room: min(4, max(1, Math.ceil(root.count / 3))) * 58px + 10px;
 
     property <float> icons-shown: max(1, root.count);
-    property <length> compact-width: max(320px, root.icons-shown * 54px - 4px + 20px);
+    property <length> compact-address-room: 196px;
+    property <length> compact-width: max(root.compact-address-room + Measures.tools-width + 2 * 10px + 6px, root.icons-shown * 54px - 4px + 20px);
     property <length> compact-height: 12px + 28px + 6px + 72px + 6px + 20px + 6px + 26px + 10px;
 
     property <length> foot-room: 74px;

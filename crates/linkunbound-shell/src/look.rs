@@ -380,14 +380,13 @@ mod tests {
 
         for chosen in looks {
             style(&picker, chosen);
-            let right_half = picker.get_wanted_width() / 2.0;
-            let close = i_slint_backend_testing::ElementHandle::find_by_element_id(
+            let found: Vec<_> = i_slint_backend_testing::ElementHandle::find_by_element_id(
                 &picker,
                 "CloseMark::touch",
             )
-            .find(|found| found.absolute_position().x > right_half)
-            .unwrap_or_else(|| panic!("{chosen:?} shows no close button"));
-            let (at, size) = (close.absolute_position(), close.size());
+            .collect();
+            assert_eq!(found.len(), 1, "{chosen:?}");
+            let (at, size) = (found[0].absolute_position(), found[0].size());
             click(
                 &picker,
                 slint::LogicalPosition::new(at.x + size.width / 2.0, at.y + size.height / 2.0),

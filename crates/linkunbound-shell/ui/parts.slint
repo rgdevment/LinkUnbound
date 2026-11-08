@@ -357,7 +357,12 @@ export component CloseMark inherits Rectangle {
     }
 }
 
+export global Measures {
+    out property <length> tools-width: 3 * 28px + 9px + 3 * 2px;
+}
+
 export component Tools inherits HorizontalLayout {
+    width: Measures.tools-width;
     in property <bool> private-on;
     in property <string> private-label;
     in property <bool> copied;
@@ -474,7 +479,7 @@ export component AskHead inherits Rectangle {
     in property <length> ask-margin: 72px;
 
     VerticalLayout {
-        padding-top: 20px;
+        padding-top: 18px;
         padding-left: 72px;
         padding-right: 72px;
         spacing: 3px;
@@ -482,6 +487,7 @@ export component AskHead inherits Rectangle {
         HorizontalLayout {
             padding-left: root.ask-margin - 72px;
             padding-right: root.ask-margin - 72px;
+            padding-bottom: 2px;
             Text {
                 text: root.ask;
                 font-size: 17px;
@@ -517,8 +523,7 @@ export component AskHead inherits Rectangle {
     }
     Tools {
         x: root.width - 8px - self.width;
-        y: 16px;
-        width: self.preferred-width;
+        y: 14px;
         height: 28px;
         private-on: root.private-on;
         private-label: root.private-label;
