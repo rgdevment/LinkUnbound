@@ -1,5 +1,40 @@
 [
   {
+    "version": "2.9.0",
+    "headline": {
+      "es": "Cierra el selector con un clic, o ábrelo al centro",
+      "en": "Close the picker with a click, or open it centered"
+    },
+    "es": [
+      {
+        "title": "Un botón para cerrar",
+        "said": "el selector tiene una «×» junto a copiar la dirección. Esc y hacer clic fuera siguen cerrándolo como siempre."
+      },
+      {
+        "title": "Al centro, si lo prefieres",
+        "said": "en Aplicación, bajo Selector, «Dónde aparece» te deja abrirlo al centro de la pantalla en la que está el puntero. Si no cambias nada, sigue apareciendo junto al puntero."
+      },
+      {
+        "title": "El selector, en su propia sección",
+        "said": "el estilo y dónde aparece ahora están juntos en Selector, aparte del tema y el idioma."
+      }
+    ],
+    "en": [
+      {
+        "title": "A button to close it",
+        "said": "the picker has an «×» next to copying the address. Esc and clicking outside still close it as always."
+      },
+      {
+        "title": "Centered, if you prefer",
+        "said": "under Application, in Picker, «Where it opens» lets you open it in the center of the screen the pointer is on. If you change nothing, it still opens next to the pointer."
+      },
+      {
+        "title": "The picker, in a section of its own",
+        "said": "the look and where it opens now sit together under Picker, apart from the theme and the language."
+      }
+    ]
+  },
+  {
     "version": "2.8.0",
     "headline": {
       "es": "Una bienvenida que te deja todo listo",
