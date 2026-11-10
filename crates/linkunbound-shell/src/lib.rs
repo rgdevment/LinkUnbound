@@ -6,6 +6,7 @@ pub mod hotkey;
 pub mod place;
 pub mod single;
 pub mod tray;
+pub mod waking;
 
 use std::rc::Rc;
 

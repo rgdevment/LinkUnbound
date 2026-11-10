@@ -5,11 +5,10 @@ use std::rc::Rc;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use linkunbound_core::{
-    Language, Origin, Store, Strings, data_dir, host_of, is_own_scheme, normalise,
-};
+use linkunbound_core::{Language, Origin, Store, Strings, data_dir, host_of, normalise};
 use linkunbound_shell::hotkey::Hotkey;
 use linkunbound_shell::tray::{Asked, Tray};
+use linkunbound_shell::waking::{comes_back_after_updates, wants_no_window};
 use linkunbound_shell::{Listed, Notice, Picker, Reaches, dress, paint, single};
 use slint::{ComponentHandle, Model};
 
@@ -32,13 +31,6 @@ fn link_from(args: &[String]) -> Option<String> {
         return None;
     }
     normalise(&args[1..].join(" ")).or_else(|| args.iter().skip(1).find_map(|a| normalise(a)))
-}
-
-/// A refused `linkunbound:` link came from a page or another process, not from a person
-/// starting the app, so it must not answer with the settings window.
-fn wants_no_window(args: &[String], incoming: Option<&str>) -> bool {
-    args.iter().any(|a| a == "--hushed")
-        || (incoming.is_none() && args.iter().skip(1).any(|a| is_own_scheme(a)))
 }
 
 #[cfg(windows)]
@@ -1052,6 +1044,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         }
     };
+    comes_back_after_updates();
 
     // Nothing was running, so this copy stays as the resident — and a person who started it by
     // hand, with no link and no tray icon to click, would otherwise see nothing happen at all.

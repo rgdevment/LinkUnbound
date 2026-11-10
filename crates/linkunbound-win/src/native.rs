@@ -403,6 +403,40 @@ pub fn current_session() -> Option<u32> {
     Some(session)
 }
 
+/// Only being closed to have its files replaced reopens it: a crash, a hang or a reboot does not.
+pub fn reopened_with(line: &str) -> windows::core::Result<()> {
+    use windows::Win32::System::Recovery::{
+        RESTART_NO_CRASH, RESTART_NO_HANG, RESTART_NO_REBOOT, RegisterApplicationRestart,
+    };
+
+    unsafe {
+        RegisterApplicationRestart(
+            &windows::core::HSTRING::from(line),
+            RESTART_NO_CRASH | RESTART_NO_HANG | RESTART_NO_REBOOT,
+        )
+    }
+}
+
+#[cfg(test)]
+fn reopens_with() -> (String, u32) {
+    use windows::Win32::System::Recovery::GetApplicationRestartSettings;
+
+    let mut line = [0u16; 1024];
+    let mut size = line.len() as u32;
+    let mut flags = 0;
+    unsafe {
+        GetApplicationRestartSettings(
+            GetCurrentProcess(),
+            Some(windows::core::PWSTR(line.as_mut_ptr())),
+            &raw mut size,
+            Some(&raw mut flags),
+        )
+    }
+    .expect("this process is registered");
+    let said = String::from_utf16_lossy(&line[..size as usize]);
+    (said.trim_end_matches('\0').to_owned(), flags)
+}
+
 /// One line down a named pipe, opened for identification only: a server squatting the name
 /// before the resident took it would otherwise be handed this process's token to impersonate.
 /// True when the line was written; false when nobody answers at that name.
@@ -817,6 +851,22 @@ mod keys {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_is_told_how_to_reopen_the_resident_and_for_nothing_but_being_replaced() {
+        use windows::Win32::System::Recovery::{
+            RESTART_NO_CRASH, RESTART_NO_HANG, RESTART_NO_REBOOT,
+        };
+
+        reopened_with("--hushed").expect("registered");
+        let (line, flags) = reopens_with();
+
+        assert_eq!(line, "--hushed");
+        assert_eq!(
+            flags,
+            (RESTART_NO_CRASH | RESTART_NO_HANG | RESTART_NO_REBOOT).0
+        );
+    }
 
     #[test]
     fn the_foreground_process_is_named_by_its_stem() {
