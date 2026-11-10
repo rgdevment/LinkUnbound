@@ -1,5 +1,48 @@
 [
   {
+    "version": "2.10.0",
+    "headline": {
+      "es": "Mueve el selector a tu gusto, y las actualizaciones de Microsoft Store llegan",
+      "en": "Move the picker where you like, and Microsoft Store updates come through"
+    },
+    "es": [
+      {
+        "title": "Lleva el selector a donde quieras",
+        "said": "arrástralo desde arriba, por la dirección o por la pregunta, y LinkBear lo acompaña. La próxima vez vuelve a abrirse donde diga «Dónde aparece»."
+      },
+      {
+        "title": "Ordena tus navegadores arrastrando",
+        "said": "en Navegadores, arrastra una fila para cambiarla de lugar dentro de su sección. Las flechas siguen ahí si prefieres el teclado."
+      },
+      {
+        "title": "Las actualizaciones de Microsoft Store, a la vista",
+        "said": "si instalaste LinkUnbound desde la Store, Acerca de muestra la versión nueva que tiene para ti y te deja instalarla sin salir. Si la Store todavía la está trayendo, la tiene en pausa o aún no te la ofrece, también te lo dice."
+      },
+      {
+        "title": "Vuelve solo tras actualizarse",
+        "said": "desde la próxima actualización, cuando Windows cierre LinkUnbound para ponerlo al día, lo vuelve a abrir en segundo plano y tus enlaces siguen llegando."
+      }
+    ],
+    "en": [
+      {
+        "title": "Take the picker wherever you like",
+        "said": "drag it from the top, by the address or by the question, and LinkBear comes along. Next time it opens again where «Where it opens» says."
+      },
+      {
+        "title": "Order your browsers by dragging",
+        "said": "in Browsers, drag a row to move it within its section. The arrows are still there if you prefer the keyboard."
+      },
+      {
+        "title": "Microsoft Store updates, in sight",
+        "said": "if you installed LinkUnbound from the Store, About shows the new version it has for you and lets you install it without leaving. If the Store is still bringing it, has it paused or has not offered it to you yet, it tells you that too."
+      },
+      {
+        "title": "Back on its own after updating",
+        "said": "from the next update on, when Windows closes LinkUnbound to bring it up to date, it opens it again in the background and your links keep arriving."
+      }
+    ]
+  },
+  {
     "version": "2.9.0",
     "headline": {
       "es": "Cierra el selector con un clic, o ábrelo al centro",
