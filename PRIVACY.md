@@ -215,7 +215,11 @@ download says whether the machine is Apple Silicon or Intel — as a download
 made by hand from the releases page would.
 
 A copy installed from the Microsoft Store takes its update from the Store
-instead, and never reads the feed above. A copy installed with Homebrew updates
+instead. To name the version on its way, it reads the Store's public listing of
+LinkUnbound at `displaycatalog.mp.microsoft.com`, asked with a fixed market and
+language so the request says nothing about you. Only when that listing cannot
+be read does it read the feed above. Nothing is installed from either: only the
+Store installs it. A copy installed with Homebrew updates
 itself the same way as a downloaded one; `brew upgrade` works as well. A copy
 installed with winget came from the same releases page and updates itself the
 same way too.
@@ -227,7 +231,7 @@ same way too.
 LinkUnbound is available through the Microsoft Store. The Store version:
 
 - **Follows the same privacy principles** as the standalone version.
-- **Asks the Store about updates**, not the feed above: a release reaches the Store when its certification lets it through, which is not when it reaches everyone else.
+- **Asks the Store about updates**, and reads the Store's public listing of LinkUnbound to name the version on its way: a release reaches the Store when its certification lets it through, which is not when it reaches everyone else. The feed above only stands in when that listing cannot be read.
 - **Uses MSIX packaging** — installs and uninstalls cleanly with standard Windows mechanisms.
 - **Microsoft Store policies** apply to distribution, but LinkUnbound itself does not share any data with Microsoft beyond what the Store platform requires for installation and updates.
 

@@ -284,7 +284,6 @@ const ES = {
   candidatesNote:
     "Llegan antes y están menos probadas. Puedes volver a las estables cuando quieras.",
   updateStore: "La instala Microsoft Store, sin salir de aquí",
-  updateStoreByHand: "Instálala desde Microsoft Store: esta copia no puede hacerlo por sí sola",
   updateFromMount:
     "Mueve LinkUnbound a Aplicaciones y ábrelo desde ahí; desde la imagen de disco no puede actualizarse",
   updateWaiting: "hay una versión nueva",
@@ -293,6 +292,22 @@ const ES = {
   lookNow: "Buscar ahora",
   lookingNow: "Buscando…",
   lookNowNone: "Estás en la última versión",
+  lookNowNoneStore: "Microsoft Store no tiene nada más nuevo para esta copia ahora mismo",
+  lookStoreKeeps:
+    "Microsoft Store mantiene esta copia al día. Se le pregunta al abrir esta ventana, como mucho cada media hora",
+  lookNotSold:
+    "Esta copia no vino de Microsoft Store, así que la Store no la actualiza y ella no puede hacerlo sola",
+  updateOffered: "Microsoft Store tiene una versión nueva",
+  updateComing: "Microsoft Store está trayendo una versión nueva",
+  updateComingWhy:
+    "Microsoft Store la trae por su cuenta. Se instala sola cuando llegue y LinkUnbound no esté abierto: ni esta ventana ni el icono de la bandeja.",
+  updatePausedWhy: "Microsoft Store la tiene en pausa. Ábrela para reanudarla.",
+  updateNotYetWhy:
+    "Microsoft Store todavía no se la ofrece a este equipo. Suele tardar unas horas; puedes revisarlo en la Store.",
+  updateLanded:
+    "Ya está en este equipo y entra cuando LinkUnbound no esté abierto: ni esta ventana ni el icono de la bandeja",
+  updateOpenShop: "Abrir Microsoft Store",
+  updateUnanswered: "Microsoft Store no respondió; vuelve a intentarlo en un rato",
   aboutWhat:
     "Cuando abres un enlace, LinkUnbound te pregunta en qué navegador quieres que se abra. Y si siempre respondes lo mismo, deja de preguntar.",
   aboutPrivacy:
@@ -627,7 +642,6 @@ const EN: Record<Key, string> = {
   candidatesNote:
     "They arrive sooner and are less tested. You can go back to the stable ones whenever you like.",
   updateStore: "Microsoft Store installs it, without leaving this window",
-  updateStoreByHand: "Install it from Microsoft Store: this copy cannot do it on its own",
   updateFromMount:
     "Move LinkUnbound to Applications and open it from there; it cannot update from the disk image",
   updateWaiting: "a new version is waiting",
@@ -636,6 +650,22 @@ const EN: Record<Key, string> = {
   lookNow: "Check now",
   lookingNow: "Checking…",
   lookNowNone: "You are on the latest version",
+  lookNowNoneStore: "Microsoft Store has nothing newer for this copy right now",
+  lookStoreKeeps:
+    "Microsoft Store keeps this copy up to date. It is asked when this window opens, at most every half hour",
+  lookNotSold:
+    "This copy did not come from Microsoft Store, so the Store does not update it and it cannot update itself",
+  updateOffered: "Microsoft Store has a new version",
+  updateComing: "Microsoft Store is bringing a new version",
+  updateComingWhy:
+    "Microsoft Store brings it on its own. It installs itself once it lands and LinkUnbound is not running: neither this window nor the icon in the tray.",
+  updatePausedWhy: "Microsoft Store has it paused. Open it to resume.",
+  updateNotYetWhy:
+    "Microsoft Store has not offered it to this computer yet. That usually takes a few hours; you can check in the Store.",
+  updateLanded:
+    "It is already on this computer and takes over once LinkUnbound is not running: neither this window nor the icon in the tray",
+  updateOpenShop: "Open Microsoft Store",
+  updateUnanswered: "Microsoft Store did not answer; try again in a while",
   aboutWhat:
     "When you open a link, LinkUnbound asks which browser you want it in. And once you keep giving the same answer, it stops asking.",
   aboutPrivacy:

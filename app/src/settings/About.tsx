@@ -10,7 +10,7 @@ import { offerMoved, saidPlainly } from "../refusal";
 import { CloudOff, Code, Gift, Key as KeyIcon } from "./Icons";
 import { Card, Line, Switch } from "./parts";
 import Star from "./Star";
-import type { Ready, Underway } from "./update";
+import type { Ready, StoreWait, Underway } from "./update";
 
 const REPO = "https://github.com/rgdevment/LinkUnbound";
 const COFFEE = "https://buymeacoffee.com/rgdevment";
@@ -18,6 +18,7 @@ const COPANDA = "https://www.copanda.app/";
 const TISTY = "https://www.tisty.app/";
 const SPONSOR = "https://github.com/sponsors/rgdevment";
 const RATING = "ms-windows-store://review/?ProductId=9N9F7C8Q43KC";
+const SHELF = "ms-windows-store://downloadsandupdates";
 const ALTERNATIVETO = "https://alternativeto.net/software/linkunbound/";
 
 type Build = {
@@ -27,14 +28,28 @@ type Build = {
   candidates: boolean;
   candidatesApply: boolean;
   keptByTheStore: boolean;
+  notSold?: boolean;
 };
 
-/// What happens on «Actualizar» — or, when there is no button, what the person has to do instead:
-/// a copy the store keeps but did not sell cannot be installed from here, and one running from
-/// the disk image it was downloaded as cannot replace itself.
+const WAITS: Record<StoreWait, Key> = {
+  queued: "updateComingWhy",
+  paused: "updatePausedWhy",
+  notYet: "updateNotYetWhy",
+};
+
 function howItInstalls(newer: Ready): Key {
   if (newer.installs) return newer.route === "store" ? "updateStore" : "updateAsk";
-  return newer.route === "store" ? "updateStoreByHand" : "updateFromMount";
+  if (newer.coming) return WAITS[newer.coming];
+  return newer.route === "store" ? "updateLanded" : "updateFromMount";
+}
+
+function headline(newer: Ready): Key {
+  return newer.installs || newer.coming === "paused" ? "updateOffered" : "updateComing";
+}
+
+function nothingFound(build: Build | null): Key {
+  if (!build?.keptByTheStore) return "lookNowNone";
+  return build.notSold ? "lookNotSold" : "lookNowNoneStore";
 }
 
 function External({ href, children }: { href: string; children: string }) {
@@ -134,16 +149,20 @@ function Pip({ ok }: { ok?: boolean }) {
 
 function Offer({
   ready,
+  nothingNewer,
   step,
+  build,
   onProblem,
   onSettled,
   onLook,
 }: {
   ready: Ready | null;
+  nothingNewer: boolean;
   step: Underway | null;
+  build: Build | null;
   onProblem: (why: string | null) => void;
   onSettled: () => void;
-  onLook: (nowPlease?: boolean) => Promise<unknown>;
+  onLook: (pressed?: boolean) => Promise<unknown>;
 }) {
   const t = useWords();
   const language = useSpoken();
@@ -165,7 +184,15 @@ function Offer({
       <div className="newer">
         <Pip ok />
         <span className="grow">
-          <b>{looking ? t("lookingNow") : t("lookNowNone")}</b>
+          <b>
+            {looking
+              ? t("lookingNow")
+              : t(
+                  nothingNewer || !build?.keptByTheStore || build.notSold
+                    ? nothingFound(build)
+                    : "lookStoreKeeps",
+                )}
+          </b>
         </span>
         <button type="button" disabled={looking} onClick={lookAgain} className="mild">
           {t("lookNow")}
@@ -178,7 +205,7 @@ function Offer({
     <div className="newer there">
       <Pip />
       <div className="grow" aria-live="polite">
-        <b>{t("updateThere", newer.version)}</b>
+        <b>{newer.version ? t("updateThere", newer.version) : t(headline(newer))}</b>
         {step ? (
           step.stage === "installing" ? (
             <span>{t(newer.route === "store" ? "updateInstallingStore" : "updateInstalling")}</span>
@@ -203,6 +230,11 @@ function Offer({
           <span>{t(howItInstalls(newer))}</span>
         )}
       </div>
+      {!step && newer.coming && (
+        <button type="button" onClick={() => void openUrl(SHELF).catch(noop)} className="mild">
+          {t("updateOpenShop")}
+        </button>
+      )}
       {!step && newer.installs && (
         <button
           type="button"
@@ -277,6 +309,7 @@ function Candidates({
 
 export default function About({
   ready,
+  nothingNewer,
   step,
   starring,
   onStarSettled,
@@ -284,11 +317,12 @@ export default function About({
   onLook,
 }: {
   ready: Ready | null;
+  nothingNewer: boolean;
   step: Underway | null;
   starring: boolean;
   onStarSettled: () => void;
   onSettled: () => void;
-  onLook: (nowPlease?: boolean) => Promise<unknown>;
+  onLook: (pressed?: boolean) => Promise<unknown>;
 }) {
   const t = useWords();
   const language = useSpoken();
@@ -391,7 +425,9 @@ export default function About({
 
       <Offer
         ready={ready}
+        nothingNewer={nothingNewer}
         step={step}
+        build={build}
         onProblem={setProblem}
         onSettled={onSettled}
         onLook={onLook}

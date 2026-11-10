@@ -16,8 +16,21 @@ pub const LATEST: &str =
 pub const CANDIDATE: &str =
     "https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/candidate.json";
 
+/// Market and language are fixed, so the request says nothing of the person making it.
+const CATALOG: &str =
+    "https://displaycatalog.mp.microsoft.com/v7.0/products/9N9F7C8Q43KC?market=US&languages=en-US";
+const STORE_FAMILY: &str = "rgdevment.LinkUnbound-BrowserPicker_kdjgfdc2rb3gc";
+const STORE_ARCH: &str = if cfg!(target_arch = "aarch64") {
+    "arm64"
+} else {
+    "x64"
+};
+const LISTING_AT_MOST: u64 = 256 * 1024;
+
 const PATIENCE: Duration = Duration::from_secs(5);
 const APART: u64 = 24 * 60 * 60;
+/// The Store answers a real look once every half hour and repeats its last answer in between.
+const SHOP_APART: u64 = 30 * 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +62,15 @@ pub struct Ready {
     pub route: Route,
     pub package: Option<&'static str>,
     pub installs: bool,
+    pub coming: Option<Coming>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Coming {
+    Queued,
+    Paused,
+    NotYet,
 }
 
 impl Route {
@@ -142,19 +164,29 @@ pub fn newer(now: &str, manifest: &str, kept: Kept, wants: Option<bool>) -> Opti
     (best > here).then(|| offered(best.to_string(), kept))
 }
 
-/// `self_installs` says no for the Store because a copy kept there cannot replace itself from a
-/// download; an offer the Store itself made is the one it can take without leaving the window.
 #[must_use]
-pub fn from_the_shop(version: &str, now: &str) -> Option<Ready> {
-    let here: semver::Version = now.parse().ok()?;
-    let said: semver::Version = version.parse().ok()?;
-
-    (said > here).then(|| Ready {
-        version: said.to_string(),
+pub fn from_the_shop(version: Option<&str>) -> Ready {
+    Ready {
+        version: version.unwrap_or_default().to_owned(),
         route: Route::Store,
         package: None,
         installs: true,
-    })
+        coming: None,
+    }
+}
+
+#[must_use]
+pub fn on_its_way(version: Option<&str>, coming: Coming) -> Ready {
+    Ready {
+        installs: false,
+        coming: Some(coming),
+        ..from_the_shop(version)
+    }
+}
+
+#[must_use]
+pub fn later(now: &str, found: &str) -> bool {
+    linkunbound_core::update::newer_than(found, now)
 }
 
 fn offered(version: String, kept: Kept) -> Ready {
@@ -166,6 +198,7 @@ fn offered(version: String, kept: Kept) -> Ready {
         // `update_install` reads the same thing: offering a button it will take away is worse
         // than not offering one.
         installs: self_installs(kept.route) && !from_a_mount(),
+        coming: None,
     }
 }
 
@@ -185,7 +218,16 @@ pub fn remembered(now: &str, said: Option<&str>, kept: Kept, wants: Option<bool>
 /// it would wait out the difference before ever looking again.
 #[must_use]
 pub fn due(last: Option<u64>, now: u64) -> bool {
-    last.is_none_or(|at| at > now || now - at >= APART)
+    owed(last, now, APART)
+}
+
+#[must_use]
+pub fn shop_due(last: Option<u64>, now: u64) -> bool {
+    owed(last, now, SHOP_APART)
+}
+
+fn owed(last: Option<u64>, now: u64, apart: u64) -> bool {
+    last.is_none_or(|at| at > now || now - at >= apart)
 }
 
 #[must_use]
@@ -256,18 +298,111 @@ fn chosen(running: Option<&Path>, there: impl Fn(&Path) -> bool) -> Kept {
     Kept::plain(Route::Download)
 }
 
-#[must_use]
-pub fn fetch() -> Option<String> {
-    let asked = reqwest::blocking::Client::builder()
+fn client() -> Option<reqwest::blocking::Client> {
+    reqwest::blocking::Client::builder()
         .timeout(PATIENCE)
         .user_agent(concat!("linkunbound/", env!("CARGO_PKG_VERSION")))
         .build()
-        .ok()?
-        .get(MANIFEST)
-        .send()
-        .ok()?;
+        .ok()
+}
+
+#[must_use]
+pub fn fetch() -> Option<String> {
+    let asked = client()?.get(MANIFEST).send().ok()?;
 
     asked.status().is_success().then(|| asked.text().ok())?
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Ahead {
+    Unheard,
+    Nothing,
+    Is(String),
+}
+
+fn ours_in_the_catalog(full: &str, arch: &str) -> Option<semver::Version> {
+    let mut parts = full.split('_');
+    let (name, version, built_for, publisher) = (
+        parts.next()?,
+        parts.next()?,
+        parts.next()?,
+        parts.next_back()?,
+    );
+    if format!("{name}_{publisher}") != STORE_FAMILY || ![arch, "neutral"].contains(&built_for) {
+        return None;
+    }
+    let mut numbers = version.split('.');
+    format!(
+        "{}.{}.{}",
+        numbers.next()?,
+        numbers.next()?,
+        numbers.next()?
+    )
+    .parse()
+    .ok()
+}
+
+/// Microsoft does not document this answer, so one with no package of ours in it says nothing.
+#[must_use]
+pub fn listed(now: &str, arch: &str, said: &str) -> Ahead {
+    let Ok(here) = now.parse::<semver::Version>() else {
+        return Ahead::Unheard;
+    };
+    let Ok(read) = serde_json::from_str::<serde_json::Value>(said) else {
+        return Ahead::Unheard;
+    };
+    let best = read
+        .pointer("/Product/DisplaySkuAvailabilities")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|one| one.pointer("/Sku/Properties/Packages")?.as_array())
+        .flatten()
+        .filter_map(|package| package.get("PackageFullName")?.as_str())
+        .filter_map(|full| ours_in_the_catalog(full, arch))
+        .max();
+    match best {
+        None => Ahead::Unheard,
+        Some(best) if best > here => Ahead::Is(best.to_string()),
+        Some(_) => Ahead::Nothing,
+    }
+}
+
+#[must_use]
+pub fn catalog(now: &str) -> Ahead {
+    use std::io::Read;
+
+    let Some(answer) = client().and_then(|asking| asking.get(CATALOG).send().ok()) else {
+        return Ahead::Unheard;
+    };
+    if !answer.status().is_success() {
+        return Ahead::Unheard;
+    }
+    let mut said = String::new();
+    if answer
+        .take(LISTING_AT_MOST)
+        .read_to_string(&mut said)
+        .is_err()
+    {
+        return Ahead::Unheard;
+    }
+    listed(now, STORE_ARCH, &said)
+}
+
+pub fn ahead(
+    now: &str,
+    wants: Option<bool>,
+    catalog: Ahead,
+    feed: impl FnOnce() -> Option<String>,
+) -> Ahead {
+    if catalog != Ahead::Unheard {
+        return catalog;
+    }
+    let Some(said) = feed().filter(|said| serde_json::from_str::<Manifest>(said).is_ok()) else {
+        return Ahead::Unheard;
+    };
+    newer(now, &said, Kept::plain(Route::Store), wants)
+        .map_or(Ahead::Nothing, |one| Ahead::Is(one.version))
 }
 
 pub use linkunbound_core::update::{Progress, keep, looked, progress, settle, tell, under_way_for};
@@ -468,11 +603,9 @@ mod tests {
         assert!(!tracking("tomorrow", None), "unreadable means stable");
     }
 
-    /// The store's own offer is the one a store copy can take without leaving the window, and it
-    /// is the only place `installs` is decided by anything other than the route.
     #[test]
     fn an_offer_the_store_itself_made_is_one_it_can_install() {
-        let found = from_the_shop("2.1.0", "2.0.0").expect("the store has something newer");
+        let found = from_the_shop(Some("2.1.0"));
 
         assert_eq!(found.version, "2.1.0");
         assert_eq!(found.route, Route::Store);
@@ -480,6 +613,7 @@ mod tests {
             found.installs,
             "a store copy cannot install from a download, but it can take what the store offered"
         );
+        assert_eq!(found.coming, None);
         assert!(
             !self_installs(Route::Store),
             "which is why the route alone must not decide this"
@@ -487,13 +621,141 @@ mod tests {
     }
 
     #[test]
-    fn the_store_offering_nothing_newer_is_not_an_update() {
-        assert!(from_the_shop("2.0.0", "2.0.0").is_none());
-        assert!(from_the_shop("1.9.0", "2.0.0").is_none());
+    fn an_offer_with_no_number_can_still_be_taken() {
+        let offer = from_the_shop(None);
+
+        assert_eq!(offer.version, "");
         assert!(
-            from_the_shop("2.0.0.4", "2.0.0").is_none(),
-            "a package version has four parts and a release has three"
+            offer.installs,
+            "the Store said it has one, and that is enough"
         );
+    }
+
+    #[test]
+    fn what_the_store_is_still_bringing_has_no_button() {
+        let coming = on_its_way(Some("2.1.0"), Coming::Paused);
+
+        assert_eq!(coming.version, "2.1.0");
+        assert_eq!(coming.route, Route::Store);
+        assert!(!coming.installs);
+        assert_eq!(coming.coming, Some(Coming::Paused));
+    }
+
+    fn catalog_naming(packages: &[&str]) -> String {
+        let named: Vec<_> = packages
+            .iter()
+            .map(|full| serde_json::json!({"PackageFullName": full, "PackageFormat": "Msix"}))
+            .collect();
+        serde_json::json!({"Product": {"DisplaySkuAvailabilities": [
+            {"Sku": {"SkuId": "0010", "Properties": {"Packages": named}}},
+            {"Sku": {"SkuId": "0011", "Properties": {"Packages": null}}},
+        ]}})
+        .to_string()
+    }
+
+    const OURS_28: &str = "rgdevment.LinkUnbound-BrowserPicker_2.8.0.0_x64__kdjgfdc2rb3gc";
+    const OURS_29: &str = "rgdevment.LinkUnbound-BrowserPicker_2.9.0.0_x64__kdjgfdc2rb3gc";
+
+    #[test]
+    fn the_catalog_names_the_newest_of_ours_it_lists() {
+        let said = catalog_naming(&[OURS_28, OURS_29]);
+
+        assert_eq!(listed("2.8.0", "x64", &said), Ahead::Is("2.9.0".into()));
+        assert_eq!(listed("2.9.0", "x64", &said), Ahead::Nothing);
+        assert_eq!(listed("3.0.0", "x64", &said), Ahead::Nothing);
+    }
+
+    #[test]
+    fn a_package_that_is_not_ours_is_not_counted_as_the_catalog_answering() {
+        for full in [
+            "Another.App_9.0.0.0_x64__kdjgfdc2rb3gc",
+            "rgdevment.LinkUnbound-BrowserPicker_9.0.0.0_x64__someoneelse",
+            "rgdevment.LinkUnbound-BrowserPicker_9.0_x64__kdjgfdc2rb3gc",
+            "rgdevment.LinkUnbound-BrowserPicker",
+        ] {
+            assert_eq!(
+                listed("2.8.0", "x64", &catalog_naming(&[full])),
+                Ahead::Unheard,
+                "{full}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_package_built_for_another_machine_is_not_one_this_copy_can_be_given() {
+        let said = catalog_naming(&[
+            OURS_29,
+            "rgdevment.LinkUnbound-BrowserPicker_9.0.0.0_arm64__kdjgfdc2rb3gc",
+        ]);
+        assert_eq!(listed("2.8.0", "x64", &said), Ahead::Is("2.9.0".into()));
+        assert_eq!(listed("2.8.0", "arm64", &said), Ahead::Is("9.0.0".into()));
+
+        let bundled = catalog_naming(&[
+            "rgdevment.LinkUnbound-BrowserPicker_2.9.0.0_neutral_~_kdjgfdc2rb3gc",
+        ]);
+        assert_eq!(listed("2.8.0", "x64", &bundled), Ahead::Is("2.9.0".into()));
+    }
+
+    #[test]
+    fn a_catalog_that_stopped_reading_as_it_did_says_nothing_rather_than_nothing_newer() {
+        for said in [
+            "",
+            "not json",
+            "{}",
+            r#"{"Product":null}"#,
+            r#"{"Product":{"DisplaySkuAvailabilities":[]}}"#,
+        ] {
+            assert_eq!(listed("2.8.0", "x64", said), Ahead::Unheard, "{said}");
+        }
+        assert_eq!(
+            listed("tomorrow", "x64", &catalog_naming(&[OURS_29])),
+            Ahead::Unheard
+        );
+    }
+
+    #[test]
+    fn a_catalog_that_answered_is_not_second_guessed_by_the_feed() {
+        let no_feed = || panic!("the catalog answered, so nothing should go to GitHub");
+
+        assert_eq!(
+            ahead("2.8.0", None, Ahead::Is("2.9.0".into()), no_feed),
+            Ahead::Is("2.9.0".into())
+        );
+        assert_eq!(
+            ahead("2.8.0", None, Ahead::Nothing, no_feed),
+            Ahead::Nothing
+        );
+    }
+
+    #[test]
+    fn the_feed_stands_in_for_a_catalog_nobody_could_read() {
+        let feed = |said: &str| Some(format!(r#"{{"schema":1,"latest":"{said}"}}"#));
+
+        assert_eq!(
+            ahead("2.8.0", None, Ahead::Unheard, || feed("2.9.0")),
+            Ahead::Is("2.9.0".into())
+        );
+        assert_eq!(
+            ahead("2.9.0", None, Ahead::Unheard, || feed("2.9.0")),
+            Ahead::Nothing
+        );
+        assert_eq!(
+            ahead("2.8.0", None, Ahead::Unheard, || None),
+            Ahead::Unheard
+        );
+        assert_eq!(
+            ahead("2.8.0", None, Ahead::Unheard, || Some("not json".into())),
+            Ahead::Unheard,
+            "a feed nobody can read says nothing either"
+        );
+    }
+
+    #[test]
+    fn what_the_catalog_names_is_the_identity_the_release_checks() {
+        let workflow = include_str!("../../../.github/workflows/release.yml");
+        let (name, _) = STORE_FAMILY.split_once('_').expect("a family");
+
+        assert!(workflow.contains(&format!("$was = \"{name}\"")));
     }
 
     #[test]
@@ -789,6 +1051,16 @@ mod tests {
 
     /// Counting forward from a look that sits in the future would wait out the whole difference,
     /// which after a clock is put back can be years.
+    #[test]
+    fn the_store_is_asked_again_once_it_would_really_look_again() {
+        let now = 1_800_000_000;
+
+        assert!(shop_due(None, now));
+        assert!(!shop_due(Some(now - 29 * 60), now));
+        assert!(shop_due(Some(now - 30 * 60), now));
+        assert!(shop_due(Some(now + 60), now), "a clock put back");
+    }
+
     #[test]
     fn a_look_left_in_the_future_is_owed_now_rather_than_waited_out() {
         assert!(due(Some(2_000_000_000), 1_800_000_000));

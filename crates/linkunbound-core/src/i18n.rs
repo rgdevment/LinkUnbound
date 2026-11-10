@@ -51,6 +51,8 @@ catalogue! {
     update_ready: "Versión {} lista" | "Version {} ready",
     update_how: "Se descarga, se instala y LinkUnbound se reinicia solo" | "It downloads, installs and LinkUnbound restarts on its own",
     update_store: "La instala Microsoft Store desde Ajustes" | "Microsoft Store installs it, from Settings",
+    update_store_coming: "Microsoft Store la está trayendo; Ajustes dice cómo va" | "Microsoft Store is bringing it; Settings says how it goes",
+    update_store_landed: "Ya está en este equipo; entra al salir de LinkUnbound" | "Already on this computer; it takes over once LinkUnbound exits",
     update_open_settings: "Desde Ajustes, que explica cómo" | "From Settings, which says how",
     update_take: "Actualizar" | "Update",
     update_open: "Abrir" | "Open",

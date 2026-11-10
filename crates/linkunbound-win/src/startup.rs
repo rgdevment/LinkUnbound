@@ -154,8 +154,9 @@ pub fn reclaim(running: &std::path::Path) {
 /// and `%LOCALAPPDATA%\Programs\LinkUnbound` is where the installer puts this.
 fn command(running: &std::path::Path) -> String {
     format!(
-        "\"{}\" --hushed",
-        linkunbound_core::link_handler(running).display()
+        "\"{}\" {}",
+        linkunbound_core::link_handler(running).display(),
+        linkunbound_core::HUSHED
     )
 }
 

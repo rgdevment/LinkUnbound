@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use linkunbound_core::Language;
 
-use crate::{HERE, catalogue, same_name, shown_origin, store, system, update};
+use crate::{HERE, catalogue, same_name, shop, shown_origin, store, system, update};
 
 const NOTICES: &str = include_str!("../../../THIRD-PARTY-BUNDLED.md");
 const LICENCES: &str = include_str!("../../../THIRD-PARTY-LICENSES.md");
@@ -16,6 +16,7 @@ pub struct Build {
     candidates: bool,
     candidates_apply: bool,
     kept_by_the_store: bool,
+    not_sold: bool,
 }
 
 #[tauri::command]
@@ -29,6 +30,7 @@ pub fn about() -> Build {
         candidates: update::tracking(HERE, kept.candidates),
         candidates_apply: !store_copy,
         kept_by_the_store: store_copy,
+        not_sold: store_copy && !shop::sold(),
     }
 }
 
