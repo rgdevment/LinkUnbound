@@ -221,7 +221,7 @@ fn carry(picker: &Picker) {
     let _ = window.with_winit_window(|winit| winit.drag_window());
     // AppKit swallows the release that ends the drag, and the head would keep the pointer.
     #[cfg(target_os = "macos")]
-    let _ = window.try_dispatch_event(slint::platform::WindowEvent::PointerReleased {
+    let _ = window.dispatch_event_with_result(slint::platform::WindowEvent::PointerReleased {
         position: slint::LogicalPosition::new(0.0, 0.0),
         button: slint::platform::PointerEventButton::Left,
     });
