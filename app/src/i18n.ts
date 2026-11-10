@@ -294,7 +294,7 @@ const ES = {
   lookNowNone: "Estás en la última versión",
   lookNowNoneStore: "Microsoft Store no tiene nada más nuevo para esta copia ahora mismo",
   lookStoreKeeps:
-    "Microsoft Store mantiene esta copia al día. Se le pregunta cada vez que abres esta ventana",
+    "Microsoft Store mantiene esta copia al día. Se le pregunta al abrir esta ventana, como mucho cada media hora",
   lookNotSold:
     "Esta copia no vino de Microsoft Store, así que la Store no la actualiza y ella no puede hacerlo sola",
   updateOffered: "Microsoft Store tiene una versión nueva",
@@ -652,7 +652,7 @@ const EN: Record<Key, string> = {
   lookNowNone: "You are on the latest version",
   lookNowNoneStore: "Microsoft Store has nothing newer for this copy right now",
   lookStoreKeeps:
-    "Microsoft Store keeps this copy up to date. It is asked every time you open this window",
+    "Microsoft Store keeps this copy up to date. It is asked when this window opens, at most every half hour",
   lookNotSold:
     "This copy did not come from Microsoft Store, so the Store does not update it and it cannot update itself",
   updateOffered: "Microsoft Store has a new version",

@@ -49,18 +49,21 @@ function Host({
   starring?: boolean;
 }) {
   const [ready, setReady] = useState(from);
+  const [nothingNewer, setNothingNewer] = useState(false);
   const [asking, setAsking] = useState(starring);
   return (
     <About
       ready={ready}
+      nothingNewer={nothingNewer}
       step={step}
       starring={asking}
       onStarSettled={() => setAsking(false)}
       onSettled={settled}
-      onLook={(look) =>
-        invoke("update_ready", { look }).then((one: unknown) => {
+      onLook={(pressed) =>
+        invoke("update_ready", { pressed }).then((one: unknown) => {
           const said = (one ?? null) as Ready | null;
           setReady(said);
+          setNothingNewer(!!pressed && !said);
           return said;
         })
       }
@@ -190,7 +193,7 @@ describe("about", () => {
     show();
 
     await userEvent.click(screen.getByRole("button", { name: "Buscar ahora" }));
-    expect(invoke).toHaveBeenCalledWith("update_ready", { look: "pressed" });
+    expect(invoke).toHaveBeenCalledWith("update_ready", { pressed: true });
     expect(screen.getByText("Buscando…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Buscar ahora" })).toBeDisabled();
 

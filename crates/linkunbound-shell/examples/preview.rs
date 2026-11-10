@@ -148,6 +148,8 @@ fn main() -> Result<(), slint::PlatformError> {
             found_version: Some("2.0.1".to_owned()),
             found_route: Some(if flag("--store") { "store" } else { "download" }.to_owned()),
             found_installs: Some(!flag("--store")),
+            found_in_the_shop: flag("--store")
+                .then_some(linkunbound_core::update::ShopSaid::Offered),
             candidates: None,
         };
         let progress = stage.map(|stage| linkunbound_core::update::Progress {

@@ -29,6 +29,8 @@ const LISTING_AT_MOST: u64 = 256 * 1024;
 
 const PATIENCE: Duration = Duration::from_secs(5);
 const APART: u64 = 24 * 60 * 60;
+/// The Store answers a real look once every half hour and repeats its last answer in between.
+const SHOP_APART: u64 = 30 * 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,13 +71,6 @@ pub enum Coming {
     Queued,
     Paused,
     NotYet,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Look {
-    Now,
-    Pressed,
 }
 
 impl Route {
@@ -223,7 +218,16 @@ pub fn remembered(now: &str, said: Option<&str>, kept: Kept, wants: Option<bool>
 /// it would wait out the difference before ever looking again.
 #[must_use]
 pub fn due(last: Option<u64>, now: u64) -> bool {
-    last.is_none_or(|at| at > now || now - at >= APART)
+    owed(last, now, APART)
+}
+
+#[must_use]
+pub fn shop_due(last: Option<u64>, now: u64) -> bool {
+    owed(last, now, SHOP_APART)
+}
+
+fn owed(last: Option<u64>, now: u64, apart: u64) -> bool {
+    last.is_none_or(|at| at > now || now - at >= apart)
 }
 
 #[must_use]
@@ -1047,6 +1051,16 @@ mod tests {
 
     /// Counting forward from a look that sits in the future would wait out the whole difference,
     /// which after a clock is put back can be years.
+    #[test]
+    fn the_store_is_asked_again_once_it_would_really_look_again() {
+        let now = 1_800_000_000;
+
+        assert!(shop_due(None, now));
+        assert!(!shop_due(Some(now - 29 * 60), now));
+        assert!(shop_due(Some(now - 30 * 60), now));
+        assert!(shop_due(Some(now + 60), now), "a clock put back");
+    }
+
     #[test]
     fn a_look_left_in_the_future_is_owed_now_rather_than_waited_out() {
         assert!(due(Some(2_000_000_000), 1_800_000_000));

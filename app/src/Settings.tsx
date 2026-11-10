@@ -413,7 +413,7 @@ export default function Settings() {
 function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   const t = useWords();
   const language = useSpoken();
-  const { ready, step, look, settled } = useUpdate();
+  const { ready, nothingNewer, step, look, settled } = useUpdate();
   const [page, setPage] = useState<Page>(() => asked() ?? "app");
   // Opened on its own, it starts on Links while they are missing; a page already chosen wins.
   const placed = useRef(asked() !== null);
@@ -534,6 +534,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
         {page === "about" && (
           <About
             ready={ready}
+            nothingNewer={nothingNewer}
             step={step}
             starring={starring}
             onStarSettled={() => setStarring(false)}

@@ -575,33 +575,28 @@ const fn owner(_app: &AppHandle) -> Option<isize> {
 #[tauri::command]
 async fn update_ready(
     app: AppHandle,
-    look: Option<update::Look>,
+    pressed: Option<bool>,
 ) -> Result<Option<update::Ready>, String> {
     let dir = store().dir().to_path_buf();
     let kept = update::route();
     let mut looked = update::looked(&dir);
     let now = update::now();
-    let asked = look.is_some();
+    let asked = pressed.unwrap_or(false);
 
     // A release is out for everyone else while certification still has it from the Store.
     if kept.route == update::Route::Store {
         let was = shop::Memory::of(&looked);
-        let Some(window) = owner(&app) else {
+        let window = owner(&app).filter(|_| asked || update::shop_due(looked.checked_at, now));
+        let Some(window) = window else {
             return Ok(shop::last_said(HERE, &was));
         };
-        let pressed = look == Some(update::Look::Pressed);
-        let wants = looked.candidates;
-        let verdict =
-            tauri::async_runtime::spawn_blocking(move || shop::look(window, pressed, wants, was))
-                .await
-                .map_err(|why| why.to_string())?;
-        verdict.memory.clone().written_into(&mut looked);
+        let verdict = tauri::async_runtime::spawn_blocking(move || shop::look(window, asked, was))
+            .await
+            .map_err(|why| why.to_string())?;
+        let told = verdict.settled_into(&mut looked, asked);
         looked.checked_at = Some(now);
         update::keep(&dir, &looked);
-        if verdict.refused(pressed) {
-            return Err("updateUnanswered".to_owned());
-        }
-        return Ok(verdict.ready);
+        return told.map_err(str::to_owned);
     }
 
     if !asked && !update::due(looked.checked_at, now) {
@@ -882,8 +877,9 @@ fn relaunch_resident() {
     };
     let resident = linkunbound_core::link_handler(&here);
     let _ = linkunbound_mac::retire(linkunbound_core::RESIDENT);
-    let _ =
-        linkunbound_core::spawn_and_forget(std::process::Command::new(resident).arg("--hushed"));
+    let _ = linkunbound_core::spawn_and_forget(
+        std::process::Command::new(resident).arg(linkunbound_core::HUSHED),
+    );
 }
 
 async fn moved_on(dir: &std::path::Path, kept: update::Kept, wants: Option<bool>) -> String {

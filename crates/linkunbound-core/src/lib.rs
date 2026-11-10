@@ -20,7 +20,7 @@ mod url;
 
 pub use args::{join as join_args, split as split_args};
 pub use binaries::{
-    BROWSERS, PREVIEW, RESIDENT, Registered, SETTINGS, link_handler, settings_binary,
+    BROWSERS, HUSHED, PREVIEW, RESIDENT, Registered, SETTINGS, link_handler, settings_binary,
     what_is_registered,
 };
 pub use browser::{

@@ -14,8 +14,6 @@ export type Ready = {
 
 export type StoreWait = "queued" | "paused" | "notYet";
 
-export type Look = "now" | "pressed";
-
 export type Underway = { stage: "getting" | "installing"; far: number };
 
 const LOOKS_AGAIN = 6 * 60 * 60 * 1000;
@@ -24,12 +22,14 @@ const LOOKS_AGAIN = 6 * 60 * 60 * 1000;
 /// request: what this interval decides is only how soon a copy left open notices.
 export function useUpdate() {
   const [ready, setReady] = useState<Ready | null>(null);
+  const [nothingNewer, setNothingNewer] = useState(false);
   const [step, setStep] = useState<Underway | null>(null);
 
   const look = useCallback(
-    (look?: Look) =>
-      invoke<Ready | null>("update_ready", { look }).then((one) => {
+    (pressed?: boolean) =>
+      invoke<Ready | null>("update_ready", { pressed }).then((one) => {
         setReady(one);
+        setNothingNewer(!!pressed && !one);
         return one;
       }),
     [],
@@ -50,5 +50,5 @@ export function useUpdate() {
     };
   }, []);
 
-  return { ready, step, look, settled: () => setStep(null) };
+  return { ready, nothingNewer, step, look, settled: () => setStep(null) };
 }

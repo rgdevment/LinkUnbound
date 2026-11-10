@@ -2,7 +2,7 @@
 
 use crate::HERE;
 use crate::update::{self, Ahead, Coming, Ready, Route};
-use linkunbound_core::update::Looked;
+use linkunbound_core::update::{Looked, ShopSaid};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shelf {
@@ -18,7 +18,7 @@ pub enum Shelf {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Memory {
     pub version: Option<String>,
-    pub offered: Option<bool>,
+    pub said: Option<ShopSaid>,
 }
 
 impl Memory {
@@ -27,14 +27,26 @@ impl Memory {
         let kept = looked.found_route.as_deref() == Some(Route::Store.name());
         Self {
             version: looked.found_version.clone(),
-            offered: looked.found_installs.filter(|_| kept),
+            said: looked.found_in_the_shop.filter(|_| kept),
         }
     }
 
     pub fn written_into(self, looked: &mut Looked) {
-        looked.found_route = self.offered.map(|_| Route::Store.name().to_owned());
-        looked.found_installs = self.offered;
+        looked.found_route = self.said.map(|_| Route::Store.name().to_owned());
+        looked.found_installs = self.said.map(|said| said == ShopSaid::Offered);
+        looked.found_in_the_shop = self.said;
         looked.found_version = self.version;
+    }
+
+    const fn offered(&self) -> bool {
+        matches!(self.said, Some(ShopSaid::Offered | ShopSaid::Landed))
+    }
+
+    const fn coming(&self) -> bool {
+        matches!(
+            self.said,
+            Some(ShopSaid::Queued | ShopSaid::Paused | ShopSaid::NotYet)
+        )
     }
 }
 
@@ -46,9 +58,17 @@ pub struct Verdict {
 }
 
 impl Verdict {
-    #[must_use]
-    pub const fn refused(&self, pressed: bool) -> bool {
-        pressed && self.unanswered
+    /// A look nobody pressed for has nobody to tell that the Store did not answer.
+    pub fn settled_into(
+        self,
+        looked: &mut Looked,
+        pressed: bool,
+    ) -> Result<Option<Ready>, &'static str> {
+        self.memory.written_into(looked);
+        if pressed && self.unanswered {
+            return Err("updateUnanswered");
+        }
+        Ok(self.ready)
     }
 }
 
@@ -57,17 +77,26 @@ pub fn waits(pressed: bool, ahead: &Ahead) -> bool {
     pressed && *ahead != Ahead::Nothing
 }
 
+fn told(said: ShopSaid, version: Option<&str>) -> Ready {
+    match said {
+        ShopSaid::Offered => update::from_the_shop(version),
+        ShopSaid::Landed => Ready {
+            installs: false,
+            ..update::from_the_shop(version)
+        },
+        ShopSaid::Queued => update::on_its_way(version, Coming::Queued),
+        ShopSaid::Paused => update::on_its_way(version, Coming::Paused),
+        ShopSaid::NotYet => update::on_its_way(version, Coming::NotYet),
+    }
+}
+
 #[must_use]
 pub fn last_said(now: &str, was: &Memory) -> Option<Ready> {
     let version = was
         .version
         .as_deref()
         .filter(|one| update::later(now, one))?;
-    Some(if was.offered? {
-        update::from_the_shop(Some(version))
-    } else {
-        update::on_its_way(Some(version), Coming::NotYet)
-    })
+    Some(told(was.said?, Some(version)))
 }
 
 #[must_use]
@@ -77,11 +106,11 @@ pub fn verdict(shelf: Shelf, ahead: Ahead, now: &str, was: Memory) -> Verdict {
         Ahead::Nothing => None,
         Ahead::Unheard => was.version.clone().filter(|one| update::later(now, one)),
     };
-    let told = |ready: Ready, version: Option<String>, offered: bool| Verdict {
-        ready: Some(ready),
+    let tell = |said: ShopSaid, version: Option<String>| Verdict {
+        ready: Some(told(said, version.as_deref())),
         memory: Memory {
             version,
-            offered: Some(offered),
+            said: Some(said),
         },
         unanswered: false,
     };
@@ -91,33 +120,15 @@ pub fn verdict(shelf: Shelf, ahead: Ahead, now: &str, was: Memory) -> Verdict {
         unanswered,
     };
     match (shelf, ahead) {
-        (Shelf::Waiting, _) => told(update::from_the_shop(number.as_deref()), number, true),
-        (Shelf::Landed(version), _) => {
-            let landed = Ready {
-                installs: false,
-                ..update::from_the_shop(Some(&version))
-            };
-            told(landed, Some(version), true)
-        }
-        (Shelf::Queued, _) => told(
-            update::on_its_way(number.as_deref(), Coming::Queued),
-            number,
-            false,
-        ),
-        (Shelf::Paused, _) => told(
-            update::on_its_way(number.as_deref(), Coming::Paused),
-            number,
-            false,
-        ),
+        (Shelf::Waiting, _) => tell(ShopSaid::Offered, number),
+        (Shelf::Landed(version), _) => tell(ShopSaid::Landed, Some(version)),
+        (Shelf::Queued, _) => tell(ShopSaid::Queued, number),
+        (Shelf::Paused, _) => tell(ShopSaid::Paused, number),
         (Shelf::NotSold, _) => none(false),
-        (_, Ahead::Is(version)) => told(
-            update::on_its_way(Some(&version), Coming::NotYet),
-            Some(version),
-            false,
-        ),
+        (_, Ahead::Is(version)) => tell(ShopSaid::NotYet, Some(version)),
         (Shelf::Current, Ahead::Nothing) => none(false),
-        (Shelf::Silent, Ahead::Nothing) if was.offered != Some(true) => none(true),
-        (Shelf::Current, Ahead::Unheard) if was.offered != Some(false) => none(false),
+        (Shelf::Silent, Ahead::Nothing) if !was.offered() => none(true),
+        (Shelf::Current, Ahead::Unheard) if !was.coming() => none(false),
         (shelf, _) => Verdict {
             ready: last_said(now, &was),
             memory: was,
@@ -126,15 +137,24 @@ pub fn verdict(shelf: Shelf, ahead: Ahead, now: &str, was: Memory) -> Verdict {
     }
 }
 
+/// The Store never carries candidates, so only the stable track can stand in for its catalog.
+fn coming_from_the_store() -> Ahead {
+    update::ahead(HERE, Some(false), update::catalog(HERE), update::fetch)
+}
+
 #[must_use]
-pub fn look(window: isize, pressed: bool, wants: Option<bool>, was: Memory) -> Verdict {
+pub fn look(window: isize, pressed: bool, was: Memory) -> Verdict {
     let (shelf, ahead) = match settled() {
         Some(shelf) => (shelf, Ahead::Unheard),
-        None => {
-            let ahead = update::ahead(HERE, wants, update::catalog(HERE), update::fetch);
-            let shelf = asked(window, waits(pressed, &ahead));
-            (shelf, ahead)
+        None if pressed => {
+            let ahead = coming_from_the_store();
+            (asked(window, waits(pressed, &ahead)), ahead)
         }
+        None => std::thread::scope(|both| {
+            let ahead = both.spawn(coming_from_the_store);
+            let shelf = asked(window, false);
+            (shelf, ahead.join().unwrap_or(Ahead::Unheard))
+        }),
     };
     verdict(shelf, ahead, HERE, was)
 }
@@ -449,18 +469,19 @@ mod tests {
 
     const NOW: &str = "2.8.0";
 
-    fn offered_before(version: Option<&str>) -> Memory {
+    fn said_before(said: ShopSaid, version: Option<&str>) -> Memory {
         Memory {
             version: version.map(str::to_owned),
-            offered: Some(true),
+            said: Some(said),
         }
     }
 
+    fn offered_before(version: Option<&str>) -> Memory {
+        said_before(ShopSaid::Offered, version)
+    }
+
     fn coming_before(version: &str) -> Memory {
-        Memory {
-            version: Some(version.to_owned()),
-            offered: Some(false),
-        }
+        said_before(ShopSaid::NotYet, Some(version))
     }
 
     fn known(version: &str) -> Ahead {
@@ -651,12 +672,20 @@ mod tests {
 
     #[test]
     fn only_a_press_is_told_the_store_did_not_answer() {
-        let said = verdict(Shelf::Silent, Ahead::Unheard, NOW, Memory::default());
-        assert!(said.refused(true));
-        assert!(!said.refused(false));
+        let settled = |shelf: Shelf, pressed: bool| {
+            let mut looked = Looked::default();
+            verdict(shelf, Ahead::Unheard, NOW, offered_before(Some("2.9.0")))
+                .settled_into(&mut looked, pressed)
+                .map(|ready| (ready.is_some(), looked.found_in_the_shop))
+        };
 
-        let answered = verdict(Shelf::Current, Ahead::Nothing, NOW, Memory::default());
-        assert!(!answered.refused(true));
+        assert_eq!(settled(Shelf::Silent, true), Err("updateUnanswered"));
+        assert_eq!(
+            settled(Shelf::Silent, false),
+            Ok((true, Some(ShopSaid::Offered))),
+            "unpressed, the last offer simply stands"
+        );
+        assert_eq!(settled(Shelf::Current, true), Ok((false, None)));
     }
 
     #[test]
@@ -680,13 +709,46 @@ mod tests {
             );
         }
 
-        let offer = {
+        let written = |memory: Memory| {
             let mut looked = Looked::default();
-            offered_before(Some("2.9.0")).written_into(&mut looked);
+            memory.written_into(&mut looked);
             looked
         };
+        let offer = written(offered_before(Some("2.9.0")));
         assert_eq!(offer.found_route.as_deref(), Some("store"));
         assert_eq!(offer.found_installs, Some(true));
+        assert_eq!(offer.found_in_the_shop, Some(ShopSaid::Offered));
+
+        for said in [
+            ShopSaid::Landed,
+            ShopSaid::Queued,
+            ShopSaid::Paused,
+            ShopSaid::NotYet,
+        ] {
+            let waiting = written(said_before(said, Some("2.9.0")));
+            assert_eq!(waiting.found_installs, Some(false), "{said:?}");
+            assert_eq!(waiting.found_in_the_shop, Some(said));
+        }
+    }
+
+    #[test]
+    fn what_landed_and_is_remembered_still_offers_nothing_to_press() {
+        let landed = said_before(ShopSaid::Landed, Some("2.9.0"));
+        let replayed = last_said(NOW, &landed).expect("still here");
+        assert!(!replayed.installs);
+        assert_eq!(replayed.coming, None);
+
+        let silent = verdict(Shelf::Silent, Ahead::Nothing, NOW, landed);
+        assert!(!silent.ready.expect("still here").installs);
+    }
+
+    #[test]
+    fn a_queue_remembered_keeps_why_it_waits() {
+        let paused = said_before(ShopSaid::Paused, Some("2.9.0"));
+        assert_eq!(
+            last_said(NOW, &paused).expect("still paused").coming,
+            Some(Coming::Paused)
+        );
     }
 
     #[test]
@@ -697,7 +759,7 @@ mod tests {
             found_installs: Some(true),
             ..Looked::default()
         };
-        assert_eq!(Memory::of(&looked).offered, None);
+        assert_eq!(Memory::of(&looked).said, None);
     }
 
     #[cfg(windows)]

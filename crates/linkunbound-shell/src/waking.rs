@@ -1,6 +1,4 @@
-use linkunbound_core::is_own_scheme;
-
-pub const HUSHED: &str = "--hushed";
+use linkunbound_core::{HUSHED, is_own_scheme};
 
 /// A refused `linkunbound:` link came from a page or another process, never from a person starting the app.
 #[must_use]

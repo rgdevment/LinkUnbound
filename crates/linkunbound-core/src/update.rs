@@ -27,6 +27,18 @@ pub struct Looked {
     /// Unset until somebody chooses, which is not the same as having chosen no.
     #[serde(default)]
     pub candidates: Option<bool>,
+    #[serde(default)]
+    pub found_in_the_shop: Option<ShopSaid>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShopSaid {
+    Offered,
+    Landed,
+    Queued,
+    Paused,
+    NotYet,
 }
 
 /// The install under way, written by whoever is downloading for whoever is watching.
@@ -233,6 +245,7 @@ mod tests {
                 found_route: Some("store".to_owned()),
                 found_installs: Some(false),
                 candidates: Some(true),
+                found_in_the_shop: Some(super::ShopSaid::Queued),
             },
         );
 
@@ -242,6 +255,7 @@ mod tests {
         assert_eq!(read.found_route.as_deref(), Some("store"));
         assert_eq!(read.found_installs, Some(false));
         assert_eq!(read.candidates, Some(true), "the track is remembered too");
+        assert_eq!(read.found_in_the_shop, Some(super::ShopSaid::Queued));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

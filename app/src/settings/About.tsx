@@ -10,7 +10,7 @@ import { offerMoved, saidPlainly } from "../refusal";
 import { CloudOff, Code, Gift, Key as KeyIcon } from "./Icons";
 import { Card, Line, Switch } from "./parts";
 import Star from "./Star";
-import type { Look, Ready, StoreWait, Underway } from "./update";
+import type { Ready, StoreWait, Underway } from "./update";
 
 const REPO = "https://github.com/rgdevment/LinkUnbound";
 const COFFEE = "https://buymeacoffee.com/rgdevment";
@@ -149,6 +149,7 @@ function Pip({ ok }: { ok?: boolean }) {
 
 function Offer({
   ready,
+  nothingNewer,
   step,
   build,
   onProblem,
@@ -156,24 +157,22 @@ function Offer({
   onLook,
 }: {
   ready: Ready | null;
+  nothingNewer: boolean;
   step: Underway | null;
   build: Build | null;
   onProblem: (why: string | null) => void;
   onSettled: () => void;
-  onLook: (how?: Look) => Promise<Ready | null>;
+  onLook: (pressed?: boolean) => Promise<unknown>;
 }) {
   const t = useWords();
   const language = useSpoken();
   const [looking, setLooking] = useState(false);
   const [asked, setAsked] = useState(false);
-  const [nothingSaid, setNothingSaid] = useState(false);
 
   const lookAgain = () => {
     setLooking(true);
     onProblem(null);
-    setNothingSaid(false);
-    onLook("pressed")
-      .then((one) => setNothingSaid(!one))
+    onLook(true)
       .catch((e: unknown) => onProblem(saidPlainly(language, e)))
       .finally(() => setLooking(false));
   };
@@ -189,7 +188,7 @@ function Offer({
             {looking
               ? t("lookingNow")
               : t(
-                  nothingSaid || !build?.keptByTheStore || build.notSold
+                  nothingNewer || !build?.keptByTheStore || build.notSold
                     ? nothingFound(build)
                     : "lookStoreKeeps",
                 )}
@@ -310,6 +309,7 @@ function Candidates({
 
 export default function About({
   ready,
+  nothingNewer,
   step,
   starring,
   onStarSettled,
@@ -317,11 +317,12 @@ export default function About({
   onLook,
 }: {
   ready: Ready | null;
+  nothingNewer: boolean;
   step: Underway | null;
   starring: boolean;
   onStarSettled: () => void;
   onSettled: () => void;
-  onLook: (how?: Look) => Promise<Ready | null>;
+  onLook: (pressed?: boolean) => Promise<unknown>;
 }) {
   const t = useWords();
   const language = useSpoken();
@@ -424,6 +425,7 @@ export default function About({
 
       <Offer
         ready={ready}
+        nothingNewer={nothingNewer}
         step={step}
         build={build}
         onProblem={setProblem}

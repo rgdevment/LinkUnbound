@@ -10,7 +10,7 @@ pub mod waking;
 
 use std::rc::Rc;
 
-use linkunbound_core::update::{Looked, Progress};
+use linkunbound_core::update::{Looked, Progress, ShopSaid};
 use linkunbound_core::{
     Browser, Scope, Strings, host_of, is_public_suffix, local_file_parts, looks_unresolved, site_of,
 };
@@ -255,14 +255,13 @@ pub fn strip_for(
     if !linkunbound_core::update::worth_offering(found, here, looked.candidates) {
         return None;
     }
-    let store = looked.found_route.as_deref() == Some("store");
     let here = takes_it_here(looked);
-    let how = if store {
-        words.update_store
-    } else if here {
-        words.update_how
-    } else {
-        words.update_open_settings
+    let how = match (looked.found_route.as_deref(), looked.found_in_the_shop) {
+        (Some("store"), Some(ShopSaid::Offered)) => words.update_store,
+        (Some("store"), Some(ShopSaid::Landed)) => words.update_store_landed,
+        (Some("store"), _) => words.update_store_coming,
+        _ if here => words.update_how,
+        _ => words.update_open_settings,
     };
 
     if let Some(progress) = under_way.filter(|one| one.version == found) {
@@ -526,6 +525,7 @@ mod short {
 
 #[cfg(test)]
 mod tests {
+    use super::ShopSaid;
     use super::dress;
     use super::{Listed, Palette, Reaches, destinations, image_for, paint, reaches, split};
     use linkunbound_core::{Browser, Language, Profile, Scope, Strings, looks_unresolved};
@@ -803,6 +803,7 @@ mod tests {
             found_route: Some(route.to_owned()),
             found_installs: Some(route != "store"),
             candidates: None,
+            found_in_the_shop: (route == "store").then_some(ShopSaid::Offered),
         }
     }
 
@@ -903,6 +904,31 @@ mod tests {
             strip_for(&words, &found("2.0.1", "store"), None, "2.0.0", None).expect("offered");
         assert_eq!(offer.button, words.update_open);
         assert_eq!(offer.detail, words.update_store);
+    }
+
+    #[test]
+    fn a_store_copy_is_told_only_an_offer_installs_from_settings() {
+        use crate::strip_for;
+        let words = Language::Spanish.strings();
+        let said = |shop: Option<ShopSaid>| {
+            let looked = linkunbound_core::update::Looked {
+                found_in_the_shop: shop,
+                ..found("2.0.1", "store")
+            };
+            strip_for(&words, &looked, None, "2.0.0", None)
+                .expect("offered")
+                .detail
+        };
+
+        assert_eq!(said(Some(ShopSaid::Landed)), words.update_store_landed);
+        for waiting in [
+            Some(ShopSaid::Queued),
+            Some(ShopSaid::Paused),
+            Some(ShopSaid::NotYet),
+            None,
+        ] {
+            assert_eq!(said(waiting), words.update_store_coming, "{waiting:?}");
+        }
     }
 
     /// While settings downloads, the strip follows its file: the bar while getting, the restart
