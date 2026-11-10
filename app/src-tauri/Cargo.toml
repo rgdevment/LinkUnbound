@@ -63,6 +63,7 @@ linkunbound-win.workspace = true
 windows-future = "0.3"
 windows = { version = "0.62", features = [
   "ApplicationModel",
+  "Management_Deployment",
   "Services_Store",
   "Win32_Foundation",
   "Win32_System_Com",

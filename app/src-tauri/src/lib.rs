@@ -575,41 +575,33 @@ const fn owner(_app: &AppHandle) -> Option<isize> {
 #[tauri::command]
 async fn update_ready(
     app: AppHandle,
-    now_please: Option<bool>,
+    look: Option<update::Look>,
 ) -> Result<Option<update::Ready>, String> {
     let dir = store().dir().to_path_buf();
     let kept = update::route();
     let mut looked = update::looked(&dir);
     let now = update::now();
-    let asked = now_please.unwrap_or(false);
+    let asked = look.is_some();
 
-    // A copy the Store keeps asks the Store, not the manifest: a release is out for everyone else
-    // while certification still has it. Silence falls through, though — the Store answers for
-    // nothing in a package it did not sell.
-    if kept.route == update::Route::Store
-        && let Some(window) = owner(&app)
-    {
-        // Held to the manifest's interval too: a Store that never answers strands the thread.
-        if !asked && !update::due(looked.checked_at, now) {
-            return Ok(looked
-                .found_version
-                .as_deref()
-                .and_then(|version| update::from_the_shop(version, HERE)));
+    // A release is out for everyone else while certification still has it from the Store.
+    if kept.route == update::Route::Store {
+        let was = shop::Memory::of(&looked);
+        let Some(window) = owner(&app) else {
+            return Ok(shop::last_said(HERE, &was));
+        };
+        let pressed = look == Some(update::Look::Pressed);
+        let wants = looked.candidates;
+        let verdict =
+            tauri::async_runtime::spawn_blocking(move || shop::look(window, pressed, wants, was))
+                .await
+                .map_err(|why| why.to_string())?;
+        verdict.memory.clone().written_into(&mut looked);
+        looked.checked_at = Some(now);
+        update::keep(&dir, &looked);
+        if verdict.refused(pressed) {
+            return Err("updateUnanswered".to_owned());
         }
-        if let Ok(shelf) = tauri::async_runtime::spawn_blocking(move || shop::asked(window)).await
-            && shelf != shop::Shelf::Silent
-        {
-            let seen = match shelf {
-                shop::Shelf::Waiting(version) => update::from_the_shop(&version, HERE),
-                _ => None,
-            };
-            looked.checked_at = Some(now);
-            looked.found_version = seen.as_ref().map(|one| one.version.clone());
-            looked.found_route = seen.as_ref().map(|one| one.route.name().to_owned());
-            looked.found_installs = seen.as_ref().map(|one| one.installs);
-            update::keep(&dir, &looked);
-            return Ok(seen);
-        }
+        return Ok(verdict.ready);
     }
 
     if !asked && !update::due(looked.checked_at, now) {
@@ -996,7 +988,7 @@ fn run_errand(app: AppHandle, errand: Errand) {
             // asked here, with no window, the manifest would answer for a package it did not sell.
             Errand::Look if update::route().route == update::Route::Store => {}
             Errand::Look => {
-                let _ = update_ready(app.clone(), Some(false)).await;
+                let _ = update_ready(app.clone(), None).await;
             }
             Errand::Update => {
                 let _ = install(app.clone(), false).await;

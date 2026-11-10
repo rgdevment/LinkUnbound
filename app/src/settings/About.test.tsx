@@ -57,10 +57,11 @@ function Host({
       starring={asking}
       onStarSettled={() => setAsking(false)}
       onSettled={settled}
-      onLook={(nowPlease) =>
-        invoke("update_ready", { nowPlease }).then((one: unknown) => {
-          setReady((one ?? null) as Ready | null);
-          return one;
+      onLook={(look) =>
+        invoke("update_ready", { look }).then((one: unknown) => {
+          const said = (one ?? null) as Ready | null;
+          setReady(said);
+          return said;
         })
       }
     />
@@ -189,7 +190,7 @@ describe("about", () => {
     show();
 
     await userEvent.click(screen.getByRole("button", { name: "Buscar ahora" }));
-    expect(invoke).toHaveBeenCalledWith("update_ready", { nowPlease: true });
+    expect(invoke).toHaveBeenCalledWith("update_ready", { look: "pressed" });
     expect(screen.getByText("Buscando…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Buscar ahora" })).toBeDisabled();
 
@@ -202,12 +203,69 @@ describe("about", () => {
   it("says what to do when the copy cannot install what it found", () => {
     show({ ...NEWER, route: "store", installs: false });
     expect(screen.queryByRole("button", { name: "Actualizar" })).toBeNull();
-    expect(screen.getByText(/Instálala desde Microsoft Store/)).toBeInTheDocument();
+    expect(screen.getByText(/Ya está en este equipo/)).toBeInTheDocument();
     cleanup();
 
     show({ ...NEWER, route: "brew", installs: false });
     expect(screen.queryByRole("button", { name: "Actualizar" })).toBeNull();
     expect(screen.getByText(/Mueve LinkUnbound a Aplicaciones/)).toBeInTheDocument();
+  });
+
+  it("offers what the store has even when nobody can say its number", () => {
+    show({ ...FROM_STORE, version: "" });
+    expect(screen.getByText("Microsoft Store tiene una versión nueva")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actualizar" })).toBeEnabled();
+  });
+
+  it("tells a store copy why it can only wait, and opens the store for it", async () => {
+    const waiting: Ready = { ...FROM_STORE, version: "", installs: false };
+
+    show({ ...waiting, coming: "queued" });
+    expect(screen.getByText("Microsoft Store está trayendo una versión nueva")).toBeInTheDocument();
+    expect(screen.getByText(/ni el icono de la bandeja/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Actualizar" })).toBeNull();
+    cleanup();
+
+    show({ ...waiting, coming: "notYet", version: "2.1.0" });
+    expect(screen.getByText("Versión 2.1.0 disponible")).toBeInTheDocument();
+    expect(screen.getByText(/todavía no se la ofrece a este equipo/)).toBeInTheDocument();
+    cleanup();
+
+    show({ ...waiting, coming: "paused" });
+    expect(screen.getByText("Microsoft Store tiene una versión nueva")).toBeInTheDocument();
+    expect(screen.getByText(/la tiene en pausa/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Abrir Microsoft Store" }));
+    expect(opened).toEqual(["ms-windows-store://downloadsandupdates"]);
+  });
+
+  it("says the store has nothing newer only once the store said so", async () => {
+    answers({ about: () => Promise.resolve({ ...BUILD, keptByTheStore: true }) });
+    show();
+    expect(
+      await screen.findByText(/Microsoft Store mantiene esta copia al día/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Buscar ahora" }));
+    expect(
+      await screen.findByText(
+        "Microsoft Store no tiene nada más nuevo para esta copia ahora mismo",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("tells a copy the store did not sell that the store does not update it", async () => {
+    answers({
+      about: () => Promise.resolve({ ...BUILD, keptByTheStore: true, notSold: true }),
+    });
+    show();
+    expect(await screen.findByText(/Esta copia no vino de Microsoft Store/)).toBeInTheDocument();
+  });
+
+  it("says plainly when the store did not answer a press", async () => {
+    answers({ update_ready: () => Promise.reject("updateUnanswered") });
+    show();
+    await userEvent.click(screen.getByRole("button", { name: "Buscar ahora" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Microsoft Store no respondió");
   });
 
   it("looks again when the offer it pressed is off the feed, and shows what is out now", async () => {

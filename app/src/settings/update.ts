@@ -9,7 +9,12 @@ export type Ready = {
   route: Route;
   package: string | null;
   installs: boolean;
+  coming?: StoreWait | null;
 };
+
+export type StoreWait = "queued" | "paused" | "notYet";
+
+export type Look = "now" | "pressed";
 
 export type Underway = { stage: "getting" | "installing"; far: number };
 
@@ -22,8 +27,8 @@ export function useUpdate() {
   const [step, setStep] = useState<Underway | null>(null);
 
   const look = useCallback(
-    (nowPlease?: boolean) =>
-      invoke<Ready | null>("update_ready", { nowPlease }).then((one) => {
+    (look?: Look) =>
+      invoke<Ready | null>("update_ready", { look }).then((one) => {
         setReady(one);
         return one;
       }),
