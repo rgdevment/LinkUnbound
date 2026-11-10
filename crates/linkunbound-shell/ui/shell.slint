@@ -72,6 +72,7 @@ export component Picker inherits Window {
     pure callback step-reach(int) -> int;
     callback dismissed();
     callback copy();
+    callback grabbed();
     callback add-browser();
     // Where the bear looks, from -1 to 1, and whether it wears the mask.
     callback mood(float, bool);
@@ -312,6 +313,7 @@ export component Picker inherits Window {
                 toggle-private => { root.toggle-private(); }
                 copy => { root.copy(); }
                 close => { root.dismissed(); }
+                grabbed => { root.grabbed(); }
                 turn-reach => { root.reach-index = root.step-reach(1); }
             }
 
@@ -333,6 +335,7 @@ export component Picker inherits Window {
                     toggle-private => { root.toggle-private(); }
                     copy => { root.copy(); }
                     close => { root.dismissed(); }
+                    grabbed => { root.grabbed(); }
                 }
                 if !root.cards: AddressHead {
                     host: root.host;
@@ -347,6 +350,7 @@ export component Picker inherits Window {
                     toggle-private => { root.toggle-private(); }
                     copy => { root.copy(); }
                     close => { root.dismissed(); }
+                    grabbed => { root.grabbed(); }
                 }
                 Hair {}
                 if root.cards: CardsLook {

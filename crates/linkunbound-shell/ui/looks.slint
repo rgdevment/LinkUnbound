@@ -1,4 +1,4 @@
-import { Destination, Palette, KeyCap, Badge, Tools } from "parts.slint";
+import { Destination, Palette, KeyCap, Badge, Tools, Grip } from "parts.slint";
 
 // The rows: key, icon, name, profile; nine on screen and the rest scroll under them.
 export component ListLook inherits Rectangle {
@@ -279,7 +279,14 @@ export component CompactLook inherits Rectangle {
     callback copy();
     callback close();
     callback turn-reach();
+    callback grabbed();
     property <int> aimed: root.hovered-at >= 0 ? root.hovered-at : root.chosen-at;
+
+    Grip {
+        height: 40px;
+        y: 0;
+        grabbed => { root.grabbed(); }
+    }
 
     VerticalLayout {
         padding-left: 10px;

@@ -116,7 +116,9 @@ fn build_settings<R: Runtime>(app: &AppHandle<R>, theme: Theme, page: Option<&st
     let builder = hidden(app, SETTINGS, url, theme)
         .inner_size(780.0, 560.0)
         .min_inner_size(640.0, 480.0)
-        .resizable(true);
+        .resizable(true)
+        // WebView2 keeps the page's own drag and drop for itself while files may be dropped.
+        .disable_drag_drop_handler();
     if let Ok(window) = builder.build() {
         dressed(&window, theme);
     }
