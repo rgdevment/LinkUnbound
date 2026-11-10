@@ -1,18 +1,18 @@
 {
-  "version": "2.9.0",
-  "notes": "https://github.com/rgdevment/LinkUnbound/releases/tag/v2.9.0",
+  "version": "2.10.0",
+  "notes": "https://github.com/rgdevment/LinkUnbound/releases/tag/v2.10.0",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/rgdevment/LinkUnbound/releases/download/v2.9.0/linkunbound-installer-2.9.0-windows-x86_64.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYVNycXJWS2ZlVWFVVU1oSjBGZ3ZsV0puS1gwOTJJZU9DeWp2MnVRUFdjYktHMjM0dy9QTlhmaG1oc1E5Zkh0NHVYSldpam1SN0VCcXhHTzBzenA1T2VDaGwrYk1LV0FNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MTk3NTUwCWZpbGU6bGlua3VuYm91bmQtaW5zdGFsbGVyLTIuOS4wLXdpbmRvd3MteDg2XzY0LmV4ZQl2ZXJzaW9uOjIuOS4wClBsc2c2SzU0ZDNYeHVtK2RZRHpEQmprcHhtVkgrNU11NzJhOXpRVWJEYW1KUzdtMWw1WWhMMDcreEJnZCs4Z2ptN3Q0ZGlIY2Z0TEx6WnJSc2ZIV0FRPT0K"
+      "url": "https://github.com/rgdevment/LinkUnbound/releases/download/v2.10.0/linkunbound-installer-2.10.0-windows-x86_64.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYVNycXJWS2ZlVVd4Rk9EMEJxSVBHMHQ1U2pyNUFDbWY5eWtwbnovUDh5TmJRdldPYXBrb3ZFOVVjSGlQUHBhK0tmWFZESlp1ZkRNNkJJVDgyY2grVi85aXAwRThDcFE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MzI0Mjc1CWZpbGU6bGlua3VuYm91bmQtaW5zdGFsbGVyLTIuMTAuMC13aW5kb3dzLXg4Nl82NC5leGUJdmVyc2lvbjoyLjEwLjAKRlhmaUZBQVl2S0dGVW5ZbDhTUWlicVNVZHdGcHNKdWhzOTNWeHpwSUhLaVg5cWJhNnh6TW41VWcrczNRbmR4VExzZVdpWTZUcmdOL0dSMFprQnRxQlE9PQo="
     },
     "darwin-aarch64": {
-      "url": "https://github.com/rgdevment/LinkUnbound/releases/download/v2.9.0/linkunbound-2.9.0-macos-aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYVNycXJWS2ZlVVIvZVVtWlhVN1BlbEs5d3krenRuWGRjVjVsMXNkN3o3OWZtVE8rYmpXVVFUclNTNTBTTmcwS0pEY1FUdTNtQ2t4b09GbFJHMXU2QnZlK1UwTGJFaHdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MTk3NTUxCWZpbGU6bGlua3VuYm91bmQtMi45LjAtbWFjb3MtYWFyY2g2NC5hcHAudGFyLmd6CXZlcnNpb246Mi45LjAKNWJhUFNSYlFYVzJ4TlhsQU1VQUQ1ZU5tb21jM2pLWlN2QjRzQ09xZmtwSDRzQUFxcVdXSnVDcVVsRjliTERZWlcxSDBVaVgyOFZ0SDJ0SE1xU0dHQ2c9PQo="
+      "url": "https://github.com/rgdevment/LinkUnbound/releases/download/v2.10.0/linkunbound-2.10.0-macos-aarch64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYVNycXJWS2ZlVWJlWndWaVhsQnV1NFRBcW51ZDZXbDBFaTdZVk02YlV4SjFTR0lRcVVqVmlNMDNoV0oxUmZBWmQ5VFVjbGV2bTloQTV6RWswa1crMzJvVkI3OFNZSXc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MzI0Mjc2CWZpbGU6bGlua3VuYm91bmQtMi4xMC4wLW1hY29zLWFhcmNoNjQuYXBwLnRhci5negl2ZXJzaW9uOjIuMTAuMAprMWtOQ1llS1BValB4ZGFNVjJLeGhoYzBhK2F2alJPNVJraVpMakNZSzZXQm52YzE2ZFBjem1mMHd5TTcwVEVOU1lCQ0tSMVptbUQzZXpRbW8yQUZEZz09Cg=="
     },
     "darwin-x86_64": {
-      "url": "https://github.com/rgdevment/LinkUnbound/releases/download/v2.9.0/linkunbound-2.9.0-macos-x86_64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYVNycXJWS2ZlVVRMZ0RFbzFkelZzeUxoTW1oWS9OSGtKNjVsQ1p4a3I2K0tLRGRyNHdWWitzV3A0YVRPaXh6d2tuOHlwYllUT0hXWnRBQ0pDQ0FVOFlRL205aUZkalFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MTk3NTUxCWZpbGU6bGlua3VuYm91bmQtMi45LjAtbWFjb3MteDg2XzY0LmFwcC50YXIuZ3oJdmVyc2lvbjoyLjkuMApJVkc5aE1WTXhaUG5oMmxvRG1UNzNLMnBHZ1FBd0t1YndpanU5MDRtNDBaL2JCcHp1WWszK1RMU3lBS3lKTWczNldEUlVzd2FsZ2FtOWM4QUVPU2NEdz09Cg=="
+      "url": "https://github.com/rgdevment/LinkUnbound/releases/download/v2.10.0/linkunbound-2.10.0-macos-x86_64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYVNycXJWS2ZlVWZaWEhwQU1UbzFPTjdQbTQxN1R5a0pyL25GUUIzOW9zRE1MNjFIOElORE01L0xzcWVsZTZXZ3doTTBsVmFyR014ZThJQUxqdVBkZ3d0cmpxTEdhc2dNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MzI0Mjc2CWZpbGU6bGlua3VuYm91bmQtMi4xMC4wLW1hY29zLXg4Nl82NC5hcHAudGFyLmd6CXZlcnNpb246Mi4xMC4wClZFaWR2WTFzRTBFNSs5WGFpUVY5ZXpZL20ySWhqS2FaQnFPRG9KS1hIN2lFVmpxZ2E3SHFpTzdnOXRoeCtTM1BRSjk5a202NUdiUHF2Nnl2NmNveUNnPT0K"
     }
   }
 }
