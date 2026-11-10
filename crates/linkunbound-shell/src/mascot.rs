@@ -2,6 +2,8 @@
 
 use linkunbound_shell::{BearHead, BearPaws, Look, Palette, Picker};
 use slint::ComponentHandle;
+use slint::winit_030::winit::event::WindowEvent;
+use slint::winit_030::{EventResult, WinitWindowAccessor};
 
 /// Sizes in logical pixels: the head, how far it rises over the edge, a paw, the room between
 /// the paws, and where across the picker the head is centred.
@@ -74,15 +76,35 @@ impl Mascot {
         self.paws.set_gap(pose.gap);
         // Measured from what the look asks for, not from the window: right after a change of
         // look or place the window still reports the size and spot it had before.
-        let window = picker.window();
-        let scale = placing_scale(window);
-        let (x, y) = self.anchor.get().unwrap_or_else(|| where_it_is(window));
+        let at = self
+            .anchor
+            .get()
+            .unwrap_or_else(|| where_it_is(picker.window()));
+        self.lean_on(pose, picker, at);
+        self.mood(0.0, picker.get_private_on());
+        let _ = self.head.show();
+        let _ = self.paws.show();
+        stack(&self.head, &self.paws, picker);
+    }
+
+    /// The picker was carried off: the bear goes along, keeping the mood it had.
+    pub fn shift(&self, picker: &Picker) {
+        let Some(pose) = pose(picker) else { return };
+        if !self.head.window().is_visible() {
+            return;
+        }
+        let at = where_it_is(picker.window());
+        self.anchor.set(Some(at));
+        self.lean_on(pose, picker, at);
+    }
+
+    fn lean_on(&self, pose: &Pose, picker: &Picker, at: (i32, i32)) {
         let (head, paws) = spots(
             pose,
-            (x, y),
+            at,
             picker.get_wanted_width(),
             picker.get_halo(),
-            scale,
+            placing_scale(picker.window()),
         );
         put(
             self.head.window(),
@@ -94,10 +116,6 @@ impl Mascot {
             paws,
             (self.paws.get_wide(), self.paws.get_tall()),
         );
-        self.mood(0.0, picker.get_private_on());
-        let _ = self.head.show();
-        let _ = self.paws.show();
-        stack(&self.head, &self.paws, picker);
     }
 
     pub fn mood(&self, aim: f32, masked: bool) {
@@ -166,8 +184,8 @@ fn put(window: &slint::Window, (x, y): (i32, i32), (wide, tall): (f32, f32)) {
     }
 }
 
-/// The picker says where the bear should look and whether it wears the mask, and an empty slot
-/// sends the person to settings to fill it.
+/// The picker says where the bear should look and whether it wears the mask, an empty slot
+/// sends the person to settings to fill it, and the head carries the picker with the bear along.
 pub fn listen(picker: &Picker) {
     picker.on_mood(|aim, masked| {
         if let Some(ui) = crate::ui() {
@@ -180,6 +198,32 @@ pub fn listen(picker: &Picker) {
             crate::look::put_away(&picker);
         }
         crate::run_settings(&[linkunbound_core::BROWSERS]);
+    });
+    let handle = picker.as_weak();
+    picker.on_grabbed(move || {
+        if let Some(picker) = handle.upgrade() {
+            carry(&picker);
+        }
+    });
+    let handle = picker.as_weak();
+    picker.window().on_winit_window_event(move |_, event| {
+        if let WindowEvent::Moved(_) = event
+            && let (Some(picker), Some(ui)) = (handle.upgrade(), crate::ui())
+        {
+            ui.mascot.shift(&picker);
+        }
+        EventResult::Propagate
+    });
+}
+
+fn carry(picker: &Picker) {
+    let window = picker.window();
+    let _ = window.with_winit_window(|winit| winit.drag_window());
+    // AppKit swallows the release that ends the drag, and the head would keep the pointer.
+    #[cfg(target_os = "macos")]
+    let _ = window.try_dispatch_event(slint::platform::WindowEvent::PointerReleased {
+        position: slint::LogicalPosition::new(0.0, 0.0),
+        button: slint::platform::PointerEventButton::Left,
     });
 }
 
