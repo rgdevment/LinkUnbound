@@ -88,12 +88,11 @@ impl Mascot {
     }
 
     /// The picker was carried off: the bear goes along, keeping the mood it had.
-    pub fn shift(&self, picker: &Picker) {
+    pub fn shift(&self, picker: &Picker, at: (i32, i32)) {
         let Some(pose) = pose(picker) else { return };
         if !self.head.window().is_visible() {
             return;
         }
-        let at = where_it_is(picker.window());
         self.anchor.set(Some(at));
         self.lean_on(pose, picker, at);
     }
@@ -160,7 +159,10 @@ fn placing_scale(window: &slint::Window) -> f32 {
 }
 
 fn where_it_is(window: &slint::Window) -> (i32, i32) {
-    let at = window.position();
+    in_placing_units(window, window.position())
+}
+
+fn in_placing_units(window: &slint::Window, at: slint::PhysicalPosition) -> (i32, i32) {
     if cfg!(target_os = "macos") {
         let at = at.to_logical(window.scale_factor());
         (at.x.round() as i32, at.y.round() as i32)
@@ -206,14 +208,19 @@ pub fn listen(picker: &Picker) {
         }
     });
     let handle = picker.as_weak();
-    picker.window().on_winit_window_event(move |_, event| {
-        if let WindowEvent::Moved(_) = event
-            && let (Some(picker), Some(ui)) = (handle.upgrade(), crate::ui())
-        {
-            ui.mascot.shift(&picker);
-        }
-        EventResult::Propagate
-    });
+    picker
+        .window()
+        .on_winit_window_event(move |_, event| bear_follows(&handle, event));
+}
+
+fn bear_follows(picker: &slint::Weak<Picker>, event: &WindowEvent) -> EventResult {
+    if let WindowEvent::Moved(at) = event
+        && let (Some(picker), Some(ui)) = (picker.upgrade(), crate::ui())
+    {
+        let at = in_placing_units(picker.window(), slint::PhysicalPosition::new(at.x, at.y));
+        ui.mascot.shift(&picker, at);
+    }
+    EventResult::Propagate
 }
 
 fn carry(picker: &Picker) {
@@ -264,9 +271,11 @@ fn stack(_head: &BearHead, _paws: &BearPaws, _picker: &Picker) {}
 
 #[cfg(test)]
 mod tests {
-    use super::{BEAR, COMPACT, Mascot, rise, spots};
+    use super::{BEAR, COMPACT, Mascot, bear_follows, listen, rise, spots};
     use linkunbound_shell::{Look, Palette, Picker};
     use slint::ComponentHandle;
+    use slint::winit_030::EventResult;
+    use slint::winit_030::winit::{dpi::PhysicalPosition, event::WindowEvent};
 
     fn picker(look: Look, clear: bool) -> Picker {
         let picker = Picker::new().expect("a window");
@@ -308,6 +317,59 @@ mod tests {
         mascot.follow(&picker(Look::Tiles, true));
         assert!(!mascot.head.window().is_visible());
         assert!(!mascot.paws.window().is_visible());
+    }
+
+    fn carried_to(picker: &Picker, x: i32, y: i32) -> EventResult {
+        bear_follows(
+            &picker.as_weak(),
+            &WindowEvent::Moved(PhysicalPosition::new(x, y)),
+        )
+    }
+
+    #[test]
+    fn the_bear_goes_where_the_picker_is_carried() {
+        let ui = crate::tests::headless_ui();
+        ui.picker.set_look(Look::Bear);
+        ui.picker.global::<Palette>().set_clear(true);
+        ui.mascot.follow(&ui.picker);
+        ui.mascot.mood(0.7, true);
+
+        assert!(matches!(
+            carried_to(&ui.picker, 400, 500),
+            EventResult::Propagate
+        ));
+        assert_eq!(ui.mascot.anchor.get(), Some((400, 500)));
+        assert_eq!(ui.mascot.head.get_look(), 0.7, "the mood stays as it was");
+        assert!(ui.mascot.head.get_masked());
+    }
+
+    #[test]
+    fn a_bear_that_is_not_out_stays_where_it_was() {
+        let ui = crate::tests::headless_ui();
+        ui.picker.set_look(Look::Bear);
+        ui.picker.global::<Palette>().set_clear(true);
+        carried_to(&ui.picker, 400, 500);
+        assert_eq!(ui.mascot.anchor.get(), None, "never shown");
+
+        ui.mascot.anchor(10, 20);
+        ui.mascot.follow(&ui.picker);
+        ui.picker.set_look(Look::List);
+        carried_to(&ui.picker, 900, 100);
+        assert_eq!(ui.mascot.anchor.get(), Some((10, 20)), "a look without it");
+
+        ui.picker.set_look(Look::Bear);
+        bear_follows(&ui.picker.as_weak(), &WindowEvent::Focused(true));
+        assert_eq!(ui.mascot.anchor.get(), Some((10, 20)), "not a move");
+    }
+
+    #[test]
+    fn grabbing_the_head_without_a_system_window_moves_nothing() {
+        i_slint_backend_testing::init_no_event_loop();
+        let picker = Picker::new().expect("a window");
+        listen(&picker);
+        let before = picker.window().position();
+        picker.invoke_grabbed();
+        assert_eq!(picker.window().position(), before);
     }
 
     /// The head stands over the middle of the sheet and rises its pose's height over it, the paws

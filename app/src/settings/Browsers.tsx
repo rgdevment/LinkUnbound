@@ -374,6 +374,11 @@ export default function Browsers() {
     setLanding(null);
   };
 
+  const landsOn = (id: string) => {
+    if (landing?.id !== id) return "";
+    return landing.after ? LANDS_AFTER : LANDS_BEFORE;
+  };
+
   const carry = (b: BrowserView, within: BrowserView[]) => ({
     draggable: true,
     onDragStart: (e: DragEvent<HTMLDivElement>) => {
@@ -394,11 +399,7 @@ export default function Browsers() {
       if (carried && landing) land(carried, landing);
       letGo();
     },
-    className: [
-      ROW,
-      carried === b.id ? "opacity-40" : "",
-      landing?.id === b.id ? (landing.after ? LANDS_AFTER : LANDS_BEFORE) : "",
-    ].join(" "),
+    className: [ROW, carried === b.id ? "opacity-40" : "", landsOn(b.id)].join(" "),
   });
 
   const detected = list.filter((b) => !b.custom);
