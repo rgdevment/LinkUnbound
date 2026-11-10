@@ -228,6 +228,16 @@ component UpdateStrip inherits Rectangle {
     }
 }
 
+// The head carries the sheet the way a title bar does: nothing drawn, nothing to learn.
+export component Grip inherits TouchArea {
+    callback grabbed();
+    pointer-event(event) => {
+        if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+            root.grabbed();
+        }
+    }
+}
+
 export component Hair inherits Rectangle {
     height: 1px;
     Rectangle {
@@ -412,7 +422,12 @@ export component AddressHead inherits Rectangle {
     callback toggle-private();
     callback copy();
     callback close();
+    callback grabbed();
     height: 60px;
+
+    Grip {
+        grabbed => { root.grabbed(); }
+    }
 
     HorizontalLayout {
         padding-left: 16px;
@@ -475,8 +490,13 @@ export component AskHead inherits Rectangle {
     callback toggle-private();
     callback copy();
     callback close();
+    callback grabbed();
     height: 80px;
     in property <length> ask-margin: 72px;
+
+    Grip {
+        grabbed => { root.grabbed(); }
+    }
 
     VerticalLayout {
         padding-top: 18px;

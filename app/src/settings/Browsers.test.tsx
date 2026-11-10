@@ -1,9 +1,15 @@
-import { render, screen, within } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Browsers from "./Browsers";
 
 const invoke = vi.fn();
+
+function dragOver(row: Element, clientY: number) {
+  const over = createEvent.dragOver(row);
+  Object.defineProperty(over, "clientY", { value: clientY });
+  fireEvent(row, over);
+}
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
 const CHROME = {
@@ -97,6 +103,46 @@ describe("browsers", () => {
     expect(invoke).toHaveBeenCalledWith("browsers_reorder", {
       ids: [MINE.id, EDGE.id, CHROME.id, ODD.id],
     });
+  });
+
+  it("drops a dragged browser above the one it lands on", async () => {
+    answers([MINE, CHROME, EDGE, ODD]);
+    render(<Browsers />);
+    const odd = (await screen.findByText("Navegador raro")).closest("[draggable]") as Element;
+    const chrome = screen.getByText("Google Chrome").closest("[draggable]") as Element;
+    fireEvent.dragStart(odd);
+    dragOver(chrome, 0);
+    fireEvent.drop(chrome);
+    expect(invoke).toHaveBeenCalledWith("browsers_reorder", {
+      ids: [MINE.id, ODD.id, CHROME.id, EDGE.id],
+    });
+  });
+
+  it("drops below the one it lands on when let go over its lower half", async () => {
+    answers([MINE, CHROME, EDGE, ODD]);
+    render(<Browsers />);
+    const chrome = (await screen.findByText("Google Chrome")).closest("[draggable]") as Element;
+    const edge = screen.getByText("Microsoft Edge").closest("[draggable]") as Element;
+    vi.spyOn(edge, "getBoundingClientRect").mockReturnValue(new DOMRect(0, -40, 300, 40));
+    fireEvent.dragStart(chrome);
+    dragOver(edge, 0);
+    fireEvent.drop(edge);
+    expect(invoke).toHaveBeenCalledWith("browsers_reorder", {
+      ids: [MINE.id, EDGE.id, CHROME.id, ODD.id],
+    });
+  });
+
+  it("keeps a dragged browser in its own section", async () => {
+    answers([MINE, CHROME, EDGE, ODD]);
+    render(<Browsers />);
+    const mine = (await screen.findByText("Chrome sin extensiones")).closest(
+      "[draggable]",
+    ) as Element;
+    const chrome = screen.getByText("Google Chrome").closest("[draggable]") as Element;
+    fireEvent.dragStart(mine);
+    dragOver(chrome, 0);
+    fireEvent.drop(chrome);
+    expect(invoke).not.toHaveBeenCalledWith("browsers_reorder", expect.anything());
   });
 
   it("does not offer to move the first of a section above a browser in the other", async () => {

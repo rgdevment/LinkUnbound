@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useState } from "react";
 import { type Key, useSpoken, useWords } from "../i18n";
 import { saidPlainly } from "../refusal";
 import Confirm from "./Confirm";
@@ -309,6 +309,14 @@ function Form({
 const GHOST =
   "grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-black/[0.06] disabled:opacity-25 dark:text-[#8B92A1] dark:hover:bg-white/[0.08]";
 
+const ROW =
+  "group flex cursor-grab items-center gap-3 border-black/[0.08] px-3.5 py-3 transition-[opacity,box-shadow] duration-150 not-first:border-t active:cursor-grabbing dark:border-white/[0.08]";
+
+const LANDS_BEFORE = "shadow-[inset_0_2px_0_#2F62D8] dark:shadow-[inset_0_2px_0_#6E9BFF]";
+const LANDS_AFTER = "shadow-[inset_0_-2px_0_#2F62D8] dark:shadow-[inset_0_-2px_0_#6E9BFF]";
+
+type Landing = { id: string; after: boolean };
+
 export default function Browsers() {
   const t = useWords();
   const language = useSpoken();
@@ -318,6 +326,8 @@ export default function Browsers() {
   const [asking, setAsking] = useState<BrowserView | null>(null);
   const [rescanning, setRescanning] = useState(false);
   const [counted, setCounted] = useState<string | null>(null);
+  const [carried, setCarried] = useState<string | null>(null);
+  const [landing, setLanding] = useState<Landing | null>(null);
 
   const run = useCallback(
     (command: string, params: Record<string, unknown> = {}) => {
@@ -351,6 +361,46 @@ export default function Browsers() {
     [order[at], order[to]] = [order[to], order[at]];
     run("browsers_reorder", { ids: order });
   };
+
+  const land = (id: string, { id: target, after }: Landing) => {
+    const order = list.map((b) => b.id).filter((o) => o !== id);
+    order.splice(order.indexOf(target) + (after ? 1 : 0), 0, id);
+    if (order.every((o, i) => o === list[i]?.id)) return;
+    run("browsers_reorder", { ids: order });
+  };
+
+  const letGo = () => {
+    setCarried(null);
+    setLanding(null);
+  };
+
+  const landsOn = (id: string) => {
+    if (landing?.id !== id) return "";
+    return landing.after ? LANDS_AFTER : LANDS_BEFORE;
+  };
+
+  const carry = (b: BrowserView, within: BrowserView[]) => ({
+    draggable: true,
+    onDragStart: (e: DragEvent<HTMLDivElement>) => {
+      e.dataTransfer?.setData("text/plain", b.id);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      setCarried(b.id);
+    },
+    onDragEnd: letGo,
+    onDragOver: (e: DragEvent<HTMLDivElement>) => {
+      if (!carried || carried === b.id || !within.some((o) => o.id === carried)) return;
+      e.preventDefault();
+      const box = e.currentTarget.getBoundingClientRect();
+      const after = e.clientY > box.top + box.height / 2;
+      if (landing?.id !== b.id || landing.after !== after) setLanding({ id: b.id, after });
+    },
+    onDrop: (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      if (carried && landing) land(carried, landing);
+      letGo();
+    },
+    className: [ROW, carried === b.id ? "opacity-40" : "", landsOn(b.id)].join(" "),
+  });
 
   const detected = list.filter((b) => !b.custom);
   const mine = list.filter((b) => b.custom);
@@ -421,10 +471,7 @@ export default function Browsers() {
                 onSave={(edit) => run("browsers_update", { id: b.id, edit })}
               />
             ) : (
-              <div
-                key={b.id}
-                className="group flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
-              >
+              <div key={b.id} {...carry(b, detected)}>
                 <Icon browser={b} />
                 <div className="min-w-0 flex-1">
                   <p className={`text-[12.5px] ${b.hidden ? "opacity-55" : ""}`}>{b.name}</p>
@@ -507,10 +554,7 @@ export default function Browsers() {
                 onSave={(edit) => run("browsers_update", { id: b.id, edit })}
               />
             ) : (
-              <div
-                key={b.id}
-                className="group flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]"
-              >
+              <div key={b.id} {...carry(b, mine)}>
                 <Icon browser={b} />
                 <div className="min-w-0 flex-1">
                   <p className={`truncate text-[12.5px] ${b.hidden ? "opacity-55" : ""}`}>
