@@ -61,19 +61,24 @@ jobs:
           drive-format: ReFS
           drive-type: Dynamic
           trusted-dev-drive: true
+          # Beside the checkout, because the cache only keeps a target it can reach from there by a relative path.
+          mount-path: ${{ github.workspace }}/../dev-drive
           env-mapping: |
             CARGO_TARGET_DIR,{{ DEV_DRIVE }}/target
             TEMP,{{ DEV_DRIVE }}/tmp
             TMP,{{ DEV_DRIVE }}/tmp
+      # The cache is handed its target by hand, and keeps nothing without a word when that names no folder.
       - if: runner.os == 'Windows'
         shell: bash
-        run: mkdir -p "$TEMP" "$CARGO_TARGET_DIR"
+        run: |
+          mkdir -p "$TEMP" "$CARGO_TARGET_DIR"
+          test -d ../dev-drive/target
       - uses: ./.github/actions/toolchain
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: workspace
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: ${{ runner.os == 'Windows' && format('. -> {0}/target', env.DEV_DRIVE) || '. -> target' }}
+          workspaces: ${{ runner.os == 'Windows' && '. -> ../dev-drive/target' || '. -> target' }}
       - uses: ./.github/actions/sidecar
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
