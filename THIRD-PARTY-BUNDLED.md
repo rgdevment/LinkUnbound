@@ -24,14 +24,14 @@ also under About → Licence texts.
 | `scheduler` | 0.28.0 | MIT |
 | `uc.micro` | 3.0.0 | MIT |
 
-## In the core (369 crates)
+## In the core (363 crates)
 
 | Crate | Version | Licence |
 | --- | --- | --- |
 | `adler2` | 2.0.1 | 0BSD OR MIT OR Apache-2.0 |
 | `aho-corasick` | 1.1.5 | Unlicense OR MIT |
-| `alloc-no-stdlib` | 2.0.4 | BSD-3-Clause |
-| `alloc-stdlib` | 0.2.4 | BSD-3-Clause |
+| `alloc-no-stdlib` | 3.0.0 | BSD-3-Clause |
+| `alloc-stdlib` | 0.3.0 | BSD-3-Clause |
 | `allocator-api2` | 0.2.21 | MIT OR Apache-2.0 |
 | `anyhow` | 1.0.104 | MIT OR Apache-2.0 |
 | `arboard` | 3.6.1 | MIT OR Apache-2.0 |
@@ -44,12 +44,13 @@ also under About → Licence texts.
 | `bitflags` | 2.13.2 | MIT OR Apache-2.0 |
 | `block2` | 0.5.1 | MIT |
 | `block2` | 0.6.2 | MIT |
-| `brotli-decompressor` | 5.0.3 | BSD-3-Clause/MIT |
-| `brotli` | 8.0.4 | BSD-3-Clause AND MIT |
+| `brotli-decompressor` | 6.3.2 | BSD-3-Clause/MIT |
+| `brotli` | 9.1.3 | BSD-3-Clause AND MIT |
 | `bytemuck` | 1.25.2 | Zlib OR Apache-2.0 OR MIT |
 | `byteorder-lite` | 0.1.0 | Unlicense OR MIT |
 | `byteorder` | 1.5.0 | Unlicense OR MIT |
 | `bytes` | 1.12.1 | MIT |
+| `cfb` | 0.14.0 | MIT |
 | `cfb` | 0.7.3 | MIT |
 | `cfg-if` | 1.0.5 | MIT OR Apache-2.0 |
 | `chrono` | 0.4.45 | MIT OR Apache-2.0 |
@@ -70,7 +71,7 @@ also under About → Licence texts.
 | `critical-section` | 1.2.0 | MIT OR Apache-2.0 |
 | `crossbeam-channel` | 0.5.17 | MIT OR Apache-2.0 |
 | `crossbeam-utils` | 0.8.23 | MIT OR Apache-2.0 |
-| `ctor` | 0.8.0 | Apache-2.0 OR MIT |
+| `ctor` | 1.0.14 | Apache-2.0 OR MIT |
 | `cursor-icon` | 1.2.0 | MIT OR Apache-2.0 OR Zlib |
 | `data-url` | 0.3.2 | MIT OR Apache-2.0 |
 | `deranged` | 0.5.8 | MIT OR Apache-2.0 |
@@ -154,11 +155,12 @@ also under About → Licence texts.
 | `imgref` | 1.12.3 | CC0-1.0 OR Apache-2.0 |
 | `indexmap` | 2.14.2 | Apache-2.0 OR MIT |
 | `infer` | 0.19.0 | MIT |
+| `infer` | 0.22.0 | MIT |
 | `interprocess` | 2.4.7 | 0BSD OR Apache-2.0 |
 | `ipnet` | 2.12.2 | MIT OR Apache-2.0 |
 | `itoa` | 1.0.18 | MIT OR Apache-2.0 |
-| `json-patch` | 3.0.1 | MIT/Apache-2.0 |
-| `jsonptr` | 0.6.3 | MIT OR Apache-2.0 |
+| `json-patch` | 4.2.0 | MIT/Apache-2.0 |
+| `jsonptr` | 0.7.1 | MIT OR Apache-2.0 |
 | `keyboard-types` | 0.7.0 | MIT OR Apache-2.0 |
 | `keyboard-types` | 0.8.3 | MIT OR Apache-2.0 |
 | `kurbo` | 0.13.1 | Apache-2.0 OR MIT |
@@ -295,10 +297,9 @@ also under About → Licence texts.
 | `tauri-plugin-updater` | 2.12.0 | Apache-2.0 OR MIT |
 | `tauri-runtime-wry` | 2.11.4 | Apache-2.0 OR MIT |
 | `tauri-runtime` | 2.11.3 | Apache-2.0 OR MIT |
-| `tauri-utils` | 2.9.3 | Apache-2.0 OR MIT |
+| `tauri-utils` | 2.10.3 | Apache-2.0 OR MIT |
 | `tauri` | 2.11.6 | Apache-2.0 OR MIT |
 | `tempfile` | 3.27.0 | MIT OR Apache-2.0 |
-| `thiserror` | 1.0.69 | MIT OR Apache-2.0 |
 | `thiserror` | 2.0.21 | MIT OR Apache-2.0 |
 | `time-core` | 0.1.9 | MIT OR Apache-2.0 |
 | `time` | 0.3.55 | MIT OR Apache-2.0 |
@@ -322,11 +323,6 @@ also under About → Licence texts.
 | `tray-icon` | 0.24.2 | MIT OR Apache-2.0 |
 | `try-lock` | 0.2.5 | MIT |
 | `typeid` | 1.0.3 | MIT OR Apache-2.0 |
-| `unic-char-property` | 0.9.0 | MIT/Apache-2.0 |
-| `unic-char-range` | 0.9.0 | MIT/Apache-2.0 |
-| `unic-common` | 0.9.0 | MIT/Apache-2.0 |
-| `unic-ucd-ident` | 0.9.0 | MIT/Apache-2.0 |
-| `unic-ucd-version` | 0.9.0 | MIT/Apache-2.0 |
 | `unicase` | 2.9.0 | MIT OR Apache-2.0 |
 | `unicode-bidi` | 0.3.18 | MIT OR Apache-2.0 |
 | `unicode-linebreak` | 0.1.5 | Apache-2.0 |
@@ -335,13 +331,14 @@ also under About → Licence texts.
 | `unicode-vo` | 0.1.0 | MIT/Apache-2.0 |
 | `untrusted` | 0.9.0 | ISC |
 | `url` | 2.5.8 | MIT OR Apache-2.0 |
-| `urlpattern` | 0.3.0 | MIT |
+| `urlpattern` | 0.6.0 | MIT |
 | `usvg` | 0.48.1 | Apache-2.0 OR MIT |
 | `utf8_iter` | 1.0.4 | Apache-2.0 OR MIT |
 | `uuid` | 1.26.1 | Apache-2.0 OR MIT |
 | `vtable` | 0.5.0 | MIT OR Apache-2.0 |
 | `walkdir` | 2.5.0 | Unlicense/MIT |
 | `want` | 0.3.1 | MIT |
+| `web-time` | 1.1.0 | MIT OR Apache-2.0 |
 | `webbrowser` | 1.2.4 | MIT OR Apache-2.0 |
 | `webview2-com-sys` | 0.38.2 | MIT |
 | `webview2-com` | 0.38.2 | MIT |
@@ -349,7 +346,6 @@ also under About → Licence texts.
 | `widestring` | 1.2.1 | MIT OR Apache-2.0 |
 | `winapi-util` | 0.1.11 | Unlicense OR MIT |
 | `window-vibrancy` | 0.6.0 | Apache-2.0 OR MIT |
-| `windows_x86_64_msvc` | 0.48.5 | MIT OR Apache-2.0 |
 | `windows_x86_64_msvc` | 0.52.6 | MIT OR Apache-2.0 |
 | `windows_x86_64_msvc` | 0.53.1 | MIT OR Apache-2.0 |
 | `windows-collections` | 0.2.0 | MIT OR Apache-2.0 |
@@ -367,12 +363,10 @@ also under About → Licence texts.
 | `windows-result` | 0.4.1 | MIT OR Apache-2.0 |
 | `windows-strings` | 0.4.2 | MIT OR Apache-2.0 |
 | `windows-strings` | 0.5.1 | MIT OR Apache-2.0 |
-| `windows-sys` | 0.48.0 | MIT OR Apache-2.0 |
 | `windows-sys` | 0.52.0 | MIT OR Apache-2.0 |
 | `windows-sys` | 0.59.0 | MIT OR Apache-2.0 |
 | `windows-sys` | 0.60.2 | MIT OR Apache-2.0 |
 | `windows-sys` | 0.61.2 | MIT OR Apache-2.0 |
-| `windows-targets` | 0.48.5 | MIT OR Apache-2.0 |
 | `windows-targets` | 0.52.6 | MIT OR Apache-2.0 |
 | `windows-targets` | 0.53.5 | MIT OR Apache-2.0 |
 | `windows-threading` | 0.1.0 | MIT OR Apache-2.0 |
