@@ -107,7 +107,7 @@ function Icon({ browser }: { browser: BrowserView }) {
       fill="none"
       stroke="currentColor"
       strokeWidth="1.7"
-      className="h-[18px] w-[18px] shrink-0 text-neutral-400 dark:text-[#646B7C]"
+      className="h-[18px] w-[18px] shrink-0 text-muted"
       aria-hidden="true"
     >
       <rect x="3" y="4" width="18" height="16" rx="3" />
@@ -117,7 +117,7 @@ function Icon({ browser }: { browser: BrowserView }) {
 }
 
 const FIELD =
-  "rounded-md border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-[12px] dark:border-white/[0.12]";
+  "rounded-md border border-black/[0.12] bg-transparent px-2.5 py-1.5 text-sm dark:border-white/[0.12]";
 
 function Form({
   initial,
@@ -184,16 +184,12 @@ function Form({
         readOnly={detected}
         className={`${FIELD} ${detected ? "opacity-60" : ""}`}
       />
-      {detected && (
-        <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
-          {t("fieldExeDetected")}
-        </p>
-      )}
+      {detected && <p className="-mt-1 text-xs text-muted">{t("fieldExeDetected")}</p>}
       <fieldset className="flex flex-col gap-1.5">
-        <legend className="mb-1 text-[11.5px]">{t("fieldKey")}</legend>
+        <legend className="mb-1 text-sm">{t("fieldKey")}</legend>
         {rows.map(([row, label], at) => (
           <div key={row} className="flex flex-wrap items-center gap-2">
-            {label && <span className="min-w-[96px] text-[11.5px]">{label}</span>}
+            {label && <span className="min-w-[96px] text-sm">{label}</span>}
             <input
               value={keys[row] ?? ""}
               placeholder={shown[row] ?? ""}
@@ -204,20 +200,20 @@ function Form({
               aria-label={label ? t("fieldKeyOf", label) : t("fieldKey")}
               aria-invalid={problems[at] !== null}
               className={`${FIELD} w-10 text-center uppercase ${
-                problems[at] ? "border-[#C0362F] dark:border-[#FF8A85]" : ""
+                problems[at] ? "border-danger" : ""
               }`}
             />
             {problems[at] && (
-              <span role="alert" className="text-[10.5px] text-[#C0362F] dark:text-[#FF8A85]">
+              <span role="alert" className="text-xs text-danger">
                 {problems[at]}
               </span>
             )}
           </div>
         ))}
-        <p className="text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">{t("fieldKeyHint")}</p>
+        <p className="text-xs text-muted">{t("fieldKeyHint")}</p>
       </fieldset>
       <details open={advancedAtFirst} className="group/advanced">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11.5px] text-neutral-500 select-none dark:text-[#8B92A1] [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm text-muted select-none [&::-webkit-details-marker]:hidden">
           <svg
             viewBox="0 0 12 12"
             aria-hidden="true"
@@ -244,9 +240,7 @@ function Form({
                 aria-label={t("fieldPrivateLabel")}
                 className={FIELD}
               />
-              <p className="-mt-1 text-[10.5px] text-neutral-500 dark:text-[#8B92A1]">
-                {t("fieldPrivateHint")}
-              </p>
+              <p className="-mt-1 text-xs text-muted">{t("fieldPrivateHint")}</p>
             </>
           )}
           <input
@@ -262,24 +256,24 @@ function Form({
         type="button"
         aria-expanded={helping}
         onClick={() => setHelping((now) => !now)}
-        className="flex items-center gap-1.5 self-start text-[11.5px] text-[#2F62D8] dark:text-[#6E9BFF]"
+        className="flex items-center gap-1.5 self-start text-sm text-accent"
       >
         <span
           aria-hidden="true"
-          className="grid h-4 w-4 place-items-center rounded-full border border-current text-[9.5px] font-semibold"
+          className="grid h-4 w-4 place-items-center rounded-full border border-current text-xs font-semibold"
         >
           ?
         </span>
         {t("helpTitle")}
       </button>
       {helping && (
-        <div className="rounded-md bg-black/[0.035] px-2.5 py-2 text-[11px] dark:bg-white/[0.04]">
+        <div className="rounded-md bg-black/[0.035] px-2.5 py-2 text-xs dark:bg-white/[0.04]">
           <dl className="flex flex-col gap-2">
             {HELP.map(([said, code]) => (
               <div key={said}>
-                <dt className="text-neutral-600 dark:text-[#AAB1C0]">{t(said)}</dt>
+                <dt className="text-ink-2">{t(said)}</dt>
                 <dd>
-                  <code className="text-[10.5px] select-all">{t(code)}</code>
+                  <code className="text-xs select-all">{t(code)}</code>
                 </dd>
               </div>
             ))}
@@ -290,14 +284,14 @@ function Form({
         <button
           type="submit"
           disabled={problems.some((p) => p !== null)}
-          className="rounded-md bg-[#2F62D8] disabled:opacity-40 px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+          className="rounded-md bg-accent disabled:opacity-40 px-3 py-1.5 text-sm font-medium text-on-accent"
         >
           {t("save")}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md px-3 py-1.5 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]"
+          className="rounded-md px-3 py-1.5 text-sm text-muted"
         >
           {t("cancel")}
         </button>
@@ -307,13 +301,13 @@ function Form({
 }
 
 const GHOST =
-  "grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-black/[0.06] disabled:opacity-25 dark:text-[#8B92A1] dark:hover:bg-white/[0.08]";
+  "grid h-6 w-6 shrink-0 place-items-center rounded text-muted hover:bg-black/[0.06] disabled:opacity-25 dark:hover:bg-white/[0.08]";
 
 const ROW =
   "group flex cursor-grab items-center gap-3 border-black/[0.08] px-3.5 py-3 transition-[opacity,box-shadow] duration-150 not-first:border-t active:cursor-grabbing dark:border-white/[0.08]";
 
-const LANDS_BEFORE = "shadow-[inset_0_2px_0_#2F62D8] dark:shadow-[inset_0_2px_0_#6E9BFF]";
-const LANDS_AFTER = "shadow-[inset_0_-2px_0_#2F62D8] dark:shadow-[inset_0_-2px_0_#6E9BFF]";
+const LANDS_BEFORE = "shadow-[inset_0_2px_0_var(--accent)]";
+const LANDS_AFTER = "shadow-[inset_0_-2px_0_var(--accent)]";
 
 type Landing = { id: string; after: boolean };
 
@@ -408,16 +402,10 @@ export default function Browsers() {
   return (
     <>
       {problem && (
-        <p className="rounded-md bg-[#C0362F]/10 px-3 py-2 text-[11.5px] text-[#C0362F] dark:bg-[#FF8A85]/10 dark:text-[#FF8A85]">
-          {problem}
-        </p>
+        <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{problem}</p>
       )}
 
-      {counted && (
-        <p className="rounded-md bg-[#1E7A52]/10 px-3 py-2 text-[11.5px] text-[#1E7A52] dark:bg-[#4CC38A]/10 dark:text-[#4CC38A]">
-          {counted}
-        </p>
-      )}
+      {counted && <p className="rounded-md bg-good/10 px-3 py-2 text-sm text-good">{counted}</p>}
 
       {rescanning && (
         <Confirm
@@ -474,10 +462,8 @@ export default function Browsers() {
               <div key={b.id} {...carry(b, detected)}>
                 <Icon browser={b} />
                 <div className="min-w-0 flex-1">
-                  <p className={`text-[12.5px] ${b.hidden ? "opacity-55" : ""}`}>{b.name}</p>
-                  <p className="mt-px text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-                    {describe(b, t)}
-                  </p>
+                  <p className={`text-md ${b.hidden ? "opacity-55" : ""}`}>{b.name}</p>
+                  <p className="mt-px text-sm text-muted">{describe(b, t)}</p>
                 </div>
                 <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                   <button
@@ -524,15 +510,13 @@ export default function Browsers() {
             ),
           )}
           {detected.length === 0 && (
-            <p className="px-3.5 py-4 text-center text-[12px] text-neutral-500 dark:text-[#8B92A1]">
-              {t("browsersNone")}
-            </p>
+            <p className="px-3.5 py-4 text-center text-sm text-muted">{t("browsersNone")}</p>
           )}
           <Line title={t("rescanTitle")} note={t("rescanNote")}>
             <button
               type="button"
               onClick={() => setRescanning(true)}
-              className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+              className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-sm dark:border-white/[0.12]"
             >
               {t("rescanGo")}
             </button>
@@ -557,12 +541,8 @@ export default function Browsers() {
               <div key={b.id} {...carry(b, mine)}>
                 <Icon browser={b} />
                 <div className="min-w-0 flex-1">
-                  <p className={`truncate text-[12.5px] ${b.hidden ? "opacity-55" : ""}`}>
-                    {b.name}
-                  </p>
-                  <p className="mt-px truncate text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-                    {b.exe}
-                  </p>
+                  <p className={`truncate text-md ${b.hidden ? "opacity-55" : ""}`}>{b.name}</p>
+                  <p className="mt-px truncate text-sm text-muted">{b.exe}</p>
                 </div>
                 <span className="flex shrink-0 gap-px opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                   <button
@@ -603,7 +583,7 @@ export default function Browsers() {
                     type="button"
                     aria-label={t("browserRemove", b.name)}
                     onClick={() => setAsking(b)}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded text-neutral-500 hover:bg-[#C0362F]/10 hover:text-[#C0362F] dark:text-[#8B92A1] dark:hover:bg-[#FF8A85]/10 dark:hover:text-[#FF8A85]"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted hover:bg-danger/10 hover:text-danger"
                   >
                     ✕
                   </button>
@@ -629,7 +609,7 @@ export default function Browsers() {
             <button
               type="button"
               onClick={() => setEditing("new")}
-              className="w-full border-black/[0.08] px-3.5 py-3 text-left text-[12px] text-[#2F62D8] not-first:border-t dark:border-white/[0.08] dark:text-[#6E9BFF]"
+              className="w-full border-black/[0.08] px-3.5 py-3 text-left text-sm text-accent not-first:border-t dark:border-white/[0.08]"
             >
               {t("browsersAdd")}
             </button>

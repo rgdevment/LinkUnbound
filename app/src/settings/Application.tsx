@@ -94,10 +94,10 @@ function Choice<T extends string>({
             onChange={() => onPick(o.id)}
           />
           <span
-            className={`cursor-pointer rounded-md px-2.5 py-1 text-[11.5px] transition peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-[#2F62D8] dark:peer-focus-visible:outline-[#6E9BFF] ${
+            className={`cursor-pointer rounded-md px-2.5 py-1 text-sm transition peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-accent ${
               o.id === value
-                ? "bg-[#2F62D8]/[0.13] font-semibold text-[#2F62D8] dark:bg-[#6E9BFF]/[0.17] dark:text-[#6E9BFF]"
-                : "bg-black/[0.045] text-neutral-500 dark:bg-white/[0.06] dark:text-[#8B92A1]"
+                ? "bg-accent/[0.13] font-semibold text-accent dark:bg-accent/[0.17]"
+                : "bg-black/[0.045] text-ink-2 dark:bg-white/[0.06]"
             }`}
           >
             {t(o.label)}
@@ -163,9 +163,7 @@ export default function Application({
   return (
     <>
       {problem && (
-        <p className="rounded-md bg-[#C0362F]/10 px-3 py-2 text-[11.5px] text-[#C0362F] dark:bg-[#FF8A85]/10 dark:text-[#FF8A85]">
-          {problem}
-        </p>
+        <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{problem}</p>
       )}
 
       <Section title={t("appAppearance")}>
@@ -202,7 +200,7 @@ export default function Application({
               <button
                 type="button"
                 onClick={preview}
-                className="text-[11.5px] text-[#2F62D8] hover:underline dark:text-[#6E9BFF]"
+                className="text-sm text-accent hover:underline"
               >
                 {t("pickerPreview")}
               </button>
@@ -258,11 +256,11 @@ export default function Application({
                 }}
                 onClick={() => setCapturing(true)}
                 onBlur={() => setCapturing(false)}
-                className={`min-w-[124px] rounded-md border px-3 py-1.5 text-[11.5px] ${
+                className={`min-w-[124px] rounded-md border px-3 py-1.5 text-sm ${
                   capturing
-                    ? "border-[#2F62D8] text-[#2F62D8] dark:border-[#6E9BFF] dark:text-[#6E9BFF]"
+                    ? "border-accent text-accent"
                     : taken
-                      ? "border-[#C0362F]/40 text-[#C0362F] dark:border-[#FF8A85]/40 dark:text-[#FF8A85]"
+                      ? "border-danger/40 text-danger"
                       : "border-black/[0.12] dark:border-white/[0.12]"
                 }`}
               >
@@ -272,7 +270,7 @@ export default function Application({
                 <button
                   type="button"
                   onClick={() => apply({ shortcut: null })}
-                  className="text-[11.5px] text-neutral-500 dark:text-[#8B92A1]"
+                  className="text-sm text-muted"
                 >
                   {t("remove")}
                 </button>

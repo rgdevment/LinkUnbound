@@ -11,6 +11,7 @@ export default defineConfig({
     setupFiles: "./src/tests/setup.ts",
     include: ["src/**/*.test.ts?(x)"],
     env: { TZ: "UTC" },
+    css: { include: [/index[.]css/] },
     coverage: {
       provider: "v8" as const,
       reporter: ["text-summary", "lcov"],

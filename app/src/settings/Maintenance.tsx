@@ -35,12 +35,10 @@ export default function Maintenance() {
   return (
     <>
       {problem && (
-        <p className="rounded-md bg-[#C0362F]/10 px-3 py-2 text-[11.5px] text-[#C0362F] dark:bg-[#FF8A85]/10 dark:text-[#FF8A85]">
-          {problem}
-        </p>
+        <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{problem}</p>
       )}
       {done && (
-        <p className="rounded-md bg-[#1E7A52]/10 px-3 py-2 text-[11.5px] text-[#1E7A52] dark:bg-[#4CC38A]/10 dark:text-[#4CC38A]">
+        <p className="rounded-md bg-good/10 px-3 py-2 text-sm text-good">
           {t("doneWith", done.toLowerCase())}
         </p>
       )}
@@ -61,7 +59,7 @@ export default function Maintenance() {
             <button
               type="button"
               onClick={() => setAsking("reset")}
-              className="shrink-0 rounded-md px-3 py-1.5 text-[11.5px] text-[#C0362F] dark:text-[#FF8A85]"
+              className="shrink-0 rounded-md px-3 py-1.5 text-sm text-danger"
             >
               {t("resetGo")}
             </button>
@@ -70,7 +68,7 @@ export default function Maintenance() {
             <button
               type="button"
               onClick={() => setAsking("unregister")}
-              className="shrink-0 rounded-md px-3 py-1.5 text-[11.5px] text-[#C0362F] dark:text-[#FF8A85]"
+              className="shrink-0 rounded-md px-3 py-1.5 text-sm text-danger"
             >
               {t("unregisterGo")}
             </button>

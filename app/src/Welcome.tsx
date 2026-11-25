@@ -66,7 +66,7 @@ function Tour({ shortcut }: { shortcut: string | null }) {
   const dots = <Dots count={steps.length} at={at} />;
 
   return (
-    <div className="flex h-full flex-col bg-white text-[#16181D] dark:bg-[#191A1F] dark:text-[#F0F1F4]">
+    <div className="flex h-full flex-col bg-panel text-ink">
       {step === "hello" && <Hello dots={dots} onSkip={close} onNext={next} />}
       {step === "links" && <Links dots={dots} onNext={next} />}
       {step === "try" && <Try dots={dots} shortcut={shortcut} onDone={close} />}
@@ -88,16 +88,14 @@ function Hello({
     <>
       <div className="flex flex-1 flex-col items-center justify-center gap-3.5 px-12 text-center">
         <img src={bear} alt="" className="bear h-[80px]" />
-        <h1 className="text-[24px] font-semibold">{t("welcomeHelloTitle")}</h1>
-        <p className="max-w-[460px] text-[14px] leading-relaxed text-neutral-600 dark:text-[#98A0B4]">
-          {t("welcomeHelloBody")}
-        </p>
+        <h1 className="text-xl font-semibold">{t("welcomeHelloTitle")}</h1>
+        <p className="max-w-[460px] text-md leading-relaxed text-ink-2">{t("welcomeHelloBody")}</p>
         <ul className="mt-1 flex flex-wrap justify-center gap-2">
           {(["welcomePillLocal", "welcomePillAccount", "welcomePillBrowsers"] as Key[]).map(
             (pill) => (
               <li
                 key={pill}
-                className="rounded-full bg-[#2F62D8]/10 px-3 py-1 text-[12px] text-[#24489F] dark:bg-[#6E9BFF]/15 dark:text-[#9DBBFF]"
+                className="rounded-full bg-accent/10 px-3 py-1 text-sm text-accent dark:bg-accent/15"
               >
                 {t(pill)}
               </li>
@@ -148,12 +146,12 @@ function Links({ dots, onNext }: { dots: ReactNode; onNext: () => void }) {
     <>
       <Page over={t("welcomeLinkOver")} title={t("welcomeLinkTitle")} body={t("welcomeLinkBody")}>
         <ol
-          className={`mt-1 flex flex-col gap-2 text-[13.5px] ${progress === "done" ? "text-neutral-400 dark:text-[#646B7C]" : ""}`}
+          className={`mt-1 flex flex-col gap-2 text-md ${progress === "done" ? "text-muted" : ""}`}
         >
           {(["welcomeLinkStep1", "welcomeLinkStep2", "welcomeLinkStep3"] as Key[]).map(
             (line, n) => (
               <li key={line} className="flex items-baseline gap-2.5">
-                <span className="font-semibold text-[#2F62D8] dark:text-[#6E9BFF]">{n + 1}</span>
+                <span className="font-semibold text-accent">{n + 1}</span>
                 <span>{t(line)}</span>
               </li>
             ),
@@ -166,7 +164,7 @@ function Links({ dots, onNext }: { dots: ReactNode; onNext: () => void }) {
           <Done said={t("welcomeLinkDone")} note={t("welcomeLinkDoneNote")} />
         )}
         {problem && (
-          <p role="alert" className="text-[12px] text-[#C0362F] dark:text-[#FF8A85]">
+          <p role="alert" className="text-sm text-danger">
             {problem}
           </p>
         )}
@@ -233,7 +231,7 @@ function Try({
           <button
             type="button"
             onClick={() => void go()}
-            className="flex items-center gap-2 rounded-lg border border-[#2F62D8]/25 bg-[#2F62D8]/[0.06] px-4 py-3 text-[14px] text-[#24489F] hover:bg-[#2F62D8]/10 dark:border-[#6E9BFF]/30 dark:bg-[#6E9BFF]/10 dark:text-[#9DBBFF]"
+            className="flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/[0.06] px-4 py-3 text-md text-accent hover:bg-accent/10 dark:border-accent/30 dark:bg-accent/10"
           >
             <svg
               viewBox="0 0 24 24"
@@ -251,7 +249,7 @@ function Try({
           </button>
         </div>
         {!handing && progress !== "done" && (
-          <p className="text-[12px] text-[#8A4A10] dark:text-[#E9A05C]">{t("welcomeTryNotYet")}</p>
+          <p className="text-sm text-caution">{t("welcomeTryNotYet")}</p>
         )}
         {progress === "waiting" && <Waiting said={t("welcomeTryWaiting")} />}
         {progress === "done" && (
@@ -285,13 +283,9 @@ function Page({
 }) {
   return (
     <div className="flex flex-1 flex-col gap-3 px-10 pt-7 pb-4">
-      <span className="text-[11px] font-semibold tracking-[0.08em] text-neutral-500 uppercase dark:text-[#8B92A1]">
-        {over}
-      </span>
-      <h1 className="text-[22px] font-semibold">{title}</h1>
-      <p className="max-w-[500px] text-[14px] leading-relaxed text-neutral-600 dark:text-[#98A0B4]">
-        {body}
-      </p>
+      <span className="text-xs font-semibold tracking-[0.08em] text-muted uppercase">{over}</span>
+      <h1 className="text-xl font-semibold">{title}</h1>
+      <p className="max-w-[500px] text-md leading-relaxed text-ink-2">{body}</p>
       {children}
     </div>
   );
@@ -305,11 +299,11 @@ function Waiting({ said, note }: { said: string; note?: string }) {
     >
       <span
         aria-hidden="true"
-        className="mt-[5px] size-[9px] shrink-0 animate-pulse rounded-full bg-[#2F62D8] dark:bg-[#6E9BFF]"
+        className="mt-[5px] size-[9px] shrink-0 animate-pulse rounded-full bg-accent"
       />
       <div className="flex flex-col gap-0.5">
-        <span className="text-[13.5px] font-semibold">{said}</span>
-        {note && <span className="text-[12px] text-neutral-500 dark:text-[#8B92A1]">{note}</span>}
+        <span className="text-md font-semibold">{said}</span>
+        {note && <span className="text-sm text-muted">{note}</span>}
       </div>
     </div>
   );
@@ -319,7 +313,7 @@ function Done({ said, note }: { said: string; note?: string }) {
   return (
     <div
       role="status"
-      className="mt-1.5 flex items-center gap-3 rounded-[10px] border border-[#1E7A52]/30 bg-[#1E7A52]/[0.08] px-4 py-3.5 dark:border-[#4CC38A]/30 dark:bg-[#4CC38A]/10"
+      className="mt-1.5 flex items-center gap-3 rounded-[10px] border border-good/30 bg-good/[0.08] px-4 py-3.5 dark:bg-good/10"
     >
       <svg
         viewBox="0 0 24 24"
@@ -328,17 +322,15 @@ function Done({ said, note }: { said: string; note?: string }) {
         strokeWidth="2.4"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="size-[22px] shrink-0 text-[#1E7A52] dark:text-[#4CC38A]"
+        className="size-[22px] shrink-0 text-good"
         aria-hidden="true"
       >
         <circle cx="12" cy="12" r="10" />
         <path d="M7.5 12.5l3 3 6-6.5" />
       </svg>
       <div className="flex flex-col gap-0.5">
-        <span className="text-[13.5px] font-semibold text-[#155C3D] dark:text-[#4CC38A]">
-          {said}
-        </span>
-        {note && <span className="text-[12px] text-[#2E5F47] dark:text-[#98A0B4]">{note}</span>}
+        <span className="text-md font-semibold text-good">{said}</span>
+        {note && <span className="text-sm text-ink-2">{note}</span>}
       </div>
     </div>
   );
@@ -350,7 +342,7 @@ function Dots({ count, at }: { count: number; at: number }) {
       {Array.from({ length: count }, (_, n) => n).map((n) => (
         <span
           key={n}
-          className={`h-1.5 rounded-full ${n === at ? "w-[18px] bg-[#2F62D8] dark:bg-[#6E9BFF]" : "w-1.5 bg-black/20 dark:bg-white/20"}`}
+          className={`h-1.5 rounded-full ${n === at ? "w-[18px] bg-accent" : "w-1.5 bg-black/20 dark:bg-white/20"}`}
         />
       ))}
     </div>
@@ -381,7 +373,7 @@ function Footer({
           <button
             type="button"
             onClick={onQuiet}
-            className="px-1 py-2 text-[13px] text-neutral-500 hover:underline dark:text-[#8B92A1]"
+            className="px-1 py-2 text-md text-muted hover:underline"
           >
             {quiet}
           </button>
@@ -392,7 +384,7 @@ function Footer({
         type="button"
         ref={main}
         onClick={onStrong}
-        className="justify-self-end rounded-md bg-[#2F62D8] px-4 py-2.5 text-[13px] font-semibold text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+        className="justify-self-end rounded-md bg-accent px-4 py-2.5 text-md font-semibold text-on-accent"
       >
         {strong}
       </button>

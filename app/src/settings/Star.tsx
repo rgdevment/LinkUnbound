@@ -32,29 +32,27 @@ export default function Star({ store, onSettled }: { store: boolean; onSettled: 
         />
       </svg>
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] font-medium">{t("starThanks")}</p>
-        <p className="mt-0.5 text-[11.5px] leading-relaxed text-neutral-600 dark:text-[#98A0B4]">
-          {t("starWhy")}
-        </p>
+        <p className="text-md font-medium">{t("starThanks")}</p>
+        <p className="mt-0.5 text-sm leading-relaxed text-ink-2">{t("starWhy")}</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => settle(true)}
-            className="rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent"
           >
             {t(store ? "aboutRate" : "starGo")}
           </button>
           <button
             type="button"
             onClick={onSettled}
-            className="rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+            className="rounded-md border border-black/[0.12] px-3 py-1.5 text-sm dark:border-white/[0.12]"
           >
             {t("starLater")}
           </button>
           <button
             type="button"
             onClick={() => settle(false)}
-            className="rounded-md px-3 py-1.5 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]"
+            className="rounded-md px-3 py-1.5 text-sm text-muted"
           >
             {t("starNo")}
           </button>
