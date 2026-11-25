@@ -41,21 +41,21 @@ export default function Confirm({
       }}
       className="rounded-lg border border-black/[0.12] bg-black/[0.02] p-3.5 dark:border-white/[0.12] dark:bg-white/[0.03]"
     >
-      <p className="text-[12.5px] font-semibold">{title}</p>
-      <p className="mt-1 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]">{body}</p>
+      <p className="text-md font-semibold">{title}</p>
+      <p className="mt-1 text-sm text-muted">{body}</p>
       <div className="mt-3 flex gap-2">
         <button
           type="button"
           ref={first}
           onClick={onConfirm}
-          className="rounded-md bg-[#C0362F] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#FF8A85] dark:text-[#12141B]"
+          className="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-on-accent"
         >
           {go}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md px-3 py-1.5 text-[11.5px] text-neutral-500 dark:text-[#8B92A1]"
+          className="rounded-md px-3 py-1.5 text-sm text-muted"
         >
           {t("cancel")}
         </button>

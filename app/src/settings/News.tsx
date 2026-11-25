@@ -65,34 +65,29 @@ export default function News() {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-md rounded-[10px] border border-black/[0.08] bg-white p-6 shadow-xl dark:border-white/[0.08] dark:bg-[#1E2027]"
+        className="w-full max-w-md rounded-[10px] border border-black/[0.08] bg-panel p-6 shadow-xl dark:border-white/[0.08] dark:bg-card"
       >
         <div className="mb-3 flex flex-col items-center gap-2">
           <img src={bear} alt="" className="bear h-[64px]" />
-          <span className="flex items-center gap-2 text-[10.5px] font-semibold tracking-[0.06em] text-neutral-500 uppercase dark:text-[#8B92A1]">
+          <span className="flex items-center gap-2 text-xs font-semibold tracking-[0.06em] text-muted uppercase">
             {t("newsOver")}
-            <span className="rounded-full bg-[#2F62D8]/10 px-2 py-0.5 font-mono tracking-normal text-[#2F62D8] normal-case dark:bg-[#6E9BFF]/15 dark:text-[#6E9BFF]">
+            <span className="rounded-full bg-accent/10 px-2 py-0.5 font-mono tracking-normal text-accent normal-case dark:bg-accent/15">
               {versions[0]}
             </span>
           </span>
         </div>
-        <h2 className="mb-3 text-center text-[17px] font-semibold">{title}</h2>
+        <h2 className="mb-3 text-center text-lg font-semibold">{title}</h2>
         <div className="scroller -mr-3 max-h-[46vh] pr-3">
           {told.map((one, at) => (
             <section key={one.version} aria-label={one.version}>
-              {at > 0 && (
-                <h3 className="mt-4 mb-1 font-mono text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-                  {one.version}
-                </h3>
-              )}
+              {at > 0 && <h3 className="mt-4 mb-1 font-mono text-xs text-muted">{one.version}</h3>}
               <ul>
                 {one.told.map((said) => (
                   <li
                     key={`${one.version}-${said.title}`}
-                    className="relative border-b border-black/[0.08] py-2.5 pl-4 text-[12px] leading-relaxed text-neutral-600 last:border-b-0 before:absolute before:top-[16px] before:left-0 before:size-1.5 before:rounded-full before:bg-[#2F62D8] dark:border-white/[0.08] dark:text-[#98A0B4] dark:before:bg-[#6E9BFF]"
+                    className="relative border-b border-black/[0.08] py-2.5 pl-4 text-sm leading-relaxed text-ink-2 last:border-b-0 before:absolute before:top-[16px] before:left-0 before:size-1.5 before:rounded-full before:bg-accent dark:border-white/[0.08]"
                   >
-                    <b className="font-semibold text-[#16181D] dark:text-[#F0F1F4]">{said.title}</b>
-                    : {said.said}
+                    <b className="font-semibold text-ink">{said.title}</b>: {said.said}
                   </li>
                 ))}
               </ul>
@@ -103,7 +98,7 @@ export default function News() {
           <button
             type="button"
             onClick={() => void openUrl(RELEASES).catch(noop)}
-            className="text-[12px] text-[#2F62D8] hover:underline dark:text-[#6E9BFF]"
+            className="text-sm text-accent hover:underline"
           >
             {t("newsAll")}
           </button>
@@ -111,7 +106,7 @@ export default function News() {
             type="button"
             ref={ok}
             onClick={close}
-            className="ml-auto rounded-md bg-[#2F62D8] px-3.5 py-1.5 text-[12px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+            className="ml-auto rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-on-accent"
           >
             {t("newsOk")}
           </button>

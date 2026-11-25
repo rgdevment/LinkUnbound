@@ -160,39 +160,37 @@ function Legacy1x({ onRetired }: { onRetired: () => void }) {
   return (
     <div role="status">
       {found && (
-        <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
-          <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">
+        <div className="rounded-lg border border-caution/30 bg-caution/[0.07] p-3.5">
+          <p className="text-md font-semibold text-caution">
             {t("legacyTitle", found.version ?? "1.x")}
           </p>
-          <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
-            {t("legacyBody")}
-          </p>
-          <p className="mt-1 font-mono text-[10.5px] break-words text-neutral-500 dark:text-[#8B92A1]">
+          <p className="mt-1 text-sm text-ink-2">{t("legacyBody")}</p>
+          <p className="mt-1 font-mono text-xs break-words text-muted">
             <Wrappable path={found.path} />
           </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             <button
               type="button"
               onClick={retire}
-              className="rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
+              className="rounded-md bg-caution px-3 py-1.5 text-sm font-medium text-on-accent"
             >
               {t("legacyGo")}
             </button>
             <button
               type="button"
               onClick={() => setAway(true)}
-              className="rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+              className="rounded-md border border-black/[0.12] px-3 py-1.5 text-sm dark:border-white/[0.12]"
             >
               {t("legacyLater")}
             </button>
           </div>
           {problem && (
             <div className="mt-2.5">
-              <p className="text-[11.5px] text-[#A85B14] dark:text-[#E9A05C]">{problem}</p>
+              <p className="text-sm text-caution">{problem}</p>
               <button
                 type="button"
                 onClick={() => invoke("system_reveal_legacy").catch(noop)}
-                className="mt-1.5 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+                className="mt-1.5 rounded-md border border-black/[0.12] px-3 py-1.5 text-sm dark:border-white/[0.12]"
               >
                 {t("legacyReveal")}
               </button>
@@ -200,9 +198,7 @@ function Legacy1x({ onRetired }: { onRetired: () => void }) {
           )}
         </div>
       )}
-      {retired && (
-        <p className="text-[11.5px] text-[#1E7A52] dark:text-[#4CC38A]">{t("legacyGone")}</p>
-      )}
+      {retired && <p className="text-sm text-good">{t("legacyGone")}</p>}
     </div>
   );
 }
@@ -211,29 +207,27 @@ function Pending({ state, onState }: { state: SystemState; onState: (next: Syste
   const t = useWords();
   const { choose, problem } = useChooseUs(onState);
   return (
-    <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
-      <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">
-        {t("pendingTitle")}
-      </p>
-      <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">{t("pendingBody")}</p>
+    <div className="rounded-lg border border-caution/30 bg-caution/[0.07] p-3.5">
+      <p className="text-md font-semibold text-caution">{t("pendingTitle")}</p>
+      <p className="mt-1 text-sm text-ink-2">{t("pendingBody")}</p>
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
         <button
           type="button"
           onClick={() => choose(state)}
-          className="rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
+          className="rounded-md bg-caution px-3 py-1.5 text-sm font-medium text-on-accent"
         >
           {t("welcomeLinkGo")}
         </button>
         <button
           type="button"
           onClick={() => invoke("welcome_show").catch(noop)}
-          className="text-[11.5px] text-[#2F62D8] hover:underline dark:text-[#6E9BFF]"
+          className="text-sm text-accent hover:underline"
         >
           {t("pendingGuide")}
         </button>
       </div>
       {problem && (
-        <p role="alert" className="mt-2 text-[11.5px] text-[#C0362F] dark:text-[#FF8A85]">
+        <p role="alert" className="mt-2 text-sm text-danger">
           {problem}
         </p>
       )}
@@ -279,15 +273,11 @@ function Links({
     <>
       <Legacy1x onRetired={() => run("system_state")} />
       {ailment && (
-        <div className="rounded-lg border border-[#A85B14]/30 bg-[#A85B14]/[0.07] p-3.5 dark:border-[#E9A05C]/30 dark:bg-[#E9A05C]/[0.07]">
-          <p className="text-[12.5px] font-semibold text-[#A85B14] dark:text-[#E9A05C]">
-            {t("healthTitle")}
-          </p>
-          <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-[#98A0B4]">
-            {t(ailment.what)}
-          </p>
+        <div className="rounded-lg border border-caution/30 bg-caution/[0.07] p-3.5">
+          <p className="text-md font-semibold text-caution">{t("healthTitle")}</p>
+          <p className="mt-1 text-sm text-ink-2">{t(ailment.what)}</p>
           {state?.registered_path && (
-            <p className="mt-1 font-mono text-[10.5px] break-words text-neutral-500 dark:text-[#8B92A1]">
+            <p className="mt-1 font-mono text-xs break-words text-muted">
               {t("healthPointsAt", "")}
               <Wrappable path={state.registered_path} />
             </p>
@@ -297,29 +287,23 @@ function Links({
               <button
                 type="button"
                 onClick={() => run(remedy.command, remedy.args)}
-                className="rounded-md bg-[#A85B14] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#E9A05C] dark:text-[#12141B]"
+                className="rounded-md bg-caution px-3 py-1.5 text-sm font-medium text-on-accent"
               >
                 {t(remedy.label)}
               </button>
-              {remedy.note && (
-                <span className="text-[11px] text-neutral-500 dark:text-[#8B92A1]">
-                  {t(remedy.note)}
-                </span>
-              )}
+              {remedy.note && <span className="text-xs text-muted">{t(remedy.note)}</span>}
             </div>
           )}
         </div>
       )}
       {pending && state && <Pending state={state} onState={onState} />}
       <Section title={t("sectionDefault")}>
-        <div className="flex items-center gap-2 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3 py-2.5 text-[11.5px] dark:border-white/[0.08] dark:bg-white/[0.02]">
+        <div className="flex items-center gap-2 rounded-lg border border-black/[0.08] bg-black/[0.02] px-3 py-2.5 text-sm dark:border-white/[0.08] dark:bg-white/[0.02]">
           <span
-            className={`h-[7px] w-[7px] shrink-0 rounded-full ${ok ? "bg-[#1E7A52] dark:bg-[#4CC38A]" : "bg-[#A85B14] dark:bg-[#E9A05C]"}`}
+            className={`h-[7px] w-[7px] shrink-0 rounded-full ${ok ? "bg-good" : "bg-caution"}`}
           />
           <span className="flex-1">{ok ? t("defaultYes") : t("defaultNo")}</span>
-          <span className="text-neutral-500 dark:text-[#8B92A1]">
-            {t("associations", String(held), String(total))}
-          </span>
+          <span className="text-muted">{t("associations", String(held), String(total))}</span>
         </div>
         {platform() === "macos" ? (
           !ok &&
@@ -329,7 +313,7 @@ function Links({
                 <button
                   type="button"
                   onClick={() => change("system_set_registered", true)}
-                  className="shrink-0 rounded-md bg-[#2F62D8] px-3 py-1.5 text-[11.5px] font-medium text-white dark:bg-[#6E9BFF] dark:text-[#12141B]"
+                  className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent"
                 >
                   {t("makeDefaultGo")}
                 </button>
@@ -353,7 +337,7 @@ function Links({
               <button
                 type="button"
                 onClick={() => run("system_open_default_apps")}
-                className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] dark:border-white/[0.12]"
+                className="shrink-0 rounded-md border border-black/[0.12] px-3 py-1.5 text-sm dark:border-white/[0.12]"
               >
                 {t("chooseGo")}
               </button>
@@ -364,13 +348,13 @@ function Links({
 
       {state?.edge_installed && noticed && !noticed.prefs.edge_warning_dismissed && (
         <Section title={t("edgeTitle")}>
-          <div className="rounded-lg border border-black/[0.08] bg-black/[0.015] p-3.5 text-[11.5px] leading-relaxed text-neutral-600 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-[#98A0B4]">
+          <div className="rounded-lg border border-black/[0.08] bg-black/[0.015] p-3.5 text-sm leading-relaxed text-ink-2 dark:border-white/[0.08] dark:bg-white/[0.02]">
             <p>{t("edgeBody")}</p>
             <p className="mt-2">{t("edgeRelief")}</p>
             <button
               type="button"
               onClick={understood}
-              className="mt-3 rounded-md border border-black/[0.12] px-3 py-1.5 text-[11.5px] font-medium hover:bg-black/[0.04] dark:border-white/[0.12] dark:hover:bg-white/[0.06]"
+              className="mt-3 rounded-md border border-black/[0.12] px-3 py-1.5 text-sm font-medium hover:bg-black/[0.04] dark:border-white/[0.12] dark:hover:bg-white/[0.06]"
             >
               {t("edgeUnderstood")}
             </button>
@@ -478,7 +462,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
   );
 
   return (
-    <div className="flex h-full bg-white text-[#16181D] dark:bg-[#191A1F] dark:text-[#F0F1F4]">
+    <div className="flex h-full bg-panel text-ink">
       <nav
         aria-label={t("navLabel")}
         className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-black/[0.08] bg-black/[0.02] p-2 dark:border-white/[0.08] dark:bg-white/[0.02]"
@@ -498,7 +482,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
               type="button"
               onClick={() => pick("about")}
               aria-label={`${t("navAbout")} · ${t("updateWaiting")}`}
-              className="flex items-center gap-1.5 rounded-md bg-[#2F62D8]/[0.11] px-2.5 py-1.5 text-[10.5px] font-medium text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
+              className="flex items-center gap-1.5 rounded-md bg-accent/[0.11] px-2.5 py-1.5 text-xs font-medium text-accent dark:bg-accent/[0.16]"
             >
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
               {t("updateGoTo", ready.version)}
@@ -510,14 +494,12 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
 
       <main className="scroller flex min-w-0 flex-1 flex-col gap-4 p-5">
         {page !== "about" && (
-          <h1 className="text-[15px] font-semibold">
+          <h1 className="text-lg font-semibold">
             {t(PAGES.find((p) => p.id === page)?.label ?? "navLinks")}
           </h1>
         )}
         {problem && (
-          <p className="rounded-md bg-[#C0362F]/10 px-3 py-2 text-[11.5px] text-[#C0362F] dark:bg-[#FF8A85]/10 dark:text-[#FF8A85]">
-            {problem}
-          </p>
+          <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{problem}</p>
         )}
         {page === "links" && <Links state={state} onState={setState} change={change} run={run} />}
         {page === "rules" && <Rules />}
@@ -572,10 +554,10 @@ function Tab({
       type="button"
       aria-current={here ? "page" : undefined}
       onClick={() => onPick(tab.id)}
-      className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[12.5px] transition ${
+      className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-md transition ${
         here
-          ? "bg-[#2F62D8]/[0.11] font-semibold text-[#2F62D8] dark:bg-[#6E9BFF]/[0.16] dark:text-[#6E9BFF]"
-          : "text-neutral-500 hover:bg-black/[0.04] hover:text-inherit dark:text-[#8B92A1] dark:hover:bg-white/[0.06]"
+          ? "bg-accent/[0.11] font-semibold text-accent dark:bg-accent/[0.16]"
+          : "text-muted hover:bg-black/[0.04] hover:text-inherit dark:hover:bg-white/[0.06]"
       }`}
     >
       <svg
@@ -591,10 +573,7 @@ function Tab({
       </svg>
       <span className="flex-1">{t(tab.label)}</span>
       {flagged && (
-        <span
-          aria-hidden="true"
-          className="size-[7px] shrink-0 rounded-full bg-[#A85B14] dark:bg-[#E9A05C]"
-        />
+        <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full bg-caution" />
       )}
     </button>
   );
