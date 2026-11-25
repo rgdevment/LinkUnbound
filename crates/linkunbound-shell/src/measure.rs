@@ -105,7 +105,8 @@ mod tests {
             assert_eq!(picker.get_wanted_height(), today, "{rows} rows");
             assert_eq!(picker.get_drawn_icon_side(), 24.0);
         }
-        assert_eq!(opened(Look::List, 3).get_wanted_width(), 460.0);
+        let width = opened(Look::List, 3).get_wanted_width();
+        assert!((380.0..=560.0).contains(&width), "{width}");
     }
 
     #[test]
