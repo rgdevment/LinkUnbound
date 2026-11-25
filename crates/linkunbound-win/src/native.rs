@@ -137,8 +137,7 @@ pub fn wear_acrylic(window: isize, dark: bool) -> bool {
     framed_by_dwm(window, dark, &whole, DWMSBT_TRANSIENTWINDOW)
 }
 
-/// Back to a plain window: high contrast asks for the painted sheet while the person keeps
-/// transparency on, and DWM drops Acrylic on its own only when transparency goes.
+/// DWM drops Acrylic on its own only when transparency goes, not when contrast asks for a sheet.
 pub fn take_off_acrylic(window: isize) -> bool {
     let hwnd = HWND(window as *mut std::ffi::c_void);
     let none = MARGINS::default();

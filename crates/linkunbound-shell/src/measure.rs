@@ -5,8 +5,7 @@ use slint::ComponentHandle;
 
 use crate::{Measures, Palette, Picker};
 
-/// Row, icon and card of the list and the bear's cards, in logical pixels; the compact look,
-/// all icons, keeps its own.
+/// Row, icon and card in logical pixels; the compact look, all icons, keeps its own.
 #[must_use]
 pub const fn stands(density: Density) -> (f32, f32, f32) {
     match density {

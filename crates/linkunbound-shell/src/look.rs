@@ -27,8 +27,7 @@ pub fn settle(picker: &Picker) {
 }
 
 /// Unblended, the shadow and the bear would come out as black boxes.
-/// Contrast paints the sheet opaque, so what is behind the picker never thins its greys; it is
-/// not `solid`, which would also send the bear away.
+/// Contrast paints the sheet opaque without `solid`, which would also send the bear away.
 fn dress_for(picker: &Picker, solid: bool) {
     let look = picker.get_look();
     let palette = picker.global::<Palette>();
