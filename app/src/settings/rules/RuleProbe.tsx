@@ -13,13 +13,13 @@ export default function RuleProbe({
   onWinner,
   onCreate,
   onClose,
-}: {
+}: Readonly<{
   rules: RuleView[];
   apps: string[];
   onWinner: (id: string | null) => void;
   onCreate: (site: string) => void;
   onClose: () => void;
-}) {
+}>) {
   const t = useWords();
   const language = useSpoken();
   const [url, setUrl] = useState("");
@@ -76,9 +76,6 @@ export default function RuleProbe({
   return (
     <section
       aria-label={t("probeOpen")}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
       className="flex flex-col gap-2.5 rounded-lg border border-(--hair) bg-(--card) px-3.5 py-3"
     >
       <div className="flex items-center gap-2">
@@ -100,6 +97,9 @@ export default function RuleProbe({
           placeholder="https://…"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") onClose();
+          }}
           className={`${field} min-w-[240px] flex-1`}
         />
         {apps.length > 0 && (
@@ -118,13 +118,10 @@ export default function RuleProbe({
       </div>
       {refusal && <p className="text-[12px] text-(--danger)">{refusal}</p>}
       {probe && (
-        <div
-          role="status"
-          className="flex flex-col gap-1 rounded-md border border-(--hair) bg-(--panel) px-3 py-2.5"
-        >
+        <output className="flex flex-col gap-1 rounded-md border border-(--hair) bg-(--panel) px-3 py-2.5">
           {probe.winner ? (
             <>
-              <p className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">
+              <span className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">
                 {probe.winner.resolved ? (
                   <>
                     {t("probeOpensIn")}
@@ -145,18 +142,18 @@ export default function RuleProbe({
                     {t("probeGone", probe.winner.browser)}
                   </>
                 )}
-              </p>
-              <p className="text-[12px] text-(--muted)">
+              </span>
+              <span className="block text-[12px] text-(--muted)">
                 {reason(probe.winner, probe.why, probe.also[0])}
-              </p>
+              </span>
             </>
           ) : (
             <>
-              <p className="flex items-center gap-2 text-[13px] font-semibold">
+              <span className="flex items-center gap-2 text-[13px] font-semibold">
                 <Glyph name="info" size={16} />
                 {t("probeNone")}
-              </p>
-              <p className="text-[12px] text-(--muted)">
+              </span>
+              <span className="block text-[12px] text-(--muted)">
                 {t("probeNoneBody")}{" "}
                 <button
                   type="button"
@@ -165,10 +162,10 @@ export default function RuleProbe({
                 >
                   {t("probeCreate", probe.site)}
                 </button>
-              </p>
+              </span>
             </>
           )}
-        </div>
+        </output>
       )}
       {probe?.winner && (
         <ul aria-label={t("probeMatches")} className="rounded-md border border-(--hair)">

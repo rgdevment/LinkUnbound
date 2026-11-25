@@ -15,7 +15,7 @@ const PATHS = {
 
 export type GlyphName = keyof typeof PATHS;
 
-export default function Glyph({ name, size = 14 }: { name: GlyphName; size?: number }) {
+export default function Glyph({ name, size = 14 }: Readonly<{ name: GlyphName; size?: number }>) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -33,7 +33,7 @@ export default function Glyph({ name, size = 14 }: { name: GlyphName; size?: num
 }
 
 /// A browser's own icon, or a quiet square where the system gave none.
-export function BrowserIcon({ src, size = 16 }: { src: string | null; size?: number }) {
+export function BrowserIcon({ src, size = 16 }: Readonly<{ src: string | null; size?: number }>) {
   return src ? (
     <img src={src} alt="" width={size} height={size} className="shrink-0" />
   ) : (

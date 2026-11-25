@@ -19,7 +19,7 @@ const CHIP: Record<Family, string> = {
   site: "bg-(--tile) text-(--ink)",
 };
 
-export function KindChip({ family }: { family: Family }) {
+export function KindChip({ family }: Readonly<{ family: Family }>) {
   const t = useWords();
   return (
     <span
@@ -49,7 +49,7 @@ function marked(text: string, query: string): ReactNode {
   return parts;
 }
 
-export function Where({ rule }: { rule: RuleView }) {
+export function Where({ rule }: Readonly<{ rule: RuleView }>) {
   return (
     <>
       {rule.resolved ? (
@@ -82,7 +82,7 @@ export default function RuleRow({
   onRetarget,
   onEdit,
   onRemove,
-}: {
+}: Readonly<{
   rule: RuleView;
   query?: string;
   verdict?: Verdict;
@@ -92,18 +92,15 @@ export default function RuleRow({
   onRetarget?: (key: string) => void;
   onEdit?: () => void;
   onRemove?: () => void;
-}) {
+}>) {
   const t = useWords();
   const what = covers(rule);
   // A picker rule can bind an app and a site at once; without its name it reads like any site rule.
   const app = rule.source_app && rule.kind !== "any" ? rule.source_app : null;
   const listed = choices !== undefined;
-  const background =
-    verdict === "wins"
-      ? "bg-(--accent-soft) shadow-[inset_0_0_0_1.5px_var(--accent)]"
-      : rule.resolved
-        ? "bg-(--card)"
-        : "bg-(--danger-soft)";
+  let background = rule.resolved ? "bg-(--card)" : "bg-(--danger-soft)";
+  if (verdict === "wins")
+    background = "bg-(--accent-soft) shadow-[inset_0_0_0_1.5px_var(--accent)]";
 
   return (
     <li

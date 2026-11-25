@@ -159,6 +159,10 @@ export default function Rules() {
   const searched = found(rules, query);
   const shown = searched.filter((r) => kept(r, showing));
   const count = (f: Filter) => searched.filter((r) => kept(r, f)).length;
+  let title = rules.length === 1 ? t("rulesOne") : t("rulesMany", String(rules.length));
+  if (shown.length !== rules.length) {
+    title = t("rulesSome", String(shown.length), String(rules.length));
+  }
   const apps = [...new Set(rules.flatMap((r) => (r.source_app ? [r.source_app] : [])))];
 
   return (
@@ -177,11 +181,7 @@ export default function Rules() {
       )}
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="flex-1 text-[11px] font-semibold tracking-[0.09em] text-(--muted) uppercase">
-          {shown.length !== rules.length
-            ? t("rulesSome", String(shown.length), String(rules.length))
-            : rules.length === 1
-              ? t("rulesOne")
-              : t("rulesMany", String(rules.length))}
+          {title}
         </h2>
         <button
           type="button"

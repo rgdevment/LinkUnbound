@@ -28,13 +28,13 @@ export default function RuleForm({
   editing,
   onSaved,
   onCancel,
-}: {
+}: Readonly<{
   choices: Destination[];
   start?: Draft;
   editing?: RuleView;
   onSaved: (rules: RuleView[]) => void;
   onCancel: () => void;
-}) {
+}>) {
   const t = useWords();
   const language = useSpoken();
   const [kind, setKind] = useState<FormKind>(start?.kind ?? "site");

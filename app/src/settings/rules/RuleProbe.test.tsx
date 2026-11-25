@@ -93,7 +93,7 @@ describe("rule probe", () => {
     await screen.findByRole("status");
     const before = invoke.mock.calls.length;
     rerender(<RuleProbe {...props} rules={[RULE, NEXT]} />);
-    await vi.waitFor(() => expect(invoke.mock.calls.length).toBe(before + 1));
+    await vi.waitFor(() => expect(invoke.mock.calls).toHaveLength(before + 1));
   });
 
   it("drops an answer that arrives after the box moved on", async () => {

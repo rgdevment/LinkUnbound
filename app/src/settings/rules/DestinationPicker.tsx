@@ -14,7 +14,7 @@ export default function DestinationPicker({
   inline = false,
   open: asked,
   onOpenChange,
-}: {
+}: Readonly<{
   label: string;
   choices: Destination[];
   value: string;
@@ -24,7 +24,7 @@ export default function DestinationPicker({
   inline?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-}) {
+}>) {
   const t = useWords();
   const id = useId();
   const [selfOpen, setSelfOpen] = useState(false);
@@ -68,16 +68,14 @@ export default function DestinationPicker({
   };
 
   const keys = (e: KeyboardEvent) => {
-    const moved =
-      e.key === "ArrowDown"
-        ? step(active, 1)
-        : e.key === "ArrowUp"
-          ? step(active, -1)
-          : e.key === "Home"
-            ? step(-1, 1)
-            : e.key === "End"
-              ? step(choices.length, -1)
-              : null;
+    const moves: Partial<Record<string, [number, number]>> = {
+      ArrowDown: [active, 1],
+      ArrowUp: [active, -1],
+      Home: [-1, 1],
+      End: [choices.length, -1],
+    };
+    const move = moves[e.key];
+    const moved = move ? step(...move) : null;
     if (moved !== null) {
       e.preventDefault();
       setHovered(moved);
@@ -122,21 +120,24 @@ export default function DestinationPicker({
           tabIndex={-1}
           aria-activedescendant={`${id}-${active}`}
           onKeyDown={keys}
+          onClick={(e) => {
+            const option = (e.target as HTMLElement).closest<HTMLElement>("[data-at]");
+            if (option) pick(Number(option.dataset.at));
+          }}
           className={`absolute top-full z-20 ${inline ? "right-0" : "left-0"} mt-1 max-h-[260px] min-w-[260px] overflow-y-auto rounded-lg border border-(--hair) bg-(--panel) p-1 text-[12px] shadow-lg outline-none`}
         >
           {choices.map((choice, at) => {
             const key = named(choice.browserId, choice.profileId);
             const off = !usable(choice);
             return (
-              // biome-ignore lint/a11y/useKeyWithClickEvents: the listbox takes the keys for every option
               <div
                 key={key}
+                data-at={at}
                 id={`${id}-${at}`}
                 role="option"
                 aria-selected={key === value}
                 aria-disabled={off || undefined}
                 tabIndex={-1}
-                onClick={() => pick(at)}
                 onMouseEnter={() => !off && setHovered(at)}
                 className={`flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 whitespace-nowrap ${
                   at === active ? "bg-(--accent-soft)" : ""
