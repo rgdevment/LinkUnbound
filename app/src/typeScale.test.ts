@@ -5,7 +5,7 @@ const css = Object.values(
 )[0];
 
 const modules = import.meta.glob<string>(
-  ["./**/*.tsx", "!./**/*.test.tsx", "!./settings/Rules.tsx"],
+  ["./**/*.tsx", "!./**/*.test.tsx", "!./settings/Rules.tsx", "!./settings/rules/**"],
   {
     query: "?raw",
     import: "default",
