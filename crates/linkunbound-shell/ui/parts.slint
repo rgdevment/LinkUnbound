@@ -79,6 +79,24 @@ export global Palette {
     out property <brush> thumb: light ? #FFFFFF : #ffffff1c;
 }
 
+// The picker's sizes in one place: the text size multiplies the letters, and the density sets how
+// tall a row of the list and a card stand.
+export global Measures {
+    in property <float> zoom: 1;
+    in property <length> row: 45px;
+    in property <length> icon: 24px;
+    in property <length> card: 52px;
+    out property <length> tools-width: 3 * 28px + 9px + 3 * 2px;
+    out property <length> text-tiny: 11px * zoom;
+    out property <length> text-note: 11.5px * zoom;
+    out property <length> text-small: 12px * zoom;
+    out property <length> text-label: 12.5px * zoom;
+    out property <length> text-body: 13px * zoom;
+    out property <length> text-name: 15px * zoom;
+    out property <length> text-title: 17px * zoom;
+    out property <length> text-mark: 22px * zoom;
+}
+
 export enum Look { list, tiles, compact, bear }
 
 export // Two sheets, one over the other: rectangles, which the software renderer draws with edges,
@@ -148,14 +166,14 @@ component UpdateStrip inherits Rectangle {
             horizontal-stretch: 1;
             Text {
                 text: root.line;
-                font-size: 12.5px;
+                font-size: Measures.text-label;
                 color: Palette.ink;
                 vertical-alignment: center;
                 overflow: elide;
             }
             if root.detail != "": Text {
                 text: root.detail;
-                font-size: 11.5px;
+                font-size: Measures.text-note;
                 color: Palette.dim;
                 vertical-alignment: center;
                 overflow: elide;
@@ -187,7 +205,7 @@ component UpdateStrip inherits Rectangle {
             opacity: take-touch.has-hover ? 0.9 : 1.0;
             take-words := Text {
                 text: root.button;
-                font-size: 12.5px;
+                font-size: Measures.text-label;
                 font-weight: 600;
                 color: Palette.accent-ink;
                 horizontal-alignment: center;
@@ -267,7 +285,7 @@ export component KeyCap inherits Rectangle {
     }
     words := Text {
         text: root.key;
-        font-size: 11.5px;
+        font-size: Measures.text-note;
         font-weight: 600;
         color: root.lit ? #FFFFFF : Palette.key-ink;
         horizontal-alignment: center;
@@ -367,10 +385,6 @@ export component CloseMark inherits Rectangle {
     }
 }
 
-export global Measures {
-    out property <length> tools-width: 3 * 28px + 9px + 3 * 2px;
-}
-
 export component Tools inherits HorizontalLayout {
     width: Measures.tools-width;
     in property <bool> private-on;
@@ -441,20 +455,20 @@ export component AddressHead inherits Rectangle {
                 alignment: start;
                 Text {
                     text: root.host;
-                    font-size: 15px;
+                    font-size: Measures.text-name;
                     font-weight: 600;
                     color: Palette.ink;
                 }
                 Text {
                     text: root.trail;
-                    font-size: 15px;
+                    font-size: Measures.text-name;
                     color: Palette.dimmer;
                     overflow: elide;
                 }
             }
             if root.line != "": Text {
                 text: root.line;
-                font-size: 12px;
+                font-size: Measures.text-small;
                 color: root.line-color;
                 font-weight: root.private-on ? 600 : 400;
                 overflow: elide;
@@ -510,7 +524,7 @@ export component AskHead inherits Rectangle {
             padding-bottom: 2px;
             Text {
                 text: root.ask;
-                font-size: 17px;
+                font-size: Measures.text-title;
                 font-weight: 700;
                 color: root.private-on ? Palette.secret : Palette.ink;
                 horizontal-alignment: center;
@@ -521,13 +535,13 @@ export component AskHead inherits Rectangle {
             alignment: center;
             Text {
                 text: root.host;
-                font-size: 13px;
+                font-size: Measures.text-body;
                 font-weight: 600;
                 color: Palette.ink;
             }
             Text {
                 text: root.trail;
-                font-size: 13px;
+                font-size: Measures.text-body;
                 color: Palette.dimmer;
                 max-width: root.width - 200px;
                 overflow: elide;
@@ -535,7 +549,7 @@ export component AskHead inherits Rectangle {
         }
         if root.line != "": Text {
             text: root.line;
-            font-size: 12px;
+            font-size: Measures.text-small;
             color: root.line-color;
             horizontal-alignment: center;
             overflow: elide;
@@ -577,7 +591,7 @@ export component RememberFoot inherits Rectangle {
         spacing: 7px;
         Text {
             text: root.label;
-            font-size: 11px;
+            font-size: Measures.text-tiny;
             font-weight: 600;
             color: Palette.faint;
             x: 4px;
@@ -600,7 +614,7 @@ export component RememberFoot inherits Rectangle {
                     drop-shadow-offset-y: 1px;
                     Text {
                         text: item.label;
-                        font-size: 12.5px;
+                        font-size: Measures.text-label;
                         font-weight: parent.on ? 600 : 400;
                         color: parent.on ? (item.keeps ? Palette.brand : Palette.ink) : (seg.has-hover ? Palette.ink : Palette.dim);
                         horizontal-alignment: center;
@@ -622,7 +636,7 @@ export component RememberFoot inherits Rectangle {
                         spacing: 5px;
                         Text {
                             text: root.more-said;
-                            font-size: 12.5px;
+                            font-size: Measures.text-label;
                             font-weight: root.more-holds ? 600 : 400;
                             color: root.more-holds ? Palette.brand : (opener.has-hover ? Palette.ink : Palette.dim);
                             vertical-alignment: center;
@@ -679,7 +693,7 @@ export component ReachMenu inherits Rectangle {
                 padding-right: 10px;
                 Text {
                     text: item.label;
-                    font-size: 12.5px;
+                    font-size: Measures.text-label;
                     color: item.index == root.reach-index ? Palette.brand : Palette.ink;
                     font-weight: item.index == root.reach-index ? 600 : 400;
                     vertical-alignment: center;

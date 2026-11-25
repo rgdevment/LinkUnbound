@@ -106,14 +106,14 @@ export component Picker inherits Window {
 
     // Nine rows at most on screen and the rest scroll under them.
     property <float> rows-shown: min(root.count, 9);
-    property <length> list-room: max(1, root.rows-shown) * 45px + 11px;
+    property <length> list-room: max(1, root.rows-shown) * Measures.row + 11px;
     // A fifth reach appears when the click came from a known app, and its label carries that
     // app's name, which no fixed width can be drawn for: the track asks for the room it needs.
     property <length> track-need: ruler.preferred-width + 60px + root.reaches.length * 18px;
     property <length> list-width: min(max(380px, root.track-need), 560px);
     ruler := Text {
         text: root.reaches-line;
-        font-size: 12.5px;
+        font-size: Measures.text-label;
         visible: false;
     }
 
@@ -123,19 +123,19 @@ export component Picker inherits Window {
     property <length> ask-need: max(ask-ruler.preferred-width, ask-private-ruler.preferred-width) + root.ask-slack + 2 * root.ask-margin;
     ask-ruler := Text {
         text: root.ask;
-        font-size: 17px;
+        font-size: Measures.text-title;
         font-weight: 700;
         visible: false;
     }
     ask-private-ruler := Text {
         text: root.ask-private;
-        font-size: 17px;
+        font-size: Measures.text-title;
         font-weight: 700;
         visible: false;
     }
 
     // Three columns of cards; four rows on screen and the rest scroll.
-    property <length> cards-room: min(4, max(1, Math.ceil(root.count / 3))) * 58px + 10px;
+    property <length> cards-room: min(4, max(1, Math.ceil(root.count / 3))) * (Measures.card + 6px) + 10px;
 
     property <float> icons-shown: max(1, root.count);
     property <length> compact-address-room: 196px;
@@ -159,7 +159,7 @@ export component Picker inherits Window {
     out property <length> wanted-height: root.sheet-height + 2 * root.halo;
     // The side the icons are drawn at, for the resident to extract them at in screen pixels.
     out property <float> drawn-icon-side:
-        root.look == Look.list ? 24 : 32;
+        root.look == Look.list ? Measures.icon / 1px : 32;
 
     function toggle-private() {
         root.pinned-private = !root.pinned-private;
@@ -444,13 +444,13 @@ export component Notice inherits Window {
                 spacing: 2px;
                 Text {
                     text: root.headline;
-                    font-size: 13px;
+                    font-size: Measures.text-body;
                     color: Palette.ink;
                     overflow: elide;
                 }
                 Text {
                     text: root.reason;
-                    font-size: 11.5px;
+                    font-size: Measures.text-note;
                     color: Palette.dim;
                     overflow: elide;
                 }
@@ -467,7 +467,7 @@ export component Notice inherits Window {
                 }
                 Text {
                     text: root.undo-label;
-                    font-size: 12px;
+                    font-size: Measures.text-small;
                     font-weight: 700;
                     color: Palette.ink;
                     horizontal-alignment: center;
@@ -488,7 +488,7 @@ export component Notice inherits Window {
                 }
                 Text {
                     text: root.left;
-                    font-size: 12px;
+                    font-size: Measures.text-small;
                     color: Palette.dimmer;
                     horizontal-alignment: center;
                     vertical-alignment: center;
