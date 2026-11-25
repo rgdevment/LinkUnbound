@@ -22,19 +22,18 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
 }
 
 /// The system can change between two links, and a refused material must be asked for again.
-/// Contrast asks for the opaque sheet, so what is behind the picker never thins its greys.
 pub fn settle(picker: &Picker) {
-    dress_for(
-        picker,
-        !blends() || picker.global::<Palette>().get_contrast(),
-    );
+    dress_for(picker, !blends());
 }
 
 /// Unblended, the shadow and the bear would come out as black boxes.
+/// Contrast paints the sheet opaque, so what is behind the picker never thins its greys; it is
+/// not `solid`, which would also send the bear away.
 fn dress_for(picker: &Picker, solid: bool) {
     let look = picker.get_look();
-    let clear = !solid && native_glass();
     let palette = picker.global::<Palette>();
+    let contrast = palette.get_contrast();
+    let clear = !solid && !contrast && native_glass();
     palette.set_solid(solid);
     palette.set_clear(clear);
     palette.set_tint(tint());
@@ -45,7 +44,7 @@ fn dress_for(picker: &Picker, solid: bool) {
     } else {
         DWM_CORNER
     });
-    palette.set_see_through(!solid && see_through());
+    palette.set_see_through(!solid && !contrast && see_through());
     picker.set_halo(if look == Look::List || clear || solid {
         0.0
     } else {
@@ -85,8 +84,6 @@ pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
     keep_see_through(handle);
     let palette = picker.global::<Palette>();
     if palette.get_solid() {
-        // Contrast makes the sheet solid on a Mac too, where the glass view would stay behind it.
-        take_off_glass(handle);
         wear_solid(handle, !palette.get_light());
         return false;
     }

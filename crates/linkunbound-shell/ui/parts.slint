@@ -94,10 +94,11 @@ export global Measures {
     // Header and footer grow a little less than the letters, just enough not to cut them.
     out property <float> grow: max(1, zoom * 0.96);
     out property <length> tools-width: 3 * 28px + 9px + 3 * 2px;
-    // Contrast weighs every letter one step more.
+    // Contrast weighs the letters one step more.
     out property <int> weight-plain: Palette.contrast ? 500 : 400;
     out property <int> weight-strong: Palette.contrast ? 700 : 600;
-    out property <int> weight-heavy: Palette.contrast ? 800 : 700;
+    // Already bold, the heaviest stays: Segoe has no face between Bold and Black.
+    out property <int> weight-heavy: 700;
     out property <length> text-tiny: 11px * zoom;
     out property <length> text-note: 11.5px * zoom;
     out property <length> text-small: 12px * zoom;
@@ -162,7 +163,7 @@ component UpdateStrip inherits Rectangle {
     callback asked();
     callback dismissed();
 
-    height: 36px;
+    height: 36px * Measures.grow;
     border-radius: 10px;
     background: Palette.accent-soft;
 

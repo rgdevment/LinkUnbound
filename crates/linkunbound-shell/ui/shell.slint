@@ -60,7 +60,7 @@ export component Picker inherits Window {
     in property <int> update-far: 0;
     property <bool> update-shown: root.update-stage != "";
     property <bool> update-busy: root.update-stage == "starting" || root.update-stage == "getting" || root.update-stage == "installing";
-    property <length> strip-room: root.update-shown ? 46px : 0px;
+    property <length> strip-room: root.update-shown ? 46px * Measures.grow : 0px;
     callback update-asked();
     callback update-dismissed();
 
