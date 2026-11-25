@@ -284,8 +284,14 @@ fn take_off_glass(view: isize) {
     linkunbound_mac::take_off_glass(view);
 }
 
-/// Acrylic is a window attribute DWM drops when the system turns transparency off.
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn take_off_glass(window: isize) {
+    if native_glass() {
+        linkunbound_win::take_off_acrylic(window);
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn take_off_glass(_window: isize) {}
 
 #[cfg(not(any(windows, target_os = "macos")))]
