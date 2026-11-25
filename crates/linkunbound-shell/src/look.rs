@@ -1,10 +1,12 @@
 //! How the picker is drawn: which look, and the material behind it where the system lends one.
 
 use linkunbound_core::{PickerPosition, PickerStyle, Preferences};
-use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, place};
+use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, measure, place};
 use slint::ComponentHandle;
 
 pub fn obey(picker: &Picker, prefs: &Preferences) {
+    // Contrast is set before the style: the sheet it asks for is settled with the style.
+    measure::wear(picker, prefs.text_size, prefs.density, prefs.high_contrast);
     style(picker, prefs.picker_style);
     picker.set_centered(prefs.picker_position == PickerPosition::Center);
 }
@@ -20,8 +22,12 @@ pub fn style(picker: &Picker, chosen: PickerStyle) {
 }
 
 /// The system can change between two links, and a refused material must be asked for again.
+/// Contrast asks for the opaque sheet, so what is behind the picker never thins its greys.
 pub fn settle(picker: &Picker) {
-    dress_for(picker, !blends());
+    dress_for(
+        picker,
+        !blends() || picker.global::<Palette>().get_contrast(),
+    );
 }
 
 /// Unblended, the shadow and the bear would come out as black boxes.
@@ -79,6 +85,8 @@ pub fn wear_backdrop(picker: &Picker, handle: isize) -> bool {
     keep_see_through(handle);
     let palette = picker.global::<Palette>();
     if palette.get_solid() {
+        // Contrast makes the sheet solid on a Mac too, where the glass view would stay behind it.
+        take_off_glass(handle);
         wear_solid(handle, !palette.get_light());
         return false;
     }
@@ -134,11 +142,6 @@ fn place_for(
     };
     let size = |logical: f32| crate::physical(logical, scale);
 
-    let halo = size(picker.get_halo());
-    let window = (
-        size(picker.get_wanted_width()),
-        size(picker.get_wanted_height()),
-    );
     // The bear rises over the sheet, so the screen it may use starts that much lower.
     let screen = place::Bounds {
         x,
@@ -146,6 +149,14 @@ fn place_for(
         width,
         height: height - size(crate::mascot::rise(picker)),
     };
+    let (room_width, room_height) = place::room(screen, scale);
+    picker.set_room_width(room_width);
+    picker.set_room_height(room_height);
+    let halo = size(picker.get_halo());
+    let window = (
+        size(picker.get_wanted_width()),
+        size(picker.get_wanted_height()),
+    );
     let (at_x, at_y) = if picker.get_centered() {
         place::centered((window.0 - 2 * halo, window.1 - 2 * halo), screen)
     } else {

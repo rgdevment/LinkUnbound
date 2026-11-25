@@ -26,9 +26,12 @@ export component ListLook inherits Rectangle {
             for item[i] in root.rows: Rectangle {
                 property <bool> greyed: root.private-on && !item.can-private;
                 property <bool> lit: touch.has-hover || i == root.chosen-at;
+                property <bool> marked: self.lit && !self.greyed && Palette.contrast;
                 height: Measures.row - 1px;
                 border-radius: 6px;
-                background: self.lit && !self.greyed ? Palette.hover : transparent;
+                background: self.marked ? Palette.brand-soft : (self.lit && !self.greyed ? Palette.hover : transparent);
+                border-width: self.marked ? 1.5px : (Palette.contrast ? 1px : 0px);
+                border-color: self.marked ? Palette.brand : Palette.row-edge;
                 opacity: self.greyed ? 0.45 : 1.0;
                 accessible-role: button;
                 accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
@@ -156,8 +159,8 @@ export component CardsLook inherits Rectangle {
             height: Measures.card;
             border-radius: 8px;
             background: self.lit && !self.greyed ? Palette.brand-soft : Palette.chip;
-            border-width: self.lit && !self.greyed ? 1.5px : 0px;
-            border-color: Palette.brand;
+            border-width: self.lit && !self.greyed ? 1.5px : (Palette.contrast ? 1px : 0px);
+            border-color: self.lit && !self.greyed ? Palette.brand : Palette.row-edge;
             opacity: self.greyed ? 0.4 : 1.0;
             accessible-role: button;
             accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
@@ -185,7 +188,7 @@ export component CardsLook inherits Rectangle {
                     Text {
                         text: item.short;
                         font-size: Measures.text-body;
-                        font-weight: 600;
+                        font-weight: Measures.weight-strong;
                         color: Palette.ink;
                         overflow: elide;
                     }
@@ -239,7 +242,7 @@ export component CardsLook inherits Rectangle {
                     Text {
                         text: root.add;
                         font-size: Measures.text-label;
-                        font-weight: 600;
+                        font-weight: Measures.weight-strong;
                         color: add-touch.has-hover ? Palette.brand : Palette.dim;
                         overflow: elide;
                     }
@@ -304,7 +307,7 @@ export component CompactLook inherits Rectangle {
                 Text {
                     text: root.host;
                     font-size: Measures.text-label;
-                    font-weight: 600;
+                    font-weight: Measures.weight-strong;
                     color: Palette.ink;
                     vertical-alignment: center;
                 }
@@ -396,7 +399,7 @@ export component CompactLook inherits Rectangle {
                     Text {
                         text: root.reach-said;
                         font-size: Measures.text-label;
-                        font-weight: 600;
+                        font-weight: Measures.weight-strong;
                         color: root.reach-keeps ? Palette.brand : Palette.ink;
                         vertical-alignment: center;
                         max-width: 180px;

@@ -1,7 +1,7 @@
 import { Destination, Reach, Palette, Look, UpdateStrip, Hair, AddressHead, AskHead, RememberFoot, ReachMenu, Measures } from "parts.slint";
 import { ListLook, CardsLook, CompactLook } from "looks.slint";
 
-export { Palette, Look } from "parts.slint";
+export { Palette, Look, Measures } from "parts.slint";
 export { BearHead, BearPaws } from "bear.slint";
 
 export component Picker inherits Window {
@@ -86,6 +86,7 @@ export component Picker inherits Window {
     height: root.wanted-height;
     in property <string> family;
     default-font-family: root.family;
+    default-font-weight: Measures.weight-plain;
     forward-focus: keys;
 
     property <int> hovered-at: -1;
@@ -104,13 +105,19 @@ export component Picker inherits Window {
     out property <string> reach-said: root.all-reaches[root.reach-index].full;
     property <string> more-said: root.more-holds ? root.reach-labels[root.reach-index] : root.reach-more-label;
 
-    // Nine rows at most on screen and the rest scroll under them.
+    // The most the sheet may measure on the screen it opens on; the resident says once it knows.
+    in property <length> room-width: 100000px;
+    in property <length> room-height: 100000px;
+    // What the rows or cards may take once the head, the foot and the strip have theirs.
+    property <length> body-most: root.room-height - root.strip-room - root.head-room - 2px - root.foot-room;
+
+    // Nine rows at most on screen and the rest scroll under them, fewer where the screen is short.
     property <float> rows-shown: min(root.count, 9);
-    property <length> list-room: max(1, root.rows-shown) * Measures.row + 11px;
+    property <length> list-room: min(max(1, root.rows-shown) * Measures.row + 11px, max(Measures.row + 11px, root.body-most));
     // A fifth reach appears when the click came from a known app, and its label carries that
     // app's name, which no fixed width can be drawn for: the track asks for the room it needs.
     property <length> track-need: ruler.preferred-width + 60px + root.reaches.length * 18px;
-    property <length> list-width: min(max(380px, root.track-need), 560px);
+    property <length> list-width: min(max(380px * Measures.grow, root.track-need), 560px * Measures.grow);
     ruler := Text {
         text: root.reaches-line;
         font-size: Measures.text-label;
@@ -124,30 +131,30 @@ export component Picker inherits Window {
     ask-ruler := Text {
         text: root.ask;
         font-size: Measures.text-title;
-        font-weight: 700;
+        font-weight: Measures.weight-heavy;
         visible: false;
     }
     ask-private-ruler := Text {
         text: root.ask-private;
         font-size: Measures.text-title;
-        font-weight: 700;
+        font-weight: Measures.weight-heavy;
         visible: false;
     }
 
     // Three columns of cards; four rows on screen and the rest scroll.
-    property <length> cards-room: min(4, max(1, Math.ceil(root.count / 3))) * (Measures.card + 6px) + 10px;
+    property <length> cards-room: min(min(4, max(1, Math.ceil(root.count / 3))) * (Measures.card + 6px) + 10px, max(Measures.card + 16px, root.body-most));
 
     property <float> icons-shown: max(1, root.count);
     property <length> compact-address-room: 196px;
     property <length> compact-width: max(root.compact-address-room + Measures.tools-width + 2 * 10px + 6px, root.icons-shown * 54px - 4px + 20px);
     property <length> compact-height: 12px + 28px + 6px + 72px + 6px + 20px + 6px + 26px + 10px;
 
-    property <length> foot-room: 74px;
+    property <length> foot-room: 74px * Measures.grow;
     property <length> sheet-width:
-        root.look == Look.list ? root.list-width
-        : root.cards ? max(500px, root.list-width, root.ask-need)
+        root.look == Look.list ? min(root.list-width, root.room-width)
+        : root.cards ? min(max(500px * Measures.grow, root.list-width, root.ask-need), root.room-width)
         : root.compact-width;
-    property <length> head-room: root.cards ? 80px : 60px;
+    property <length> head-room: (root.cards ? 80px : 60px) * Measures.grow;
     property <length> body-room:
         root.cards ? root.cards-room
         : root.list-room;
@@ -395,7 +402,7 @@ export component Picker inherits Window {
 
         if root.more-open && root.look != Look.compact: ReachMenu {
             x: root.halo + root.sheet-width - 12px - self.width;
-            y: root.halo + root.sheet-height - 12px - 32px - 6px - self.height;
+            y: root.halo + root.sheet-height - 12px - 32px * Measures.grow - 6px - self.height;
             reaches: root.reaches-more;
             reach-index: root.reach-index;
             picked(i) => {
@@ -468,7 +475,7 @@ export component Notice inherits Window {
                 Text {
                     text: root.undo-label;
                     font-size: Measures.text-small;
-                    font-weight: 700;
+                    font-weight: Measures.weight-heavy;
                     color: Palette.ink;
                     horizontal-alignment: center;
                     vertical-alignment: center;

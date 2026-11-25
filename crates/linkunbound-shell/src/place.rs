@@ -1,4 +1,6 @@
 const OFFSET: i32 = 12;
+/// What the sheet leaves free at each edge of the screen when it has to shrink to fit.
+const EDGE: f64 = 8.0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bounds {
@@ -38,6 +40,15 @@ pub fn centered(window: (i32, i32), screen: Bounds) -> (i32, i32) {
         window,
         screen,
     )
+}
+
+/// The most the sheet may measure on a screen, in the logical pixels it is drawn in.
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub fn room(screen: Bounds, scale: f64) -> (f32, f32) {
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let fit = |physical: i32| (f64::from(physical) / scale - 2.0 * EDGE).max(1.0) as f32;
+    (fit(screen.width), fit(screen.height))
 }
 
 fn inside((x, y): (i32, i32), (w, h): (i32, i32), screen: Bounds) -> (i32, i32) {

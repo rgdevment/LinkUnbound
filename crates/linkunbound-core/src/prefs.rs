@@ -38,6 +38,37 @@ pub enum PickerPosition {
     Center,
 }
 
+/// How large the picker draws its words, as a factor over the sizes it was designed at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextSize {
+    Small,
+    #[default]
+    Normal,
+    Large,
+}
+
+impl TextSize {
+    #[must_use]
+    pub const fn zoom(self) -> f32 {
+        match self {
+            Self::Small => 0.87,
+            Self::Normal => 1.0,
+            Self::Large => 1.13,
+        }
+    }
+}
+
+/// How tall each row and card of the picker is; the compact look, all icons, has none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Density {
+    Compact,
+    #[default]
+    Normal,
+    Comfortable,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Preferences {
     #[serde(default)]
@@ -59,6 +90,13 @@ pub struct Preferences {
     pub picker_style: PickerStyle,
     #[serde(default)]
     pub picker_position: PickerPosition,
+    #[serde(default)]
+    pub text_size: TextSize,
+    #[serde(default)]
+    pub density: Density,
+    /// Darker greys, visible edges, heavier letters and an opaque sheet whatever the desktop.
+    #[serde(default)]
+    pub high_contrast: bool,
     /// Whether the resident asks about releases on its own, every few hours; off, only the
     /// settings window ever asks, and only while it is open.
     #[serde(default = "yes")]
@@ -93,6 +131,9 @@ impl Default for Preferences {
             edge_warning_dismissed: false,
             picker_style: PickerStyle::default(),
             picker_position: PickerPosition::default(),
+            text_size: TextSize::default(),
+            density: Density::default(),
+            high_contrast: false,
             looks_for_updates: true,
             here_since: None,
             asked_for_a_star: false,

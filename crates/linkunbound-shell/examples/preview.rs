@@ -2,9 +2,10 @@
 
 //! `cargo run -p linkunbound-shell --example preview -- [--look=list|tiles|compact|bear] [--glass]
 //! [--count=N] [--tint=0..1] [--light] [--en] [--six | --twelve]
-//! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]`
+//! [--scale=N] [--update | --store | --stage=starting|getting|installing|failed] [--notice]
+//! [--size=small|large] [--density=compact|comfortable] [--contrast] [--room=HEIGHT]`
 
-use linkunbound_core::Language;
+use linkunbound_core::{Density, Language, TextSize};
 use linkunbound_shell::{HALO, Listed, Look, Palette, Picker, dress, paint, row_typed};
 use slint::ComponentHandle;
 
@@ -22,8 +23,18 @@ fn main() -> Result<(), slint::PlatformError> {
         .find_map(|a| a.strip_prefix("--scale="))
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
+    let size = match args.iter().find_map(|a| a.strip_prefix("--size=")) {
+        Some("small") => TextSize::Small,
+        Some("large") => TextSize::Large,
+        _ => TextSize::Normal,
+    };
+    let density = match args.iter().find_map(|a| a.strip_prefix("--density=")) {
+        Some("compact") => Density::Compact,
+        Some("comfortable") => Density::Comfortable,
+        _ => Density::Normal,
+    };
     let side = match look {
-        Look::List => 24,
+        Look::List => linkunbound_shell::measure::stands(density).1 as u32,
         Look::Tiles | Look::Compact | Look::Bear => 32,
     } * scale;
     let icons = linkunbound_core::data_dir().join("icons");
@@ -114,8 +125,16 @@ fn main() -> Result<(), slint::PlatformError> {
     let window = Picker::new()?;
     let notice = linkunbound_shell::Notice::new()?;
     paint(&window, &notice, flag("--light"));
+    linkunbound_shell::measure::wear(&window, size, density, flag("--contrast"));
+    if let Some(room) = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--room="))
+        .and_then(|v| v.parse::<f32>().ok())
+    {
+        window.set_room_height(room);
+    }
     window.set_look(look);
-    let glass = flag("--glass");
+    let glass = flag("--glass") && !flag("--contrast");
     window.global::<Palette>().set_clear(glass);
     if let Some(tint) = args
         .iter()
