@@ -160,4 +160,27 @@ mod tests {
         };
         assert_eq!(centered(WINDOW, left), (-1142, 370));
     }
+
+    #[test]
+    fn the_room_is_the_screen_in_logical_pixels_less_an_edge_each_side() {
+        assert_eq!(room(SCREEN, 1.0), (1904.0, 1064.0));
+        assert_eq!(room(SCREEN, 1.5), (1264.0, 704.0));
+    }
+
+    #[test]
+    fn a_scale_that_is_not_positive_counts_as_one() {
+        assert_eq!(room(SCREEN, 0.0), room(SCREEN, 1.0));
+        assert_eq!(room(SCREEN, -2.0), room(SCREEN, 1.0));
+    }
+
+    #[test]
+    fn a_tiny_screen_still_leaves_one_pixel() {
+        let tiny = Bounds {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 0,
+        };
+        assert_eq!(room(tiny, 1.0), (1.0, 1.0));
+    }
 }

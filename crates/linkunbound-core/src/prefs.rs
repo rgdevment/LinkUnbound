@@ -215,7 +215,7 @@ fn shortcut_of(said: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Locale, PickerPosition, PickerStyle, Preferences, Theme};
+    use super::{Density, Locale, PickerPosition, PickerStyle, Preferences, TextSize, Theme};
 
     #[test]
     fn a_fresh_install_follows_the_system_and_claims_the_default_shortcut() {
@@ -369,5 +369,48 @@ mod tests {
     fn turning_the_shortcut_off_is_kept_as_off() {
         let p: Preferences = serde_json::from_str(r#"{"shortcut": null}"#).unwrap();
         assert!(p.shortcut.is_none());
+    }
+
+    #[test]
+    fn a_file_from_before_text_size_density_and_contrast_reads_as_ordinary() {
+        let fresh: Preferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(fresh.text_size, TextSize::Normal);
+        assert_eq!(fresh.density, Density::Normal);
+        assert!(!fresh.high_contrast);
+
+        let old: Preferences =
+            serde_json::from_str(r#"{"theme": "dark", "picker_style": "sheet"}"#).unwrap();
+        assert_eq!(old.theme, Theme::Dark);
+        assert_eq!(old.picker_style, PickerStyle::Sheet);
+        assert_eq!(old.text_size, TextSize::Normal);
+        assert_eq!(old.density, Density::Normal);
+        assert!(!old.high_contrast);
+        assert_eq!(Preferences::default().text_size, TextSize::Normal);
+    }
+
+    #[test]
+    fn text_size_density_and_contrast_are_written_in_the_words_settings_shows() {
+        let asked: Preferences = serde_json::from_str(
+            r#"{"text_size": "large", "density": "comfortable", "high_contrast": true}"#,
+        )
+        .unwrap();
+        assert_eq!(asked.text_size, TextSize::Large);
+        assert_eq!(asked.density, Density::Comfortable);
+        assert!(asked.high_contrast);
+
+        let written = serde_json::to_string(&asked).unwrap();
+        assert!(written.contains(r#""text_size":"large""#), "{written}");
+        assert!(written.contains(r#""density":"comfortable""#), "{written}");
+        assert!(written.contains(r#""high_contrast":true"#), "{written}");
+
+        let back: Preferences = serde_json::from_str(&written).unwrap();
+        assert_eq!(back, asked);
+    }
+
+    #[test]
+    fn the_text_sizes_scale_around_the_size_it_was_designed_at() {
+        assert_eq!(TextSize::Small.zoom(), 0.87);
+        assert_eq!(TextSize::Normal.zoom(), 1.0);
+        assert_eq!(TextSize::Large.zoom(), 1.13);
     }
 }

@@ -305,7 +305,7 @@ fn wear_glass(_window: isize, _dark: bool, _corner: f64) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{corner_of, dress_for, native_glass, place_for, style, wear_backdrop};
+    use super::{corner_of, dress_for, native_glass, place_for, settle, style, wear_backdrop};
     use linkunbound_core::PickerStyle;
     use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
     use slint::ComponentHandle;
@@ -490,5 +490,32 @@ mod tests {
         dress_for(&picker, false);
         assert!(!palette.get_solid());
         assert!(crate::mascot::rise(&picker) > 0.0, "the bear is back");
+    }
+
+    /// Contrast paints the sheet opaque without calling it solid, which would send the bear away.
+    #[test]
+    fn contrast_takes_the_material_off_but_keeps_the_bear() {
+        let picker = picker();
+        let palette = picker.global::<Palette>();
+        palette.set_contrast(true);
+        style(&picker, PickerStyle::Bear);
+
+        dress_for(&picker, false);
+        assert!(!palette.get_solid());
+        assert!(!palette.get_clear());
+        assert!(!palette.get_see_through());
+        assert_eq!(picker.get_halo(), HALO);
+        assert!(
+            crate::mascot::rise(&picker) > 0.0,
+            "the bear is still there"
+        );
+
+        dress_for(&picker, true);
+        assert!(palette.get_solid(), "an unblended system stays solid");
+        assert!(!palette.get_clear());
+
+        settle(&picker);
+        assert!(!palette.get_clear());
+        assert!(!palette.get_see_through());
     }
 }
