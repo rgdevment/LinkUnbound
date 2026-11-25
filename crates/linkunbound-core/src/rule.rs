@@ -242,6 +242,24 @@ impl RuleSet {
         true
     }
 
+    /// In place: remaking the rule would send it to the end of the order.
+    pub fn replace(&mut self, id: &str, mut rule: Rule) -> Replaced {
+        rule.id = rule.identity();
+        let Some(at) = self.rules.iter().position(|r| r.id == id) else {
+            return Replaced::Gone;
+        };
+        let taken = self.rules.iter().enumerate().any(|(i, r)| {
+            i != at
+                && r.scope == rule.scope
+                && same_origin(r.source_app.as_deref(), rule.source_app.as_deref())
+        });
+        if taken {
+            return Replaced::Taken;
+        }
+        self.rules[at] = rule;
+        Replaced::Done
+    }
+
     pub fn remove(&mut self, id: &str) -> bool {
         let before = self.rules.len();
         self.rules.retain(|r| r.id != id);
@@ -263,6 +281,50 @@ impl RuleSet {
             .filter(|(_, r)| r.applies(url, host, origin))
             .max_by_key(|(i, r)| (r.specificity(), Reverse(*i)))
             .map(|(_, r)| r)
+    }
+
+    #[must_use]
+    pub fn matching_from(&self, url: &str, host: &str, origin: Option<&Origin>) -> Vec<&Rule> {
+        let mut found: Vec<(usize, &Rule)> = self
+            .rules
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.applies(url, host, origin))
+            .collect();
+        found.sort_by_key(|(i, r)| Reverse((r.specificity(), Reverse(*i))));
+        found.into_iter().map(|(_, r)| r).collect()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Replaced {
+    Done,
+    Gone,
+    /// Another rule already covers the same thing from the same origin.
+    Taken,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Why {
+    Alone,
+    Origin,
+    /// Of a narrower kind, or as narrow a kind over more of the address.
+    Narrower,
+    Earlier,
+}
+
+#[must_use]
+pub fn why_first(winner: &Rule, next: Option<&Rule>) -> Why {
+    let Some(next) = next else {
+        return Why::Alone;
+    };
+    if winner.source_app.is_some() && next.source_app.is_none() {
+        Why::Origin
+    } else if winner.specificity() != next.specificity() {
+        Why::Narrower
+    } else {
+        Why::Earlier
     }
 }
 
@@ -881,5 +943,195 @@ mod tests {
                 .browser_id,
             "chrome"
         );
+    }
+
+    fn a_site_a_host_and_an_app_rule() -> RuleSet {
+        RuleSet {
+            schema_version: 2,
+            rules: vec![
+                rule("site", Scope::Site("github.com".to_owned()), None, "chrome"),
+                rule(
+                    "host",
+                    Scope::Host("gist.github.com".to_owned()),
+                    None,
+                    "edge",
+                ),
+                rule("slack", Scope::Any, Some("slack"), "firefox"),
+                rule("other", Scope::Site("gitlab.com".to_owned()), None, "brave"),
+            ],
+        }
+    }
+
+    #[test]
+    fn matching_lists_every_rule_that_applies_best_first() {
+        let set = a_site_a_host_and_an_app_rule();
+        let slack = super::Origin::named("slack");
+
+        let ids = |origin: Option<&super::Origin>| -> Vec<String> {
+            set.matching_from("https://gist.github.com/a", "gist.github.com", origin)
+                .iter()
+                .map(|r| r.id.clone())
+                .collect()
+        };
+        assert_eq!(ids(None), ["host", "site"]);
+        assert_eq!(
+            ids(Some(&slack)),
+            ["slack", "host", "site"],
+            "an origin that is named outranks any host"
+        );
+    }
+
+    #[test]
+    fn the_first_match_is_the_rule_resolving_picks() {
+        let set = a_site_a_host_and_an_app_rule();
+        let slack = super::Origin::named("slack");
+        for (url, host, origin) in [
+            ("https://gist.github.com/a", "gist.github.com", None),
+            ("https://gist.github.com/a", "gist.github.com", Some(&slack)),
+            ("https://github.com/a", "github.com", None),
+            ("https://gitlab.com/", "gitlab.com", None),
+            ("https://nowhere.test/", "nowhere.test", None),
+        ] {
+            let first = set.matching_from(url, host, origin).first().copied();
+            assert_eq!(
+                first.map(|r| &r.id),
+                set.resolve_from(url, host, origin).map(|r| &r.id),
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn matching_keeps_the_order_the_user_sees_among_equals() {
+        let set = RuleSet {
+            schema_version: 2,
+            rules: vec![
+                rule(
+                    "a",
+                    Scope::Site("github.com".to_owned()),
+                    Some("slack"),
+                    "x",
+                ),
+                rule(
+                    "b",
+                    Scope::Site("github.com".to_owned()),
+                    Some("teams"),
+                    "y",
+                ),
+                rule("c", Scope::Site("github.com".to_owned()), None, "z"),
+            ],
+        };
+        let teams = super::Origin::named("teams");
+        let found: Vec<&str> = set
+            .matching_from("https://github.com/", "github.com", Some(&teams))
+            .iter()
+            .map(|r| r.id.as_str())
+            .collect();
+        assert_eq!(found, ["b", "c"], "a rule for another app is left out");
+
+        let twins = RuleSet {
+            schema_version: 2,
+            rules: vec![
+                rule("first", Scope::Host("a.test".to_owned()), None, "x"),
+                rule("second", Scope::Host("a.test".to_owned()), None, "y"),
+            ],
+        };
+        let found: Vec<&str> = twins
+            .matching_from("https://a.test/", "a.test", None)
+            .iter()
+            .map(|r| r.id.as_str())
+            .collect();
+        assert_eq!(found, ["first", "second"]);
+        assert!(
+            twins
+                .matching_from("https://b.test/", "b.test", None)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn replacing_a_rule_rewrites_it_in_its_place_under_its_new_id() {
+        let mut set = a_site_a_host_and_an_app_rule();
+        let edited = rule(
+            "",
+            Scope::Host("www.github.com".to_owned()),
+            None,
+            "firefox",
+        );
+
+        assert_eq!(set.replace("host", edited), super::Replaced::Done);
+
+        let ids: Vec<&str> = set.rules.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, ["site", "host:www.github.com", "slack", "other"]);
+        assert_eq!(set.rules[1].target.browser_id, "firefox");
+    }
+
+    #[test]
+    fn replacing_a_rule_with_itself_changed_only_in_where_it_opens_is_not_a_clash() {
+        let mut set = a_site_a_host_and_an_app_rule();
+        let same_scope = rule("", Scope::Site("github.com".to_owned()), None, "safari");
+        assert_eq!(set.replace("site", same_scope), super::Replaced::Done);
+        assert_eq!(set.rules[0].id, "site:github.com");
+        assert_eq!(set.rules[0].target.browser_id, "safari");
+        assert_eq!(set.rules.len(), 4);
+    }
+
+    #[test]
+    fn replacing_a_rule_that_is_not_there_says_it_is_gone() {
+        let mut set = a_site_a_host_and_an_app_rule();
+        let before = set.rules.len();
+        let edited = rule("", Scope::Site("x.test".to_owned()), None, "chrome");
+        assert_eq!(set.replace("nothing", edited), super::Replaced::Gone);
+        assert_eq!(set.rules.len(), before);
+    }
+
+    #[test]
+    fn replacing_a_rule_with_what_another_already_covers_is_refused_and_changes_nothing() {
+        let mut set = a_site_a_host_and_an_app_rule();
+        let onto_the_site = rule("", Scope::Site("github.com".to_owned()), None, "firefox");
+
+        assert_eq!(set.replace("host", onto_the_site), super::Replaced::Taken);
+
+        assert_eq!(set.rules[1].id, "host");
+        assert_eq!(set.rules[1].target.browser_id, "edge");
+        assert_eq!(set.rules[0].target.browser_id, "chrome");
+    }
+
+    #[test]
+    fn the_same_scope_for_another_origin_is_not_taken() {
+        let mut set = a_site_a_host_and_an_app_rule();
+        let for_an_app = rule(
+            "",
+            Scope::Site("github.com".to_owned()),
+            Some("teams"),
+            "firefox",
+        );
+        assert_eq!(set.replace("host", for_an_app), super::Replaced::Done);
+        assert_eq!(set.rules[1].id, "site:github.com@teams");
+    }
+
+    #[test]
+    fn the_reason_a_rule_answers_is_told_for_each_way_it_can_win() {
+        use super::{Why, why_first};
+        let site = rule("a", Scope::Site("github.com".to_owned()), None, "x");
+        let longer_site = rule("b", Scope::Site("gist.github.com".to_owned()), None, "x");
+        let host = rule("c", Scope::Host("github.com".to_owned()), None, "x");
+        let host_twin = rule("d", Scope::Host("github.com".to_owned()), None, "x");
+        let from_app = rule(
+            "e",
+            Scope::Site("github.com".to_owned()),
+            Some("slack"),
+            "x",
+        );
+
+        assert_eq!(why_first(&site, None), Why::Alone);
+        assert_eq!(why_first(&from_app, Some(&site)), Why::Origin);
+        assert_eq!(why_first(&host, Some(&site)), Why::Narrower);
+        assert_eq!(
+            why_first(&longer_site, Some(&site)),
+            Why::Narrower,
+            "as narrow a kind over more of the address"
+        );
+        assert_eq!(why_first(&host, Some(&host_twin)), Why::Earlier);
     }
 }

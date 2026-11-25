@@ -2,7 +2,9 @@ use serde::Serialize;
 
 use linkunbound_core::Language;
 
-use crate::{HERE, catalogue, same_name, shop, shown_origin, store, system, update};
+use crate::rules::shown_origin;
+use crate::{HERE, catalogue, shop, store, system, update};
+use linkunbound_core::same_name;
 
 const NOTICES: &str = include_str!("../../../THIRD-PARTY-BUNDLED.md");
 const LICENCES: &str = include_str!("../../../THIRD-PARTY-LICENSES.md");
