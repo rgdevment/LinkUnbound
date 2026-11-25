@@ -58,7 +58,7 @@ also under About → Licence texts.
 | `clru` | 0.6.3 | MIT |
 | `color_quant` | 1.1.0 | MIT |
 | `const-field-offset` | 0.2.1 | MIT OR Apache-2.0 |
-| `cookie` | 0.18.2 | MIT OR Apache-2.0 |
+| `cookie` | 0.18.3 | MIT OR Apache-2.0 |
 | `core_detect` | 1.0.0 | MIT/Apache-2.0 |
 | `core-foundation-sys` | 0.8.7 | MIT OR Apache-2.0 |
 | `core-foundation` | 0.10.1 | MIT OR Apache-2.0 |
@@ -103,7 +103,7 @@ also under About → Licence texts.
 | `fontique` | 0.11.1 | Apache-2.0 OR MIT |
 | `foreign-types-shared` | 0.3.1 | MIT/Apache-2.0 |
 | `foreign-types` | 0.5.0 | MIT/Apache-2.0 |
-| `form_urlencoded` | 1.2.2 | MIT OR Apache-2.0 |
+| `form_urlencoded` | 1.2.3 | MIT OR Apache-2.0 |
 | `futures-channel` | 0.3.34 | MIT OR Apache-2.0 |
 | `futures-core` | 0.3.34 | MIT OR Apache-2.0 |
 | `futures-io` | 0.3.34 | MIT OR Apache-2.0 |
@@ -245,7 +245,7 @@ also under About → Licence texts.
 | `rgb` | 0.8.53 | MIT |
 | `ring` | 0.17.14 | Apache-2.0 AND ISC |
 | `roxmltree` | 0.21.1 | MIT OR Apache-2.0 |
-| `rustix` | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| `rustix` | 1.1.6 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | `rustls-native-certs` | 0.8.4 | Apache-2.0 OR ISC OR MIT |
 | `rustls-pki-types` | 1.15.1 | MIT OR Apache-2.0 |
 | `rustls-platform-verifier` | 0.7.0 | MIT OR Apache-2.0 |
@@ -309,7 +309,7 @@ also under About → Licence texts.
 | `tinyvec` | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
 | `tokio-rustls` | 0.26.5 | MIT OR Apache-2.0 |
 | `tokio-util` | 0.7.19 | MIT |
-| `tokio` | 1.53.1 | MIT |
+| `tokio` | 1.54.1 | MIT |
 | `toml_datetime` | 1.1.1+spec-1.1.0 | MIT OR Apache-2.0 |
 | `toml_parser` | 1.1.3+spec-1.1.0 | MIT OR Apache-2.0 |
 | `toml_writer` | 1.1.2+spec-1.1.0 | MIT OR Apache-2.0 |
@@ -330,7 +330,7 @@ also under About → Licence texts.
 | `unicode-segmentation` | 1.13.3 | MIT OR Apache-2.0 |
 | `unicode-vo` | 0.1.0 | MIT/Apache-2.0 |
 | `untrusted` | 0.9.0 | ISC |
-| `url` | 2.5.8 | MIT OR Apache-2.0 |
+| `url` | 2.5.9 | MIT OR Apache-2.0 |
 | `urlpattern` | 0.6.0 | MIT |
 | `usvg` | 0.48.1 | Apache-2.0 OR MIT |
 | `utf8_iter` | 1.0.4 | Apache-2.0 OR MIT |
