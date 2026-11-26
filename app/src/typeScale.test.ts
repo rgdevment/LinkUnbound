@@ -4,14 +4,11 @@ const css = Object.values(
   import.meta.glob<string>("./index.css", { query: "?raw", import: "default", eager: true }),
 )[0];
 
-const modules = import.meta.glob<string>(
-  ["./**/*.tsx", "!./**/*.test.tsx", "!./settings/Rules.tsx", "!./settings/rules/**"],
-  {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  },
-);
+const modules = import.meta.glob<string>(["./**/*.tsx", "!./**/*.test.tsx"], {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 const files = Object.entries(modules).map(([path, text]) => ({ path: path.slice(2), text }));
 
 function offenders(pattern: RegExp, allowed: string[] = []) {
@@ -43,6 +40,11 @@ describe("type scale and colour contract", () => {
   it("keeps hex colours in markup to the decorative About fills", () => {
     const decorative = ["#C8892A", "#E3B341", "#e3b341", "#0078d4", "#db61a2", "#c8892a"];
     expect(offenders(/#[0-9A-Fa-f]{6}\b/g, decorative)).toEqual([]);
+  });
+
+  it("names themed colours by token, not by the raw variable", () => {
+    const raw = /[\w:-]*-\(--(ink|ink-2|muted|accent|on-accent|danger|good|caution|panel|card)\)/g;
+    expect(offenders(raw)).toEqual([]);
   });
 
   it("defines exactly the five text sizes", () => {

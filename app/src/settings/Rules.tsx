@@ -47,7 +47,7 @@ function RankLine() {
   const t = useWords();
   const order: Family[] = ["app", "url", "host", "site"];
   return (
-    <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-(--muted)">
+    <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted">
       <Glyph name="info" />
       <span>{t("rulesRank")}</span>
       {order.map((family, at) => (
@@ -100,11 +100,7 @@ export default function Rules() {
   };
 
   if (problem) {
-    return (
-      <p className="rounded-md bg-(--danger-soft) px-3 py-2 text-[12px] text-(--danger)">
-        {problem}
-      </p>
-    );
+    return <p className="rounded-md bg-(--danger-soft) px-3 py-2 text-sm text-danger">{problem}</p>;
   }
 
   if (rules === null) return null;
@@ -113,7 +109,7 @@ export default function Rules() {
     <button
       type="button"
       onClick={() => setAdding({ kind: "site", value: "" })}
-      className="flex items-center gap-1.5 rounded-md bg-(--accent) px-3 py-1.5 text-[12px] font-medium text-(--panel)"
+      className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent"
     >
       <Glyph name="plus" />
       {t("ruleAdd")}
@@ -139,12 +135,12 @@ export default function Rules() {
         {form}
         {!adding && (
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-(--hair) px-5 py-7 text-center">
-            <span className="grid h-10 w-10 place-items-center rounded-[10px] bg-(--accent-soft) text-(--accent)">
+            <span className="grid h-10 w-10 place-items-center rounded-[10px] bg-(--accent-soft) text-accent">
               <Glyph name="rules" size={20} />
             </span>
             <div>
-              <p className="text-[13px] font-semibold">{t("rulesEmptyTitle")}</p>
-              <p className="mt-1 max-w-[46ch] text-[12px] text-(--muted)">{t("rulesEmptyBody")}</p>
+              <p className="text-md font-semibold">{t("rulesEmptyTitle")}</p>
+              <p className="mt-1 max-w-[46ch] text-sm text-muted">{t("rulesEmptyBody")}</p>
             </div>
             {addButton}
           </div>
@@ -180,7 +176,7 @@ export default function Rules() {
         />
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="flex-1 text-[11px] font-semibold tracking-[0.09em] text-(--muted) uppercase">
+        <h2 className="flex-1 text-xs font-semibold tracking-[0.09em] text-muted uppercase">
           {title}
         </h2>
         <button
@@ -190,7 +186,7 @@ export default function Rules() {
             setProbing(!probing);
             setWinner(null);
           }}
-          className="flex items-center gap-1.5 rounded-md border border-(--hair) px-3 py-1.5 text-[12px] font-medium"
+          className="flex items-center gap-1.5 rounded-md border border-(--hair) px-3 py-1.5 text-sm font-medium"
         >
           <Glyph name="flask" />
           {t("probeOpen")}
@@ -212,17 +208,14 @@ export default function Rules() {
       )}
       {form}
       {refusal && (
-        <p
-          role="alert"
-          className="rounded-md bg-(--danger-soft) px-3 py-2 text-[12px] text-(--danger)"
-        >
+        <p role="alert" className="rounded-md bg-(--danger-soft) px-3 py-2 text-sm text-danger">
           {refusal}
         </p>
       )}
 
       <div className="flex flex-col gap-2">
-        <label className="flex min-w-0 items-center gap-2 rounded-md border border-(--hair) bg-(--panel) px-2.5 py-1.5 text-[12px] focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-(--accent)">
-          <span className="text-(--muted)">
+        <label className="flex min-w-0 items-center gap-2 rounded-md border border-(--hair) bg-panel px-2.5 py-1.5 text-sm focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent">
+          <span className="text-muted">
             <Glyph name="search" />
           </span>
           <input
@@ -231,14 +224,14 @@ export default function Rules() {
             placeholder={t("rulesSearch")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-(--muted) [&::-webkit-search-cancel-button]:appearance-none"
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted [&::-webkit-search-cancel-button]:appearance-none"
           />
           {query && (
             <button
               type="button"
               aria-label={t("rulesSearchClear")}
               onClick={() => setQuery("")}
-              className="text-(--muted) hover:text-(--ink)"
+              className="text-muted hover:text-ink"
             >
               <Glyph name="x" size={12} />
             </button>
@@ -254,14 +247,14 @@ export default function Rules() {
               type="button"
               aria-pressed={showing === f.id}
               onClick={() => setFilter(f.id)}
-              className={`rounded-md px-[9px] py-[3px] text-[12px] whitespace-nowrap ${
+              className={`rounded-md px-[9px] py-[3px] text-sm whitespace-nowrap ${
                 showing === f.id
-                  ? "bg-(--accent-soft) font-semibold text-(--accent)"
-                  : "bg-(--tile) text-(--ink)"
+                  ? "bg-(--accent-soft) font-semibold text-accent"
+                  : "bg-(--tile) text-ink-2"
               }`}
             >
               {t(f.label)}
-              <span className="ml-1 text-(--muted) tabular-nums">{count(f.id)}</span>
+              <span className="ml-1 text-muted tabular-nums">{count(f.id)}</span>
             </button>
           ))}
           {broken && (
@@ -269,8 +262,8 @@ export default function Rules() {
               type="button"
               aria-pressed={showing === "broken"}
               onClick={() => setFilter("broken")}
-              className={`flex items-center gap-1 rounded-md px-[9px] py-[3px] text-[12px] whitespace-nowrap text-(--danger) ${
-                showing === "broken" ? "bg-(--danger-soft) font-semibold" : "bg-(--tile)"
+              className={`flex items-center gap-1 rounded-md px-[9px] py-[3px] text-sm whitespace-nowrap text-caution ${
+                showing === "broken" ? "bg-caution/[0.12] font-semibold" : "bg-(--tile)"
               }`}
             >
               <Glyph name="warn" size={12} />
@@ -283,7 +276,7 @@ export default function Rules() {
       <RankLine />
 
       {shown.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-(--hair) px-4 py-5 text-center text-[12px] text-(--muted)">
+        <p className="rounded-lg border border-dashed border-(--hair) px-4 py-5 text-center text-sm text-muted">
           {t("rulesNoneFound")}
         </p>
       ) : (
@@ -324,7 +317,7 @@ export default function Rules() {
         </ul>
       )}
 
-      <p className="text-[11px] text-(--muted)">{t("rulesFooter")}</p>
+      <p className="text-xs text-muted">{t("rulesFooter")}</p>
     </section>
   );
 }

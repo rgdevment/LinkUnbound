@@ -435,6 +435,15 @@ describe("rules", () => {
       expect(screen.queryByRole("button", { name: /^Sin navegador/ })).toBeNull();
     });
 
+    it("colours the filter chips by token: ink-2 when idle, caution for the broken one", async () => {
+      render(<Rules />);
+      const broken = await screen.findByRole("button", { name: /^Sin navegador/ });
+      expect(broken).toHaveClass("text-caution");
+      expect(await screen.findByRole("button", { name: /^Sitio/ })).toHaveClass("text-ink-2");
+      await userEvent.click(broken);
+      expect(broken).toHaveClass("bg-caution/[0.12]");
+    });
+
     it("keeps only the rules whose browser is gone when asked", async () => {
       render(<Rules />);
       const chip = await screen.findByRole("button", { name: /^Sin navegador/ });

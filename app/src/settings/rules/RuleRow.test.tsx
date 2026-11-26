@@ -131,6 +131,45 @@ describe("rule row", () => {
     expect(onPicking).toHaveBeenCalledWith(true);
   });
 
+  it("paints a broken rule with caution, never danger", () => {
+    inList(
+      <RuleRow
+        rule={{ ...RULE, resolved: false, browser: "brave" }}
+        choices={CHOICES}
+        onPicking={vi.fn()}
+        onEdit={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("listitem")).toHaveClass("bg-caution/[0.08]");
+    expect(screen.getByText(/brave ya no está instalado/).parentElement).toHaveClass(
+      "text-caution",
+    );
+    const pick = screen.getByRole("button", { name: "Elegir otro navegador" });
+    expect(pick).toHaveClass("bg-caution", "text-on-accent");
+    expect(pick.className).not.toContain("danger");
+  });
+
+  it("colours the app chip with caution and the site chip grey with ink-2", () => {
+    const { rerender } = inList(
+      <RuleRow rule={{ ...RULE, kind: "any", covers: "", source_app: "teams" }} />,
+    );
+    expect(screen.getByText("Desde")).toHaveClass("text-caution");
+    rerender(
+      <ul>
+        <RuleRow rule={RULE} />
+      </ul>,
+    );
+    expect(screen.getByText("Sitio")).toHaveClass("text-ink-2");
+  });
+
+  it("tags the winner on accent text and the others in ink-2", () => {
+    inList(<RuleRow rule={RULE} verdict="wins" />);
+    expect(screen.getByText("Gana")).toHaveClass("bg-accent", "text-on-accent");
+    inList(<RuleRow rule={{ ...RULE, id: "x" }} verdict="also" />);
+    expect(screen.getByText("También coincide")).toHaveClass("text-ink-2");
+  });
+
   it("blames the profile, not the browser, when only the profile is gone", () => {
     inList(
       <RuleRow
