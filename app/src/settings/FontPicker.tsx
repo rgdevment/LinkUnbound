@@ -9,6 +9,10 @@ type Pickable = { name: string; label: string };
 const DROP_HEIGHT = 280;
 const GAP = 4;
 
+/// What Settings draws with when nothing is chosen, so «System» shows in its own letters too.
+const SYSTEM_LETTERS =
+  '"Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui';
+
 /// Fixed to the window, because the card around the line clips whatever hangs out of it. Below
 /// while it fits, else on the roomier side, cut to the room there.
 function dropAt(button: HTMLElement): CSSProperties {
@@ -60,7 +64,9 @@ export default function FontPicker({
   ];
   const current = all.find((one) => one.name === (chosen ?? "")) ?? all[0];
   const shown = matching(all, query);
-  const lettersOf = (one: Pickable) => (one.name ? { fontFamily: familyCss(one.name) } : undefined);
+  const lettersOf = (one: Pickable) => ({
+    fontFamily: one.name ? familyCss(one.name) : SYSTEM_LETTERS,
+  });
 
   const close = (refocus: boolean) => {
     setOpen(null);

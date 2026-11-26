@@ -112,7 +112,7 @@ describe("the font picker", () => {
       fontFamily: '"Yu Gothic"',
     });
     expect(opener("Courier New")).toHaveStyle({ fontFamily: '"Courier New"' });
-    expect(screen.getByRole("option", { name: SYSTEM }).style.fontFamily).toBe("");
+    expect(screen.getByRole("option", { name: SYSTEM }).style.fontFamily).toContain("Segoe UI");
   });
 
   it("filters as you type, by label or name, ignoring accents", async () => {
