@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { useWords } from "../i18n";
+import { familyCss } from "../theme";
 import { CARD, type Density, type Look, ROW, type TextSize } from "./look";
 
 /// Mirrors `TextSize::zoom` and `measure::stands`, which the webview cannot ask for.
@@ -128,6 +129,7 @@ export default function LookPreview({ look, onPreview }: { look: Look; onPreview
     "--row": `${ROW[look.density]}px`,
     "--card": `${CARD[look.density]}px`,
     "--icon": `${ICON[look.density]}px`,
+    ...(look.font && { "--look-font": familyCss(look.font) }),
   } as CSSProperties;
   return (
     <figure className="look-preview">

@@ -3,7 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 type Theme = "system" | "light" | "dark";
 type TextSize = "small" | "normal" | "large";
 
-type Look = { theme: Theme; high_contrast?: boolean; text_size?: TextSize };
+type Look = { theme: Theme; high_contrast?: boolean; text_size?: TextSize; font?: string | null };
+
+type Dressed = { contrast: boolean; size: TextSize; font: string | null };
 
 const REMEMBERED = "theme-was-dark";
 const REMEMBERED_LOOK = "look-was";
@@ -18,15 +20,25 @@ function paint(theme: Theme, systemIsDark: boolean) {
   }
 }
 
-function dress(contrast: boolean, size: TextSize) {
-  const root = document.documentElement.classList;
-  // The welcome is a fixed 600×460 with no scrolling, laid out for the base scale.
+/// A family name as CSS reads it, whatever quotes or backslashes it carries.
+export function familyCss(family: string): string {
+  return `"${family.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function dress({ contrast, size, font }: Dressed) {
+  const root = document.documentElement;
+  // The welcome is a fixed 600×460 with no scrolling, laid out for the base scale and font.
   const scales = window.location.hash !== "#welcome";
-  root.toggle("contrast", contrast);
-  root.toggle("text-small", scales && size === "small");
-  root.toggle("text-large", scales && size === "large");
+  root.classList.toggle("contrast", contrast);
+  root.classList.toggle("text-small", scales && size === "small");
+  root.classList.toggle("text-large", scales && size === "large");
+  if (scales && font) {
+    root.style.setProperty("--worn-font", `${familyCss(font)}, "Segoe UI Variable Text"`);
+  } else {
+    root.style.removeProperty("--worn-font");
+  }
   try {
-    localStorage.setItem(REMEMBERED_LOOK, JSON.stringify({ contrast, size }));
+    localStorage.setItem(REMEMBERED_LOOK, JSON.stringify({ contrast, size, font }));
   } catch {
     // As above.
   }
@@ -45,17 +57,25 @@ function remembered(): Theme {
   return "system";
 }
 
-function rememberedLook(): { contrast: boolean; size: TextSize } {
+function rememberedLook(): Dressed {
   try {
     const was = JSON.parse(localStorage.getItem(REMEMBERED_LOOK) ?? "null") as {
       contrast?: unknown;
       size?: unknown;
+      font?: unknown;
     } | null;
     const size = was?.size === "small" || was?.size === "large" ? was.size : "normal";
-    return { contrast: was?.contrast === true, size };
+    const font = typeof was?.font === "string" && was.font ? was.font : null;
+    return { contrast: was?.contrast === true, size, font };
   } catch {
-    return { contrast: false, size: "normal" };
+    return { contrast: false, size: "normal", font: null };
   }
+}
+
+/// `system` and blank mean the system's own, as the resident reads them.
+function chosenFont(font: string | null | undefined): string | null {
+  const family = font?.trim();
+  return family && family.toLowerCase() !== "system" ? family : null;
 }
 
 let reread: (() => void) | null = null;
@@ -66,7 +86,7 @@ export function follow() {
   const was = rememberedLook();
 
   paint(chosen, media.matches);
-  dress(was.contrast, was.size);
+  dress(was);
   media.addEventListener("change", () => paint(chosen, media.matches));
 
   reread = () =>
@@ -74,7 +94,11 @@ export function follow() {
       .then(({ prefs }) => {
         chosen = prefs.theme;
         paint(chosen, media.matches);
-        dress(prefs.high_contrast === true, prefs.text_size ?? "normal");
+        dress({
+          contrast: prefs.high_contrast === true,
+          size: prefs.text_size ?? "normal",
+          font: chosenFont(prefs.font),
+        });
       })
       .catch(() => {});
 

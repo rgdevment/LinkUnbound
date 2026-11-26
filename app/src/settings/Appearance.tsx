@@ -3,10 +3,12 @@ import { useEffect, useState } from "react";
 import { type Key, useSpoken, useWords } from "../i18n";
 import { saidPlainly } from "../refusal";
 import { refresh } from "../theme";
+import FontPicker from "./FontPicker";
 import LookPreview from "./LookPreview";
 import {
   CARD,
   type Density,
+  type Fonts,
   type Look,
   type PickerPosition,
   type PickerStyle,
@@ -58,9 +60,18 @@ export default function Appearance() {
   const [look, setLook] = useState<Look | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [fonts, setFonts] = useState<Fonts | null>(null);
 
   useEffect(() => {
     void invoke<Look>("appearance_get").then(setLook).catch(noop);
+  }, []);
+
+  // Read again on coming back, so a font installed meanwhile is offered without leaving the page.
+  useEffect(() => {
+    const read = () => void invoke<Fonts>("fonts_list").then(setFonts).catch(noop);
+    read();
+    window.addEventListener("focus", read);
+    return () => window.removeEventListener("focus", read);
   }, []);
 
   const preview = () => {
@@ -127,6 +138,14 @@ export default function Appearance() {
               value={look.text_size}
               label={t("lookSize")}
               onPick={(text_size) => change({ text_size })}
+            />
+          </Line>
+          <Line title={t("lookFont")} note={t("lookFontNote")}>
+            <FontPicker
+              label={t("lookFont")}
+              fonts={fonts}
+              chosen={look.font}
+              onPick={(font) => change({ font })}
             />
           </Line>
         </Card>

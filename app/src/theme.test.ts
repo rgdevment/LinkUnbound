@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { follow, refresh } from "./theme";
+import { familyCss, follow, refresh } from "./theme";
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
@@ -191,6 +191,7 @@ describe("theme", () => {
       expect(JSON.parse(localStorage.getItem("look-was") ?? "null")).toEqual({
         contrast: true,
         size: "large",
+        font: null,
       });
 
       document.documentElement.classList.remove("contrast", "text-large");
@@ -237,6 +238,7 @@ describe("theme", () => {
         expect(JSON.parse(localStorage.getItem("look-was") ?? "null")).toEqual({
           contrast: false,
           size: "large",
+          font: null,
         });
       });
     });
@@ -252,6 +254,117 @@ describe("theme", () => {
       invoke.mockReturnValue(new Promise(() => {}));
       follow();
       expect(classes()).toEqual([]);
+    });
+  });
+
+  describe("the font", () => {
+    const worn = () => document.documentElement.style.getPropertyValue("--worn-font");
+
+    beforeEach(() => {
+      document.documentElement.style.removeProperty("--worn-font");
+      systemPrefers(false);
+    });
+
+    it("wears the family the backend chose, quoted", async () => {
+      invoke.mockResolvedValue({ prefs: { theme: "light", font: "Courier New" } });
+      follow();
+      await settled();
+      expect(worn()).toBe('"Courier New", "Segoe UI Variable Text"');
+    });
+
+    it.each([
+      ["null", null],
+      ["system", "system"],
+      ["System in capitals", "SYSTEM"],
+      ["blank", "   "],
+      ["empty", ""],
+      ["missing", undefined],
+    ])("wears none when the font is %s", async (_what, font) => {
+      document.documentElement.style.setProperty("--worn-font", '"Old"');
+      invoke.mockResolvedValue({ prefs: { theme: "light", font } });
+      follow();
+      await settled();
+      expect(worn()).toBe("");
+    });
+
+    it("takes the font off again when it is reset", async () => {
+      invoke.mockResolvedValueOnce({ prefs: { theme: "light", font: "Calibri" } });
+      follow();
+      await settled();
+      expect(worn()).toBe('"Calibri", "Segoe UI Variable Text"');
+      invoke.mockResolvedValueOnce({ prefs: { theme: "light", font: null } });
+      refresh();
+      await settled();
+      expect(worn()).toBe("");
+    });
+
+    it("trims the name it was given", async () => {
+      invoke.mockResolvedValue({ prefs: { theme: "light", font: "  Calibri " } });
+      follow();
+      await settled();
+      expect(worn()).toBe('"Calibri", "Segoe UI Variable Text"');
+    });
+
+    it("remembers it for the first frame of the next open", async () => {
+      invoke.mockResolvedValue({ prefs: { theme: "light", font: "Comic Sans MS" } });
+      follow();
+      await settled();
+      expect(JSON.parse(localStorage.getItem("look-was") ?? "null").font).toBe("Comic Sans MS");
+
+      document.documentElement.style.removeProperty("--worn-font");
+      invoke.mockReturnValue(new Promise(() => {}));
+      follow();
+      expect(worn()).toBe('"Comic Sans MS", "Segoe UI Variable Text"');
+    });
+
+    it.each([
+      ["a number", 3],
+      ["an empty string", ""],
+      ["null", null],
+    ])("ignores a remembered font that is %s", (_what, font) => {
+      localStorage.setItem("look-was", JSON.stringify({ contrast: false, size: "normal", font }));
+      invoke.mockReturnValue(new Promise(() => {}));
+      follow();
+      expect(worn()).toBe("");
+    });
+
+    describe("on the welcome", () => {
+      beforeEach(() => {
+        window.location.hash = "#welcome";
+      });
+      afterEach(() => {
+        window.location.hash = "";
+      });
+
+      it("is never set, though the other windows still remember it", async () => {
+        invoke.mockResolvedValue({ prefs: { theme: "light", font: "Calibri" } });
+        follow();
+        await settled();
+        expect(worn()).toBe("");
+        expect(JSON.parse(localStorage.getItem("look-was") ?? "null").font).toBe("Calibri");
+      });
+
+      it("is not set from the remembered look either", () => {
+        localStorage.setItem(
+          "look-was",
+          JSON.stringify({ contrast: false, size: "normal", font: "Calibri" }),
+        );
+        invoke.mockReturnValue(new Promise(() => {}));
+        follow();
+        expect(worn()).toBe("");
+      });
+    });
+  });
+
+  describe("familyCss", () => {
+    it("quotes a plain family", () => {
+      expect(familyCss("Segoe UI")).toBe('"Segoe UI"');
+    });
+
+    it("escapes quotes and backslashes so the name cannot leave its string", () => {
+      expect(familyCss('A"B')).toBe('"A\\"B"');
+      expect(familyCss("A\\B")).toBe('"A\\\\B"');
+      expect(familyCss('x\\"; color: red')).toBe('"x\\\\\\"; color: red"');
     });
   });
 });
