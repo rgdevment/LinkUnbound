@@ -139,19 +139,22 @@ nothing_that_takes_the_picker_down() {
 }
 
 unsafe_stays_where_it_was_audited() {
-  # native.rs is the Win32 surface the picker needs; shop.rs talks to the Store and reaches
-  # unsafe only to hand it a window handle and to join the process apartment. The Mac crate
-  # reaches it for framework statics, blocks, a class of its own and the window behind a raw
-  # handle; its own audit test lists the same files.
+  # native.rs is the Win32 surface the picker needs; fonts.rs asks DirectWrite and CoreText for
+  # the installed families; shop.rs talks to the Store and reaches unsafe only to hand it a window
+  # handle and to join the process apartment. The Mac crate reaches it for framework statics,
+  # blocks, a class of its own and the window behind a raw handle; its own audit test lists the
+  # same files.
   local audited found
   audited="app/src-tauri/src/shop.rs
 crates/linkunbound-mac/src/events.rs
+crates/linkunbound-mac/src/fonts.rs
 crates/linkunbound-mac/src/glass.rs
 crates/linkunbound-mac/src/icons.rs
 crates/linkunbound-mac/src/native.rs
 crates/linkunbound-mac/src/registration.rs
 crates/linkunbound-mac/src/startup.rs
 crates/linkunbound-mac/tests/main_thread.rs
+crates/linkunbound-win/src/fonts.rs
 crates/linkunbound-win/src/native.rs"
   found=$(grep -rln 'allow(unsafe_code)' crates app/src-tauri/src --include='*.rs' | sort)
   if [ "$found" != "$(printf '%s\n' "$audited" | sort)" ]; then

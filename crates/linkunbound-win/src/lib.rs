@@ -1,6 +1,8 @@
 #[cfg(windows)]
 mod detect;
 #[cfg(windows)]
+pub mod fonts;
+#[cfg(windows)]
 mod icons;
 #[cfg(windows)]
 mod native;
@@ -45,9 +47,9 @@ mod audit {
     use std::fs;
     use std::path::Path;
 
-    /// `native.rs` is the audited exception. Anything else reaching for `unsafe`
-    /// has to be reviewed and added here deliberately, never by accident.
-    const AUDITED: [&str; 1] = ["native.rs"];
+    /// `native.rs` and the DirectWrite calls in `fonts.rs` are the audited exceptions. Anything
+    /// else reaching for `unsafe` has to be reviewed and added here deliberately, never by accident.
+    const AUDITED: [&str; 2] = ["fonts.rs", "native.rs"];
 
     /// Split so this file does not match its own search.
     const NEEDLE: &str = concat!("allow(unsafe", "_code)");
@@ -77,7 +79,7 @@ mod audit {
     }
 
     #[test]
-    fn unsafe_stays_in_the_one_place_it_was_audited() {
+    fn unsafe_stays_in_the_places_it_was_audited() {
         let mut found = Vec::new();
         rust_files(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src").as_path(),

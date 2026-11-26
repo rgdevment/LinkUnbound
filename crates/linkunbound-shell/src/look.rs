@@ -1,10 +1,13 @@
 //! How the picker is drawn: which look, and the material behind it where the system lends one.
 
 use linkunbound_core::{PickerPosition, PickerStyle, Preferences};
-use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, measure, place};
+use linkunbound_shell::{
+    CLASSIC_CORNER, CORNER, HALO, Look, Notice, Palette, Picker, font, measure, place,
+};
 use slint::ComponentHandle;
 
-pub fn obey(picker: &Picker, prefs: &Preferences) {
+pub fn obey(picker: &Picker, notice: &Notice, prefs: &Preferences) {
+    font::wear(picker, notice, prefs.chosen_font());
     // Contrast is set before the style: the sheet it asks for is settled with the style.
     measure::wear(picker, prefs.text_size, prefs.density, prefs.high_contrast);
     style(picker, prefs.picker_style);

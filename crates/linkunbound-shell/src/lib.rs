@@ -2,6 +2,7 @@
 
 slint::include_modules!();
 
+pub mod font;
 pub mod hotkey;
 pub mod measure;
 pub mod place;
@@ -21,17 +22,7 @@ use linkunbound_core::{
 pub fn paint(picker: &Picker, notice: &Notice, light: bool) {
     picker.global::<Palette>().set_light(light);
     notice.global::<Palette>().set_light(light);
-    picker.set_family(FAMILY.into());
-    notice.set_family(FAMILY.into());
 }
-
-pub const FAMILY: &str = if cfg!(windows) {
-    "Segoe UI"
-} else if cfg!(target_os = "macos") {
-    ".SF NS"
-} else {
-    ""
-};
 
 /// What this copy is, for the update strip to compare against what settings found.
 pub const HERE: &str = env!("CARGO_PKG_VERSION");
@@ -1470,12 +1461,6 @@ mod tests {
         paint(&picker, &notice, false);
         assert!(!picker.global::<Palette>().get_light());
         assert!(!notice.global::<Palette>().get_light());
-        assert_eq!(picker.get_family(), crate::FAMILY);
-        assert_eq!(notice.get_family(), crate::FAMILY);
-        assert_eq!(
-            crate::FAMILY.is_empty(),
-            !cfg!(any(windows, target_os = "macos"))
-        );
     }
 
     /// An icon that fails to load leaves a blank square rather than stopping the picker, so

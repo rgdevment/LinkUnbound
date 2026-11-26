@@ -778,7 +778,7 @@ impl Ui {
         let light = wants_light(prefs.theme);
         self.light_seen.set(light);
         paint(&self.picker, &self.notice, light);
-        look::obey(&self.picker, prefs);
+        look::obey(&self.picker, &self.notice, prefs);
         if let Some(tray) = self.tray.as_ref() {
             tray.show(true);
             tray.relabel(&self.words.get());
