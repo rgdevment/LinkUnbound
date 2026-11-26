@@ -1,6 +1,7 @@
 mod about;
 mod editing;
 mod news;
+mod rules;
 mod shell;
 mod shop;
 mod star;
@@ -9,10 +10,7 @@ mod update;
 mod welcome;
 
 use editing::{BrowserView, Edit, added, edited, free_id, hidden_in, readable, views, without};
-use linkunbound_core::{
-    Browser, Language, Preferences, Rule, Scope, Store, Strings, Target, host_of, is_public_suffix,
-    merge, normalise, same_name, site_of,
-};
+use linkunbound_core::{Browser, Language, Preferences, Store, Strings, merge};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -67,267 +65,6 @@ fn store() -> Store {
 fn catalogue() -> Vec<Browser> {
     let saved = store().browsers().map(|c| c.browsers).unwrap_or_default();
     merge(system::browsers(), &saved)
-}
-
-/// The rule as the settings window shows it: what it covers, where it opens and
-/// whether the browser it names is still installed.
-#[derive(Serialize)]
-struct RuleView {
-    id: String,
-    /// As stored, so the screen can offer to change it without matching names.
-    browser_id: String,
-    profile_id: Option<String>,
-    kind: &'static str,
-    covers: String,
-    browser: String,
-    profile: Option<String>,
-    icon: Option<String>,
-    private: bool,
-    source_app: Option<String>,
-    resolved: bool,
-}
-
-fn is_scheme(said: &str) -> bool {
-    said.starts_with(|c: char| c.is_ascii_alphabetic())
-        && said
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
-}
-
-/// What the picker would have saved for the app typed: on a Mac its bundle id when one is
-/// installed by that name, so the rule outlives a change of language; otherwise the name.
-fn app_key(said: &str) -> String {
-    #[cfg(target_os = "macos")]
-    if let Some(id) = linkunbound_mac::bundle_id_named(said) {
-        return id;
-    }
-    said.to_lowercase().trim_end_matches(".exe").to_owned()
-}
-
-/// An app typed by its name is the app a rule already saved by bundle id, when that id goes by
-/// the same name: the form would otherwise add a second rule the first one hides.
-fn named_alike(rules: &[Rule], rule: &Rule) -> bool {
-    let Some(typed) = rule.source_app.as_deref() else {
-        return false;
-    };
-    let names = |said: &str| [said.to_owned(), shown_origin(said)];
-    let wanted = names(typed);
-    rules.iter().any(|r| {
-        r.scope == rule.scope
-            && r.source_app.as_deref().is_some_and(|saved| {
-                names(saved)
-                    .iter()
-                    .any(|name| wanted.iter().any(|typed| same_name(name, typed)))
-            })
-    })
-}
-
-/// A Mac picker saves the bundle id, which no language changes; the person reads the app's name.
-fn shown_origin(saved: &str) -> String {
-    #[cfg(target_os = "macos")]
-    if let Some(name) = linkunbound_mac::app_named(saved) {
-        return name;
-    }
-    saved.to_owned()
-}
-
-fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
-    let found = browsers.iter().find(|b| b.id == rule.target.browser_id);
-    let profile = rule.target.profile_id.as_ref().and_then(|id| {
-        found
-            .and_then(|b| b.profiles.iter().find(|p| &p.id == id))
-            .map(|p| p.name.clone())
-    });
-    let (kind, covers) = match &rule.scope {
-        Scope::Any => ("any", String::new()),
-        Scope::Url(u) => ("url", u.clone()),
-        Scope::Host(h) => ("host", h.clone()),
-        Scope::Site(d) => ("site", d.clone()),
-    };
-    // A profile that is gone is a rule that never fires, however present its browser.
-    let resolved = found.is_some() && (rule.target.profile_id.is_none() || profile.is_some());
-    RuleView {
-        id: rule.id.clone(),
-        browser_id: rule.target.browser_id.clone(),
-        profile_id: rule.target.profile_id.clone(),
-        kind,
-        covers,
-        browser: found.map_or_else(|| rule.target.browser_id.clone(), |b| b.name.clone()),
-        profile,
-        icon: found.and_then(|b| icon_data(&b.exe, &b.id)),
-        private: rule.private,
-        source_app: rule.source_app.as_deref().map(shown_origin),
-        resolved,
-    }
-}
-
-#[tauri::command]
-fn rules_list() -> Result<Vec<RuleView>, String> {
-    let browsers = catalogue();
-    Ok(store()
-        .rules()
-        .map_err(|e| e.to_string())?
-        .rules
-        .iter()
-        .map(|r| describe(r, &browsers))
-        .collect())
-}
-
-#[tauri::command]
-fn rules_remove(id: String) -> Result<Vec<RuleView>, String> {
-    store()
-        .edit_rules(|rules| rules.remove(&id))
-        .map_err(|e| e.to_string())?;
-    rules_list()
-}
-
-/// What the form said, turned into the rule the picker would have written for the same choice:
-/// the same scopes, the same origin binding, the same target. Refused, by name, when the value
-/// is not what the kind needs or the destination is gone.
-fn rule_from(
-    kind: &str,
-    value: &str,
-    target: Target,
-    private: bool,
-    browsers: &[Browser],
-) -> Result<Rule, &'static str> {
-    let Some(browser) = browsers.iter().find(|b| b.id == target.browser_id) else {
-        return Err("browserGone");
-    };
-    if let Some(profile) = target.profile_id.as_deref()
-        && !browser.profiles.iter().any(|p| p.id == profile)
-    {
-        return Err("browserGone");
-    }
-    // Saved, such a rule would wear the badge and never fire: the launch refuses it and the link
-    // falls through to the picker, which does not offer that browser privately either.
-    if private && !browser.supports_private() {
-        return Err("rulePrivateImpossible");
-    }
-    let said = value.trim();
-    if said.is_empty() {
-        return Err("ruleValueEmpty");
-    }
-    // Read the way an arriving link's host is read, so `user@`, a port or a trailing dot come out
-    // as the host a rule is matched against. A wildcard never matches; a lone name like
-    // `intranet` is a host when no path follows it, as the picker already treats it.
-    let host_named = || -> Result<String, &'static str> {
-        // Only a scheme at the very start makes it a link: `a.com/?next=https://b.com` is a.com.
-        let bare = match said.split_once("://") {
-            Some((scheme, rest)) if is_scheme(scheme) => rest,
-            _ => said,
-        }
-        .trim_end_matches('/');
-        let host = host_of(&format!("https://{bare}")).ok_or("ruleValueNotHost")?;
-        let single = !host.contains('.') && !host.starts_with('[');
-        if host.contains('*') || (single && bare.contains(['/', '\\', '?', '#'])) {
-            return Err("ruleValueNotHost");
-        }
-        Ok(host)
-    };
-    // A site is a registrable domain: a lone name is either a whole country's ending (`np`) or
-    // a word that no address carries as its site (`github`).
-    let site_named = || -> Result<String, &'static str> {
-        let site = site_of(&host_named()?);
-        if !site.contains('.') && !site.starts_with('[') {
-            return Err("ruleValueNotSite");
-        }
-        if is_public_suffix(&site) {
-            return Err("ruleValueIsSuffix");
-        }
-        Ok(site)
-    };
-    let (scope, source_app) = match kind {
-        "url" => {
-            let url = normalise(said).ok_or("ruleValueNotUrl")?;
-            (Scope::Url(url), None)
-        }
-        "host" => (Scope::Host(host_named()?), None),
-        "site" => (Scope::Site(site_named()?), None),
-        // «Slack» and «Slack.exe» both mean the app somebody sees in «Desde …».
-        "app" => (Scope::Any, Some(app_key(said))),
-        _ => return Err("ruleKindUnknown"),
-    };
-    Ok(Rule {
-        id: String::new(),
-        scope,
-        source_app,
-        target,
-        private,
-    })
-}
-
-// Async so it runs off the main thread: on a Mac an app typed by name may be looked for among
-// every installed one.
-#[tauri::command(async)]
-fn rules_add(
-    kind: String,
-    value: String,
-    browser_id: String,
-    profile_id: Option<String>,
-    private: bool,
-) -> Result<Vec<RuleView>, String> {
-    let target = Target {
-        browser_id,
-        profile_id,
-    };
-    let rule = rule_from(&kind, &value, target, private, &catalogue()).map_err(str::to_owned)?;
-    // The picker replaces on purpose — «always here» again is a change of mind — but a form
-    // that overwrote a rule the person forgot they had would do it without a word.
-    let mut standing = false;
-    store()
-        .edit_rules(|rules| {
-            if rules.standing_in_for(&rule).is_some() || named_alike(&rules.rules, &rule) {
-                standing = true;
-                return false;
-            }
-            rules.upsert(rule);
-            true
-        })
-        .map_err(|e| e.to_string())?;
-    if standing {
-        return Err("ruleExists".to_owned());
-    }
-    rules_list()
-}
-
-/// In place: remaking the rule would send it to the end of the order.
-#[tauri::command]
-fn rules_retarget(
-    id: String,
-    browser_id: String,
-    profile_id: Option<String>,
-) -> Result<Vec<RuleView>, String> {
-    let target = Target {
-        browser_id,
-        profile_id,
-    };
-    let browsers = catalogue();
-    let opens_privately = browsers
-        .iter()
-        .find(|b| b.id == target.browser_id)
-        .is_some_and(Browser::supports_private);
-    let mut refused = false;
-    let changed = store()
-        .edit_rules(|rules| {
-            if rules
-                .rules
-                .iter()
-                .any(|r| r.id == id && r.private && !opens_privately)
-            {
-                refused = true;
-                return false;
-            }
-            rules.retarget(&id, target.clone())
-        })
-        .map_err(|e| e.to_string())?;
-    if refused {
-        return Err("rulePrivateImpossible".to_owned());
-    }
-    if !changed {
-        return Err("ruleGone".to_owned());
-    }
-    rules_list()
 }
 
 #[tauri::command]
@@ -1018,10 +755,12 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(Updating::default())
         .invoke_handler(tauri::generate_handler![
-            rules_list,
-            rules_add,
-            rules_remove,
-            rules_retarget,
+            rules::rules_list,
+            rules::rules_add,
+            rules::rules_edit,
+            rules::rules_remove,
+            rules::rules_retarget,
+            rules::rules_probe,
             browsers_list,
             browsers_set_hidden,
             browsers_remove,
@@ -1150,11 +889,11 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        Edit, Errand, Store, added, describe, duplicated_in, edited, errand_in, far_along, free_id,
+        Edit, Errand, Store, added, duplicated_in, edited, errand_in, far_along, free_id,
         hidden_in, keep_in, ordered, readable, rescanned, spoken, without,
     };
     use crate::editing::seen;
-    use linkunbound_core::{Locale, Preferences, Profile, Rule, Scope, Target};
+    use linkunbound_core::{Locale, Preferences, Profile};
 
     /// The resident's errands are told apart from a launch that wants the window, and from each
     /// other; a stray word in the arguments is not one.
@@ -1175,202 +914,6 @@ mod tests {
             errand_in(&args(&["settings.exe", "update"])),
             None,
             "not a flag"
-        );
-    }
-
-    fn with_profiles(id: &str, profiles: &[&str]) -> linkunbound_core::Browser {
-        linkunbound_core::Browser {
-            profiles: profiles
-                .iter()
-                .map(|p| Profile {
-                    id: (*p).to_owned(),
-                    name: (*p).to_owned(),
-                    args: vec![],
-                })
-                .collect(),
-            ..detected(id)
-        }
-    }
-
-    fn aimed(browser: &str, profile: Option<&str>) -> Target {
-        Target {
-            browser_id: browser.to_owned(),
-            profile_id: profile.map(str::to_owned),
-        }
-    }
-
-    /// The form writes the same rule the picker would for the same choice, so the two ways in
-    /// cannot disagree about what a kind means.
-    #[test]
-    fn a_rule_from_the_form_covers_what_its_kind_says() {
-        use super::rule_from;
-        let all = vec![with_profiles("chrome", &["Default"]), detected("firefox")];
-
-        let url = rule_from(
-            "url",
-            " https://docs.google.com/a?b=1 ",
-            aimed("firefox", None),
-            false,
-            &all,
-        )
-        .expect("a url");
-        assert_eq!(
-            url.scope,
-            Scope::Url("https://docs.google.com/a?b=1".to_owned())
-        );
-        assert!(url.source_app.is_none());
-
-        let host = rule_from(
-            "host",
-            "https://docs.google.com/x",
-            aimed("firefox", None),
-            true,
-            &all,
-        )
-        .expect("a host, read off a url");
-        assert_eq!(host.scope, Scope::Host("docs.google.com".to_owned()));
-        assert!(host.private);
-
-        let site = rule_from(
-            "site",
-            "Docs.Google.com",
-            aimed("chrome", Some("Default")),
-            false,
-            &all,
-        )
-        .expect("a site, read off a bare host");
-        assert_eq!(site.scope, Scope::Site("google.com".to_owned()));
-
-        let app =
-            rule_from("app", "Slack.EXE", aimed("firefox", None), false, &all).expect("an app");
-        assert_eq!(app.scope, Scope::Any);
-        assert_eq!(
-            app.source_app.as_deref(),
-            Some("slack"),
-            "as the picker records an origin: lowercased, without the executable's suffix"
-        );
-
-        let odd = rule_from(
-            "host",
-            "User@Docs.Google.com:8443/x.",
-            aimed("firefox", None),
-            false,
-            &all,
-        )
-        .expect("a host, read the way a link's host is read");
-        assert_eq!(odd.scope, Scope::Host("docs.google.com".to_owned()));
-    }
-
-    #[test]
-    fn an_app_typed_by_name_is_the_one_a_rule_already_names() {
-        use super::named_alike;
-        let saved = |app: &str| Rule {
-            id: String::new(),
-            scope: Scope::Any,
-            source_app: Some(app.to_owned()),
-            target: aimed("chrome", None),
-            private: false,
-        };
-        let typed = saved("slack");
-        assert!(named_alike(&[saved("Slack")], &typed));
-        assert!(!named_alike(&[saved("teams")], &typed));
-        #[cfg(target_os = "macos")]
-        assert!(named_alike(&[saved("com.apple.Safari")], &saved("safari")));
-    }
-
-    /// The picker saves a rule for `intranet` or `localhost`; the form has to accept what the
-    /// picker writes, or the same rule can be made one way and not the other.
-    #[test]
-    fn a_single_name_is_a_host_in_the_form_as_in_the_picker() {
-        use super::rule_from;
-        let all = vec![with_profiles("chrome", &["Default"])];
-        for (said, host) in [
-            ("localhost", "localhost"),
-            ("intranet", "intranet"),
-            ("https://intranet/", "intranet"),
-            ("localhost:3000", "localhost"),
-            ("https://intranet:8080/", "intranet"),
-            ("intranet.", "intranet"),
-            ("ana@intranet", "intranet"),
-        ] {
-            let rule = rule_from("host", said, aimed("chrome", None), false, &all).expect(said);
-            assert_eq!(rule.scope, Scope::Host(host.to_owned()), "{said}");
-        }
-        let site =
-            rule_from("site", "bbc.co.uk", aimed("chrome", None), false, &all).expect("a site");
-        assert_eq!(site.scope, Scope::Site("bbc.co.uk".to_owned()));
-    }
-
-    /// Every refusal names what to fix; none of them writes a rule that would match nothing or
-    /// open nowhere.
-    #[test]
-    fn a_rule_from_the_form_is_refused_by_name() {
-        use super::rule_from;
-        let all = vec![with_profiles("chrome", &["Default"])];
-        let chrome = || aimed("chrome", None);
-
-        assert_eq!(
-            rule_from("url", "   ", chrome(), false, &all),
-            Err("ruleValueEmpty")
-        );
-        assert_eq!(
-            rule_from("url", "not a url", chrome(), false, &all),
-            Err("ruleValueNotUrl")
-        );
-        assert_eq!(
-            rule_from("host", "just words", chrome(), false, &all),
-            Err("ruleValueNotHost")
-        );
-        assert_eq!(
-            rule_from("host", "*.example.com", chrome(), false, &all),
-            Err("ruleValueNotHost")
-        );
-        assert_eq!(
-            rule_from("site", "co.uk", chrome(), false, &all),
-            Err("ruleValueIsSuffix")
-        );
-        for said in [
-            "github.com/login?return_to=https://gitlab.com/",
-            "example.com/redirect/https://foo",
-        ] {
-            let rule = rule_from("host", said, chrome(), false, &all).expect(said);
-            assert_ne!(rule.scope, Scope::Host("gitlab.com".to_owned()), "{said}");
-            assert_ne!(rule.scope, Scope::Host("foo".to_owned()), "{said}");
-        }
-        for said in [r"a\b.com", r"intranet\reports"] {
-            assert_eq!(
-                rule_from("host", said, chrome(), false, &all),
-                Err("ruleValueNotHost"),
-                "{said}"
-            );
-        }
-        for said in ["np", "github", "intranet"] {
-            assert_eq!(
-                rule_from("site", said, chrome(), false, &all),
-                Err("ruleValueNotSite"),
-                "{said}"
-            );
-        }
-        assert_eq!(
-            rule_from("site", "https://github.io/", chrome(), false, &all),
-            Err("ruleValueIsSuffix")
-        );
-        assert_eq!(
-            rule_from("site", "a/b.com", chrome(), false, &all),
-            Err("ruleValueNotHost")
-        );
-        assert_eq!(
-            rule_from("when", "x.com", chrome(), false, &all),
-            Err("ruleKindUnknown")
-        );
-        assert_eq!(
-            rule_from("site", "x.com", aimed("edge", None), false, &all),
-            Err("browserGone")
-        );
-        assert_eq!(
-            rule_from("site", "x.com", aimed("chrome", Some("Work")), false, &all),
-            Err("browserGone"),
-            "a profile the browser does not have is a destination that is gone"
         );
     }
 
@@ -1527,7 +1070,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    fn detected(id: &str) -> linkunbound_core::Browser {
+    pub(crate) fn detected(id: &str) -> linkunbound_core::Browser {
         linkunbound_core::Browser {
             id: id.to_owned(),
             name: "Google Chrome".to_owned(),
@@ -1544,43 +1087,6 @@ mod tests {
             hidden: false,
             keys: Default::default(),
         }
-    }
-
-    fn rule_for(browser: &str, profile: Option<&str>) -> Rule {
-        Rule {
-            id: "r1".to_owned(),
-            scope: Scope::Site("github.com".to_owned()),
-            source_app: None,
-            target: Target {
-                browser_id: browser.to_owned(),
-                profile_id: profile.map(str::to_owned),
-            },
-            private: false,
-        }
-    }
-
-    #[test]
-    fn a_rule_pointing_at_a_browser_that_is_gone_is_not_called_resolved() {
-        let installed = [detected("chrome")];
-
-        let live = describe(&rule_for("chrome", Some("Default")), &installed);
-        assert!(live.resolved);
-        assert_eq!(live.browser, "Google Chrome");
-        assert_eq!(live.profile.as_deref(), Some("Personal"));
-
-        let gone = describe(&rule_for("brave", None), &installed);
-        assert!(
-            !gone.resolved,
-            "an uninstalled browser must not read as live"
-        );
-        assert_eq!(gone.browser, "brave", "and it still names what it was");
-    }
-
-    #[test]
-    fn a_rule_carries_the_destination_it_was_saved_with() {
-        let view = describe(&rule_for("chrome", Some("Default")), &[detected("chrome")]);
-        assert_eq!(view.browser_id, "chrome");
-        assert_eq!(view.profile_id.as_deref(), Some("Default"));
     }
 
     #[test]
