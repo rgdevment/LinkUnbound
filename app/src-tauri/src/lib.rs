@@ -445,8 +445,6 @@ async fn install_from(
     from_the_window: bool,
     started: &std::sync::atomic::AtomicBool,
 ) -> Result<(), String> {
-    use tauri_plugin_updater::UpdaterExt;
-
     let kept = update::route();
     if kept.route == update::Route::Store {
         return take_from_the_shop(app).await;
@@ -490,29 +488,18 @@ async fn install_from(
     progress("starting", 0);
     started.store(true, std::sync::atomic::Ordering::Release);
 
-    let asked = want.clone();
-    let mut building = app.updater_builder();
-    if let Some(platform) = update::platform(translated()) {
-        building = building.target(platform);
+    let mut update = offered(&app, &want, None).await?;
+    if let Some(signed) = update
+        .as_ref()
+        .map(|one| one.signature.clone())
+        .filter(|signature| linkunbound_core::update::signed_by(signature, update::SPARE_KEY))
+    {
+        // The feed is read twice; a second answer with another signature is not the one checked.
+        update = offered(&app, &want, Some(update::SPARE_KEY)).await?;
+        if update.as_ref().is_some_and(|one| one.signature != signed) {
+            return Err("updateFailed".to_owned());
+        }
     }
-    let update = building
-        .endpoints(
-            update::feeds_for(&want)
-                .into_iter()
-                .map(str::parse)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| "updateFailed".to_owned())?,
-        )
-        .map_err(|why| why.to_string())?
-        // Pinned to what the person was shown, so a feed that moves in between cannot quietly
-        // hand them a different version than the one they agreed to.
-        .version_comparator(move |_, release| release.version.to_string() == asked)
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|why| why.to_string())?
-        .check()
-        .await
-        .map_err(|why| why.to_string())?;
 
     let Some(mut update) = update else {
         return Err(moved_on(dir, kept, looked.candidates).await);
@@ -633,6 +620,40 @@ fn relaunch_resident() {
     let _ = linkunbound_core::spawn_and_forget(
         std::process::Command::new(resident).arg(linkunbound_core::HUSHED),
     );
+}
+
+async fn offered(
+    app: &AppHandle,
+    want: &str,
+    key: Option<&str>,
+) -> Result<Option<tauri_plugin_updater::Update>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let asked = want.to_owned();
+    let mut building = app.updater_builder();
+    if let Some(platform) = update::platform(translated()) {
+        building = building.target(platform);
+    }
+    if let Some(key) = key {
+        building = building.pubkey(key);
+    }
+    building
+        .endpoints(
+            update::feeds_for(want)
+                .into_iter()
+                .map(str::parse)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| "updateFailed".to_owned())?,
+        )
+        .map_err(|why| why.to_string())?
+        // Pinned to the version the person was shown, so a feed that moves cannot swap it.
+        .version_comparator(move |_, release| release.version.to_string() == asked)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|why| why.to_string())?
+        .check()
+        .await
+        .map_err(|why| why.to_string())
 }
 
 async fn moved_on(dir: &std::path::Path, kept: update::Kept, wants: Option<bool>) -> String {
