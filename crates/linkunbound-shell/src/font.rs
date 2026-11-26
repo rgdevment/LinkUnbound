@@ -113,11 +113,28 @@ mod tests {
     fn a_mac_offers_only_families_coretext_lists_and_the_picker_draws() {
         let offered = super::families();
         let listed = linkunbound_mac::fonts::families();
+        let mut drawn = fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: true,
+        });
         assert!(offered.iter().all(|one| listed.contains(one)));
+        let undrawn: Vec<&str> = offered
+            .iter()
+            .map(|one| one.name.as_str())
+            .filter(|name| drawn.family_by_name(name).is_none())
+            .collect();
+        assert!(undrawn.is_empty(), "{undrawn:?}");
         assert!(
             offered.iter().any(|one| one.name == "Helvetica"),
             "{offered:?}"
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_font_list_asks_the_one_fontique_slint_draws_with() {
+        let lock = include_str!("../../../Cargo.lock");
+        assert_eq!(lock.matches("name = \"fontique\"\n").count(), 1);
     }
 
     /// Segoe UI on an English Windows; Yu Gothic UI and the like where the system writes in them.
