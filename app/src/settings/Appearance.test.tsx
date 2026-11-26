@@ -15,6 +15,15 @@ const LOOK: Look = {
   picker_style: "bear",
   density: "normal",
   picker_position: "pointer",
+  font: null,
+};
+
+const FONTS = {
+  system: "Segoe UI",
+  families: [
+    { name: "Arial", label: "Arial" },
+    { name: "Courier New", label: "Courier New" },
+  ],
 };
 
 const REFUSAL = "the file could not be written";
@@ -33,6 +42,7 @@ function answers(start: Look = LOOK, fail?: string) {
       return Promise.resolve(held);
     }
     if (cmd === "prefs_get") return Promise.resolve({ prefs: { ...held } });
+    if (cmd === "fonts_list") return Promise.resolve(FONTS);
     return Promise.resolve(null);
   });
 }
@@ -68,6 +78,7 @@ describe("appearance settings", () => {
       picker_style: "sheet",
       density: "comfortable",
       picker_position: "center",
+      font: null,
     });
     await mount();
     expect(group("Tema").getByRole("radio", { name: "Oscuro" })).toBeChecked();
@@ -300,6 +311,7 @@ describe("appearance settings", () => {
         picker_style: "compact",
         density: "comfortable",
         picker_position: "center",
+        font: null,
       });
       await mount();
       await userEvent.click(screen.getByRole("button", { name: "Restablecer la apariencia" }));
@@ -318,7 +330,9 @@ describe("appearance settings", () => {
     it("keeps what was in force when the reset is refused", async () => {
       const held: Look = { ...LOOK, theme: "dark", high_contrast: true, text_size: "large" };
       invoke.mockImplementation((cmd: string) =>
-        cmd === "appearance_reset" ? Promise.reject(REFUSAL) : Promise.resolve(held),
+        cmd === "appearance_reset"
+          ? Promise.reject(REFUSAL)
+          : Promise.resolve(cmd === "fonts_list" ? FONTS : held),
       );
       const { container } = await mount();
       await userEvent.click(screen.getByRole("button", { name: "Restablecer la apariencia" }));
@@ -332,7 +346,9 @@ describe("appearance settings", () => {
 
     it("surfaces a refusal", async () => {
       invoke.mockImplementation((cmd: string) =>
-        cmd === "appearance_reset" ? Promise.reject(REFUSAL) : Promise.resolve(LOOK),
+        cmd === "appearance_reset"
+          ? Promise.reject(REFUSAL)
+          : Promise.resolve(cmd === "fonts_list" ? FONTS : LOOK),
       );
       await mount();
       await userEvent.click(screen.getByRole("button", { name: "Restablecer la apariencia" }));
@@ -388,5 +404,99 @@ describe("appearance settings", () => {
         expect(miniature(container)).toHaveTextContent("Chrome");
       },
     );
+  });
+
+  describe("the font", () => {
+    const opener = (current: string) => screen.getByRole("button", { name: `Fuente: ${current}` });
+    const SYSTEM = "Sistema (Segoe UI) · predeterminada";
+
+    it("shows System as the font in force by default", async () => {
+      await mount();
+      expect(opener(SYSTEM)).toBeInTheDocument();
+      expect(screen.getByText("Cualquiera instalada en el equipo")).toBeInTheDocument();
+    });
+
+    it("shows the family that is in force", async () => {
+      answers({ ...LOOK, font: "Courier New" });
+      await mount();
+      expect(opener("Courier New")).toBeInTheDocument();
+    });
+
+    it("sends the English name of the family that was picked", async () => {
+      await mount();
+      await userEvent.click(opener(SYSTEM));
+      await userEvent.click(screen.getByRole("option", { name: "Courier New" }));
+      expect(invoke).toHaveBeenCalledWith("appearance_set", {
+        appearance: { ...LOOK, font: "Courier New" },
+      });
+      await waitFor(() => expect(opener("Courier New")).toBeInTheDocument());
+    });
+
+    it("sends null when System is picked again", async () => {
+      answers({ ...LOOK, font: "Arial" });
+      await mount();
+      await userEvent.click(opener("Arial"));
+      await userEvent.click(screen.getByRole("option", { name: SYSTEM }));
+      expect(invoke).toHaveBeenCalledWith("appearance_set", {
+        appearance: { ...LOOK, font: null },
+      });
+    });
+
+    it("sends nothing when the list is closed with Escape", async () => {
+      await mount();
+      await userEvent.click(opener(SYSTEM));
+      await userEvent.keyboard("{Escape}");
+      expect(invoke.mock.calls.filter(([cmd]) => cmd === "appearance_set")).toHaveLength(0);
+    });
+
+    it("redraws an open preview with the new font", async () => {
+      await mount();
+      await userEvent.click(screen.getByRole("button", { name: "Vista previa" }));
+      await userEvent.click(opener(SYSTEM));
+      await userEvent.click(screen.getByRole("option", { name: "Arial" }));
+      await waitFor(() => expect(previews()).toBe(2));
+    });
+
+    it("puts the old font back when the change is refused", async () => {
+      answers(LOOK, REFUSAL);
+      await mount();
+      await userEvent.click(opener(SYSTEM));
+      await userEvent.click(screen.getByRole("option", { name: "Arial" }));
+      await screen.findByText(/could not be written/);
+      expect(opener(SYSTEM)).toBeInTheDocument();
+    });
+
+    it("brings System back on reset", async () => {
+      answers({ ...LOOK, font: "Courier New" });
+      await mount();
+      await userEvent.click(screen.getByRole("button", { name: "Restablecer la apariencia" }));
+      await waitFor(() => expect(opener(SYSTEM)).toBeInTheDocument());
+    });
+
+    it("keeps the button disabled when the fonts cannot be listed", async () => {
+      invoke.mockImplementation((cmd: string) =>
+        cmd === "fonts_list" ? Promise.reject("no fonts") : Promise.resolve(LOOK),
+      );
+      await mount();
+      expect(screen.getByRole("button", { name: /^Fuente/ })).toBeDisabled();
+    });
+
+    it("reads the fonts again when the window comes back to the front", async () => {
+      await mount();
+      const listed = () => invoke.mock.calls.filter(([cmd]) => cmd === "fonts_list").length;
+      expect(listed()).toBe(1);
+      window.dispatchEvent(new Event("focus"));
+      await waitFor(() => expect(listed()).toBe(2));
+    });
+
+    it("writes the miniature in the chosen font, and only then", async () => {
+      const { container } = await mount();
+      expect(miniature(container).style.getPropertyValue("--look-font")).toBe("");
+      await userEvent.click(opener(SYSTEM));
+      await userEvent.click(screen.getByRole("option", { name: "Courier New" }));
+      await waitFor(() =>
+        expect(miniature(container).style.getPropertyValue("--look-font")).toBe('"Courier New"'),
+      );
+    });
   });
 });

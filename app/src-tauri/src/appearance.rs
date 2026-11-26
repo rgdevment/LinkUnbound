@@ -5,7 +5,7 @@ use tauri::AppHandle;
 use crate::{shell, store};
 
 /// Only these fields, so a stale copy here never undoes what another page saved.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Appearance {
     pub theme: Theme,
     pub high_contrast: bool,
@@ -13,11 +13,14 @@ pub struct Appearance {
     pub picker_style: PickerStyle,
     pub density: Density,
     pub picker_position: PickerPosition,
+    /// The English family name, or `None` for the system's.
+    #[serde(default)]
+    pub font: Option<String>,
 }
 
 impl Appearance {
     #[must_use]
-    pub const fn of(prefs: &Preferences) -> Self {
+    pub fn of(prefs: &Preferences) -> Self {
         Self {
             theme: prefs.theme,
             high_contrast: prefs.high_contrast,
@@ -25,16 +28,18 @@ impl Appearance {
             picker_style: prefs.picker_style,
             density: prefs.density,
             picker_position: prefs.picker_position,
+            font: prefs.chosen_font().map(str::to_owned),
         }
     }
 
-    pub const fn onto(self, prefs: &mut Preferences) {
+    pub fn onto(self, prefs: &mut Preferences) {
         prefs.theme = self.theme;
         prefs.high_contrast = self.high_contrast;
         prefs.text_size = self.text_size;
         prefs.picker_style = self.picker_style;
         prefs.density = self.density;
         prefs.picker_position = self.picker_position;
+        prefs.font = self.font;
     }
 }
 
@@ -47,7 +52,7 @@ pub fn appearance_get() -> Appearance {
 pub fn appearance_set(app: AppHandle, appearance: Appearance) -> Result<Appearance, String> {
     store()
         .edit_prefs(|prefs| {
-            appearance.onto(prefs);
+            appearance.clone().onto(prefs);
             true
         })
         .map_err(|e| e.to_string())?;
@@ -81,6 +86,7 @@ mod tests {
             picker_style: PickerStyle::Classic,
             density: Density::Comfortable,
             picker_position: PickerPosition::Center,
+            font: Some("Calibri".to_owned()),
         }
         .onto(&mut prefs);
 
@@ -90,6 +96,7 @@ mod tests {
         assert_eq!(prefs.picker_style, PickerStyle::Classic);
         assert_eq!(prefs.density, Density::Comfortable);
         assert_eq!(prefs.picker_position, PickerPosition::Center);
+        assert_eq!(prefs.chosen_font(), Some("Calibri"));
         assert_eq!(prefs.shortcut, None);
         assert!(!prefs.looks_for_updates);
     }
@@ -104,8 +111,9 @@ mod tests {
             picker_style: PickerStyle::Sheet,
             density: Density::Compact,
             picker_position: PickerPosition::Pointer,
+            font: Some("Courier New".to_owned()),
         };
-        asked.onto(&mut prefs);
+        asked.clone().onto(&mut prefs);
         assert_eq!(Appearance::of(&prefs), asked);
     }
 
@@ -118,6 +126,7 @@ mod tests {
             "picker_style": "sheet",
             "density": "comfortable",
             "picker_position": "center",
+            "font": "Calibri",
         });
         let got: Appearance = serde_json::from_value(sent.clone()).unwrap();
 
@@ -127,6 +136,7 @@ mod tests {
         assert_eq!(got.picker_style, PickerStyle::Sheet);
         assert_eq!(got.density, Density::Comfortable);
         assert_eq!(got.picker_position, PickerPosition::Center);
+        assert_eq!(got.font.as_deref(), Some("Calibri"));
         assert_eq!(serde_json::to_value(got).unwrap(), sent);
     }
 
@@ -148,5 +158,40 @@ mod tests {
         assert_eq!(fresh.picker_style, PickerStyle::Bear);
         assert_eq!(fresh.density, Density::Normal);
         assert_eq!(fresh.picker_position, PickerPosition::Pointer);
+        assert_eq!(fresh.font, None);
+    }
+
+    /// `system`, blank or absent all read back as the system's own, which the page shows first.
+    #[test]
+    fn a_font_spelled_as_the_system_reads_as_none() {
+        for said in [Some("system"), Some("  "), None] {
+            let prefs = Preferences {
+                font: said.map(str::to_owned),
+                ..Preferences::default()
+            };
+            assert_eq!(Appearance::of(&prefs).font, None, "{said:?}");
+        }
+    }
+
+    /// An older page that never heard of fonts still saves, and keeps the system's.
+    #[test]
+    fn a_page_without_a_font_asks_for_the_system_one() {
+        let sent = serde_json::json!({
+            "theme": "dark",
+            "high_contrast": false,
+            "text_size": "normal",
+            "picker_style": "bear",
+            "density": "normal",
+            "picker_position": "pointer",
+        });
+        let got: Appearance = serde_json::from_value(sent).unwrap();
+        assert_eq!(got.font, None);
+
+        let mut prefs = Preferences {
+            font: Some("Calibri".to_owned()),
+            ..Preferences::default()
+        };
+        got.onto(&mut prefs);
+        assert_eq!(prefs.chosen_font(), None);
     }
 }

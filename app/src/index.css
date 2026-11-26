@@ -57,9 +57,11 @@ body,
   background: transparent;
 }
 
+/* --worn-font is the family chosen in Appearance; without it, the platform's own. */
 body {
   font-family:
-    "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    var(--worn-font, "Segoe UI Variable Text"), "Segoe UI", -apple-system, BlinkMacSystemFont,
+    system-ui, sans-serif;
   user-select: none;
 }
 
@@ -633,6 +635,7 @@ body {
   backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 10px 34px rgb(0 0 0 / 0.3);
   color: var(--ink);
+  font-family: var(--look-font, inherit);
   font-size: calc(15px * var(--zoom));
   line-height: 1.25;
 }

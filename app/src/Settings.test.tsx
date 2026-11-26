@@ -61,6 +61,7 @@ function answers(
     if (cmd === "rules_list") return Promise.resolve([]);
     if (cmd === "prefs_get" || cmd === "prefs_set") return Promise.resolve(PREFS);
     if (cmd === "appearance_get") return Promise.resolve(LOOK);
+    if (cmd === "fonts_list") return Promise.resolve({ system: "Segoe UI", families: [] });
     if (cmd === "update_ready") return Promise.resolve(null);
     if (cmd === "system_legacy") return Promise.resolve(null);
     if (cmd === "about") return Promise.resolve(BUILD);
