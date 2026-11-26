@@ -9,6 +9,9 @@ fn main() {
 
     #[cfg(windows)]
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        // Windows ships the UCRT but not vcruntime140.dll; tauri-build does this for settings, not for the resident.
+        static_vcruntime::metabuild();
+
         println!("cargo:rerun-if-changed=linkunbound-shell.manifest");
         embed_manifest::embed_manifest_file("linkunbound-shell.manifest")
             .expect("the manifest must be embedded");

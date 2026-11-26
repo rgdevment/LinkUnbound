@@ -3678,6 +3678,7 @@ dependencies = [
  "raw-window-handle",
  "slint",
  "slint-build",
+ "static_vcruntime",
  "tauri-winres",
  "tray-icon",
  "widestring",
