@@ -115,6 +115,23 @@ body {
   --caution: #e9a05c;
 }
 
+/* The text size chosen on Appearance moves the whole scale above, never below 11px. */
+:root.text-small {
+  --text-xs: 11px;
+  --text-sm: 11px;
+  --text-md: 12px;
+  --text-lg: 14px;
+  --text-xl: 18px;
+}
+
+:root.text-large {
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+}
+
 /* Contrast hardens these settings with the picker: darker greys and edges, heavier letters. */
 :root.contrast {
   --ink-2: #3d4250;

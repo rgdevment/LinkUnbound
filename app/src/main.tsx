@@ -4,7 +4,6 @@ import Settings from "./Settings";
 import { follow } from "./theme";
 import Welcome from "./Welcome";
 import "./index.css";
-import "./textSize.css";
 
 follow();
 
