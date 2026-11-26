@@ -1,4 +1,5 @@
 mod about;
+mod appearance;
 mod editing;
 mod fonts;
 mod news;
@@ -775,6 +776,9 @@ pub fn run() {
             prefs_get,
             prefs_set,
             fonts::fonts_list,
+            appearance::appearance_get,
+            appearance::appearance_set,
+            appearance::appearance_reset,
             shell::picker_preview,
             system::system_state,
             system::system_is_default,

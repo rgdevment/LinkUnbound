@@ -2,49 +2,24 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { type Key, type Language, spoken, useSpoken, useWords } from "../i18n";
 import { saidPlainly } from "../refusal";
-import { refresh } from "../theme";
-import { Card, Line, Section, Switch } from "./parts";
+import { Card, Choice, Line, Section, Switch } from "./parts";
 
-type Theme = "system" | "light" | "dark";
 type Locale = "system" | "spanish" | "english";
-type PickerStyle = "bear" | "classic" | "sheet" | "compact";
-type PickerPosition = "pointer" | "center";
 
 type Preferences = {
   schema_version: number;
-  theme: Theme;
   locale: Locale;
   shortcut: string | null;
   notify_on_rule: boolean;
-  picker_style: PickerStyle;
-  picker_position: PickerPosition;
   looks_for_updates: boolean;
 };
 
 type Settings = { prefs: Preferences; shortcut_held: string | null; language: string };
 
-const THEMES: { id: Theme; label: Key }[] = [
-  { id: "system", label: "themeAuto" },
-  { id: "light", label: "themeLight" },
-  { id: "dark", label: "themeDark" },
-];
-
 const LOCALES: { id: Locale; label: Key }[] = [
   { id: "system", label: "localeAuto" },
   { id: "spanish", label: "localeSpanish" },
   { id: "english", label: "localeEnglish" },
-];
-
-const PICKERS: { id: PickerStyle; label: Key }[] = [
-  { id: "bear", label: "pickerBear" },
-  { id: "classic", label: "pickerClassic" },
-  { id: "sheet", label: "pickerSheet" },
-  { id: "compact", label: "pickerCompact" },
-];
-
-const POSITIONS: { id: PickerPosition; label: Key }[] = [
-  { id: "pointer", label: "pickerByPointer" },
-  { id: "center", label: "pickerCentered" },
 ];
 
 const MODIFIERS = new Set(["Control", "Alt", "Shift", "Meta"]);
@@ -69,45 +44,6 @@ function combinationOf(e: React.KeyboardEvent): string | null {
   return parts.join("+");
 }
 
-function Choice<T extends string>({
-  options,
-  value,
-  label,
-  onPick,
-}: {
-  options: { id: T; label: Key }[];
-  value: T;
-  label: string;
-  onPick: (next: T) => void;
-}) {
-  const t = useWords();
-  return (
-    <fieldset className="flex shrink-0 gap-1">
-      <legend className="sr-only">{label}</legend>
-      {options.map((o) => (
-        <label key={o.id} className="contents">
-          <input
-            type="radio"
-            name={label}
-            className="peer sr-only"
-            checked={o.id === value}
-            onChange={() => onPick(o.id)}
-          />
-          <span
-            className={`cursor-pointer rounded-md px-2.5 py-1 text-sm transition peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-accent ${
-              o.id === value
-                ? "bg-accent/[0.13] font-semibold text-accent dark:bg-accent/[0.17]"
-                : "bg-black/[0.045] text-ink-2 dark:bg-white/[0.06]"
-            }`}
-          >
-            {t(o.label)}
-          </span>
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
 export default function Application({
   startsWithSystem,
   startupIsOurs,
@@ -125,22 +61,14 @@ export default function Application({
   const [problem, setProblem] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
 
-  const [previewing, setPreviewing] = useState(false);
-  const preview = () => {
-    setPreviewing(true);
-    void invoke("picker_preview").catch(noop);
-  };
-
-  const apply = (patch: Partial<Preferences>, then?: () => void) => {
+  const apply = (patch: Partial<Preferences>) => {
     if (!settings) return;
     void invoke<Settings>("prefs_set", { prefs: { ...settings.prefs, ...patch } })
       .then((next) => {
         setSettings(next);
         onLanguage(spoken(next.language));
-        refresh();
         setProblem(null);
         if ("shortcut" in patch) askAgainOnceTheResidentHasIt();
-        then?.();
       })
       .catch((e: unknown) => setProblem(saidPlainly(language, e)))
       .finally(() => setCapturing(false));
@@ -166,54 +94,14 @@ export default function Application({
         <p className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{problem}</p>
       )}
 
-      <Section title={t("appAppearance")}>
+      <Section title={t("appLanguage")}>
         <Card>
-          <Line title={t("appTheme")}>
-            <Choice
-              options={THEMES}
-              value={prefs.theme}
-              label={t("appTheme")}
-              onPick={(theme) => apply({ theme })}
-            />
-          </Line>
-          <Line title={t("appLanguage")}>
+          <Line title={t("appLanguageLine")}>
             <Choice
               options={LOCALES}
               value={prefs.locale}
-              label={t("appLanguage")}
+              label={t("appLanguageLine")}
               onPick={(locale) => apply({ locale })}
-            />
-          </Line>
-        </Card>
-      </Section>
-
-      <Section title={t("appPicker")}>
-        <Card>
-          <Line title={t("pickerLook")}>
-            <div className="flex shrink-0 flex-col items-end gap-1.5">
-              <Choice
-                options={PICKERS}
-                value={prefs.picker_style}
-                label={t("pickerLook")}
-                onPick={(picker_style) => apply({ picker_style }, previewing ? preview : undefined)}
-              />
-              <button
-                type="button"
-                onClick={preview}
-                className="text-sm text-accent hover:underline"
-              >
-                {t("pickerPreview")}
-              </button>
-            </div>
-          </Line>
-          <Line title={t("appPickerPosition")} note={t("appPickerPositionNote")}>
-            <Choice
-              options={POSITIONS}
-              value={prefs.picker_position}
-              label={t("appPickerPosition")}
-              onPick={(picker_position) =>
-                apply({ picker_position }, previewing ? preview : undefined)
-              }
             />
           </Line>
         </Card>
@@ -261,7 +149,7 @@ export default function Application({
                     ? "border-accent text-accent"
                     : taken
                       ? "border-danger/40 text-danger"
-                      : "border-black/[0.12] dark:border-white/[0.12]"
+                      : "border-edge"
                 }`}
               >
                 {capturing ? t("shortcutPress") : (prefs.shortcut ?? t("shortcutNone"))}
