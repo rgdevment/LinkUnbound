@@ -427,7 +427,7 @@ fn offered(seen: Vec<SeenApp>, rules: &[Rule], shown: impl Fn(&str) -> String) -
 
 #[cfg(target_os = "macos")]
 fn program_of(app: &Offered) -> Option<String> {
-    linkunbound_mac::app_path(&app.origin.key)
+    linkunbound_mac::app_path(&app.origin.key).or_else(|| app.program.clone())
 }
 
 #[cfg(not(target_os = "macos"))]

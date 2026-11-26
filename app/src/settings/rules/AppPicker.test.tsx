@@ -406,6 +406,21 @@ describe("app picker", () => {
       expect(await screen.findByRole("option", { name: /newcomer/ })).toBeInTheDocument();
     });
 
+    it("drops an older answer that lands after the one asked later", async () => {
+      let late: (apps: SeenApp[]) => void = () => {};
+      invoke
+        .mockImplementationOnce(() => new Promise<SeenApp[]>((done) => (late = done)))
+        .mockImplementationOnce(() => Promise.resolve([seen("fresh")]));
+      render(<Harness />);
+      await userEvent.click(combobox());
+      expect(await screen.findByRole("option", { name: /fresh/ })).toBeInTheDocument();
+      late([seen("stale")]);
+      await vi.waitFor(() => expect(asked()).toBe(2));
+      await new Promise((done) => setTimeout(done, 30));
+      expect(screen.getByRole("option", { name: /fresh/ })).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: /stale/ })).toBeNull();
+    });
+
     it("opens and closes with the chevron and gives the focus back to the box", async () => {
       answering([seen("slack")]);
       const { container } = render(<Harness />);

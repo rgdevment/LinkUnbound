@@ -128,7 +128,7 @@ report*), and you can read or delete `errors.log` whenever you like.
 
 ### Extracted Icons
 
-Browser icons are extracted locally from installed browser executables and stored as image files. These are visual assets only.
+Browser icons are extracted locally from installed browser executables and stored as image files, and so are the icons of the applications links came from, under `icons/apps`. These are visual assets only.
 
 ### Left by 1.x
 
