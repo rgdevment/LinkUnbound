@@ -30,7 +30,7 @@ export function KindChip({ family }: Readonly<{ family: Family }>) {
   );
 }
 
-function marked(text: string, query: string): ReactNode {
+export function marked(text: string, query: string): ReactNode {
   const q = query.trim().toLocaleLowerCase();
   if (!q) return text;
   const lower = text.toLocaleLowerCase();

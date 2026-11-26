@@ -1,12 +1,14 @@
 //! Rule commands: the list, the form, editing in place, and the probe.
 
+use std::cmp::Reverse;
+
 use linkunbound_core::{
-    Browser, Origin, Replaced, Rule, RuleSet, Scope, Target, Why, host_of, is_public_suffix,
-    normalise, same_name, site_of, why_first,
+    Browser, Origin, Replaced, Rule, RuleSet, Scope, SeenApp, Target, Why, host_of,
+    is_public_suffix, normalise, same_name, site_of, why_first,
 };
 use serde::Serialize;
 
-use crate::{catalogue, icon_data, store};
+use crate::{app_icon_data, catalogue, icon_data, store};
 
 /// The rule as the settings window shows it: what it covers, where it opens and
 /// whether the browser it names is still installed.
@@ -357,6 +359,101 @@ fn probed(
 pub fn rules_probe(url: String, from_app: Option<String>) -> Result<Probe, String> {
     let rules = store().rules().map_err(|e| e.to_string())?;
     probed(&rules, &url, from_app.as_deref(), &catalogue()).map_err(str::to_owned)
+}
+
+/// An app the «From» field offers: one links came from, or one a rule names and none came from yet.
+#[derive(Serialize)]
+pub struct SeenAppView {
+    name: String,
+    links: u64,
+    last_seen: Option<u64>,
+    icon: Option<String>,
+    /// The «From» rule that already holds it, so the form can tell it from the one being edited.
+    rule_id: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct Offered {
+    origin: Origin,
+    links: u64,
+    last_seen: Option<u64>,
+    program: Option<String>,
+    rule_id: Option<String>,
+}
+
+/// Matched on what the rule saved, as `named_alike` does: on a Mac that is a bundle id, which
+/// only the record's key carries, while the record's label is the name in lower case.
+fn offered(seen: Vec<SeenApp>, rules: &[Rule], shown: impl Fn(&str) -> String) -> Vec<Offered> {
+    let mut all: Vec<Offered> = seen
+        .into_iter()
+        .map(|app| Offered {
+            origin: Origin {
+                key: app.key,
+                label: app.label,
+            },
+            links: app.links,
+            last_seen: Some(app.last_seen),
+            program: app.program,
+            rule_id: None,
+        })
+        .collect();
+    all.sort_by_key(|app| Reverse(app.last_seen));
+    for rule in rules {
+        let Some(saved) = rule.source_app.as_deref() else {
+            continue;
+        };
+        let name = shown(saved);
+        let at = all
+            .iter()
+            .position(|app| app.origin.answers_to(saved) || app.origin.answers_to(&name))
+            .unwrap_or_else(|| {
+                all.push(Offered {
+                    origin: Origin {
+                        key: saved.to_owned(),
+                        label: name,
+                    },
+                    links: 0,
+                    last_seen: None,
+                    program: None,
+                    rule_id: None,
+                });
+                all.len() - 1
+            });
+        if rule.scope == Scope::Any && all[at].rule_id.is_none() {
+            all[at].rule_id = Some(rule.id.clone());
+        }
+    }
+    all
+}
+
+#[cfg(target_os = "macos")]
+fn program_of(app: Offered) -> Option<String> {
+    linkunbound_mac::app_path(&app.origin.key)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn program_of(app: Offered) -> Option<String> {
+    app.program
+}
+
+// Async: icons are extracted, and on a Mac each app is looked up by its bundle id.
+#[tauri::command(async)]
+pub fn apps_seen() -> Vec<SeenAppView> {
+    let store = store();
+    let rules = store.rules().map(|set| set.rules).unwrap_or_default();
+    offered(store.apps_seen(), &rules, shown_origin)
+        .into_iter()
+        .map(|app| SeenAppView {
+            name: app.origin.label.clone(),
+            links: app.links,
+            last_seen: app.last_seen,
+            rule_id: app.rule_id.clone(),
+            icon: {
+                let key = app.origin.key.clone();
+                program_of(app).and_then(|program| app_icon_data(&program, &key))
+            },
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated:** October 4, 2026
+**Last updated:** November 26, 2026
 
 ---
 
@@ -76,9 +76,26 @@ What this means in practice:
   application was last brought to the front, in memory only, so a link that arrives while
   nothing is in front still has an origin; on Windows it remembers the origin of the last
   link for the same reason. Neither is written anywhere or kept past the session.
-- **It reaches the disk only if you ask it to.** The name is used in memory to
-  match rules and to label the picker. It is written to `rules.json` only when
-  you tick "always open" on a link whose origin is known.
+- **It reaches the disk in two places.** It is written to `rules.json` when you
+  tick "always open" on a link whose origin is known, and the application's name
+  is noted in `apps-seen.json`, described below, so Settings can offer it when
+  you write a rule for links from an application.
+
+### Applications Seen
+
+To let you pick the application for a "links from an application" rule instead of typing its
+name, the resident notes in `apps-seen.json` each application a link came from:
+
+| Data | Purpose |
+| :-- | :-- |
+| The application's name and identifier, as the picker shows it (`slack`) | List it in the rule form |
+| How many links came from it | Show it next to the name |
+| The date of the last one | Put the most recent first |
+| On Windows, the path of its program | Show its icon, kept with the others in the `apps` folder under `icons` |
+
+No link, address or page is written there: only which application and when. Only the latest 50
+applications are kept. The file is not part of the diagnostic report and never leaves your
+computer. **Reset configuration** deletes it, and so can you, whenever you like.
 
 ### Links From Other Applications
 
@@ -134,6 +151,7 @@ All data is stored locally under your user profile.
 | Last update check | `%LOCALAPPDATA%\LinkUnbound\update.json` (and `updating.json` while one installs) |
 | Global shortcut held | `%LOCALAPPDATA%\LinkUnbound\shortcut` |
 | Error log | `%LOCALAPPDATA%\LinkUnbound\errors.log` (latest 200 lines, redacted) |
+| Applications seen | `%LOCALAPPDATA%\LinkUnbound\apps-seen.json` (latest 50, no links) |
 | Lock files | `rules.lock`, `browsers.lock`, `preferences.lock`, empty |
 | Kept aside | `rules.1x.json`, `browsers.1x.json` (the 1.x files, kept once when upgrading), `preferences.unread.json` (a preferences file that could not be read) |
 | Icons    | `%LOCALAPPDATA%\LinkUnbound\icons\`              |
@@ -148,6 +166,7 @@ All data is stored locally under your user profile.
 | Last update check | `~/Library/Application Support/LinkUnbound/update.json` (and `updating.json` while one installs) |
 | Global shortcut held | `~/Library/Application Support/LinkUnbound/shortcut` |
 | Error log | `~/Library/Application Support/LinkUnbound/errors.log` (latest 200 lines, redacted) |
+| Applications seen | `~/Library/Application Support/LinkUnbound/apps-seen.json` (latest 50, no links) |
 | Resident's socket | `~/Library/Application Support/LinkUnbound/shell.sock` |
 | Lock files | `rules.lock`, `browsers.lock`, `preferences.lock`, empty |
 | Kept aside | `rules.1x.json`, `browsers.1x.json` (the 1.x files, kept once when upgrading), `preferences.unread.json` (a preferences file that could not be read) |
@@ -245,7 +264,7 @@ For Microsoft's own privacy practices, refer to [Microsoft's Privacy Statement](
 
 Settings → **Maintenance** tab provides:
 
-- **Reset configuration** — clears all browsers, rules, and icons, then re-scans installed browsers.
+- **Reset configuration** — clears all browsers, rules, icons and the applications seen, then re-scans installed browsers.
 - **Unregister** — removes LinkUnbound's browser registration from the system: the registry entries on Windows, `linkunbound://` included; on macOS, hands `http`, `https` and the web document types back to the application that held them before (Safari when none is remembered).
 
 ### Complete Removal

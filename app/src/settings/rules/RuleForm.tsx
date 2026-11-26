@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { type Key, useSpoken, useWords } from "../../i18n";
 import { saidPlainly } from "../../refusal";
+import AppPicker from "./AppPicker";
 import DestinationPicker from "./DestinationPicker";
 import Glyph, { BrowserIcon } from "./Glyph";
 import { covers, type Destination, named, type RuleView, unnamed } from "./types";
@@ -38,6 +39,7 @@ export default function RuleForm({
   const t = useWords();
   const language = useSpoken();
   const [kind, setKind] = useState<FormKind>(start?.kind ?? "site");
+  const [kindChosen, setKindChosen] = useState(false);
   const [value, setValue] = useState(start?.value ?? "");
   const [where, setWhere] = useState(() => {
     if (editing) return named(editing.browser_id, editing.profile_id);
@@ -59,6 +61,10 @@ export default function RuleForm({
 
   const valueBox = useRef<HTMLInputElement>(null);
   useEffect(() => valueBox.current?.focus(), []);
+  // Choosing «from an app» opens its list, and the arrows have to walk that list, not the kinds.
+  useEffect(() => {
+    if (kindChosen && kind === "app") valueBox.current?.focus();
+  }, [kind, kindChosen]);
 
   const field =
     "rounded-md border border-(--hair) bg-panel px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent";
@@ -108,7 +114,10 @@ export default function RuleForm({
                 name={`rule-kind-${editing?.id ?? "new"}`}
                 value={k.id}
                 checked={kind === k.id}
-                onChange={() => setKind(k.id)}
+                onChange={() => {
+                  setKind(k.id);
+                  setKindChosen(true);
+                }}
                 className="sr-only"
               />
               {t(k.label)}
@@ -116,14 +125,25 @@ export default function RuleForm({
           ))}
         </div>
       </fieldset>
-      <input
-        aria-label={t(hint)}
-        value={value}
-        placeholder={t(hint)}
-        onChange={(e) => setValue(e.target.value)}
-        ref={valueBox}
-        className={`${field} min-w-0`}
-      />
+      {kind === "app" ? (
+        <AppPicker
+          label={t(hint)}
+          value={value}
+          onChange={setValue}
+          editingId={editing?.id}
+          startOpen={kindChosen}
+          inputRef={valueBox}
+        />
+      ) : (
+        <input
+          aria-label={t(hint)}
+          value={value}
+          placeholder={t(hint)}
+          onChange={(e) => setValue(e.target.value)}
+          ref={valueBox}
+          className={`${field} min-w-0`}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="text-sm text-muted">{t("ruleNewBrowser")}</span>
         <DestinationPicker
