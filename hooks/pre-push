@@ -44,8 +44,8 @@ while read -r ref mine where theirs; do
       ;;
   esac
   pushed "$mine" || status=1
-  # A remote commit never fetched here cannot start a range; main can.
-  if [ "${theirs:-$nothing}" != "$nothing" ] && git cat-file -e "$theirs^{commit}" 2> /dev/null; then
+  # After a rebase the remote tip is no ancestor, and theirs..mine would hold main's squash commits; main can start it.
+  if [ "${theirs:-$nothing}" != "$nothing" ] && git merge-base --is-ancestor "$theirs" "$mine" 2> /dev/null; then
     range="$theirs..$mine"
   elif base=$(git merge-base "$mine" "$main" 2> /dev/null) && [ -n "$base" ]; then
     range="$base..$mine"
