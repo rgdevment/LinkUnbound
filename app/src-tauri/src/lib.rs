@@ -1,5 +1,6 @@
 mod about;
 mod editing;
+mod fonts;
 mod news;
 mod rules;
 mod shell;
@@ -773,6 +774,7 @@ pub fn run() {
             about::maintenance_report,
             prefs_get,
             prefs_set,
+            fonts::fonts_list,
             shell::picker_preview,
             system::system_state,
             system::system_is_default,

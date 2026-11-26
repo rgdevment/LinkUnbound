@@ -3,6 +3,7 @@ mod binaries;
 mod browser;
 mod config;
 mod detect;
+pub mod fonts;
 mod hostile;
 mod i18n;
 mod icons;

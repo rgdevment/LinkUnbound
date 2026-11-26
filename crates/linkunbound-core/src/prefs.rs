@@ -97,6 +97,9 @@ pub struct Preferences {
     /// Darker greys, visible edges, heavier letters and an opaque sheet whatever the desktop.
     #[serde(default)]
     pub high_contrast: bool,
+    /// English name, as renderers know it; absent or `system` keeps the look from before.
+    #[serde(default)]
+    pub font: Option<String>,
     /// Whether the resident asks about releases on its own, every few hours; off, only the
     /// settings window ever asks, and only while it is open.
     #[serde(default = "yes")]
@@ -134,6 +137,7 @@ impl Default for Preferences {
             text_size: TextSize::default(),
             density: Density::default(),
             high_contrast: false,
+            font: None,
             looks_for_updates: true,
             here_since: None,
             asked_for_a_star: false,
@@ -144,6 +148,15 @@ impl Default for Preferences {
 }
 
 impl Preferences {
+    /// The family the person chose, or `None` for the system's.
+    #[must_use]
+    pub fn chosen_font(&self) -> Option<&str> {
+        self.font
+            .as_deref()
+            .map(str::trim)
+            .filter(|family| !family.is_empty() && !family.eq_ignore_ascii_case("system"))
+    }
+
     /// The bear became everybody's picker once, whatever was chosen before; the move is written
     /// down so a style picked afterwards stands. Returns the style left behind, when it was not
     /// already the bear, so the person can be told how to get it back.
@@ -405,6 +418,41 @@ mod tests {
 
         let back: Preferences = serde_json::from_str(&written).unwrap();
         assert_eq!(back, asked);
+    }
+
+    #[test]
+    fn a_file_from_before_the_font_reads_as_the_system_font() {
+        let old: Preferences = serde_json::from_str(r#"{"theme": "dark"}"#).unwrap();
+        assert_eq!(old.font, None);
+        assert_eq!(old.chosen_font(), None);
+        assert_eq!(Preferences::default().chosen_font(), None);
+    }
+
+    #[test]
+    fn system_empty_and_blank_fonts_all_mean_the_system_font() {
+        for said in ["system", "SYSTEM", "System", "", "   "] {
+            let p: Preferences = serde_json::from_str(&format!(r#"{{"font": "{said}"}}"#)).unwrap();
+            assert_eq!(p.chosen_font(), None, "{said:?}");
+        }
+        let null: Preferences = serde_json::from_str(r#"{"font": null}"#).unwrap();
+        assert_eq!(null.chosen_font(), None);
+    }
+
+    #[test]
+    fn a_chosen_font_is_kept_trimmed_and_written_back_out() {
+        let p: Preferences = serde_json::from_str(r#"{"font": "  Calibri "}"#).unwrap();
+        assert_eq!(p.chosen_font(), Some("Calibri"));
+
+        let written = serde_json::to_string(&p).unwrap();
+        assert!(written.contains(r#""font":"  Calibri ""#), "{written}");
+        let back: Preferences = serde_json::from_str(&written).unwrap();
+        assert_eq!(back, p);
+    }
+
+    #[test]
+    fn a_family_that_only_starts_with_system_is_still_a_family() {
+        let p: Preferences = serde_json::from_str(r#"{"font": "System Mono"}"#).unwrap();
+        assert_eq!(p.chosen_font(), Some("System Mono"));
     }
 
     #[test]

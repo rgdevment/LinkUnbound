@@ -1,10 +1,13 @@
 //! How the picker is drawn: which look, and the material behind it where the system lends one.
 
 use linkunbound_core::{PickerPosition, PickerStyle, Preferences};
-use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, measure, place};
+use linkunbound_shell::{
+    CLASSIC_CORNER, CORNER, HALO, Look, Notice, Palette, Picker, font, measure, place,
+};
 use slint::ComponentHandle;
 
-pub fn obey(picker: &Picker, prefs: &Preferences) {
+pub fn obey(picker: &Picker, notice: &Notice, prefs: &Preferences) {
+    font::wear(picker, notice, prefs.chosen_font());
     // Contrast is set before the style: the sheet it asks for is settled with the style.
     measure::wear(picker, prefs.text_size, prefs.density, prefs.high_contrast);
     style(picker, prefs.picker_style);
@@ -116,12 +119,24 @@ pub fn dress_the_window(picker: &Picker) {
 /// Centered or not, the picker opens on the pointer's screen, the one the person is looking at.
 pub fn put_in_place(picker: &Picker) {
     let Some(pointer) = crate::host::cursor() else {
+        fit(picker);
         return;
     };
     let Some(area) = crate::host::work_area_at(pointer.0, pointer.1) else {
+        fit(picker);
         return;
     };
     place_for(picker, pointer, area);
+}
+
+/// Left to Slint, a window shown before opens in its old size and fits the new look a frame
+/// later; AppKit would also keep its bottom edge and lift it off the place and the bear.
+/// Logical, because a window not yet created reports a scale of one.
+fn fit(picker: &Picker) {
+    picker.window().set_size(slint::LogicalSize::new(
+        picker.get_wanted_width(),
+        picker.get_wanted_height(),
+    ));
 }
 
 /// Where the picker goes for a pointer and the screen area around it, in the units the window is
@@ -164,18 +179,11 @@ fn place_for(
     if let Some(ui) = crate::ui() {
         ui.mascot.anchor(at_x, at_y);
     }
-    // AppKit keeps a window's bottom edge when it grows, so the size Slint would set later would
-    // lift the picker off the place asked for, and off the bear.
+    fit(picker);
     #[cfg(target_os = "macos")]
-    {
-        picker.window().set_size(slint::LogicalSize::new(
-            picker.get_wanted_width(),
-            picker.get_wanted_height(),
-        ));
-        picker
-            .window()
-            .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
-    }
+    picker
+        .window()
+        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
     #[cfg(not(target_os = "macos"))]
     picker
         .window()

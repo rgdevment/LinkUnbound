@@ -3,6 +3,8 @@ mod detect;
 #[cfg(target_os = "macos")]
 mod events;
 #[cfg(target_os = "macos")]
+pub mod fonts;
+#[cfg(target_os = "macos")]
 mod glass;
 #[cfg(target_os = "macos")]
 mod icons;
@@ -57,8 +59,9 @@ mod audit {
     use std::fs;
     use std::path::Path;
 
-    const AUDITED: [&str; 6] = [
+    const AUDITED: [&str; 7] = [
         "events.rs",
+        "fonts.rs",
         "glass.rs",
         "icons.rs",
         "native.rs",
