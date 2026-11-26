@@ -39,4 +39,10 @@ describe("settings text", () => {
     const toggle = screen.getByRole("switch", { name: "Startup" });
     expect(toggle).toHaveClass("enabled:hover:ring-4", "enabled:hover:bg-ink-2/40");
   });
+
+  it("positions the choice fieldset so its hidden radios stay inside the scroller", () => {
+    const options = [{ id: "a", label: "lookSize" as const }];
+    render(<Choice options={options} value="a" label="Pick" onPick={() => {}} />);
+    expect(screen.getByRole("group", { name: "Pick" })).toHaveClass("relative");
+  });
 });
