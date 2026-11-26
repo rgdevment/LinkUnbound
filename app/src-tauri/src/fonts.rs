@@ -45,7 +45,7 @@ pub fn fonts_list() -> Fonts {
 
 #[cfg(test)]
 mod tests {
-    use super::{Offered, fonts_list, listed};
+    use super::{Offered, listed};
     use linkunbound_core::fonts::Family;
 
     fn family(name: &str, local: &str, symbol: bool) -> Family {
@@ -91,7 +91,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn this_windows_names_its_system_family_and_offers_no_pictures() {
-        let fonts = fonts_list();
+        let fonts = super::fonts_list();
         assert!(fonts.families.iter().any(|one| one.label == fonts.system));
         assert!(fonts.families.iter().any(|one| one.name == "Arial"));
         assert!(!fonts.families.iter().any(|one| one.name == "Marlett"));

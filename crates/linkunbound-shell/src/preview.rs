@@ -190,7 +190,11 @@ mod tests {
             ),
         ];
         let old = opened(vec![before.clone()]).remove(0);
-        for (what, after) in changes {
+        // Linux CI has one family, so there is no other font to change to there.
+        for (what, after) in changes
+            .into_iter()
+            .filter(|(what, _)| *what != "font" || other.is_some())
+        {
             let seen = opened(vec![before.clone(), after.clone()]);
             let fresh = opened(vec![after]).remove(0);
             assert_eq!(seen[0], old, "{what}");

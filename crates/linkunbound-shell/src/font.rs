@@ -53,7 +53,7 @@ pub fn wear(picker: &Picker, notice: &Notice, asked: Option<&str>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{families, installed, system, wear};
+    use super::{system, wear};
 
     fn windows() -> (crate::Picker, crate::Notice) {
         thread_local!(static BACKEND: () = i_slint_backend_testing::init_no_event_loop());
@@ -84,10 +84,10 @@ mod tests {
     #[test]
     fn an_installed_family_is_worn_by_both_windows() {
         let (picker, notice) = windows();
-        let chosen = families()
+        let chosen = super::families()
             .into_iter()
             .map(|one| one.name)
-            .find(|name| *name != system() && installed(name))
+            .find(|name| *name != system() && super::installed(name))
             .expect("a second family");
         wear(&picker, &notice, Some(&chosen));
         assert_eq!(picker.get_family(), chosen.as_str());
@@ -103,6 +103,6 @@ mod tests {
             Some(family.as_str()),
             linkunbound_win::fonts::system().as_deref()
         );
-        assert!(installed(&family), "{family}");
+        assert!(super::installed(&family), "{family}");
     }
 }
