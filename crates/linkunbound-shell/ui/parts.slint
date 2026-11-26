@@ -26,6 +26,8 @@ export global Palette {
     in property <length> glass-corner: 8px;
     // Windows blends no window: the opaque sheet fills it.
     in property <bool> solid: false;
+    // Darker greys and visible edges, read the same over any desktop because the sheet is opaque.
+    in property <bool> contrast: false;
     out property <brush> veil: light
         ? @linear-gradient(180deg, #FFFFFF.with-alpha(tint) 0%, #F3F5F9.with-alpha(tint + 0.03) 100%)
         : @linear-gradient(180deg, #282B36.with-alpha(tint) 0%, #1A1C23.with-alpha(tint + 0.03) 100%);
@@ -44,13 +46,13 @@ export global Palette {
     // Header and footer sit a shade apart from the list, which is what tells the zones apart.
     out property <brush> band: light ? #F8F9FB : #1C1D23;
     out property <brush> ink: light ? #16181D : #F0F1F4;
-    out property <brush> dim: light ? #555B6A : #AAB1C0;
-    out property <brush> dimmer: light ? #5F6575 : #9CA3B3;
+    out property <brush> dim: contrast ? (light ? #3D4250 : #C9CED9) : (light ? #555B6A : #AAB1C0);
+    out property <brush> dimmer: contrast ? (light ? #3D4250 : #C9CED9) : (light ? #5F6575 : #9CA3B3);
     out property <brush> line: light ? #00000014 : #ffffff14;
     out property <brush> hover: light ? #0000000b : #ffffff12;
-    out property <brush> chip: light ? #0000000e : #ffffff10;
-    out property <brush> key-bg: light ? #00000010 : #ffffff14;
-    out property <brush> key-ink: light ? #5F6575 : #B3BAC9;
+    out property <brush> chip: contrast ? (light ? #00000014 : #ffffff1c) : (light ? #0000000e : #ffffff10);
+    out property <brush> key-bg: contrast ? (light ? #0000001a : #ffffff21) : (light ? #00000010 : #ffffff14);
+    out property <brush> key-ink: contrast ? (light ? #2F3440 : #DDE1EA) : (light ? #5F6575 : #B3BAC9);
     out property <brush> accent: light ? #2F62D8 : #6E9BFF;
     // Literals here were picked for a dark ground and sat at 2.2:1 on a light
     // one, which is where the launch failures are printed.
@@ -65,8 +67,11 @@ export global Palette {
     out property <brush> sheet-band: light ? #F8F9FB : #212329;
     out property <brush> fill: light ? #0000000c : #ffffff0e;
     out property <brush> fill-hover: light ? #00000014 : #ffffff1a;
-    out property <brush> faint: light ? #6B7280 : #8791A4;
-    out property <brush> glow: light ? #0000000f : #ffffff12;
+    out property <brush> faint: contrast ? (light ? #4A5060 : #B3BAC9) : (light ? #6B7280 : #8791A4);
+    // The sheet's own edge, which contrast turns into a border that reads.
+    out property <brush> glow: contrast ? (light ? #0000003d : #ffffff47) : (light ? #0000000f : #ffffff12);
+    // Each row and card outlined, only under contrast.
+    out property <brush> row-edge: contrast ? (light ? #00000024 : #ffffff26) : transparent;
     out property <brush> shade: light ? #14192d : #000000;
     out property <brush> accent-ink: light ? #FFFFFF : #12141B;
     // The mascot's blue marks what is chosen; violet is the private window.
@@ -74,9 +79,33 @@ export global Palette {
     out property <brush> brand-soft: light ? #3E6BE01f : #7FA2FF24;
     out property <brush> secret: light ? #7A4FE0 : #B79BFF;
     out property <brush> secret-soft: light ? #7A4FE024 : #B79BFF29;
-    out property <brush> hair: light ? #00000012 : #ffffff17;
-    out property <brush> track: light ? #0000000d : #00000033;
+    out property <brush> hair: contrast ? (light ? #00000030 : #ffffff33) : (light ? #00000012 : #ffffff17);
+    out property <brush> track: contrast ? (light ? #00000014 : #00000055) : (light ? #0000000d : #00000033);
     out property <brush> thumb: light ? #FFFFFF : #ffffff1c;
+}
+
+// The text size multiplies the letters; the density sets how tall a row and a card stand.
+export global Measures {
+    in property <float> zoom: 1;
+    in property <length> row: 45px;
+    in property <length> icon: 24px;
+    in property <length> card: 52px;
+    // Header and footer grow a little less than the letters, just enough not to cut them.
+    out property <float> grow: max(1, zoom * 0.96);
+    out property <length> tools-width: 3 * 28px + 9px + 3 * 2px;
+    // Contrast weighs the letters one step more.
+    out property <int> weight-plain: Palette.contrast ? 500 : 400;
+    out property <int> weight-strong: Palette.contrast ? 700 : 600;
+    // Already bold, the heaviest stays: Segoe has no face between Bold and Black.
+    out property <int> weight-heavy: 700;
+    out property <length> text-tiny: 11px * zoom;
+    out property <length> text-note: 11.5px * zoom;
+    out property <length> text-small: 12px * zoom;
+    out property <length> text-label: 12.5px * zoom;
+    out property <length> text-body: 13px * zoom;
+    out property <length> text-name: 15px * zoom;
+    out property <length> text-title: 17px * zoom;
+    out property <length> text-mark: 22px * zoom;
 }
 
 export enum Look { list, tiles, compact, bear }
@@ -133,7 +162,7 @@ component UpdateStrip inherits Rectangle {
     callback asked();
     callback dismissed();
 
-    height: 36px;
+    height: 36px * Measures.grow;
     border-radius: 10px;
     background: Palette.accent-soft;
 
@@ -148,14 +177,14 @@ component UpdateStrip inherits Rectangle {
             horizontal-stretch: 1;
             Text {
                 text: root.line;
-                font-size: 12.5px;
+                font-size: Measures.text-label;
                 color: Palette.ink;
                 vertical-alignment: center;
                 overflow: elide;
             }
             if root.detail != "": Text {
                 text: root.detail;
-                font-size: 11.5px;
+                font-size: Measures.text-note;
                 color: Palette.dim;
                 vertical-alignment: center;
                 overflow: elide;
@@ -187,8 +216,8 @@ component UpdateStrip inherits Rectangle {
             opacity: take-touch.has-hover ? 0.9 : 1.0;
             take-words := Text {
                 text: root.button;
-                font-size: 12.5px;
-                font-weight: 600;
+                font-size: Measures.text-label;
+                font-weight: Measures.weight-strong;
                 color: Palette.accent-ink;
                 horizontal-alignment: center;
                 vertical-alignment: center;
@@ -241,10 +270,10 @@ export component Grip inherits TouchArea {
 export component Hair inherits Rectangle {
     height: 1px;
     Rectangle {
-        x: 12px;
-        width: parent.width - 24px;
+        x: Palette.contrast ? 0 : 12px;
+        width: parent.width - 2 * self.x;
         height: 1px;
-        background: @linear-gradient(90deg, transparent 0%, Palette.hair 12%, Palette.hair 88%, transparent 100%);
+        background: Palette.contrast ? Palette.hair : @linear-gradient(90deg, transparent 0%, Palette.hair 12%, Palette.hair 88%, transparent 100%);
     }
 }
 
@@ -267,8 +296,8 @@ export component KeyCap inherits Rectangle {
     }
     words := Text {
         text: root.key;
-        font-size: 11.5px;
-        font-weight: 600;
+        font-size: Measures.text-note;
+        font-weight: Measures.weight-strong;
         color: root.lit ? #FFFFFF : Palette.key-ink;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -367,10 +396,6 @@ export component CloseMark inherits Rectangle {
     }
 }
 
-export global Measures {
-    out property <length> tools-width: 3 * 28px + 9px + 3 * 2px;
-}
-
 export component Tools inherits HorizontalLayout {
     width: Measures.tools-width;
     in property <bool> private-on;
@@ -423,7 +448,7 @@ export component AddressHead inherits Rectangle {
     callback copy();
     callback close();
     callback grabbed();
-    height: 60px;
+    height: 60px * Measures.grow;
 
     Grip {
         grabbed => { root.grabbed(); }
@@ -441,22 +466,22 @@ export component AddressHead inherits Rectangle {
                 alignment: start;
                 Text {
                     text: root.host;
-                    font-size: 15px;
-                    font-weight: 600;
+                    font-size: Measures.text-name;
+                    font-weight: Measures.weight-strong;
                     color: Palette.ink;
                 }
                 Text {
                     text: root.trail;
-                    font-size: 15px;
+                    font-size: Measures.text-name;
                     color: Palette.dimmer;
                     overflow: elide;
                 }
             }
             if root.line != "": Text {
                 text: root.line;
-                font-size: 12px;
+                font-size: Measures.text-small;
                 color: root.line-color;
-                font-weight: root.private-on ? 600 : 400;
+                font-weight: root.private-on ? Measures.weight-strong : Measures.weight-plain;
                 overflow: elide;
             }
         }
@@ -491,7 +516,7 @@ export component AskHead inherits Rectangle {
     callback copy();
     callback close();
     callback grabbed();
-    height: 80px;
+    height: 80px * Measures.grow;
     in property <length> ask-margin: 72px;
 
     Grip {
@@ -510,8 +535,8 @@ export component AskHead inherits Rectangle {
             padding-bottom: 2px;
             Text {
                 text: root.ask;
-                font-size: 17px;
-                font-weight: 700;
+                font-size: Measures.text-title;
+                font-weight: Measures.weight-heavy;
                 color: root.private-on ? Palette.secret : Palette.ink;
                 horizontal-alignment: center;
                 overflow: elide;
@@ -521,13 +546,13 @@ export component AskHead inherits Rectangle {
             alignment: center;
             Text {
                 text: root.host;
-                font-size: 13px;
-                font-weight: 600;
+                font-size: Measures.text-body;
+                font-weight: Measures.weight-strong;
                 color: Palette.ink;
             }
             Text {
                 text: root.trail;
-                font-size: 13px;
+                font-size: Measures.text-body;
                 color: Palette.dimmer;
                 max-width: root.width - 200px;
                 overflow: elide;
@@ -535,7 +560,7 @@ export component AskHead inherits Rectangle {
         }
         if root.line != "": Text {
             text: root.line;
-            font-size: 12px;
+            font-size: Measures.text-small;
             color: root.line-color;
             horizontal-alignment: center;
             overflow: elide;
@@ -567,7 +592,7 @@ export component RememberFoot inherits Rectangle {
     in property <int> reach-index;
     callback picked(int);
     callback more();
-    height: 74px;
+    height: 74px * Measures.grow;
 
     VerticalLayout {
         padding-left: 12px;
@@ -577,13 +602,13 @@ export component RememberFoot inherits Rectangle {
         spacing: 7px;
         Text {
             text: root.label;
-            font-size: 11px;
-            font-weight: 600;
+            font-size: Measures.text-tiny;
+            font-weight: Measures.weight-strong;
             color: Palette.faint;
             x: 4px;
         }
         Rectangle {
-            height: 32px;
+            height: 32px * Measures.grow;
             border-radius: 7px;
             background: Palette.track;
             HorizontalLayout {
@@ -595,13 +620,15 @@ export component RememberFoot inherits Rectangle {
                     border-radius: 5px;
                     opacity: item.dead ? 0.4 : 1.0;
                     background: self.on ? Palette.thumb : transparent;
+                    border-width: self.on && Palette.contrast ? 1px : 0px;
+                    border-color: Palette.glow;
                     drop-shadow-blur: self.on ? 2px : 0px;
                     drop-shadow-color: #0000002e;
                     drop-shadow-offset-y: 1px;
                     Text {
                         text: item.label;
-                        font-size: 12.5px;
-                        font-weight: parent.on ? 600 : 400;
+                        font-size: Measures.text-label;
+                        font-weight: parent.on ? Measures.weight-strong : Measures.weight-plain;
                         color: parent.on ? (item.keeps ? Palette.brand : Palette.ink) : (seg.has-hover ? Palette.ink : Palette.dim);
                         horizontal-alignment: center;
                         vertical-alignment: center;
@@ -622,8 +649,8 @@ export component RememberFoot inherits Rectangle {
                         spacing: 5px;
                         Text {
                             text: root.more-said;
-                            font-size: 12.5px;
-                            font-weight: root.more-holds ? 600 : 400;
+                            font-size: Measures.text-label;
+                            font-weight: root.more-holds ? Measures.weight-strong : Measures.weight-plain;
                             color: root.more-holds ? Palette.brand : (opener.has-hover ? Palette.ink : Palette.dim);
                             vertical-alignment: center;
                             overflow: elide;
@@ -679,9 +706,9 @@ export component ReachMenu inherits Rectangle {
                 padding-right: 10px;
                 Text {
                     text: item.label;
-                    font-size: 12.5px;
+                    font-size: Measures.text-label;
                     color: item.index == root.reach-index ? Palette.brand : Palette.ink;
-                    font-weight: item.index == root.reach-index ? 600 : 400;
+                    font-weight: item.index == root.reach-index ? Measures.weight-strong : Measures.weight-plain;
                     vertical-alignment: center;
                     overflow: elide;
                 }

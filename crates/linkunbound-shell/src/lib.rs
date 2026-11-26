@@ -3,6 +3,7 @@
 slint::include_modules!();
 
 pub mod hotkey;
+pub mod measure;
 pub mod place;
 pub mod single;
 pub mod tray;
