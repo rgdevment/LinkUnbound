@@ -119,12 +119,24 @@ pub fn dress_the_window(picker: &Picker) {
 /// Centered or not, the picker opens on the pointer's screen, the one the person is looking at.
 pub fn put_in_place(picker: &Picker) {
     let Some(pointer) = crate::host::cursor() else {
+        fit(picker);
         return;
     };
     let Some(area) = crate::host::work_area_at(pointer.0, pointer.1) else {
+        fit(picker);
         return;
     };
     place_for(picker, pointer, area);
+}
+
+/// Left to Slint, a window shown before opens in its old size and fits the new look a frame
+/// later; AppKit would also keep its bottom edge and lift it off the place and the bear.
+/// Logical, because a window not yet created reports a scale of one.
+fn fit(picker: &Picker) {
+    picker.window().set_size(slint::LogicalSize::new(
+        picker.get_wanted_width(),
+        picker.get_wanted_height(),
+    ));
 }
 
 /// Where the picker goes for a pointer and the screen area around it, in the units the window is
@@ -167,13 +179,7 @@ fn place_for(
     if let Some(ui) = crate::ui() {
         ui.mascot.anchor(at_x, at_y);
     }
-    // Left to Slint, a window shown before opens in its old size and fits the new look a frame
-    // later; AppKit would also keep its bottom edge and lift it off the place and the bear.
-    // Logical, because a window not yet created reports a scale of one.
-    picker.window().set_size(slint::LogicalSize::new(
-        picker.get_wanted_width(),
-        picker.get_wanted_height(),
-    ));
+    fit(picker);
     #[cfg(target_os = "macos")]
     picker
         .window()
