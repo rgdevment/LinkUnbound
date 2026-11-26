@@ -88,6 +88,15 @@ mod tests {
         assert_eq!(listed("Tahoma", Vec::new()).system, "Tahoma");
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn this_mac_names_sf_pro_and_offers_no_hidden_family() {
+        let fonts = super::fonts_list();
+        assert_eq!(fonts.system, "SF Pro");
+        assert!(fonts.families.iter().any(|one| one.name == "Helvetica"));
+        assert!(!fonts.families.iter().any(|one| one.name.starts_with('.')));
+    }
+
     #[cfg(windows)]
     #[test]
     fn this_windows_names_its_system_family_and_offers_no_pictures() {
