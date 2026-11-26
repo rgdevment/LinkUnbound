@@ -5,16 +5,22 @@ import type { Fonts } from "./look";
 
 type Pickable = { name: string; label: string };
 
-/// The search, the list's tallest and the gap: what the drop needs below the button.
+/// The search and the list's tallest: what the drop needs beside the button.
 const DROP_HEIGHT = 280;
+const GAP = 4;
 
-/// Fixed to the window, because the card around the line clips whatever hangs out of it.
+/// Fixed to the window, because the card around the line clips whatever hangs out of it. Below
+/// while it fits, else on the roomier side, cut to the room there.
 function dropAt(button: HTMLElement): CSSProperties {
   const at = button.getBoundingClientRect();
   const right = window.innerWidth - at.right;
-  return at.bottom + DROP_HEIGHT > window.innerHeight && at.top > DROP_HEIGHT
-    ? { right, bottom: window.innerHeight - at.top + 4 }
-    : { right, top: at.bottom + 4 };
+  const below = window.innerHeight - at.bottom - 2 * GAP;
+  const above = at.top - 2 * GAP;
+  const up = below < DROP_HEIGHT && above > below;
+  const maxHeight = Math.min(DROP_HEIGHT, up ? above : below);
+  return up
+    ? { right, bottom: window.innerHeight - at.top + GAP, maxHeight }
+    : { right, top: at.bottom + GAP, maxHeight };
 }
 
 const folded = (said: string) =>
@@ -138,7 +144,7 @@ export default function FontPicker({
         <div
           ref={drop}
           style={open}
-          className="fixed z-20 w-[300px] rounded-lg border border-hair bg-panel p-1.5 shadow-lg"
+          className="fixed z-20 flex w-[300px] flex-col rounded-lg border border-hair bg-panel p-1.5 shadow-lg"
         >
           <input
             type="search"
@@ -156,14 +162,14 @@ export default function FontPicker({
             }}
             onKeyDown={steer}
             onBlur={() => close(false)}
-            className="w-full rounded-md border border-accent bg-panel px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-muted"
+            className="w-full shrink-0 rounded-md border border-accent bg-panel px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-muted"
           />
           <div
             id={list}
             role="listbox"
             aria-label={label}
             onMouseDown={(event) => event.preventDefault()}
-            className="scroller mt-1 max-h-[220px]"
+            className="scroller mt-1 max-h-[220px] min-h-0"
           >
             {shown.map((one, at) => (
               <div

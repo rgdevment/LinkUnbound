@@ -260,4 +260,13 @@ describe("the font picker", () => {
     expect(drop().style.bottom).toBe("44px");
     expect(drop().style.top).toBe("");
   });
+
+  it("takes the roomier side and fits it when the list fits neither", async () => {
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(441);
+    buttonAt(220, 250);
+    mount();
+    await userEvent.click(opener(SYSTEM));
+    expect(drop().style.bottom).toBe("225px");
+    expect(drop().style.maxHeight).toBe("212px");
+  });
 });
