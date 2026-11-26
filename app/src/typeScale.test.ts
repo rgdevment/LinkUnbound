@@ -47,8 +47,10 @@ describe("type scale and colour contract", () => {
     expect(offenders(raw)).toEqual([]);
   });
 
-  it("defines exactly the five text sizes", () => {
-    const sizes = [...css.matchAll(/--text-(\w+):\s*(\d+)px/g)].map((m) => [m[1], m[2]]);
+  // Only the theme is held to five: a text-size class may still override them elsewhere.
+  it("defines exactly the five text sizes in the theme", () => {
+    const theme = css.match(/@theme\s*\{([^}]*)\}/)?.[1] ?? "";
+    const sizes = [...theme.matchAll(/--text-(\w+):\s*([\d.]+)px/g)].map((m) => [m[1], m[2]]);
     expect(sizes).toEqual([
       ["xs", "11"],
       ["sm", "12"],
@@ -56,6 +58,6 @@ describe("type scale and colour contract", () => {
       ["lg", "15"],
       ["xl", "20"],
     ]);
-    expect(css).toMatch(/--text-\*:\s*initial/);
+    expect(theme).toMatch(/--text-\*:\s*initial/);
   });
 });
