@@ -57,8 +57,8 @@ export function Switch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!on)}
-      className={`relative h-[19px] w-[34px] shrink-0 rounded-full transition disabled:opacity-40 ${
-        on ? "bg-accent" : "bg-edge"
+      className={`relative h-[19px] w-[34px] shrink-0 rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent enabled:cursor-pointer enabled:hover:ring-4 enabled:hover:ring-accent/20 disabled:opacity-40 ${
+        on ? "bg-accent" : "bg-edge enabled:hover:bg-ink-2/40"
       }`}
     >
       <span
@@ -69,6 +69,10 @@ export function Switch({
     </button>
   );
 }
+
+const CHOSEN_HOVER = "cursor-pointer hover:bg-accent/[0.2] dark:hover:bg-accent/[0.26]";
+const OTHER_HOVER =
+  "cursor-pointer hover:bg-black/[0.09] hover:text-ink dark:hover:bg-white/[0.12]";
 
 export function Choice<T extends string>({
   options,
@@ -98,12 +102,10 @@ export function Choice<T extends string>({
           />
           <span
             className={`rounded-md px-2.5 py-1 text-sm transition peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-accent ${
-              disabled ? "" : "cursor-pointer"
-            } ${
               o.id === value
                 ? "bg-accent/[0.13] font-semibold text-accent dark:bg-accent/[0.17]"
                 : "bg-black/[0.045] text-ink-2 dark:bg-white/[0.06]"
-            }`}
+            } ${disabled ? "" : o.id === value ? CHOSEN_HOVER : OTHER_HOVER}`}
           >
             {t(o.label)}
           </span>
