@@ -25,6 +25,8 @@ widestring = "1"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 linkunbound-mac.workspace = true
+# The version Slint draws with, so the font list offers only the families the picker finds.
+fontique = "0.11.1"
 
 [dev-dependencies]
 i-slint-backend-testing = "1.17"

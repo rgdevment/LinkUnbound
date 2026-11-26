@@ -32,10 +32,24 @@ pub const fn installed(_name: &str) -> bool {
     false
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(windows)]
 #[must_use]
 pub fn families() -> Vec<Family> {
     here::families()
+}
+
+/// CoreText also lists families Slint never finds (PingFang): the picker would write in another.
+#[cfg(target_os = "macos")]
+#[must_use]
+pub fn families() -> Vec<Family> {
+    let mut drawn = fontique::Collection::new(fontique::CollectionOptions {
+        shared: false,
+        system_fonts: true,
+    });
+    here::families()
+        .into_iter()
+        .filter(|one| drawn.family_by_name(&one.name).is_some())
+        .collect()
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -92,6 +106,18 @@ mod tests {
         wear(&picker, &notice, Some(&chosen));
         assert_eq!(picker.get_family(), chosen.as_str());
         assert_eq!(notice.get_family(), chosen.as_str());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_mac_offers_only_families_coretext_lists_and_the_picker_draws() {
+        let offered = super::families();
+        let listed = linkunbound_mac::fonts::families();
+        assert!(offered.iter().all(|one| listed.contains(one)));
+        assert!(
+            offered.iter().any(|one| one.name == "Helvetica"),
+            "{offered:?}"
+        );
     }
 
     /// Segoe UI on an English Windows; Yu Gothic UI and the like where the system writes in them.
