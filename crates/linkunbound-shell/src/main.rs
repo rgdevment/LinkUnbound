@@ -614,8 +614,8 @@ fn ui() -> Option<Rc<Ui>> {
 }
 
 impl Ui {
-    /// Settings runs in another process: the file is the only channel between
-    /// them. Read when something is about to be shown rather than on a clock.
+    /// Settings runs in another process: the file is the only channel between them. Never read
+    /// under a picker on screen: it would be redrawn in the new look and left where the old fit.
     fn catch_up(&self) {
         if self.settings_moved() {
             self.obey(&store().prefs());
@@ -625,7 +625,7 @@ impl Ui {
     }
 
     fn settings_moved(&self) -> bool {
-        self.moved_since(prefs_touched_at())
+        !self.picker.window().is_visible() && self.moved_since(prefs_touched_at())
     }
 
     fn moved_since(&self, now: Option<std::time::SystemTime>) -> bool {
@@ -1418,7 +1418,7 @@ mod tests {
             progress_watch: slint::Timer::default(),
             looker: slint::Timer::default(),
             put_away: RefCell::new(None),
-            prefs_seen: Cell::new(None),
+            prefs_seen: Cell::new(super::prefs_touched_at()),
             held_focus: Cell::new(false),
             launched_at: Cell::new(None),
             light_seen: Cell::new(false),

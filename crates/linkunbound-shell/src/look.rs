@@ -167,18 +167,17 @@ fn place_for(
     if let Some(ui) = crate::ui() {
         ui.mascot.anchor(at_x, at_y);
     }
-    // AppKit keeps a window's bottom edge when it grows, so the size Slint would set later would
-    // lift the picker off the place asked for, and off the bear.
+    // Left to Slint, a window shown before opens in its old size and fits the new look a frame
+    // later; AppKit would also keep its bottom edge and lift it off the place and the bear.
+    // Logical, because a window not yet created reports a scale of one.
+    picker.window().set_size(slint::LogicalSize::new(
+        picker.get_wanted_width(),
+        picker.get_wanted_height(),
+    ));
     #[cfg(target_os = "macos")]
-    {
-        picker.window().set_size(slint::LogicalSize::new(
-            picker.get_wanted_width(),
-            picker.get_wanted_height(),
-        ));
-        picker
-            .window()
-            .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
-    }
+    picker
+        .window()
+        .set_position(slint::LogicalPosition::new(at_x as f32, at_y as f32));
     #[cfg(not(target_os = "macos"))]
     picker
         .window()
