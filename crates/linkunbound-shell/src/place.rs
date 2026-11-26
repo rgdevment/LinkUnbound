@@ -1,4 +1,6 @@
 const OFFSET: i32 = 12;
+/// What the sheet leaves free at each edge of the screen when it has to shrink to fit.
+const EDGE: f64 = 8.0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bounds {
@@ -38,6 +40,15 @@ pub fn centered(window: (i32, i32), screen: Bounds) -> (i32, i32) {
         window,
         screen,
     )
+}
+
+/// The most the sheet may measure on a screen, in the logical pixels it is drawn in.
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub fn room(screen: Bounds, scale: f64) -> (f32, f32) {
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let fit = |physical: i32| (f64::from(physical) / scale - 2.0 * EDGE).max(1.0) as f32;
+    (fit(screen.width), fit(screen.height))
 }
 
 fn inside((x, y): (i32, i32), (w, h): (i32, i32), screen: Bounds) -> (i32, i32) {
@@ -148,5 +159,28 @@ mod tests {
             height: 1040,
         };
         assert_eq!(centered(WINDOW, left), (-1142, 370));
+    }
+
+    #[test]
+    fn the_room_is_the_screen_in_logical_pixels_less_an_edge_each_side() {
+        assert_eq!(room(SCREEN, 1.0), (1904.0, 1064.0));
+        assert_eq!(room(SCREEN, 1.5), (1264.0, 704.0));
+    }
+
+    #[test]
+    fn a_scale_that_is_not_positive_counts_as_one() {
+        assert_eq!(room(SCREEN, 0.0), room(SCREEN, 1.0));
+        assert_eq!(room(SCREEN, -2.0), room(SCREEN, 1.0));
+    }
+
+    #[test]
+    fn a_tiny_screen_still_leaves_one_pixel() {
+        let tiny = Bounds {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 0,
+        };
+        assert_eq!(room(tiny, 1.0), (1.0, 1.0));
     }
 }

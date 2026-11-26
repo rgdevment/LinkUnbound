@@ -1,10 +1,12 @@
 //! How the picker is drawn: which look, and the material behind it where the system lends one.
 
 use linkunbound_core::{PickerPosition, PickerStyle, Preferences};
-use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, place};
+use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Look, Palette, Picker, measure, place};
 use slint::ComponentHandle;
 
 pub fn obey(picker: &Picker, prefs: &Preferences) {
+    // Contrast is set before the style: the sheet it asks for is settled with the style.
+    measure::wear(picker, prefs.text_size, prefs.density, prefs.high_contrast);
     style(picker, prefs.picker_style);
     picker.set_centered(prefs.picker_position == PickerPosition::Center);
 }
@@ -25,10 +27,12 @@ pub fn settle(picker: &Picker) {
 }
 
 /// Unblended, the shadow and the bear would come out as black boxes.
+/// Contrast paints the sheet opaque without `solid`, which would also send the bear away.
 fn dress_for(picker: &Picker, solid: bool) {
     let look = picker.get_look();
-    let clear = !solid && native_glass();
     let palette = picker.global::<Palette>();
+    let contrast = palette.get_contrast();
+    let clear = !solid && !contrast && native_glass();
     palette.set_solid(solid);
     palette.set_clear(clear);
     palette.set_tint(tint());
@@ -39,7 +43,7 @@ fn dress_for(picker: &Picker, solid: bool) {
     } else {
         DWM_CORNER
     });
-    palette.set_see_through(!solid && see_through());
+    palette.set_see_through(!solid && !contrast && see_through());
     picker.set_halo(if look == Look::List || clear || solid {
         0.0
     } else {
@@ -134,11 +138,6 @@ fn place_for(
     };
     let size = |logical: f32| crate::physical(logical, scale);
 
-    let halo = size(picker.get_halo());
-    let window = (
-        size(picker.get_wanted_width()),
-        size(picker.get_wanted_height()),
-    );
     // The bear rises over the sheet, so the screen it may use starts that much lower.
     let screen = place::Bounds {
         x,
@@ -146,6 +145,14 @@ fn place_for(
         width,
         height: height - size(crate::mascot::rise(picker)),
     };
+    let (room_width, room_height) = place::room(screen, scale);
+    picker.set_room_width(room_width);
+    picker.set_room_height(room_height);
+    let halo = size(picker.get_halo());
+    let window = (
+        size(picker.get_wanted_width()),
+        size(picker.get_wanted_height()),
+    );
     let (at_x, at_y) = if picker.get_centered() {
         place::centered((window.0 - 2 * halo, window.1 - 2 * halo), screen)
     } else {
@@ -276,8 +283,14 @@ fn take_off_glass(view: isize) {
     linkunbound_mac::take_off_glass(view);
 }
 
-/// Acrylic is a window attribute DWM drops when the system turns transparency off.
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn take_off_glass(window: isize) {
+    if native_glass() {
+        linkunbound_win::take_off_acrylic(window);
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn take_off_glass(_window: isize) {}
 
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -292,7 +305,7 @@ fn wear_glass(_window: isize, _dark: bool, _corner: f64) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{corner_of, dress_for, native_glass, place_for, style, wear_backdrop};
+    use super::{corner_of, dress_for, native_glass, place_for, settle, style, wear_backdrop};
     use linkunbound_core::PickerStyle;
     use linkunbound_shell::{CLASSIC_CORNER, CORNER, HALO, Palette, Picker};
     use slint::ComponentHandle;
@@ -477,5 +490,32 @@ mod tests {
         dress_for(&picker, false);
         assert!(!palette.get_solid());
         assert!(crate::mascot::rise(&picker) > 0.0, "the bear is back");
+    }
+
+    /// Contrast paints the sheet opaque without calling it solid, which would send the bear away.
+    #[test]
+    fn contrast_takes_the_material_off_but_keeps_the_bear() {
+        let picker = picker();
+        let palette = picker.global::<Palette>();
+        palette.set_contrast(true);
+        style(&picker, PickerStyle::Bear);
+
+        dress_for(&picker, false);
+        assert!(!palette.get_solid());
+        assert!(!palette.get_clear());
+        assert!(!palette.get_see_through());
+        assert_eq!(picker.get_halo(), HALO);
+        assert!(
+            crate::mascot::rise(&picker) > 0.0,
+            "the bear is still there"
+        );
+
+        dress_for(&picker, true);
+        assert!(palette.get_solid(), "an unblended system stays solid");
+        assert!(!palette.get_clear());
+
+        settle(&picker);
+        assert!(!palette.get_clear());
+        assert!(!palette.get_see_through());
     }
 }

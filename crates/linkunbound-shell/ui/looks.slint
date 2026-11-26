@@ -1,9 +1,8 @@
-import { Destination, Palette, KeyCap, Badge, Tools, Grip } from "parts.slint";
+import { Destination, Palette, Measures, KeyCap, Badge, Tools, Grip } from "parts.slint";
 
 // The rows: key, icon, name, profile; nine on screen and the rest scroll under them.
 export component ListLook inherits Rectangle {
     in property <[Destination]> rows;
-    in property <length> icon: 24px;
     in property <bool> private-on;
     in property <int> chosen-at;
     in property <length> room;
@@ -16,20 +15,23 @@ export component ListLook inherits Rectangle {
         list.content-y = 0;
     }
     changed chosen-at => {
-        list.content-y = root.chosen-at < 0 ? 0 : clamp(list.content-y, -(root.chosen-at * 45px), root.room - (root.chosen-at * 45px + 56px));
+        list.content-y = root.chosen-at < 0 ? 0 : clamp(list.content-y, -(root.chosen-at * Measures.row), root.room - (root.chosen-at * Measures.row + Measures.row + 11px));
     }
     list := Flickable {
         height: root.room;
-        content-height: root.rows.length * 45px + 12px;
+        content-height: root.rows.length * Measures.row + 12px;
         VerticalLayout {
             padding: 6px;
             spacing: 1px;
             for item[i] in root.rows: Rectangle {
                 property <bool> greyed: root.private-on && !item.can-private;
                 property <bool> lit: touch.has-hover || i == root.chosen-at;
-                height: 44px;
+                property <bool> marked: self.lit && !self.greyed && Palette.contrast;
+                height: Measures.row - 1px;
                 border-radius: 6px;
-                background: self.lit && !self.greyed ? Palette.hover : transparent;
+                background: self.marked ? Palette.brand-soft : (self.lit && !self.greyed ? Palette.hover : transparent);
+                border-width: self.marked ? 1.5px : (Palette.contrast ? 1px : 0px);
+                border-color: self.marked ? Palette.brand : Palette.row-edge;
                 opacity: self.greyed ? 0.45 : 1.0;
                 accessible-role: button;
                 accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
@@ -52,14 +54,14 @@ export component ListLook inherits Rectangle {
                     }
                     Badge {
                         y: (parent.height - self.height) / 2;
-                        width: root.icon;
-                        height: root.icon;
+                        width: Measures.icon;
+                        height: Measures.icon;
                         icon: item.icon;
                         secret: root.private-on && item.can-private;
                     }
                     Text {
                         text: item.name;
-                        font-size: 15px;
+                        font-size: Measures.text-name;
                         color: Palette.ink;
                         vertical-alignment: center;
                         overflow: elide;
@@ -74,7 +76,7 @@ export component ListLook inherits Rectangle {
                         background: Palette.chip;
                         profile := Text {
                             text: item.profile;
-                            font-size: 12px;
+                            font-size: Measures.text-small;
                             color: Palette.dim;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -137,27 +139,28 @@ export component CardsLook inherits Rectangle {
     callback hovered(int);
     callback adding();
     property <length> card-width: (self.width - 20px - 2 * 6px) / 3;
+    property <length> pitch: Measures.card + 6px;
 
     changed rows => {
         cards.content-y = 0;
     }
     changed chosen-at => {
-        cards.content-y = root.chosen-at < 0 ? 0 : clamp(cards.content-y, -(Math.floor(root.chosen-at / 3) * 58px), root.room - (Math.floor(root.chosen-at / 3) * 58px + 68px));
+        cards.content-y = root.chosen-at < 0 ? 0 : clamp(cards.content-y, -(Math.floor(root.chosen-at / 3) * root.pitch), root.room - (Math.floor(root.chosen-at / 3) * root.pitch + root.pitch + 10px));
     }
     cards := Flickable {
         height: root.room;
-        content-height: Math.ceil(root.rows.length / 3) * 58px + 10px;
+        content-height: Math.ceil(root.rows.length / 3) * root.pitch + 10px;
         for item[i] in root.rows: Rectangle {
             property <bool> greyed: root.private-on && !item.can-private;
             property <bool> lit: touch.has-hover || i == root.chosen-at;
             x: 10px + Math.mod(i, 3) * (root.card-width + 6px);
-            y: 8px + Math.floor(i / 3) * 58px;
+            y: 8px + Math.floor(i / 3) * root.pitch;
             width: root.card-width;
-            height: 52px;
+            height: Measures.card;
             border-radius: 8px;
             background: self.lit && !self.greyed ? Palette.brand-soft : Palette.chip;
-            border-width: self.lit && !self.greyed ? 1.5px : 0px;
-            border-color: Palette.brand;
+            border-width: self.lit && !self.greyed ? 1.5px : (Palette.contrast ? 1px : 0px);
+            border-color: self.lit && !self.greyed ? Palette.brand : Palette.row-edge;
             opacity: self.greyed ? 0.4 : 1.0;
             accessible-role: button;
             accessible-label: item.profile != "" ? item.name + " · " + item.profile : item.name;
@@ -184,14 +187,14 @@ export component CardsLook inherits Rectangle {
                     horizontal-stretch: 1;
                     Text {
                         text: item.short;
-                        font-size: 13px;
-                        font-weight: 600;
+                        font-size: Measures.text-body;
+                        font-weight: Measures.weight-strong;
                         color: Palette.ink;
                         overflow: elide;
                     }
                     if item.profile != "": Text {
                         text: item.profile;
-                        font-size: 12px;
+                        font-size: Measures.text-small;
                         color: Palette.dim;
                         overflow: elide;
                     }
@@ -211,7 +214,7 @@ export component CardsLook inherits Rectangle {
             x: 10px + (root.rows.length + slot) * (root.card-width + 6px);
             y: 8px;
             width: root.card-width;
-            height: 52px;
+            height: Measures.card;
             border-radius: 8px;
             background: add-touch.has-hover ? Palette.brand-soft : transparent;
             accessible-role: button;
@@ -229,7 +232,7 @@ export component CardsLook inherits Rectangle {
                 spacing: 10px;
                 Text {
                     text: "+";
-                    font-size: 22px;
+                    font-size: Measures.text-mark;
                     color: add-touch.has-hover ? Palette.brand : Palette.faint;
                     vertical-alignment: center;
                 }
@@ -238,14 +241,14 @@ export component CardsLook inherits Rectangle {
                     spacing: 1px;
                     Text {
                         text: root.add;
-                        font-size: 12.5px;
-                        font-weight: 600;
+                        font-size: Measures.text-label;
+                        font-weight: Measures.weight-strong;
                         color: add-touch.has-hover ? Palette.brand : Palette.dim;
                         overflow: elide;
                     }
                     Text {
                         text: root.add-more;
-                        font-size: 11.5px;
+                        font-size: Measures.text-note;
                         color: Palette.faint;
                         overflow: elide;
                     }
@@ -303,14 +306,14 @@ export component CompactLook inherits Rectangle {
                 padding-left: 4px;
                 Text {
                     text: root.host;
-                    font-size: 12.5px;
-                    font-weight: 600;
+                    font-size: Measures.text-label;
+                    font-weight: Measures.weight-strong;
                     color: Palette.ink;
                     vertical-alignment: center;
                 }
                 Text {
                     text: root.trail;
-                    font-size: 12.5px;
+                    font-size: Measures.text-label;
                     color: Palette.dimmer;
                     vertical-alignment: center;
                     overflow: elide;
@@ -369,7 +372,7 @@ export component CompactLook inherits Rectangle {
             horizontal-alignment: center;
             vertical-alignment: center;
             overflow: elide;
-            font-size: 13px;
+            font-size: Measures.text-body;
             text: root.private-on ? root.private-line
                 : root.aimed >= 0 && root.aimed < root.rows.length
                     ? (root.rows[root.aimed].profile != "" ? root.rows[root.aimed].name + " · " + root.rows[root.aimed].profile : root.rows[root.aimed].name)
@@ -389,14 +392,14 @@ export component CompactLook inherits Rectangle {
                     spacing: 5px;
                     Text {
                         text: root.remember-label + ":";
-                        font-size: 12.5px;
+                        font-size: Measures.text-label;
                         color: Palette.dim;
                         vertical-alignment: center;
                     }
                     Text {
                         text: root.reach-said;
-                        font-size: 12.5px;
-                        font-weight: 600;
+                        font-size: Measures.text-label;
+                        font-weight: Measures.weight-strong;
                         color: root.reach-keeps ? Palette.brand : Palette.ink;
                         vertical-alignment: center;
                         max-width: 180px;

@@ -137,6 +137,23 @@ pub fn wear_acrylic(window: isize, dark: bool) -> bool {
     framed_by_dwm(window, dark, &whole, DWMSBT_TRANSIENTWINDOW)
 }
 
+/// DWM drops Acrylic on its own only when transparency goes, not when contrast asks for a sheet.
+pub fn take_off_acrylic(window: isize) -> bool {
+    let hwnd = HWND(window as *mut std::ffi::c_void);
+    let none = MARGINS::default();
+    let backdrop = DWMSBT_NONE;
+    unsafe {
+        DwmExtendFrameIntoClientArea(hwnd, &none).is_ok()
+            && DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_SYSTEMBACKDROP_TYPE,
+                (&raw const backdrop).cast(),
+                size_of::<DWM_SYSTEMBACKDROP_TYPE>() as u32,
+            )
+            .is_ok()
+    }
+}
+
 /// DWM shadows only a window with some frame in its client area.
 pub fn wear_solid(window: isize, dark: bool) -> bool {
     let edge = MARGINS {
