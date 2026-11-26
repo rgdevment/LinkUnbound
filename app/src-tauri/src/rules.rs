@@ -435,8 +435,8 @@ fn program_of(app: &Offered) -> Option<String> {
     app.program.clone()
 }
 
-// Async: icons are extracted, and on a Mac each app is looked up by its bundle id.
-#[tauri::command(async)]
+// On the main thread like the browser list: two at once would share one icon staging file.
+#[tauri::command]
 pub fn apps_seen() -> Vec<SeenAppView> {
     let store = store();
     let rules = store.rules().map(|set| set.rules).unwrap_or_default();
