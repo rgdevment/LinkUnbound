@@ -427,13 +427,13 @@ fn offered(seen: Vec<SeenApp>, rules: &[Rule], shown: impl Fn(&str) -> String) -
 }
 
 #[cfg(target_os = "macos")]
-fn program_of(app: Offered) -> Option<String> {
+fn program_of(app: &Offered) -> Option<String> {
     linkunbound_mac::app_path(&app.origin.key)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn program_of(app: Offered) -> Option<String> {
-    app.program
+fn program_of(app: &Offered) -> Option<String> {
+    app.program.clone()
 }
 
 // Async: icons are extracted, and on a Mac each app is looked up by its bundle id.
@@ -444,23 +444,20 @@ pub fn apps_seen() -> Vec<SeenAppView> {
     offered(store.apps_seen(), &rules, shown_origin)
         .into_iter()
         .map(|app| SeenAppView {
-            name: app.origin.label.clone(),
+            icon: program_of(&app).and_then(|program| app_icon_data(&program, &app.origin.key)),
+            name: app.origin.label,
             links: app.links,
             last_seen: app.last_seen,
-            rule_id: app.rule_id.clone(),
-            icon: {
-                let key = app.origin.key.clone();
-                program_of(app).and_then(|program| app_icon_data(&program, &key))
-            },
+            rule_id: app.rule_id,
         })
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{describe, edited_in, named_alike, probed, rule_from};
+    use super::{describe, edited_in, named_alike, offered, probed, rule_from};
     use crate::tests::detected;
-    use linkunbound_core::{Profile, Replaced, Rule, RuleSet, Scope, Target, Why};
+    use linkunbound_core::{Profile, Replaced, Rule, RuleSet, Scope, SeenApp, Target, Why};
 
     fn with_profiles(id: &str, profiles: &[&str]) -> linkunbound_core::Browser {
         linkunbound_core::Browser {
@@ -902,6 +899,130 @@ mod tests {
         let from_nowhere = probed(&rules, "https://a.test/", None, &[]).expect("a link");
         assert_eq!(from_nowhere.winner.expect("a winner").id, "site:a.test");
         assert!(from_nowhere.also.is_empty());
+    }
+
+    fn sighted(key: &str, label: &str, links: u64, last_seen: u64) -> SeenApp {
+        SeenApp {
+            key: key.to_owned(),
+            label: label.to_owned(),
+            links,
+            last_seen,
+            program: None,
+        }
+    }
+
+    fn naming(id: &str, scope: Scope, app: &str) -> Rule {
+        Rule {
+            id: id.to_owned(),
+            scope,
+            source_app: Some(app.to_owned()),
+            target: aimed("chrome", None),
+            private: false,
+        }
+    }
+
+    fn as_is(saved: &str) -> String {
+        saved.to_owned()
+    }
+
+    #[test]
+    fn the_apps_seen_come_most_recent_first_whatever_order_they_were_stored_in() {
+        let seen = vec![
+            sighted("olk", "olk", 1, 10),
+            sighted("slack", "slack", 5, 30),
+            sighted("teams", "teams", 2, 20),
+        ];
+        let all = offered(seen, &[], as_is);
+        let names: Vec<&str> = all.iter().map(|a| a.origin.key.as_str()).collect();
+        assert_eq!(names, ["slack", "teams", "olk"]);
+        assert_eq!(all[0].links, 5);
+        assert_eq!(all[0].last_seen, Some(30));
+        assert!(all.iter().all(|a| a.rule_id.is_none()));
+    }
+
+    #[test]
+    fn an_app_only_a_rule_names_goes_last_with_no_links_and_no_date() {
+        let rules = [naming("any@zoom", Scope::Any, "zoom")];
+        let all = offered(vec![sighted("slack", "slack", 1, 5)], &rules, as_is);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[1].origin.label, "zoom");
+        assert_eq!(all[1].links, 0);
+        assert_eq!(all[1].last_seen, None);
+        assert!(all[1].program.is_none());
+        assert_eq!(all[1].rule_id.as_deref(), Some("any@zoom"));
+    }
+
+    #[test]
+    fn rules_naming_the_same_app_add_it_once_and_the_first_from_rule_holds_it() {
+        let rules = [
+            naming("site:a.test@zoom", Scope::Site("a.test".to_owned()), "zoom"),
+            naming("any@zoom", Scope::Any, "Zoom"),
+            naming("any@zoom-again", Scope::Any, "zoom"),
+        ];
+        let all = offered(Vec::new(), &rules, as_is);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].rule_id.as_deref(), Some("any@zoom"));
+    }
+
+    #[test]
+    fn a_rule_for_a_site_from_an_app_does_not_hold_the_app() {
+        let rules = [naming(
+            "site:a.test@slack",
+            Scope::Host("a.test".to_owned()),
+            "slack",
+        )];
+        let all = offered(vec![sighted("slack", "slack", 3, 9)], &rules, as_is);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].links, 3, "the sighting is kept, not duplicated");
+        assert!(all[0].rule_id.is_none());
+    }
+
+    #[test]
+    fn a_rule_that_names_no_app_changes_nothing() {
+        let mut anyone = naming("any", Scope::Any, "x");
+        anyone.source_app = None;
+        let all = offered(vec![sighted("slack", "slack", 1, 1)], &[anyone], as_is);
+        assert_eq!(all.len(), 1);
+        assert!(all[0].rule_id.is_none());
+    }
+
+    #[test]
+    fn a_rule_matches_an_app_by_its_key_or_its_label_in_any_case() {
+        let seen = vec![
+            sighted("ms-teams", "Microsoft Teams", 1, 2),
+            sighted("olk", "olk", 1, 1),
+        ];
+        let rules = [
+            naming("any@label", Scope::Any, "microsoft teams"),
+            naming("any@key", Scope::Any, "OLK"),
+        ];
+        let all = offered(seen, &rules, as_is);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].rule_id.as_deref(), Some("any@label"));
+        assert_eq!(all[1].rule_id.as_deref(), Some("any@key"));
+    }
+
+    /// On a Mac a rule saves the bundle id, which the record's key carries and its label does not.
+    #[test]
+    fn a_rule_saved_with_a_bundle_id_finds_the_app_by_its_key_or_by_the_name_shown() {
+        let seen = vec![sighted("com.tinyspeck.slackmacgap", "slack", 4, 7)];
+        let by_id = [naming("any@id", Scope::Any, "com.tinyspeck.slackmacgap")];
+        let all = offered(seen.clone(), &by_id, |_| "Slack".to_owned());
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].rule_id.as_deref(), Some("any@id"));
+
+        let by_name = [naming("any@name", Scope::Any, "com.slack.unknown")];
+        let all = offered(seen, &by_name, |_| "slack".to_owned());
+        assert_eq!(all.len(), 1, "found by the name it is shown under");
+        assert_eq!(all[0].rule_id.as_deref(), Some("any@name"));
+    }
+
+    #[test]
+    fn an_app_a_rule_names_but_was_never_seen_takes_the_name_it_is_shown_under() {
+        let rules = [naming("any@id", Scope::Any, "com.apple.Safari")];
+        let all = offered(Vec::new(), &rules, |_| "Safari".to_owned());
+        assert_eq!(all[0].origin.key, "com.apple.Safari");
+        assert_eq!(all[0].origin.label, "Safari");
     }
 
     #[test]

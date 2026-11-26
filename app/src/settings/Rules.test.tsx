@@ -89,12 +89,15 @@ const BROWSERS = [
   },
 ];
 
+const APP_BOX = "Busca una aplicación o escribe su nombre";
+
 type Answer = () => Promise<unknown>;
 
 function answers(list: unknown[], overrides: Record<string, Answer> = {}) {
   invoke.mockImplementation((cmd: string) => {
     if (cmd in overrides) return overrides[cmd]();
     if (cmd === "browsers_list") return Promise.resolve(BROWSERS);
+    if (cmd === "apps_seen") return Promise.resolve([]);
     return Promise.resolve(list);
   });
 }
@@ -165,7 +168,7 @@ describe("rules", () => {
     render(<Rules />);
     await userEvent.click(await screen.findByRole("button", { name: "Añadir regla" }));
     await userEvent.click(screen.getByRole("radio", { name: "Los enlaces de una aplicación" }));
-    const box = screen.getByRole("textbox", { name: /Slack/ });
+    const box = screen.getByRole("combobox", { name: APP_BOX });
     await userEvent.type(box, "teams");
     await userEvent.click(screen.getByRole("button", { name: "Abrir en" }));
     await userEvent.click(screen.getByRole("option", { name: /Mozilla Firefox/ }));
@@ -538,7 +541,7 @@ describe("rules", () => {
       expect(
         within(form).getByRole("radio", { name: "Los enlaces de una aplicación" }),
       ).toBeChecked();
-      expect(within(form).getByRole("textbox", { name: /Slack/ })).toHaveValue("teams");
+      expect(within(form).getByRole("combobox", { name: APP_BOX })).toHaveValue("teams");
     });
 
     it("sends the new rule with the id of the one it rewrites", async () => {

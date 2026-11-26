@@ -7,6 +7,8 @@ import type { Destination, RuleView } from "./types";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...a) }));
 
+const APP_BOX = "Busca una aplicación o escribe su nombre";
+
 const CHOICES: Destination[] = [
   { browserId: "chrome", profileId: null, label: "Chrome", icon: null, opensPrivately: true },
   { browserId: "plain", profileId: null, label: "Plain", icon: null, opensPrivately: false },
@@ -134,6 +136,70 @@ describe("rule form", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "google.com" }), "a.test");
     await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
     await vi.waitFor(() => expect(onSaved).toHaveBeenCalledWith([RULE]));
+  });
+
+  describe("from an app", () => {
+    const NOW = Math.floor(Date.now() / 1000);
+    const SEEN = [
+      { name: "slack", links: 3, last_seen: NOW, icon: null, rule_id: null },
+      { name: "teams", links: 1, last_seen: NOW, icon: null, rule_id: "any@teams" },
+      { name: "olk", links: 2, last_seen: NOW, icon: null, rule_id: "any@olk" },
+    ];
+    const FROM_OLK: RuleView = {
+      ...RULE,
+      id: "any@olk",
+      kind: "any",
+      covers: "",
+      source_app: "olk",
+      resolved: true,
+    };
+
+    beforeEach(() => {
+      invoke.mockImplementation((cmd: string) =>
+        Promise.resolve(cmd === "apps_seen" ? SEEN : [RULE]),
+      );
+    });
+
+    it("opens the list of apps by itself and keeps the cursor in the box when the kind is chosen", async () => {
+      render(<RuleForm choices={CHOICES} onSaved={vi.fn()} onCancel={vi.fn()} />);
+      expect(screen.queryByRole("combobox")).toBeNull();
+      await userEvent.click(screen.getByRole("radio", { name: "Los enlaces de una aplicación" }));
+      const box = screen.getByRole("combobox", { name: APP_BOX });
+      expect(box).toHaveFocus();
+      expect(await screen.findByRole("listbox")).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /slack/ })).toBeInTheDocument();
+    });
+
+    it("picks an app with Enter without sending the form", async () => {
+      render(<RuleForm choices={CHOICES} onSaved={vi.fn()} onCancel={vi.fn()} />);
+      await userEvent.click(screen.getByRole("radio", { name: "Los enlaces de una aplicación" }));
+      await screen.findByRole("listbox");
+      await userEvent.keyboard("{Enter}");
+      expect(screen.getByRole("combobox", { name: APP_BOX })).toHaveValue("slack");
+      expect(invoke).not.toHaveBeenCalledWith("rules_add", expect.anything());
+    });
+
+    it("shows the app of the rule being edited as chosen and the app of another rule as taken", async () => {
+      render(
+        <RuleForm
+          choices={CHOICES}
+          editing={FROM_OLK}
+          start={draftOf(FROM_OLK)}
+          onSaved={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+      const box = screen.getByRole("combobox", { name: APP_BOX });
+      expect(box).toHaveValue("olk");
+      await userEvent.click(box);
+      const own = await screen.findByRole("option", { name: /olk/ });
+      expect(own).toHaveAttribute("aria-selected", "true");
+      expect(own).not.toHaveAttribute("aria-disabled");
+      expect(own).not.toHaveTextContent("ya tiene regla");
+      const other = screen.getByRole("option", { name: /teams/ });
+      expect(other).toHaveAttribute("aria-disabled", "true");
+      expect(other).toHaveTextContent("ya tiene regla");
+    });
   });
 
   it("words a refusal it has no sentence for, and can be tried again", async () => {
