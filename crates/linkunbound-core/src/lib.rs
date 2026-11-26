@@ -14,6 +14,7 @@ mod prefs;
 mod private;
 mod report;
 mod rule;
+mod seen;
 mod star;
 mod store;
 pub mod update;
@@ -45,6 +46,7 @@ pub use rule::{
     Origin, Replaced, Rule, RuleSet, Scope, Target, Why, is_public_suffix, same_name, site_of,
     visible, why_first,
 };
+pub use seen::{APPS_SEEN, SeenApp};
 pub use star::{Asking, asking};
 pub use store::{Store, StoreError, data_dir, seconds_now, unmarked};
 pub use url::{

@@ -11,6 +11,8 @@ const PATHS = {
   flask: "M9 3h6M10 3v6L4.5 19a1.3 1.3 0 0 0 1.1 2h12.8a1.3 1.3 0 0 0 1.1-2L14 9V3M7.5 14h9",
   plus: "M12 5v14M5 12h14",
   rules: "M4 6h16M4 12h11M4 18h7",
+  window:
+    "M5.5 4.5h13A2.5 2.5 0 0 1 21 7v10a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17V7a2.5 2.5 0 0 1 2.5-2.5zM3 9h18",
 } as const;
 
 export type GlyphName = keyof typeof PATHS;
@@ -42,5 +44,15 @@ export function BrowserIcon({ src, size = 16 }: Readonly<{ src: string | null; s
       style={{ width: size, height: size }}
       className="shrink-0 rounded bg-(--tile)"
     />
+  );
+}
+
+export function AppIcon({ src }: Readonly<{ src: string | null }>) {
+  return src ? (
+    <img src={src} alt="" width={16} height={16} className="shrink-0" />
+  ) : (
+    <span aria-hidden="true" className="text-muted">
+      <Glyph name="window" size={16} />
+    </span>
   );
 }

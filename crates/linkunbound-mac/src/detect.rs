@@ -136,6 +136,12 @@ fn preferred(bundle_id: &str) -> Option<objc2::rc::Retained<NSURL>> {
         .URLForApplicationWithBundleIdentifier(&NSString::from_str(bundle_id))
 }
 
+/// Where the app with this bundle id is installed, which is where its icon comes from.
+#[must_use]
+pub fn app_path(bundle_id: &str) -> Option<String> {
+    text(preferred(bundle_id)?.path())
+}
+
 /// The name an app goes by, for an origin a rule saved as its bundle id.
 #[must_use]
 pub fn app_named(bundle_id: &str) -> Option<String> {

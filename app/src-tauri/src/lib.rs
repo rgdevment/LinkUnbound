@@ -16,15 +16,27 @@ use linkunbound_core::{Browser, Language, Preferences, Store, Strings, merge};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-#[cfg(any(windows, target_os = "macos"))]
 fn icons_dir() -> std::path::PathBuf {
     linkunbound_core::data_dir().join("icons")
 }
 
+fn icon_data(source: &str, id: &str) -> Option<String> {
+    icon_data_in(&icons_dir(), source, id)
+}
+
+/// Apart from the browsers' pictures, which the resident sweeps of anything not a browser.
+fn app_icons_dir() -> std::path::PathBuf {
+    icons_dir().join("apps")
+}
+
+fn app_icon_data(program: &str, key: &str) -> Option<String> {
+    icon_data_in(&app_icons_dir(), program, key)
+}
+
 #[cfg(windows)]
-fn icon_data(exe: &str, id: &str) -> Option<String> {
+fn icon_data_in(dir: &std::path::Path, exe: &str, id: &str) -> Option<String> {
     use base64::Engine;
-    let path = linkunbound_win::icon_for(exe, id, &icons_dir(), linkunbound_shell::ICON_SIDE)?;
+    let path = linkunbound_win::icon_for(exe, id, dir, linkunbound_shell::ICON_SIDE)?;
     let bytes = std::fs::read(path).ok()?;
     Some(format!(
         "data:image/png;base64,{}",
@@ -33,9 +45,9 @@ fn icon_data(exe: &str, id: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "macos")]
-fn icon_data(app: &str, id: &str) -> Option<String> {
+fn icon_data_in(dir: &std::path::Path, app: &str, id: &str) -> Option<String> {
     use base64::Engine;
-    let path = linkunbound_mac::icon_for(app, id, &icons_dir(), linkunbound_shell::ICON_SIDE * 2)?;
+    let path = linkunbound_mac::icon_for(app, id, dir, linkunbound_shell::ICON_SIDE * 2)?;
     let bytes = std::fs::read(path).ok()?;
     Some(format!(
         "data:image/png;base64,{}",
@@ -44,7 +56,7 @@ fn icon_data(app: &str, id: &str) -> Option<String> {
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
-fn icon_data(_exe: &str, _id: &str) -> Option<String> {
+fn icon_data_in(_dir: &std::path::Path, _exe: &str, _id: &str) -> Option<String> {
     None
 }
 
@@ -229,7 +241,9 @@ fn maintenance_reset() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     store
         .save_browsers(&Default::default())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    store.forget_apps_seen();
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -763,6 +777,7 @@ pub fn run() {
             rules::rules_remove,
             rules::rules_retarget,
             rules::rules_probe,
+            rules::apps_seen,
             browsers_list,
             browsers_set_hidden,
             browsers_remove,

@@ -922,7 +922,7 @@ fn arrived(raw: String) {
     // normalised and this has to be too, or the scheme guard is walked around.
     let Some(url) = normalise(&raw) else { return };
 
-    let source = host::clicked_in();
+    let source = linkunbound_shell::apps_seen::noted(&store(), host::clicked_in());
     if let Some(fired) = answered_by_rule(&url, source.as_ref()) {
         announce(&ui, &fired);
         return;

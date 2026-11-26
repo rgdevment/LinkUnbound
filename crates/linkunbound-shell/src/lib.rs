@@ -2,6 +2,7 @@
 
 slint::include_modules!();
 
+pub mod apps_seen;
 pub mod font;
 pub mod hotkey;
 pub mod measure;
