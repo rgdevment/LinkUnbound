@@ -25,6 +25,8 @@
   --color-danger: var(--danger);
   --color-good: var(--good);
   --color-caution: var(--caution);
+  --color-hair: var(--hair);
+  --color-edge: var(--edge);
 }
 
 /* The parts the engine draws itself — a select's list, a checkbox — take their colours from
@@ -80,6 +82,7 @@ body {
   --card: #fbfbfc;
   --tile: #f1f2f6;
   --hair: rgb(20 24 48 / 0.08);
+  --edge: rgb(0 0 0 / 0.12);
   --ink: #16181d;
   --ink-2: #5c5e6b;
   --muted: #6b6d7a;
@@ -98,6 +101,7 @@ body {
   --card: #1e2027;
   --tile: #262a33;
   --hair: rgb(255 255 255 / 0.08);
+  --edge: rgb(255 255 255 / 0.12);
   --ink: #f0f1f4;
   --ink-2: #aab1c0;
   --muted: #8b92a1;
@@ -109,6 +113,25 @@ body {
   --danger-soft: rgb(255 138 133 / 0.12);
   --good: #4cc38a;
   --caution: #e9a05c;
+}
+
+/* Contrast hardens these settings with the picker: darker greys and edges, heavier letters. */
+:root.contrast {
+  --ink-2: #3d4250;
+  --muted: #4a4c57;
+  --hair: rgb(0 0 0 / 0.2);
+  --edge: rgb(0 0 0 / 0.32);
+}
+
+:root.dark.contrast {
+  --ink-2: #c9ced9;
+  --muted: #b3b9c6;
+  --hair: rgb(255 255 255 / 0.2);
+  --edge: rgb(255 255 255 / 0.32);
+}
+
+:root.contrast body {
+  font-weight: 500;
 }
 
 .brow {
@@ -540,4 +563,319 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* The picker in miniature: its own sizes, not this window's scale, so it shows what it will draw. */
+.look-preview {
+  flex-shrink: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+}
+
+.look-desk {
+  display: flex;
+  justify-content: center;
+  padding: 18px;
+  background:
+    radial-gradient(
+      circle at 18% 24%,
+      color-mix(in srgb, var(--caution) 75%, transparent) 0 9%,
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 84% 72%,
+      color-mix(in srgb, var(--good) 75%, transparent) 0 8%,
+      transparent 26%
+    ),
+    linear-gradient(140deg, var(--accent), var(--accent-dim));
+}
+
+.look-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--hair);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.look-foot span {
+  flex: 1;
+}
+
+.look-picker {
+  width: calc(380px * max(1, var(--zoom)));
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 10px 34px rgb(0 0 0 / 0.3);
+  color: var(--ink);
+  font-size: calc(15px * var(--zoom));
+  line-height: 1.25;
+}
+
+.look-picker.cards {
+  width: calc(480px * max(1, var(--zoom)));
+}
+
+.look-picker.icons {
+  width: 280px;
+}
+
+.look-picker.strong {
+  background: var(--panel);
+  backdrop-filter: none;
+  box-shadow:
+    0 10px 34px rgb(0 0 0 / 0.3),
+    inset 0 0 0 1px var(--hair);
+  font-weight: 500;
+}
+
+.look-picker kbd {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: calc(11px * var(--zoom));
+  font-variant-numeric: tabular-nums;
+}
+
+.look-icon {
+  width: var(--icon);
+  height: var(--icon);
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-style: normal;
+  font-weight: 700;
+  font-size: calc(var(--icon) * 0.45);
+}
+
+.look-icon.tone-1 {
+  background: var(--good);
+}
+
+.look-icon.tone-2 {
+  background: var(--caution);
+}
+
+.look-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 16px;
+}
+
+.look-head b,
+.look-top b {
+  font-weight: 600;
+}
+
+.look-head span,
+.look-ask span {
+  font-size: calc(12px * var(--zoom));
+  color: var(--ink-2);
+}
+
+.look-hair {
+  height: 1px;
+  margin: 0 12px;
+  background: var(--hair);
+}
+
+.look-picker.strong .look-hair {
+  margin: 0;
+}
+
+.look-rows {
+  padding: 6px;
+}
+
+.look-row {
+  height: calc(var(--row) - 1px);
+  margin-bottom: 1px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 10px;
+  border-radius: 6px;
+}
+
+.look-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.look-row em,
+.look-card small {
+  font-style: normal;
+  font-size: calc(12px * var(--zoom));
+  color: var(--ink-2);
+}
+
+.look-row em {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.look-row.lit,
+.look-card,
+.look-track {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.look-picker.strong .look-row,
+.look-picker.strong .look-card {
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+
+.look-picker.strong .look-row.lit,
+.look-picker .look-card.lit,
+.look-slot.lit {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.look-remember {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px 12px;
+}
+
+.look-remember small {
+  font-size: calc(11px * var(--zoom));
+  color: var(--ink-2);
+}
+
+.look-track {
+  height: calc(32px * max(1, var(--zoom)));
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 7px;
+}
+
+.look-track span {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  border-radius: 5px;
+  font-size: calc(12px * var(--zoom));
+}
+
+.look-track span.on {
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+}
+
+.look-picker.strong .look-track span.on {
+  box-shadow: inset 0 0 0 1px var(--hair);
+  font-weight: 600;
+}
+
+.look-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  text-align: center;
+}
+
+.look-ask b {
+  font-size: calc(17px * var(--zoom));
+  font-weight: 700;
+}
+
+.look-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 10px 10px;
+}
+
+.look-card {
+  height: var(--card);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 8px;
+  border-radius: 8px;
+}
+
+.look-card .look-icon,
+.look-slot .look-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+}
+
+.look-card .look-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: calc(13px * var(--zoom));
+}
+
+.look-card .look-name b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.look-card kbd {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.look-top {
+  padding: 12px 14px 0;
+  font-size: calc(12px * var(--zoom));
+}
+
+.look-icons {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px;
+}
+
+.look-slot {
+  width: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0 8px;
+  border-radius: 8px;
+}
+
+.look-said {
+  padding-bottom: 12px;
+  text-align: center;
+  font-size: calc(13px * var(--zoom));
 }

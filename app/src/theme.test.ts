@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { follow, refresh } from "./theme";
 
 const invoke = vi.fn();
@@ -125,5 +125,133 @@ describe("theme", () => {
     follow();
     await settled();
     expect(isDark()).toBe(false);
+  });
+
+  describe("contrast and text size", () => {
+    const classes = () =>
+      ["contrast", "text-small", "text-large"].filter((c) =>
+        document.documentElement.classList.contains(c),
+      );
+
+    beforeEach(() => {
+      document.documentElement.classList.remove("contrast", "text-small", "text-large");
+      systemPrefers(false);
+    });
+
+    it("dresses the window in what the backend chose", async () => {
+      invoke.mockResolvedValue({
+        prefs: { theme: "light", high_contrast: true, text_size: "large" },
+      });
+      follow();
+      await settled();
+      expect(classes()).toEqual(["contrast", "text-large"]);
+    });
+
+    it("marks the small size on its own", async () => {
+      invoke.mockResolvedValue({ prefs: { theme: "light", text_size: "small" } });
+      follow();
+      await settled();
+      expect(classes()).toEqual(["text-small"]);
+    });
+
+    it("adds no class when the backend sends neither field", async () => {
+      invoke.mockResolvedValue({ prefs: { theme: "light" } });
+      follow();
+      await settled();
+      expect(classes()).toEqual([]);
+    });
+
+    it("takes the classes off again when they are turned off", async () => {
+      invoke.mockResolvedValueOnce({
+        prefs: { theme: "light", high_contrast: true, text_size: "small" },
+      });
+      follow();
+      await settled();
+      invoke.mockResolvedValueOnce({
+        prefs: { theme: "light", high_contrast: false, text_size: "normal" },
+      });
+      refresh();
+      await settled();
+      expect(classes()).toEqual([]);
+    });
+
+    it("only a true contrast counts", async () => {
+      invoke.mockResolvedValue({ prefs: { theme: "light", high_contrast: "yes" } });
+      follow();
+      await settled();
+      expect(classes()).toEqual([]);
+    });
+
+    it("remembers it for the first frame of the next open", async () => {
+      invoke.mockResolvedValue({
+        prefs: { theme: "light", high_contrast: true, text_size: "large" },
+      });
+      follow();
+      await settled();
+      expect(JSON.parse(localStorage.getItem("look-was") ?? "null")).toEqual({
+        contrast: true,
+        size: "large",
+      });
+
+      document.documentElement.classList.remove("contrast", "text-large");
+      invoke.mockReturnValue(new Promise(() => {}));
+      follow();
+      expect(classes()).toEqual(["contrast", "text-large"]);
+    });
+
+    it("starts from the remembered look before the backend answers", () => {
+      localStorage.setItem("look-was", JSON.stringify({ contrast: false, size: "small" }));
+      invoke.mockReturnValue(new Promise(() => {}));
+      follow();
+      expect(classes()).toEqual(["text-small"]);
+    });
+
+    describe("on the welcome", () => {
+      beforeEach(() => {
+        window.location.hash = "#welcome";
+      });
+      afterEach(() => {
+        window.location.hash = "";
+      });
+
+      it("keeps the contrast but never scales the text", async () => {
+        invoke.mockResolvedValue({
+          prefs: { theme: "light", high_contrast: true, text_size: "large" },
+        });
+        follow();
+        await settled();
+        expect(classes()).toEqual(["contrast"]);
+      });
+
+      it("does not scale it from the remembered look either", () => {
+        localStorage.setItem("look-was", JSON.stringify({ contrast: true, size: "small" }));
+        invoke.mockReturnValue(new Promise(() => {}));
+        follow();
+        expect(classes()).toEqual(["contrast"]);
+      });
+
+      it("still remembers the size for the other windows", async () => {
+        invoke.mockResolvedValue({ prefs: { theme: "light", text_size: "large" } });
+        follow();
+        await settled();
+        expect(JSON.parse(localStorage.getItem("look-was") ?? "null")).toEqual({
+          contrast: false,
+          size: "large",
+        });
+      });
+    });
+
+    it.each([
+      ["malformed storage", "{not json"],
+      ["a null", "null"],
+      ["missing fields", "{}"],
+      ["wrong types", JSON.stringify({ contrast: "yes", size: 3 })],
+      ["an unknown size", JSON.stringify({ contrast: false, size: "huge" })],
+    ])("adds no class from %s", (_what, stored) => {
+      localStorage.setItem("look-was", stored);
+      invoke.mockReturnValue(new Promise(() => {}));
+      follow();
+      expect(classes()).toEqual([]);
+    });
   });
 });

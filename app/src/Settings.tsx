@@ -4,6 +4,7 @@ import { type Key, type Language, Speaking, spoken, useSpoken, useWords } from "
 import { platform } from "./platform";
 import { saidPlainly } from "./refusal";
 import About from "./settings/About";
+import Appearance from "./settings/Appearance";
 import Application from "./settings/Application";
 import Browsers from "./settings/Browsers";
 import Maintenance from "./settings/Maintenance";
@@ -68,7 +69,7 @@ function Wrappable({ path }: { path: string }) {
   );
 }
 
-type Page = "links" | "rules" | "browsers" | "app" | "care" | "about";
+type Page = "links" | "rules" | "browsers" | "app" | "appearance" | "care" | "about";
 
 type Entry = { id: Page; label: Key; icon: React.ReactNode };
 
@@ -80,6 +81,16 @@ const PAGES: Entry[] = [
       <>
         <circle cx="12" cy="12" r="3" />
         <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2" />
+      </>
+    ),
+  },
+  {
+    id: "appearance",
+    label: "navAppearance",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" />
       </>
     ),
   },
@@ -465,7 +476,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
     <div className="flex h-full bg-panel text-ink">
       <nav
         aria-label={t("navLabel")}
-        className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-black/[0.08] bg-black/[0.02] p-2 dark:border-white/[0.08] dark:bg-white/[0.02]"
+        className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-hair bg-black/[0.02] p-2 dark:bg-white/[0.02]"
       >
         {PAGES.map((p) => (
           <Tab
@@ -512,6 +523,7 @@ function Shell({ onLanguage }: { onLanguage: (next: Language) => void }) {
             onLanguage={onLanguage}
           />
         )}
+        {page === "appearance" && <Appearance />}
         {page === "care" && <Maintenance />}
         {page === "about" && (
           <About

@@ -43,6 +43,15 @@ const PREFS = {
   shortcut_held: "Alt+Shift+L",
 };
 
+const LOOK = {
+  theme: "system",
+  high_contrast: false,
+  text_size: "normal",
+  picker_style: "bear",
+  density: "normal",
+  picker_position: "pointer",
+};
+
 function answers(
   state: Record<string, unknown>,
   overrides: Record<string, () => Promise<unknown>> = {},
@@ -51,6 +60,7 @@ function answers(
     if (cmd in overrides) return overrides[cmd]();
     if (cmd === "rules_list") return Promise.resolve([]);
     if (cmd === "prefs_get" || cmd === "prefs_set") return Promise.resolve(PREFS);
+    if (cmd === "appearance_get") return Promise.resolve(LOOK);
     if (cmd === "update_ready") return Promise.resolve(null);
     if (cmd === "system_legacy") return Promise.resolve(null);
     if (cmd === "about") return Promise.resolve(BUILD);
@@ -83,6 +93,15 @@ describe("settings", () => {
     } finally {
       window.location.hash = "";
     }
+  });
+
+  it("opens the appearance page from its own entry in the bar", async () => {
+    answers(BASE);
+    render(<Settings />);
+    await go("Apariencia");
+    expect(await screen.findByRole("heading", { name: "Apariencia" })).toBeInTheDocument();
+    expect(await screen.findByRole("switch", { name: "Contraste alto" })).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("appearance_get");
   });
 
   it("asks for the window once it has painted", async () => {

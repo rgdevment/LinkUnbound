@@ -1,0 +1,16 @@
+/* The text size chosen on Appearance moves the whole scale index.css sets, never below 11px. */
+:root.text-small {
+  --text-xs: 11px;
+  --text-sm: 11px;
+  --text-md: 12px;
+  --text-lg: 14px;
+  --text-xl: 18px;
+}
+
+:root.text-large {
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+}

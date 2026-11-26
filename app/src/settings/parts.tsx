@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { type Key, useWords } from "../i18n";
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -11,7 +12,7 @@ export function Section({ title, children }: { title: string; children: ReactNod
 
 export function Card({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-black/[0.08] bg-black/[0.015] dark:border-white/[0.08] dark:bg-white/[0.02]">
+    <div className="overflow-hidden rounded-lg border border-hair bg-black/[0.015] dark:bg-white/[0.02]">
       {children}
     </div>
   );
@@ -27,7 +28,7 @@ export function Line({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 border-black/[0.08] px-3.5 py-3 not-first:border-t dark:border-white/[0.08]">
+    <div className="flex items-center gap-3 border-hair px-3.5 py-3 not-first:border-t">
       <div className="min-w-0 flex-1">
         <p className="text-md">{title}</p>
         {note && <p className="mt-px text-sm text-muted">{note}</p>}
@@ -57,7 +58,7 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!on)}
       className={`relative h-[19px] w-[34px] shrink-0 rounded-full transition disabled:opacity-40 ${
-        on ? "bg-accent" : "bg-black/[0.12] dark:bg-white/[0.12]"
+        on ? "bg-accent" : "bg-edge"
       }`}
     >
       <span
@@ -66,5 +67,48 @@ export function Switch({
         }`}
       />
     </button>
+  );
+}
+
+export function Choice<T extends string>({
+  options,
+  value,
+  label,
+  disabled,
+  onPick,
+}: {
+  options: { id: T; label: Key }[];
+  value: T;
+  label: string;
+  disabled?: boolean;
+  onPick: (next: T) => void;
+}) {
+  const t = useWords();
+  return (
+    <fieldset disabled={disabled} className="flex shrink-0 gap-1 disabled:opacity-40">
+      <legend className="sr-only">{label}</legend>
+      {options.map((o) => (
+        <label key={o.id} className="contents">
+          <input
+            type="radio"
+            name={label}
+            className="peer sr-only"
+            checked={o.id === value}
+            onChange={() => onPick(o.id)}
+          />
+          <span
+            className={`rounded-md px-2.5 py-1 text-sm transition peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-accent ${
+              disabled ? "" : "cursor-pointer"
+            } ${
+              o.id === value
+                ? "bg-accent/[0.13] font-semibold text-accent dark:bg-accent/[0.17]"
+                : "bg-black/[0.045] text-ink-2 dark:bg-white/[0.06]"
+            }`}
+          >
+            {t(o.label)}
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }

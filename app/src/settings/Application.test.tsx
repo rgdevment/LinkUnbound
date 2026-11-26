@@ -1,7 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { follow } from "../theme";
 import Application from "./Application";
 
 const invoke = vi.fn();
@@ -9,12 +8,9 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invoke(...
 
 const PREFS = {
   schema_version: 1,
-  theme: "system" as "system" | "light" | "dark",
   locale: "system" as "system" | "spanish" | "english",
   shortcut: "Alt+Shift+L" as string | null,
   notify_on_rule: true,
-  picker_style: "classic" as "bear" | "classic" | "sheet" | "compact",
-  picker_position: "pointer" as "pointer" | "center",
   looks_for_updates: true,
 };
 
@@ -43,7 +39,7 @@ describe("on a Mac", () => {
   /// so a Mac never offers to hide it.
   it("never offers to hide the menu bar icon", async () => {
     mount();
-    await screen.findByRole("group", { name: "Tema" });
+    await screen.findByRole("group", { name: "Idioma de la aplicación" });
     expect(screen.queryByRole("switch", { name: "Ocultar el icono de la bandeja" })).toBeNull();
   });
 });
@@ -56,61 +52,12 @@ describe("application settings", () => {
 
   /// The other tests assert the payload, not what the control ends up showing.
   it("marks the option that is actually in force", async () => {
-    answers({ ...PREFS, theme: "dark", locale: "english" });
+    answers({ ...PREFS, locale: "english" });
     mount();
 
-    const theme = within(await screen.findByRole("group", { name: "Tema" }));
-    expect(theme.getByRole("radio", { name: "Oscuro" })).toBeChecked();
-    expect(theme.getByRole("radio", { name: "Automático" })).not.toBeChecked();
-
-    const language = within(screen.getByRole("group", { name: "Idioma" }));
+    const language = within(await screen.findByRole("group", { name: "Idioma de la aplicación" }));
     expect(language.getByRole("radio", { name: "Inglés" })).toBeChecked();
     expect(language.getByRole("radio", { name: "Español" })).not.toBeChecked();
-  });
-
-  it("offers the tiles, and keeps the classic picker marked until they are chosen", async () => {
-    mount();
-    const picker = within(await screen.findByRole("group", { name: "Estilo" }));
-    expect(picker.getByRole("radio", { name: "Clásico" })).toBeChecked();
-    await userEvent.click(picker.getByRole("radio", { name: "Mosaico" }));
-    expect(invoke).toHaveBeenCalledWith("prefs_set", {
-      prefs: { ...PREFS, picker_style: "sheet" },
-    });
-  });
-
-  /// Every look is offered, the bear among them, and each can be seen before it is kept.
-  it("opens the picker by the pointer until the center is chosen", async () => {
-    mount();
-    const where = within(await screen.findByRole("group", { name: "Dónde aparece" }));
-    expect(where.getByRole("radio", { name: "Junto al puntero" })).toBeChecked();
-    await userEvent.click(where.getByRole("radio", { name: "Al centro" }));
-    expect(invoke).toHaveBeenCalledWith("prefs_set", {
-      prefs: { ...PREFS, picker_position: "center" },
-    });
-  });
-
-  it("offers the four looks and shows the picker over a sample link", async () => {
-    mount();
-    const picker = within(await screen.findByRole("group", { name: "Estilo" }));
-    for (const look of ["LinkBear", "Clásico", "Mosaico", "Compacto"]) {
-      expect(picker.getByRole("radio", { name: look })).toBeInTheDocument();
-    }
-    await userEvent.click(screen.getByRole("button", { name: "Vista previa" }));
-    expect(invoke).toHaveBeenCalledWith("picker_preview");
-  });
-
-  /// Once a preview is up, choosing another look redraws it rather than leaving the old one open.
-  it("redraws the preview when another look is chosen", async () => {
-    mount();
-    const picker = within(await screen.findByRole("group", { name: "Estilo" }));
-    await userEvent.click(picker.getByRole("radio", { name: "Mosaico" }));
-    expect(invoke.mock.calls.filter(([cmd]) => cmd === "picker_preview")).toHaveLength(0);
-
-    await userEvent.click(screen.getByRole("button", { name: "Vista previa" }));
-    await userEvent.click(picker.getByRole("radio", { name: "LinkBear" }));
-    await waitFor(() =>
-      expect(invoke.mock.calls.filter(([cmd]) => cmd === "picker_preview")).toHaveLength(2),
-    );
   });
 
   /// The resident asks the feed on its own; the switch is the one way to say not to, and it has
@@ -125,27 +72,6 @@ describe("application settings", () => {
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
       prefs: { ...PREFS, looks_for_updates: false },
     });
-  });
-
-  it("saves the theme as a choice of its own, not as whatever the system says", async () => {
-    mount();
-    await userEvent.click(await screen.findByRole("radio", { name: "Oscuro" }));
-    expect(invoke).toHaveBeenCalledWith("prefs_set", {
-      prefs: { ...PREFS, theme: "dark" },
-    });
-  });
-
-  it("repaints the window as soon as the theme is chosen", async () => {
-    invoke.mockImplementation((cmd: string) => {
-      const prefs = { ...PREFS, theme: document.documentElement.dataset.picked ?? "system" };
-      if (cmd === "prefs_set") document.documentElement.dataset.picked = "dark";
-      return Promise.resolve({ prefs, shortcut_held: null });
-    });
-    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {} }));
-    follow();
-    mount();
-    await userEvent.click(await screen.findByRole("radio", { name: "Oscuro" }));
-    await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
   });
 
   it("captures a combination from the physical keys, not the printed ones", async () => {
@@ -184,7 +110,7 @@ describe("application settings", () => {
   it("surfaces the backend refusal rather than looking like it worked", async () => {
     answers(PREFS, "Alt+Shift+L", "the file could not be written");
     mount();
-    await userEvent.click(await screen.findByRole("radio", { name: "Claro" }));
+    await userEvent.click(await screen.findByRole("radio", { name: "Inglés" }));
     expect(await screen.findByText(/could not be written/)).toBeInTheDocument();
   });
 
@@ -217,5 +143,21 @@ describe("application settings", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("what moved to the appearance page", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    answers();
+  });
+
+  it("no longer offers the theme or the picker, but keeps the language", async () => {
+    mount();
+    await screen.findByRole("group", { name: "Idioma de la aplicación" });
+    for (const gone of ["Tema", "Estilo", "Dónde aparece"]) {
+      expect(screen.queryByRole("group", { name: gone })).toBeNull();
+    }
+    expect(screen.queryByRole("button", { name: "Vista previa" })).toBeNull();
   });
 });
