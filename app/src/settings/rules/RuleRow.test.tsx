@@ -131,6 +131,22 @@ describe("rule row", () => {
     expect(onPicking).toHaveBeenCalledWith(true);
   });
 
+  it("gives the broken rule's pick button a hover and a focus ring", () => {
+    inList(
+      <RuleRow
+        rule={{ ...RULE, resolved: false, browser: "brave" }}
+        choices={CHOICES}
+        onPicking={vi.fn()}
+        onRetarget={vi.fn()}
+        onEdit={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    const pick = screen.getByRole("button", { name: "Elegir otro navegador" });
+    expect(pick.className).toContain("hover:");
+    expect(pick.className).toContain("focus-visible:outline");
+  });
+
   it("paints a broken rule with caution, never danger", () => {
     inList(
       <RuleRow

@@ -109,7 +109,7 @@ export default function Rules() {
     <button
       type="button"
       onClick={() => setAdding({ kind: "site", value: "" })}
-      className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent"
+      className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent/85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
     >
       <Glyph name="plus" />
       {t("ruleAdd")}
@@ -186,7 +186,7 @@ export default function Rules() {
             setProbing(!probing);
             setWinner(null);
           }}
-          className="flex items-center gap-1.5 rounded-md border border-(--hair) px-3 py-1.5 text-sm font-medium"
+          className="flex items-center gap-1.5 rounded-md border border-(--hair) px-3 py-1.5 text-sm font-medium hover:bg-black/[0.04] dark:hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         >
           <Glyph name="flask" />
           {t("probeOpen")}
@@ -247,10 +247,10 @@ export default function Rules() {
               type="button"
               aria-pressed={showing === f.id}
               onClick={() => setFilter(f.id)}
-              className={`rounded-md px-[9px] py-[3px] text-sm whitespace-nowrap ${
+              className={`rounded-md px-[9px] py-[3px] text-sm whitespace-nowrap focus-visible:outline-2 focus-visible:outline-accent ${
                 showing === f.id
                   ? "bg-(--accent-soft) font-semibold text-accent"
-                  : "bg-(--tile) text-ink-2"
+                  : "bg-(--tile) text-ink-2 hover:bg-black/[0.09] hover:text-ink dark:hover:bg-white/[0.1]"
               }`}
             >
               {t(f.label)}
@@ -262,8 +262,10 @@ export default function Rules() {
               type="button"
               aria-pressed={showing === "broken"}
               onClick={() => setFilter("broken")}
-              className={`flex items-center gap-1 rounded-md px-[9px] py-[3px] text-sm whitespace-nowrap text-caution ${
-                showing === "broken" ? "bg-caution/[0.12] font-semibold" : "bg-(--tile)"
+              className={`flex items-center gap-1 rounded-md px-[9px] py-[3px] text-sm whitespace-nowrap text-caution focus-visible:outline-2 focus-visible:outline-accent ${
+                showing === "broken"
+                  ? "bg-caution/[0.12] font-semibold"
+                  : "bg-(--tile) hover:bg-caution/[0.12]"
               }`}
             >
               <Glyph name="warn" size={12} />

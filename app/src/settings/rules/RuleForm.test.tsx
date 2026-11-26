@@ -43,6 +43,18 @@ describe("rule form", () => {
     expect(draftOf({ ...RULE, kind: "any", covers: "" })).toEqual({ kind: "site", value: "" });
   });
 
+  it("gives save, cancel and the kind segments a hover, and the buttons a focus ring", () => {
+    render(<RuleForm choices={CHOICES} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    for (const name of ["Guardar", "Cancelar"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.className).toContain("hover:");
+      expect(button.className).toContain("focus-visible:outline");
+    }
+    expect(screen.getByRole("radio", { name: "Este dominio" }).closest("label")).toHaveClass(
+      "hover:text-ink",
+    );
+  });
+
   it("takes the first browser it is offered and puts the cursor in the value", () => {
     render(<RuleForm choices={CHOICES} onSaved={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Abrir en" })).toHaveTextContent("Chrome");

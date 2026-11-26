@@ -444,6 +444,18 @@ describe("rules", () => {
       expect(broken).toHaveClass("bg-caution/[0.12]");
     });
 
+    it("gives every Rules control a hover and a focus ring", async () => {
+      render(<Rules />);
+      const add = await screen.findByRole("button", { name: "Añadir regla" });
+      const probe = screen.getByRole("button", { name: /Probar un enlace/ });
+      const chip = await screen.findByRole("button", { name: /^Sitio/ });
+      const broken = screen.getByRole("button", { name: /^Sin navegador/ });
+      for (const control of [add, probe, chip, broken]) {
+        expect(control.className).toContain("hover:");
+        expect(control.className).toContain("focus-visible:outline");
+      }
+    });
+
     it("keeps only the rules whose browser is gone when asked", async () => {
       render(<Rules />);
       const chip = await screen.findByRole("button", { name: /^Sin navegador/ });

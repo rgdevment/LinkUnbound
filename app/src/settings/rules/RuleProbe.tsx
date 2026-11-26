@@ -85,7 +85,7 @@ export default function RuleProbe({
           type="button"
           aria-label={t("probeClose")}
           onClick={onClose}
-          className="grid h-[26px] w-[26px] place-items-center rounded-md text-muted hover:bg-(--tile) hover:text-ink"
+          className="grid h-[26px] w-[26px] place-items-center rounded-md text-muted hover:bg-(--tile) hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
         >
           <Glyph name="x" size={13} />
         </button>
@@ -156,7 +156,7 @@ export default function RuleProbe({
                 <button
                   type="button"
                   onClick={() => onCreate(probe.site)}
-                  className="text-accent hover:underline"
+                  className="text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent"
                 >
                   {t("probeCreate", probe.site)}
                 </button>

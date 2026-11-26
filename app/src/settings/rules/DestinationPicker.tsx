@@ -104,7 +104,7 @@ export default function DestinationPicker({
         className={
           inline
             ? "flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm group-hover:border-(--hair) hover:border-(--hair) focus-visible:outline-2 focus-visible:outline-accent"
-            : "flex min-w-[200px] items-center gap-2 rounded-md border border-(--hair) bg-panel px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            : "flex min-w-[200px] items-center gap-2 rounded-md border border-(--hair) bg-panel px-2.5 py-1.5 text-sm hover:border-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         }
       >
         {face}

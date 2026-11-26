@@ -100,7 +100,7 @@ export default function RuleForm({
             <label
               key={k.id}
               className={`rounded px-2 py-1 text-sm whitespace-nowrap has-focus-visible:outline-2 has-focus-visible:outline-accent ${
-                kind === k.id ? "bg-panel font-semibold shadow-sm" : "text-ink-2"
+                kind === k.id ? "bg-panel font-semibold shadow-sm" : "text-ink-2 hover:text-ink"
               }`}
             >
               <input
@@ -167,14 +167,14 @@ export default function RuleForm({
         <button
           type="submit"
           disabled={saving || choices.length === 0}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent disabled:opacity-50"
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent enabled:hover:bg-accent/85 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         >
           {t("save")}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-(--hair) px-3 py-1.5 text-sm"
+          className="rounded-md border border-(--hair) px-3 py-1.5 text-sm hover:bg-black/[0.04] dark:hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         >
           {t("cancel")}
         </button>

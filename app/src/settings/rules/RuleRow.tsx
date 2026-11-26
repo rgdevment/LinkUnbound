@@ -177,7 +177,7 @@ export default function RuleRow({
             <button
               type="button"
               onClick={() => onPicking(true)}
-              className="rounded-md bg-caution px-3 py-1.5 text-sm font-medium text-on-accent"
+              className="rounded-md bg-caution px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-caution/85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
             >
               {t("ruleBrokenPick")}
             </button>
