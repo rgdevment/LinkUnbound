@@ -61,15 +61,15 @@ export default function RuleForm({
   useEffect(() => valueBox.current?.focus(), []);
 
   const field =
-    "rounded-md border border-(--hair) bg-(--panel) px-2.5 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--accent)";
+    "rounded-md border border-(--hair) bg-panel px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent";
 
   return (
     <form
       aria-label={editing ? t("ruleEdit", covers(editing)) : t("ruleNewTitle")}
       className={
         editing
-          ? "flex flex-col gap-2.5 rounded-[inherit] bg-(--panel) p-3 shadow-[inset_0_0_0_1.5px_var(--accent)]"
-          : "flex flex-col gap-2.5 rounded-lg border border-(--hair) bg-(--card) p-3.5"
+          ? "flex flex-col gap-2.5 rounded-[inherit] bg-panel p-3 shadow-[inset_0_0_0_1.5px_var(--accent)]"
+          : "flex flex-col gap-2.5 rounded-lg border border-(--hair) bg-card p-3.5"
       }
       onSubmit={(e) => {
         e.preventDefault();
@@ -92,15 +92,15 @@ export default function RuleForm({
           .finally(() => setSaving(false));
       }}
     >
-      {!editing && <p className="text-[13px] font-semibold">{t("ruleNewTitle")}</p>}
+      {!editing && <p className="text-md font-semibold">{t("ruleNewTitle")}</p>}
       <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
-        <legend className="float-left mr-2 text-[12px] text-(--muted)">{t("ruleNewKind")}</legend>
+        <legend className="float-left mr-2 text-sm text-muted">{t("ruleNewKind")}</legend>
         <div className="flex flex-wrap gap-0.5 rounded-md bg-(--tile) p-0.5">
           {KINDS.map((k) => (
             <label
               key={k.id}
-              className={`rounded px-2 py-1 text-[12px] whitespace-nowrap has-focus-visible:outline-2 has-focus-visible:outline-(--accent) ${
-                kind === k.id ? "bg-(--panel) font-semibold shadow-sm" : "text-(--muted)"
+              className={`rounded px-2 py-1 text-sm whitespace-nowrap has-focus-visible:outline-2 has-focus-visible:outline-accent ${
+                kind === k.id ? "bg-panel font-semibold shadow-sm" : "text-ink-2 hover:text-ink"
               }`}
             >
               <input
@@ -125,7 +125,7 @@ export default function RuleForm({
         className={`${field} min-w-0`}
       />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-[12px] text-(--muted)">{t("ruleNewBrowser")}</span>
+        <span className="text-sm text-muted">{t("ruleNewBrowser")}</span>
         <DestinationPicker
           label={t("ruleNewBrowser")}
           choices={choices}
@@ -139,7 +139,7 @@ export default function RuleForm({
               </>
             ) : (
               <>
-                <span className="text-(--danger)">
+                <span className="text-caution">
                   <Glyph name="warn" />
                 </span>
                 <span className="truncate">{editing?.browser ?? ""}</span>
@@ -147,7 +147,7 @@ export default function RuleForm({
             )
           }
         />
-        <label className="flex items-center gap-2 text-[12px]">
+        <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={isPrivate && opensPrivately}
@@ -158,30 +158,27 @@ export default function RuleForm({
         </label>
       </div>
       {refusal && (
-        <p
-          role="alert"
-          className="rounded-md bg-(--danger-soft) px-3 py-2 text-[12px] text-(--danger)"
-        >
+        <p role="alert" className="rounded-md bg-(--danger-soft) px-3 py-2 text-sm text-danger">
           {refusal}
         </p>
       )}
-      {choices.length === 0 && <p className="text-[12px] text-(--muted)">{t("browsersNone")}</p>}
+      {choices.length === 0 && <p className="text-sm text-muted">{t("browsersNone")}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
           disabled={saving || choices.length === 0}
-          className="rounded-md bg-(--accent) px-3 py-1.5 text-[12px] font-medium text-(--panel) disabled:opacity-50"
+          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent enabled:hover:bg-accent/85 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         >
           {t("save")}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-(--hair) px-3 py-1.5 text-[12px]"
+          className="rounded-md border border-(--hair) px-3 py-1.5 text-sm hover:bg-black/[0.04] dark:hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         >
           {t("cancel")}
         </button>
-        {editing && <p className="ml-auto text-[11px] text-(--muted)">{t("ruleEditKeeps")}</p>}
+        {editing && <p className="ml-auto text-xs text-muted">{t("ruleEditKeeps")}</p>}
       </div>
     </form>
   );

@@ -103,12 +103,12 @@ export default function DestinationPicker({
         onClick={() => setOpen(!open)}
         className={
           inline
-            ? "flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-[12px] group-hover:border-(--hair) hover:border-(--hair) focus-visible:outline-2 focus-visible:outline-(--accent)"
-            : "flex min-w-[200px] items-center gap-2 rounded-md border border-(--hair) bg-(--panel) px-2.5 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--accent)"
+            ? "flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm group-hover:border-(--hair) hover:border-(--hair) focus-visible:outline-2 focus-visible:outline-accent"
+            : "flex min-w-[200px] items-center gap-2 rounded-md border border-(--hair) bg-panel px-2.5 py-1.5 text-sm hover:border-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         }
       >
         {face}
-        <span className="ml-auto text-(--muted)">
+        <span className="ml-auto text-muted">
           <Glyph name="chev" size={12} />
         </span>
       </button>
@@ -124,7 +124,7 @@ export default function DestinationPicker({
             const option = (e.target as HTMLElement).closest<HTMLElement>("[data-at]");
             if (option) pick(Number(option.dataset.at));
           }}
-          className={`absolute top-full z-20 ${inline ? "right-0" : "left-0"} mt-1 max-h-[260px] min-w-[260px] overflow-y-auto rounded-lg border border-(--hair) bg-(--panel) p-1 text-[12px] shadow-lg outline-none`}
+          className={`absolute top-full z-20 ${inline ? "right-0" : "left-0"} mt-1 max-h-[260px] min-w-[260px] overflow-y-auto rounded-lg border border-(--hair) bg-panel p-1 text-sm shadow-lg outline-none`}
         >
           {choices.map((choice, at) => {
             const key = named(choice.browserId, choice.profileId);
@@ -146,14 +146,10 @@ export default function DestinationPicker({
                 <BrowserIcon src={choice.icon} />
                 <span>{choice.label}</span>
                 {!choice.opensPrivately && (
-                  <span className="ml-auto pl-3 text-[11px] text-(--muted)">
-                    {t("ruleNoPrivate")}
-                  </span>
+                  <span className="ml-auto pl-3 text-xs text-muted">{t("ruleNoPrivate")}</span>
                 )}
                 {key === value && (
-                  <span
-                    className={`${choice.opensPrivately ? "ml-auto pl-3" : ""} text-(--accent)`}
-                  >
+                  <span className={`${choice.opensPrivately ? "ml-auto pl-3" : ""} text-accent`}>
                     <Glyph name="check" />
                   </span>
                 )}

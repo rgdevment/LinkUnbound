@@ -4,14 +4,11 @@ const css = Object.values(
   import.meta.glob<string>("./index.css", { query: "?raw", import: "default", eager: true }),
 )[0];
 
-const modules = import.meta.glob<string>(
-  ["./**/*.tsx", "!./**/*.test.tsx", "!./settings/Rules.tsx", "!./settings/rules/**"],
-  {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  },
-);
+const modules = import.meta.glob<string>(["./**/*.tsx", "!./**/*.test.tsx"], {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 const files = Object.entries(modules).map(([path, text]) => ({ path: path.slice(2), text }));
 
 function offenders(pattern: RegExp, allowed: string[] = []) {
@@ -45,8 +42,15 @@ describe("type scale and colour contract", () => {
     expect(offenders(/#[0-9A-Fa-f]{6}\b/g, decorative)).toEqual([]);
   });
 
-  it("defines exactly the five text sizes", () => {
-    const sizes = [...css.matchAll(/--text-(\w+):\s*(\d+)px/g)].map((m) => [m[1], m[2]]);
+  it("names themed colours by token, not by the raw variable", () => {
+    const raw = /[\w:-]*-\(--(ink|ink-2|muted|accent|on-accent|danger|good|caution|panel|card)\)/g;
+    expect(offenders(raw)).toEqual([]);
+  });
+
+  // Only the theme is held to five: a text-size class may still override them elsewhere.
+  it("defines exactly the five text sizes in the theme", () => {
+    const theme = css.match(/@theme\s*\{([^}]*)\}/)?.[1] ?? "";
+    const sizes = [...theme.matchAll(/--text-(\w+):\s*([\d.]+)px/g)].map((m) => [m[1], m[2]]);
     expect(sizes).toEqual([
       ["xs", "11"],
       ["sm", "12"],
@@ -54,6 +58,6 @@ describe("type scale and colour contract", () => {
       ["lg", "15"],
       ["xl", "20"],
     ]);
-    expect(css).toMatch(/--text-\*:\s*initial/);
+    expect(theme).toMatch(/--text-\*:\s*initial/);
   });
 });

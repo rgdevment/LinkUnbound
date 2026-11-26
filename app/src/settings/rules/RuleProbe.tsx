@@ -71,21 +71,21 @@ export default function RuleProbe({
   };
 
   const field =
-    "rounded-md border border-(--hair) bg-(--panel) px-2.5 py-1.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--accent)";
+    "rounded-md border border-(--hair) bg-panel px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent";
 
   return (
     <section
       aria-label={t("probeOpen")}
-      className="flex flex-col gap-2.5 rounded-lg border border-(--hair) bg-(--card) px-3.5 py-3"
+      className="flex flex-col gap-2.5 rounded-lg border border-(--hair) bg-card px-3.5 py-3"
     >
       <div className="flex items-center gap-2">
         <Glyph name="flask" size={15} />
-        <p className="flex-1 text-[13px] font-semibold">{t("probeOpen")}</p>
+        <p className="flex-1 text-md font-semibold">{t("probeOpen")}</p>
         <button
           type="button"
           aria-label={t("probeClose")}
           onClick={onClose}
-          className="grid h-[26px] w-[26px] place-items-center rounded-md text-(--muted) hover:bg-(--tile) hover:text-(--ink)"
+          className="grid h-[26px] w-[26px] place-items-center rounded-md text-muted hover:bg-(--tile) hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
         >
           <Glyph name="x" size={13} />
         </button>
@@ -103,8 +103,8 @@ export default function RuleProbe({
           className={`${field} min-w-[240px] flex-1`}
         />
         {apps.length > 0 && (
-          <label className="flex items-center gap-2 text-[12px]">
-            <span className="text-(--muted)">{t("kindFrom")}</span>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted">{t("kindFrom")}</span>
             <select value={fromApp} onChange={(e) => setFrom(e.target.value)} className={field}>
               <option value="">{t("probeFromAny")}</option>
               {apps.map((app) => (
@@ -116,12 +116,12 @@ export default function RuleProbe({
           </label>
         )}
       </div>
-      {refusal && <p className="text-[12px] text-(--danger)">{refusal}</p>}
+      {refusal && <p className="text-sm text-danger">{refusal}</p>}
       {probe && (
-        <output className="flex flex-col gap-1 rounded-md border border-(--hair) bg-(--panel) px-3 py-2.5">
+        <output className="flex flex-col gap-1 rounded-md border border-(--hair) bg-panel px-3 py-2.5">
           {probe.winner ? (
             <>
-              <span className="flex flex-wrap items-center gap-2 text-[13px] font-semibold">
+              <span className="flex flex-wrap items-center gap-2 text-md font-semibold">
                 {probe.winner.resolved ? (
                   <>
                     {t("probeOpensIn")}
@@ -129,36 +129,34 @@ export default function RuleProbe({
                       <Where rule={probe.winner} />
                     </span>
                     {probe.winner.private && (
-                      <span className="text-[12px] font-normal text-(--accent)">
-                        {t("rulePrivate")}
-                      </span>
+                      <span className="text-sm font-normal text-accent">{t("rulePrivate")}</span>
                     )}
                   </>
                 ) : (
                   <>
-                    <span className="text-(--danger)">
+                    <span className="text-caution">
                       <Glyph name="warn" size={16} />
                     </span>
                     {t("probeGone", probe.winner.browser)}
                   </>
                 )}
               </span>
-              <span className="block text-[12px] text-(--muted)">
+              <span className="block text-sm text-muted">
                 {reason(probe.winner, probe.why, probe.also[0])}
               </span>
             </>
           ) : (
             <>
-              <span className="flex items-center gap-2 text-[13px] font-semibold">
+              <span className="flex items-center gap-2 text-md font-semibold">
                 <Glyph name="info" size={16} />
                 {t("probeNone")}
               </span>
-              <span className="block text-[12px] text-(--muted)">
+              <span className="block text-sm text-muted">
                 {t("probeNoneBody")}{" "}
                 <button
                   type="button"
                   onClick={() => onCreate(probe.site)}
-                  className="text-(--accent) hover:underline"
+                  className="text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent"
                 >
                   {t("probeCreate", probe.site)}
                 </button>
