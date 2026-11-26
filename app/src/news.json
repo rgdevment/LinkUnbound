@@ -1,5 +1,72 @@
 [
   {
+    "version": "2.11.0",
+    "headline": {
+      "es": "Elige tu fuente y el tamaño del texto, y prueba tus reglas antes de abrir un enlace",
+      "en": "Choose your font and text size, and test your rules before a link opens"
+    },
+    "es": [
+      {
+        "title": "Una página para la apariencia",
+        "said": "en Apariencia eliges el tamaño del texto y la densidad, junto al tema, el estilo del selector y dónde aparece, que llegan desde Aplicación. Una miniatura del selector cambia con cada elección, y «Vista previa» abre el de verdad. Con letra grande o en una pantalla pequeña, el selector se ajusta para caber."
+      },
+      {
+        "title": "Escribe con la fuente que quieras",
+        "said": "en Apariencia, «Fuente» te deja elegir cualquier fuente instalada en el equipo, cada una escrita con su propia letra. La usan el selector y estos ajustes. «Sistema» sigue siendo la predeterminada, y si desinstalas la que elegiste, vuelven a ella."
+      },
+      {
+        "title": "Contraste alto",
+        "said": "texto más marcado, bordes visibles y un selector siempre opaco, que se lee bien sobre cualquier fondo. Aunque no lo actives, los textos grises de los ajustes ahora se leen mejor, en tema claro y oscuro."
+      },
+      {
+        "title": "Encuentra y edita tus reglas",
+        "said": "en Reglas, busca por dirección, aplicación o navegador, filtra por tipo y edita una regla sin que pierda su lugar en la lista. Si el navegador de una regla ya no está, la regla lo dice y te deja elegir otro."
+      },
+      {
+        "title": "Prueba un enlace",
+        "said": "«Probar un enlace», en Reglas, te dice en qué navegador se abriría, qué regla gana y por qué. Si ninguna coincide, te ofrece crear una para ese sitio."
+      },
+      {
+        "title": "Reglas «Desde» sin adivinar el nombre",
+        "said": "al crear una regla para una aplicación, la eliges de una lista de las que te han enviado enlaces, con su icono, cuántos llegaron y cuándo fue el último. La lista se llena a medida que abres enlaces, y solo guarda el nombre de cada aplicación, nunca el enlace."
+      },
+      {
+        "title": "Arranca en más equipos con Windows",
+        "said": "LinkUnbound ya no necesita un componente de Microsoft que algunos Windows no traen instalado, así que también se abre en esos equipos."
+      }
+    ],
+    "en": [
+      {
+        "title": "A page for how it looks",
+        "said": "in Appearance you choose the text size and the density, next to the theme, the picker's look and where it opens, which move there from Application. A miniature picker changes with each choice, and «Preview» opens the real one. With large text or on a small screen, the picker adjusts to fit."
+      },
+      {
+        "title": "Write in the font you like",
+        "said": "in Appearance, «Font» lets you choose any font installed on your computer, each one written in its own letters. The picker and these settings use it. «System» is still the default, and if you uninstall the one you chose, they go back to it."
+      },
+      {
+        "title": "High contrast",
+        "said": "bolder text, visible edges and an always opaque picker that reads well over any background. Even without it, the grey text in the settings now reads better, in light and dark."
+      },
+      {
+        "title": "Find and edit your rules",
+        "said": "in Rules, search by address, application or browser, filter by kind and edit a rule without it losing its place in the list. If a rule's browser is gone, the rule says so and lets you choose another."
+      },
+      {
+        "title": "Test a link",
+        "said": "«Test a link», in Rules, tells you which browser it would open in, which rule wins and why. If none matches, it offers to create one for that site."
+      },
+      {
+        "title": "«From» rules without guessing the name",
+        "said": "when you create a rule for an application, you pick it from a list of those that sent you links, with its icon, how many came and when the last one did. The list fills up as you open links, and it keeps only each application's name, never the link."
+      },
+      {
+        "title": "Starts on more Windows computers",
+        "said": "LinkUnbound no longer needs a Microsoft component that some Windows installations lack, so it opens on those computers too."
+      }
+    ]
+  },
+  {
     "version": "2.10.0",
     "headline": {
       "es": "Mueve el selector a tu gusto, y las actualizaciones de Microsoft Store llegan",
