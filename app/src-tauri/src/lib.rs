@@ -25,8 +25,12 @@ fn icon_data(source: &str, id: &str) -> Option<String> {
 }
 
 /// Apart from the browsers' pictures, which the resident sweeps of anything not a browser.
+fn app_icons_dir() -> std::path::PathBuf {
+    icons_dir().join("apps")
+}
+
 fn app_icon_data(program: &str, key: &str) -> Option<String> {
-    icon_data_in(&icons_dir().join("apps"), program, key)
+    icon_data_in(&app_icons_dir(), program, key)
 }
 
 #[cfg(windows)]

@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import { type KeyboardEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { useWords } from "../../i18n";
 import Glyph, { AppIcon } from "./Glyph";
 import { marked } from "./RuleRow";
@@ -41,7 +49,6 @@ function about(t: Words, app: SeenApp, held: boolean, now: Date): string {
 const sameName = (a: string, b: string) =>
   a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
 
-/// The apps the picker saw links come from, most recent first, and room to name one it has not.
 export default function AppPicker({
   label,
   value,
@@ -65,9 +72,16 @@ export default function AppPicker({
   const [lit, setLit] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    void seenApps().then(setApps);
+  const asked = useRef(0);
+  // Asked on mount and on every opening, and only the latest answer counts.
+  const refresh = useCallback(() => {
+    const mine = ++asked.current;
+    void seenApps().then((all) => {
+      if (mine === asked.current) setApps(all);
+    });
   }, []);
+
+  useEffect(refresh, [refresh]);
 
   const close = () => {
     setOpen(false);
@@ -88,10 +102,9 @@ export default function AppPicker({
     return () => document.removeEventListener("mousedown", away);
   }, [open]);
 
-  // Asked again on every opening: «open a link and come back» has to find it there.
   const show = () => {
     setOpen(true);
-    void seenApps().then(setApps);
+    refresh();
   };
 
   const all = apps ?? [];

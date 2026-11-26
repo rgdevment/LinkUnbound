@@ -47,7 +47,6 @@ export function BrowserIcon({ src, size = 16 }: Readonly<{ src: string | null; s
   );
 }
 
-/// An app's own icon, or a plain window where the system gave none.
 export function AppIcon({ src }: Readonly<{ src: string | null }>) {
   return src ? (
     <img src={src} alt="" width={16} height={16} className="shrink-0" />

@@ -8,7 +8,7 @@ use linkunbound_core::{
 };
 use serde::Serialize;
 
-use crate::{app_icon_data, catalogue, icon_data, store};
+use crate::{app_icon_data, app_icons_dir, catalogue, icon_data, store};
 
 /// The rule as the settings window shows it: what it covers, where it opens and
 /// whether the browser it names is still installed.
@@ -361,7 +361,6 @@ pub fn rules_probe(url: String, from_app: Option<String>) -> Result<Probe, Strin
     probed(&rules, &url, from_app.as_deref(), &catalogue()).map_err(str::to_owned)
 }
 
-/// An app the «From» field offers: one links came from, or one a rule names and none came from yet.
 #[derive(Serialize)]
 pub struct SeenAppView {
     name: String,
@@ -441,8 +440,12 @@ fn program_of(app: &Offered) -> Option<String> {
 pub fn apps_seen() -> Vec<SeenAppView> {
     let store = store();
     let rules = store.rules().map(|set| set.rules).unwrap_or_default();
-    offered(store.apps_seen(), &rules, shown_origin)
-        .into_iter()
+    let all = offered(store.apps_seen(), &rules, shown_origin);
+    linkunbound_core::prune_icons(
+        &app_icons_dir(),
+        all.iter().map(|app| app.origin.key.as_str()),
+    );
+    all.into_iter()
         .map(|app| SeenAppView {
             icon: program_of(&app).and_then(|program| app_icon_data(&program, &app.origin.key)),
             name: app.origin.label,
