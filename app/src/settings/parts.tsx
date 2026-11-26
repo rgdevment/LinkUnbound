@@ -89,7 +89,8 @@ export function Choice<T extends string>({
 }) {
   const t = useWords();
   return (
-    <fieldset disabled={disabled} className="flex shrink-0 gap-1 disabled:opacity-40">
+    // Relative, so the hidden radios scroll with the page instead of stretching the window.
+    <fieldset disabled={disabled} className="relative flex shrink-0 gap-1 disabled:opacity-40">
       <legend className="sr-only">{label}</legend>
       {options.map((o) => (
         <label key={o.id} className="contents">
