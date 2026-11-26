@@ -41,7 +41,8 @@ pub use prefs::{Density, Locale, PickerPosition, PickerStyle, Preferences, TextS
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{
-    Origin, Rule, RuleSet, Scope, Target, is_public_suffix, same_name, site_of, visible,
+    Origin, Replaced, Rule, RuleSet, Scope, Target, Why, is_public_suffix, same_name, site_of,
+    visible, why_first,
 };
 pub use star::{Asking, asking};
 pub use store::{Store, StoreError, data_dir, seconds_now, unmarked};
