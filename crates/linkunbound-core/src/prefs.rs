@@ -104,6 +104,12 @@ pub struct Preferences {
     /// settings window ever asks, and only while it is open.
     #[serde(default = "yes")]
     pub looks_for_updates: bool,
+    /// `None` until the person answers, and while it is the picker asks once a minor version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updates_automatically: Option<bool>,
+    /// The version the question was last put away in; it waits for the next minor one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updates_asked_in: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub here_since: Option<u64>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -139,6 +145,8 @@ impl Default for Preferences {
             high_contrast: false,
             font: None,
             looks_for_updates: true,
+            updates_automatically: None,
+            updates_asked_in: None,
             here_since: None,
             asked_for_a_star: false,
             news_seen: None,
@@ -229,6 +237,33 @@ fn shortcut_of(said: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{Density, Locale, PickerPosition, PickerStyle, Preferences, TextSize, Theme};
+
+    #[test]
+    fn preferences_written_before_the_update_answer_read_it_as_unanswered() {
+        let read: Preferences =
+            serde_json::from_str(r#"{"looks_for_updates": true}"#).expect("old file");
+        assert_eq!(read.updates_automatically, None);
+        assert_eq!(read.updates_asked_in, None);
+    }
+
+    #[test]
+    fn an_unanswered_update_question_is_not_written_out() {
+        let written = serde_json::to_string(&Preferences::default()).expect("written");
+        assert!(!written.contains("updates_automatically"));
+        assert!(!written.contains("updates_asked_in"));
+    }
+
+    #[test]
+    fn an_update_answer_survives_a_round_trip() {
+        let given = Preferences {
+            updates_automatically: Some(false),
+            updates_asked_in: Some("2.11.0".to_owned()),
+            ..Preferences::default()
+        };
+        let read: Preferences =
+            serde_json::from_str(&serde_json::to_string(&given).expect("written")).expect("read");
+        assert_eq!(read, given);
+    }
 
     #[test]
     fn a_fresh_install_follows_the_system_and_claims_the_default_shortcut() {

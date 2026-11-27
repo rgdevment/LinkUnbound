@@ -55,6 +55,7 @@ export component Picker inherits Window {
     in property <string> update-detail;
     in property <string> update-button;
     in property <string> update-later;
+    in property <string> update-never;
     in property <string> copy-label;
     in property <string> close-label;
     in property <int> update-far: 0;
@@ -63,6 +64,7 @@ export component Picker inherits Window {
     property <length> strip-room: root.update-shown ? 46px * Measures.grow : 0px;
     callback update-asked();
     callback update-dismissed();
+    callback update-never-asked();
 
     callback open(int, bool);
     /// Returns whether the key was a destination. See `key-pressed`.
@@ -291,10 +293,12 @@ export component Picker inherits Window {
                 detail: root.update-detail;
                 button: root.update-button;
                 later: root.update-later;
+                never: root.update-never;
                 far: root.update-far;
                 busy: root.update-busy;
                 asked => { root.update-asked(); }
                 dismissed => { root.update-dismissed(); }
+                never-asked => { root.update-never-asked(); }
             }
 
             if root.look == Look.compact: CompactLook {

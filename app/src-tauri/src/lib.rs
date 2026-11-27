@@ -252,6 +252,7 @@ struct Settings {
     shortcut_held: Option<String>,
     /// Resolved here so `Locale::System` cannot mean two things at once.
     language: &'static str,
+    installs_here: bool,
 }
 
 fn claim(prefs: &Preferences) -> Settings {
@@ -259,6 +260,7 @@ fn claim(prefs: &Preferences) -> Settings {
         language: spoken(prefs),
         prefs: prefs.clone(),
         shortcut_held: store().shortcut_held(),
+        installs_here: update::self_installs(update::route().route) && !update::from_a_mount(),
     }
 }
 
@@ -283,12 +285,26 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
             settled.asked_for_a_star = kept.asked_for_a_star;
             settled.news_seen.clone_from(&kept.news_seen);
             settled.welcomed = kept.welcomed;
+            settled.updates_automatically = kept.updates_automatically;
+            settled.updates_asked_in.clone_from(&kept.updates_asked_in);
             *kept = settled.clone();
             true
         })
         .map_err(|e| e.to_string())?;
     shell::repaint(&app, settled.theme);
     Ok(claim(&settled))
+}
+
+/// Its own call, so a window holding older preferences cannot undo the picker's answer.
+#[tauri::command]
+fn updates_automatically_set(on: bool) -> Result<Settings, String> {
+    store()
+        .edit_prefs(|kept| {
+            kept.updates_automatically = Some(on);
+            true
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(claim(&store().prefs()))
 }
 
 /// A page opened the ordinary way goes to the default browser — which, on the one screen that
@@ -811,6 +827,7 @@ pub fn run() {
             about::maintenance_report,
             prefs_get,
             prefs_set,
+            updates_automatically_set,
             fonts::fonts_list,
             appearance::appearance_get,
             appearance::appearance_set,

@@ -12,9 +12,15 @@ type Preferences = {
   shortcut: string | null;
   notify_on_rule: boolean;
   looks_for_updates: boolean;
+  updates_automatically?: boolean | null;
 };
 
-type Settings = { prefs: Preferences; shortcut_held: string | null; language: string };
+type Settings = {
+  prefs: Preferences;
+  shortcut_held: string | null;
+  language: string;
+  installs_here: boolean;
+};
 
 const LOCALES: { id: Locale; label: Key }[] = [
   { id: "system", label: "localeAuto" },
@@ -72,6 +78,15 @@ export default function Application({
       })
       .catch((e: unknown) => setProblem(saidPlainly(language, e)))
       .finally(() => setCapturing(false));
+  };
+
+  const setAutomatically = (on: boolean) => {
+    void invoke<Settings>("updates_automatically_set", { on })
+      .then((next) => {
+        setSettings(next);
+        setProblem(null);
+      })
+      .catch((e: unknown) => setProblem(saidPlainly(language, e)));
   };
 
   const askAgainOnceTheResidentHasIt = () => {
@@ -177,6 +192,19 @@ export default function Application({
               onChange={(looks_for_updates) => apply({ looks_for_updates })}
             />
           </Line>
+          {settings.installs_here && (
+            <Line
+              title={t("automaticTitle")}
+              note={prefs.looks_for_updates ? t("automaticNote") : t("automaticNeedsLooking")}
+            >
+              <Switch
+                on={prefs.updates_automatically === true}
+                disabled={!prefs.looks_for_updates}
+                label={t("automaticTitle")}
+                onChange={setAutomatically}
+              />
+            </Line>
+          )}
         </Card>
       </Section>
 
