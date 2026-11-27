@@ -157,12 +157,12 @@ component UpdateStrip inherits Rectangle {
     in property <string> detail;
     in property <string> button;
     in property <string> later;
-    in property <string> never;
+    in property <string> link;
     in property <int> far;
     in property <bool> busy;
     callback asked();
     callback dismissed();
-    callback never-asked();
+    callback link-pressed();
 
     height: 36px * Measures.grow;
     border-radius: 10px;
@@ -191,17 +191,17 @@ component UpdateStrip inherits Rectangle {
                 vertical-alignment: center;
                 overflow: elide;
             }
-            if root.never != "": Text {
+            if root.link != "": Text {
                 accessible-role: AccessibleRole.button;
-                accessible-label: root.never;
-                accessible-action-default => { root.never-asked(); }
-                text: root.never;
+                accessible-label: root.link;
+                accessible-action-default => { root.link-pressed(); }
+                text: root.link;
                 font-size: Measures.text-note;
-                color: never-touch.has-hover ? Palette.ink : Palette.dim;
+                color: link-touch.has-hover ? Palette.ink : Palette.dim;
                 vertical-alignment: center;
                 overflow: elide;
-                never-touch := TouchArea {
-                    clicked => { root.never-asked(); }
+                link-touch := TouchArea {
+                    clicked => { root.link-pressed(); }
                 }
             }
             if root.far > 0: Rectangle {

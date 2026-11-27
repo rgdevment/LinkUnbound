@@ -66,6 +66,7 @@ catalogue! {
     update_auto_ask: "¿Instalar actualizaciones solas?" | "Install updates on their own?",
     update_auto_yes: "Sí" | "Yes",
     update_auto_never: "No volver a preguntar" | "Don't ask again",
+    update_download: "Descargar desde la web" | "Download from the web",
     wrapper_unresolved: "Enlace envuelto: el destino real se conocerá al abrirlo" | "Wrapped link: the real destination is known once it opens",
     no_browsers: "Ningún navegador que ofrecer. Añade uno en Ajustes." | "No browser to offer. Add one in Settings.",
     notice_opened: "Abierto en {}" | "Opened in {}",

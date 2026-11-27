@@ -317,13 +317,16 @@ fn system_open_elsewhere(url: String) -> Result<(), String> {
         return Err("ruleValueNotUrl".to_owned());
     }
     let browsers = catalogue();
-    let first = browsers
-        .iter()
-        .find(|b| !b.hidden)
+    let to = linkunbound_core::where_ours_opens(&browsers, store().rules().ok().as_ref(), &url)
         .ok_or_else(|| "browsersNone".to_owned())?;
-    linkunbound_core::launch(&browsers, &first.id, None, false, &url)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    linkunbound_core::launch(
+        &browsers,
+        &to.browser_id,
+        to.profile_id.as_deref(),
+        to.private,
+        &url,
+    )
+    .map_err(|e| e.to_string())
 }
 
 const HERE: &str = env!("CARGO_PKG_VERSION");

@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 
+export const RELEASES = "https://github.com/rgdevment/LinkUnbound/releases/latest";
+
 export type Route = "store" | "brew" | "download";
 
 export type Ready = {

@@ -1,4 +1,4 @@
-use crate::{Browser, LaunchRefused};
+use crate::{Browser, LaunchRefused, RuleSet, host_of};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LaunchError {
@@ -27,6 +27,37 @@ pub fn open(
     let args = browser.launch(profile_id, private, url)?;
     spawn(&browser.exe, &args)?;
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Destination {
+    pub browser_id: String,
+    pub profile_id: Option<String>,
+    pub private: bool,
+}
+
+#[must_use]
+pub fn where_ours_opens(
+    browsers: &[Browser],
+    rules: Option<&RuleSet>,
+    url: &str,
+) -> Option<Destination> {
+    let ruled = rules
+        .zip(host_of(url))
+        .and_then(|(rules, host)| rules.resolve_from(url, &host, None))
+        .filter(|rule| browsers.iter().any(|b| b.id == rule.target.browser_id));
+    if let Some(rule) = ruled {
+        return Some(Destination {
+            browser_id: rule.target.browser_id.clone(),
+            profile_id: rule.target.profile_id.clone(),
+            private: rule.private,
+        });
+    }
+    browsers.iter().find(|b| !b.hidden).map(|b| Destination {
+        browser_id: b.id.clone(),
+        profile_id: None,
+        private: false,
+    })
 }
 
 pub fn spawn_and_forget(command: &mut std::process::Command) -> Result<(), std::io::Error> {
@@ -119,7 +150,7 @@ mod mac {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Profile;
+    use crate::{Profile, Rule, Scope, Target};
 
     fn catalogue() -> Vec<Browser> {
         vec![Browser {
@@ -138,6 +169,92 @@ mod tests {
             hidden: false,
             keys: Default::default(),
         }]
+    }
+
+    fn browser_named(id: &str, hidden: bool) -> Browser {
+        Browser {
+            id: id.to_owned(),
+            hidden,
+            ..catalogue().remove(0)
+        }
+    }
+
+    fn rules_for(site: &str, browser: &str, profile: Option<&str>, private: bool) -> RuleSet {
+        RuleSet {
+            schema_version: 1,
+            rules: vec![Rule {
+                id: format!("site:{site}"),
+                scope: Scope::Site(site.to_owned()),
+                source_app: None,
+                target: Target {
+                    browser_id: browser.to_owned(),
+                    profile_id: profile.map(str::to_owned),
+                },
+                private,
+            }],
+        }
+    }
+
+    const PAGE: &str = "https://github.com/rgdevment/LinkUnbound/releases/latest";
+
+    #[test]
+    fn a_rule_for_the_site_of_the_page_picks_its_browser_profile_and_private_flag() {
+        let browsers = [browser_named("edge", false), browser_named("chrome", false)];
+        let rules = rules_for("github.com", "chrome", Some("Profile 2"), true);
+        let to = where_ours_opens(&browsers, Some(&rules), PAGE).unwrap();
+        assert_eq!(
+            to,
+            Destination {
+                browser_id: "chrome".to_owned(),
+                profile_id: Some("Profile 2".to_owned()),
+                private: true,
+            }
+        );
+    }
+
+    #[test]
+    fn a_rule_whose_browser_is_not_installed_falls_back_to_the_first_visible_browser() {
+        let browsers = [browser_named("edge", false), browser_named("chrome", false)];
+        let rules = rules_for("github.com", "gone", Some("Profile 2"), true);
+        let to = where_ours_opens(&browsers, Some(&rules), PAGE).unwrap();
+        assert_eq!(to.browser_id, "edge");
+        assert_eq!(to.profile_id, None);
+        assert!(!to.private);
+    }
+
+    #[test]
+    fn a_rule_for_another_site_does_not_apply() {
+        let browsers = [browser_named("edge", false), browser_named("chrome", false)];
+        let rules = rules_for("other.test", "chrome", None, true);
+        let to = where_ours_opens(&browsers, Some(&rules), PAGE).unwrap();
+        assert_eq!(to.browser_id, "edge");
+        assert!(!to.private);
+    }
+
+    #[test]
+    fn with_no_rules_the_first_visible_browser_is_chosen() {
+        let browsers = [browser_named("edge", false), browser_named("chrome", false)];
+        let to = where_ours_opens(&browsers, None, PAGE).unwrap();
+        assert_eq!(to.browser_id, "edge");
+    }
+
+    #[test]
+    fn a_hidden_first_browser_is_skipped() {
+        let browsers = [browser_named("edge", true), browser_named("chrome", false)];
+        let to = where_ours_opens(&browsers, None, PAGE).unwrap();
+        assert_eq!(to.browser_id, "chrome");
+    }
+
+    #[test]
+    fn only_hidden_browsers_leave_nowhere_to_open() {
+        let browsers = [browser_named("edge", true)];
+        assert_eq!(where_ours_opens(&browsers, None, PAGE), None);
+    }
+
+    #[test]
+    fn no_browsers_leave_nowhere_to_open() {
+        let rules = rules_for("github.com", "chrome", None, false);
+        assert_eq!(where_ours_opens(&[], Some(&rules), PAGE), None);
     }
 
     #[test]

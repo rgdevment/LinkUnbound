@@ -11,7 +11,7 @@ import Maintenance from "./settings/Maintenance";
 import News from "./settings/News";
 import { Card, Line, Section, Switch } from "./settings/parts";
 import Rules from "./settings/Rules";
-import { useUpdate } from "./settings/update";
+import { RELEASES, useUpdate } from "./settings/update";
 import { type Health, type SystemState, useChooseUs } from "./system";
 
 type Spoken = { language: string };
@@ -20,8 +20,6 @@ type Spoken = { language: string };
 type Noticed = { prefs: { edge_warning_dismissed: boolean } & Record<string, unknown> };
 
 type Legacy = { path: string; version: string | null };
-
-const RELEASES = "https://github.com/rgdevment/LinkUnbound/releases/latest";
 
 type Remedy = { label: Key; note?: Key } & { command: string; args?: Record<string, unknown> };
 

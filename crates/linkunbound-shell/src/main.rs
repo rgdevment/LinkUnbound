@@ -1083,9 +1083,9 @@ fn main() -> Result<(), slint::PlatformError> {
             ui.strip_closed();
         }
     });
-    picker.on_update_never_asked(|| {
+    picker.on_update_link_pressed(|| {
         if let Some(ui) = ui() {
-            ui.never_ask();
+            ui.strip_link_pressed();
         }
     });
 
