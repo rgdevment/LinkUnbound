@@ -10,6 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+base64.workspace = true
 psl = "2.1.232"
 sys-locale = "0.3"
 serde.workspace = true

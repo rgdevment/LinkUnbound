@@ -3611,6 +3611,7 @@ checksum = "4d9aae57673c1a235149777a74d152f3210ebd3e3b13346d2cdb6809e566bd3c"
 name = "linkunbound-core"
 version = "2.0.0"
 dependencies = [
+ "base64 0.23.1",
  "percent-encoding",
  "psl",
  "semver",

@@ -16,6 +16,9 @@ pub const LATEST: &str =
 pub const CANDIDATE: &str =
     "https://raw.githubusercontent.com/rgdevment/LinkUnbound/manifest/candidate.json";
 
+/// The second public key the updater accepts a release signed with.
+pub const SPARE_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcwOTVCRjc2NDFDNDc0QjMKUldTemRNUkJkcitWY09JSU1FUnVQbk8rWGZjenVEWXdTd25RaXoydTVEdWVzZkd6OEJPZElqZ0MK";
+
 /// Market and language are fixed, so the request says nothing of the person making it.
 const CATALOG: &str =
     "https://displaycatalog.mp.microsoft.com/v7.0/products/9N9F7C8Q43KC?market=US&languages=en-US";
@@ -1064,5 +1067,25 @@ mod tests {
     #[test]
     fn a_look_left_in_the_future_is_owed_now_rather_than_waited_out() {
         assert!(due(Some(2_000_000_000), 1_800_000_000));
+    }
+
+    fn id_as_hex(wrapped: &str) -> String {
+        linkunbound_core::update::key_id(wrapped)
+            .expect("a wrapped minisign key")
+            .iter()
+            .rev()
+            .map(|byte| format!("{byte:02X}"))
+            .collect()
+    }
+
+    #[test]
+    fn the_two_updater_keys_carry_the_ids_they_were_minted_with() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+            .expect("tauri.conf.json parses");
+        let main = config["plugins"]["updater"]["pubkey"]
+            .as_str()
+            .expect("the updater pubkey is a string");
+        assert_eq!(id_as_hex(main), "51DEA754ABBA4A9A");
+        assert_eq!(id_as_hex(super::SPARE_KEY), "7095BF7641C474B3");
     }
 }

@@ -178,12 +178,37 @@ pub fn worth_offering(found: &str, here: &str, wants: Option<bool>) -> bool {
     !candidate || on_the_candidate_track(here, wants)
 }
 
+/// The eight id bytes after the algorithm on line two of base64-wrapped minisign text.
+#[must_use]
+pub fn key_id(wrapped: &str) -> Option<[u8; 8]> {
+    use base64::Engine;
+    let text = base64::engine::general_purpose::STANDARD
+        .decode(wrapped.trim())
+        .ok()?;
+    let line = std::str::from_utf8(&text).ok()?.lines().nth(1)?;
+    let raw = base64::engine::general_purpose::STANDARD
+        .decode(line.trim())
+        .ok()?;
+    if !matches!(raw.get(..2)?, b"Ed" | b"ED") {
+        return None;
+    }
+    raw.get(2..10)?.try_into().ok()
+}
+
+/// Picks the key that checks a download; the plugin still verifies the signature itself.
+#[must_use]
+pub fn signed_by(signature: &str, pubkey: &str) -> bool {
+    key_id(signature).is_some_and(|signed| key_id(pubkey) == Some(signed))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         Looked, Progress, gone_quiet, keep, looked, newer_than, on_the_candidate_track, progress,
         settle, tell, under_way_for, worth_offering,
     };
+    use super::{key_id, signed_by};
+    use base64::Engine;
     use std::time::Duration;
 
     #[test]
@@ -362,5 +387,97 @@ mod tests {
             newer_than("v2.0.1", "2.0.0"),
             "a leading v is how tags are written"
         );
+    }
+
+    const MAIN_PUB: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUxREVBNzU0QUJCQTRBOUEKUldTYVNycXJWS2ZlVWJjeGFJdFc0ZkQrZTRsSUhubG9FaDdseTZzcUl6MTB1NS9TanAzcEE4S0oK";
+    const MAIN_SIG: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYVNycXJWS2ZlVWZvamc2WWhNZFNQOFp5UExUWi9FbTNxdkZqNWk4eklYRElDRjBTNW1ySHg4Rk5COWQxaVBWYW9EUkNZY1pjblN3RVhSTFFIRENQWjFlMWV4TklXMmdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzEzNzMxCWZpbGU6bGlua3VuYm91bmQtaW5zdGFsbGVyLTIuMTEuMC13aW5kb3dzLXg4Nl82NC5leGUJdmVyc2lvbjoyLjExLjAKRDhtNHEwVzB3RTBNMUdrVFpUNHN5Wi9oVkpCNUxzbE1IS29RUmUyR3RySnNIcEhOMGF2MU51NVZPUkR4T2RaL0VEQTBIOHUwNlpsVG1xVk8yZEtRQWc9PQo=";
+    const SPARE_PUB: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIwMTA2QjBCRTYyOTVDMjAKUldRZ1hDbm1DMnNRc09zMEVrWXlwSjArSzhLVTZZVnQ1VlY0NWJCdm9NZVdTbXo2dVF1TnI0TFYK";
+    const SPARE_SIG: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRZ1hDbm1DMnNRc0M1a3Y3NElpUnRzNWttdUVjaDB0Y1VVUnBzcnlQV1h1NjVZRTdQbDdKdEd0d3hLS1BOSW1KZWZoL2Zydmc3blFEVmxuWkM5YnUzdU1vRVpZMzdBdFE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1NzIyNjI5CWZpbGU6cGF5bG9hZC50eHQKamRucEQxb2lFUVpRdjBzWG81aDdaT09kQXoxczlPcEpUbmFqbmZiRlZWOHVZNnVjS3M1NGEyMnhiSkZzVTdsL0RQOVQzeGZ2TzZhOGEwYXN2ZTNsQ0E9PQo=";
+
+    fn wrap(text: &str) -> String {
+        base64::engine::general_purpose::STANDARD.encode(text)
+    }
+
+    fn wrap_line_two(raw: &[u8]) -> String {
+        let line = base64::engine::general_purpose::STANDARD.encode(raw);
+        wrap(&format!("untrusted comment: x\n{line}\n"))
+    }
+
+    fn hex_reversed(id: [u8; 8]) -> String {
+        id.iter().rev().map(|byte| format!("{byte:02X}")).collect()
+    }
+
+    #[test]
+    fn a_public_key_and_its_signature_carry_the_same_key_id() {
+        assert!(key_id(MAIN_PUB).is_some());
+        assert_eq!(key_id(MAIN_PUB), key_id(MAIN_SIG));
+        assert_eq!(key_id(SPARE_PUB), key_id(SPARE_SIG));
+        assert_ne!(key_id(MAIN_PUB), key_id(SPARE_PUB));
+    }
+
+    #[test]
+    fn the_key_id_bytes_read_backwards_are_the_hex_minisign_prints() {
+        assert_eq!(hex_reversed(key_id(MAIN_PUB).unwrap()), "51DEA754ABBA4A9A");
+        assert_eq!(hex_reversed(key_id(SPARE_PUB).unwrap()), "B0106B0BE6295C20");
+    }
+
+    #[test]
+    fn a_signature_is_signed_by_its_own_key_and_by_no_other() {
+        assert!(signed_by(MAIN_SIG, MAIN_PUB));
+        assert!(signed_by(SPARE_SIG, SPARE_PUB));
+        assert!(!signed_by(MAIN_SIG, SPARE_PUB));
+        assert!(!signed_by(SPARE_SIG, MAIN_PUB));
+    }
+
+    #[test]
+    fn text_that_is_not_minisign_has_no_key_id_and_is_signed_by_nothing() {
+        let one_line = wrap("untrusted comment: x");
+        let line_not_base64 = wrap("untrusted comment: x\n!!not base64!!\n");
+        for bad in [
+            "",
+            "   ",
+            "not base64 at all!",
+            one_line.as_str(),
+            line_not_base64.as_str(),
+        ] {
+            assert_eq!(key_id(bad), None, "{bad}");
+            assert!(!signed_by(bad, MAIN_PUB), "{bad}");
+            assert!(!signed_by(MAIN_SIG, bad), "{bad}");
+        }
+        assert!(
+            !signed_by("", ""),
+            "two unreadable texts are not the same key"
+        );
+    }
+
+    #[test]
+    fn a_key_line_too_short_or_of_another_algorithm_has_no_key_id() {
+        let mut raw = b"Ed".to_vec();
+        raw.extend_from_slice(&[7; 8]);
+        assert_eq!(key_id(&wrap_line_two(&raw)), Some([7; 8]));
+        raw[0] = b'E';
+        raw[1] = b'D';
+        assert_eq!(key_id(&wrap_line_two(&raw)), Some([7; 8]));
+        assert_eq!(key_id(&wrap_line_two(&raw[..9])), None, "one byte short");
+        assert_eq!(key_id(&wrap_line_two(b"Ed")), None);
+        assert_eq!(key_id(&wrap_line_two(b"")), None);
+        raw[0] = b'X';
+        assert_eq!(key_id(&wrap_line_two(&raw)), None);
+        raw[1] = b'X';
+        assert_eq!(key_id(&wrap_line_two(&raw)), None);
+        raw[0] = b'E';
+        raw[1] = b'x';
+        assert_eq!(key_id(&wrap_line_two(&raw)), None);
+    }
+
+    #[test]
+    fn only_the_key_id_decides_so_a_different_id_never_matches() {
+        let mut raw = b"Ed".to_vec();
+        raw.extend_from_slice(&[1; 8]);
+        let one = wrap_line_two(&raw);
+        raw[9] = 2;
+        let other = wrap_line_two(&raw);
+        assert!(signed_by(&one, &one));
+        assert!(!signed_by(&one, &other));
     }
 }
