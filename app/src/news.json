@@ -1,5 +1,24 @@
 [
   {
+    "version": "2.12.0",
+    "headline": {
+      "es": "LinkUnbound puede actualizarse solo, si tú quieres",
+      "en": "LinkUnbound can update itself, if you want it to"
+    },
+    "es": [
+      {
+        "title": "Actualizaciones que se instalan solas",
+        "said": "en Ajustes › Aplicación, «Instalar las actualizaciones solas» deja que cada versión nueva se instale cuando el selector no está a la vista, y LinkUnbound se reinicia por su cuenta. Viene apagado. El selector te lo pregunta una vez en cada versión nueva, y si eliges «No volver a preguntar», no lo hace más. No aparece en la copia de Microsoft Store, que se actualiza desde la Store."
+      }
+    ],
+    "en": [
+      {
+        "title": "Updates that install on their own",
+        "said": "In Settings › Application, «Install updates on their own» lets each new version install while the picker is out of sight, and LinkUnbound restarts by itself. It starts off. The picker asks you once with each new version, and if you choose «Don't ask again», it stops asking. It doesn't appear in the Microsoft Store copy, which the Store keeps up to date."
+      }
+    ]
+  },
+  {
     "version": "2.11.0",
     "headline": {
       "es": "Elige tu fuente y el tamaño del texto, y prueba tus reglas antes de abrir un enlace",
