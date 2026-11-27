@@ -37,7 +37,7 @@ pub use hostile::{as_file_name, disarm, is_remote};
 pub use i18n::{Language, Strings};
 pub use icons::{cached_icon, prune as prune_icons};
 pub use journal::{JOURNAL, journal, note, scrubbed};
-pub use launch::{LaunchError, open as launch, spawn_and_forget};
+pub use launch::{Destination, LaunchError, open as launch, spawn_and_forget, where_ours_opens};
 pub use news::{behind as news_behind, untold as untold_news};
 pub use prefs::{Density, Locale, PickerPosition, PickerStyle, Preferences, TextSize, Theme};
 pub use private::private_flag_for;

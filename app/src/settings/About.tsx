@@ -10,7 +10,7 @@ import { offerMoved, saidPlainly } from "../refusal";
 import { CloudOff, Code, Gift, Key as KeyIcon } from "./Icons";
 import { Card, Line, Switch } from "./parts";
 import Star from "./Star";
-import type { Ready, StoreWait, Underway } from "./update";
+import { RELEASES, type Ready, type StoreWait, type Underway } from "./update";
 
 const REPO = "https://github.com/rgdevment/LinkUnbound";
 const COFFEE = "https://buymeacoffee.com/rgdevment";
@@ -168,6 +168,7 @@ function Offer({
   const language = useSpoken();
   const [looking, setLooking] = useState(false);
   const [asked, setAsked] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const lookAgain = () => {
     setLooking(true);
@@ -241,6 +242,7 @@ function Offer({
           disabled={asked}
           onClick={() => {
             setAsked(true);
+            setFailed(false);
             onProblem(null);
             invoke("update_install")
               // Every other route takes the process with it, and a button handed back there would
@@ -257,12 +259,23 @@ function Offer({
                 onProblem(saidPlainly(language, e));
                 if (offerMoved(e)) {
                   onLook().catch(() => {});
+                } else {
+                  setFailed(newer.route !== "store");
                 }
               });
           }}
           className="strong"
         >
           {t("updateInstall")}
+        </button>
+      )}
+      {!step && failed && (
+        <button
+          type="button"
+          onClick={() => void invoke("system_open_elsewhere", { url: RELEASES }).catch(noop)}
+          className="mild"
+        >
+          {t("updateDownload")}
         </button>
       )}
     </div>

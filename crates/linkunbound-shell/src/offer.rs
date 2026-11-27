@@ -9,6 +9,8 @@ use slint::ComponentHandle;
 use super::{Ui, catalogue, open_settings, run_settings, store, ui};
 
 const ASKING: &str = "ask";
+const FAILED: &str = "failed";
+const RELEASES: &str = "https://github.com/rgdevment/LinkUnbound/releases/latest";
 const LOOK_ANSWERS_WITHIN: Duration = Duration::from_secs(3 * 60);
 const PICKER_GOES_AWAY_WITHIN: Duration = Duration::from_secs(10 * 60);
 
@@ -35,6 +37,31 @@ fn settle_the_question_for_a_new_copy() {
     }
 }
 
+fn link_for(words: &Strings, stage: &str) -> &'static str {
+    match stage {
+        ASKING => words.update_auto_never,
+        FAILED => words.update_download,
+        _ => "",
+    }
+}
+
+fn download_from_the_web() {
+    let browsers = catalogue();
+    let Some(to) =
+        linkunbound_core::where_ours_opens(&browsers, store().rules().ok().as_ref(), RELEASES)
+    else {
+        return;
+    };
+    super::host::let_whoever_opens_next_come_forward();
+    let _ = linkunbound_core::launch(
+        &browsers,
+        &to.browser_id,
+        to.profile_id.as_deref(),
+        to.private,
+        RELEASES,
+    );
+}
+
 fn take_by_itself() {
     if let Some(ui) = ui() {
         ui.take_by_itself();
@@ -56,7 +83,7 @@ impl Ui {
             tell(&dir, one);
         }
         let words = self.words.get();
-        let strip = linkunbound_shell::strip_for(
+        let mut strip = linkunbound_shell::strip_for(
             &words,
             &looked,
             under_way.as_ref(),
@@ -66,13 +93,14 @@ impl Ui {
         .or_else(|| self.asking(&looked).then(|| question(&words)));
         let stage = strip.as_ref().map_or("", |one| one.stage);
         self.strip_stage.set(stage);
+        let link = link_for(&words, stage);
+        if !link.is_empty()
+            && let Some(one) = strip.as_mut()
+        {
+            one.detail.clear();
+        }
         linkunbound_shell::show_strip(&self.picker, strip.as_ref());
-        let never = if stage == ASKING {
-            words.update_auto_never
-        } else {
-            ""
-        };
-        self.picker.set_update_never(never.into());
+        self.picker.set_update_link(link.into());
         let busy = strip
             .as_ref()
             .is_some_and(|one| matches!(one.stage, "starting" | "getting" | "installing"));
@@ -197,8 +225,12 @@ impl Ui {
         }
     }
 
-    pub(super) fn never_ask(self: &Rc<Self>) {
-        self.answer(false);
+    pub(super) fn strip_link_pressed(self: &Rc<Self>) {
+        match self.strip_stage.get() {
+            ASKING => self.answer(false),
+            FAILED => download_from_the_web(),
+            _ => {}
+        }
     }
 
     fn answer(self: &Rc<Self>, automatically: bool) {
@@ -230,7 +262,7 @@ impl Ui {
 
 #[cfg(test)]
 mod tests {
-    use super::{ASKING, question};
+    use super::{ASKING, FAILED, link_for, question};
     use linkunbound_core::Language;
 
     #[test]
@@ -247,6 +279,26 @@ mod tests {
         assert_ne!(
             question(&Language::Spanish.strings()).line,
             question(&Language::English.strings()).line
+        );
+    }
+
+    #[test]
+    fn the_strip_link_says_never_for_the_question_and_download_for_a_failure_in_each_language() {
+        for language in [Language::Spanish, Language::English] {
+            let words = language.strings();
+            assert_eq!(link_for(&words, ASKING), words.update_auto_never);
+            assert_eq!(link_for(&words, FAILED), words.update_download);
+            for stage in ["", "starting", "getting", "installing", "ready"] {
+                assert_eq!(link_for(&words, stage), "", "stage {stage:?} has no link");
+            }
+        }
+        assert_eq!(
+            link_for(&Language::Spanish.strings(), FAILED),
+            "Descargar desde la web"
+        );
+        assert_eq!(
+            link_for(&Language::English.strings(), FAILED),
+            "Download from the web"
         );
     }
 }

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import About from "./About";
-import type { Ready, Underway } from "./update";
+import { RELEASES, type Ready, type Underway } from "./update";
 
 const opened: string[] = [];
 const invoke = vi.fn();
@@ -367,6 +367,48 @@ describe("about", () => {
     await userEvent.click(screen.getByRole("button", { name: "Actualizar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("the disk is full");
+  });
+
+  it("offers the download from the web after an install that failed on a download route", async () => {
+    answers({ update_install: () => Promise.reject("the disk is full") });
+    show(NEWER);
+    expect(screen.queryByRole("button", { name: "Descargar desde la web" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Descargar desde la web" }));
+    expect(invoke).toHaveBeenCalledWith("system_open_elsewhere", { url: RELEASES });
+  });
+
+  it("hides the download from the web again once install is pressed", async () => {
+    answers({ update_install: () => Promise.reject("the disk is full") });
+    show(NEWER);
+    await userEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    await screen.findByRole("button", { name: "Descargar desde la web" });
+
+    answers({ update_install: () => new Promise(() => {}) });
+    await userEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(screen.queryByRole("button", { name: "Descargar desde la web" })).toBeNull();
+  });
+
+  it("does not offer the download when the offer it pressed has moved", async () => {
+    answers({
+      update_install: () => Promise.reject("updateMoved:2.1.1"),
+      update_ready: () => Promise.resolve({ ...NEWER, version: "2.1.1" }),
+    });
+    show(NEWER);
+    await userEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+
+    await screen.findByText("Versión 2.1.1 disponible");
+    expect(screen.queryByRole("button", { name: "Descargar desde la web" })).toBeNull();
+  });
+
+  it("does not offer the download after a failure on a store copy", async () => {
+    answers({ update_install: () => Promise.reject("the disk is full") });
+    show(FROM_STORE);
+    await userEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("the disk is full");
+    expect(screen.queryByRole("button", { name: "Descargar desde la web" })).toBeNull();
   });
 
   it("clears a previous complaint when something new is tried", async () => {
