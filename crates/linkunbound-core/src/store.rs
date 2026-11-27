@@ -457,6 +457,8 @@ mod tests {
                 prefs.asked_for_a_star = true;
                 prefs.news_seen = Some("2.6.0".to_owned());
                 prefs.welcomed = true;
+                prefs.updates_automatically = Some(true);
+                prefs.updates_asked_in = Some("2.11.0".to_owned());
                 true
             })
             .expect("marked");
@@ -472,6 +474,8 @@ mod tests {
                 settled.asked_for_a_star = kept.asked_for_a_star;
                 settled.news_seen.clone_from(&kept.news_seen);
                 settled.welcomed = kept.welcomed;
+                settled.updates_automatically = kept.updates_automatically;
+                settled.updates_asked_in.clone_from(&kept.updates_asked_in);
                 *kept = settled.clone();
                 true
             })
@@ -490,6 +494,16 @@ mod tests {
             read.news_seen.as_deref(),
             Some("2.6.0"),
             "and the news it told"
+        );
+        assert_eq!(
+            read.updates_automatically,
+            Some(true),
+            "and the update answer"
+        );
+        assert_eq!(
+            read.updates_asked_in.as_deref(),
+            Some("2.11.0"),
+            "and where the question was put away"
         );
     }
 

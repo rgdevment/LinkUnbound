@@ -18,6 +18,7 @@ mod kept;
 mod look;
 mod mascot;
 mod notice;
+mod offer;
 mod preview;
 use detected::catalogue;
 
@@ -568,6 +569,7 @@ struct Ui {
     looker: slint::Timer,
     /// The version whose offer was put away with ✕, for this session.
     put_away: RefCell<Option<String>>,
+    strip_stage: Cell<&'static str>,
     prefs_seen: Cell<Option<std::time::SystemTime>>,
     held_focus: Cell<bool>,
     /// When a browser was last sent a link: the one coming to the front just after is that
@@ -651,126 +653,6 @@ impl Ui {
                 tray.follow(taskbar);
             }
         }
-    }
-
-    /// What the strip says now, read off the two files settings writes. An install that stopped
-    /// reporting is one whose process died: told as failed, so the button comes back.
-    fn refresh_strip(self: &Rc<Self>) {
-        use linkunbound_core::update::{gone_quiet, progress, progress_age, tell};
-        let dir = data_dir();
-        let looked = linkunbound_core::update::looked(&dir);
-        let mut under_way = progress(&dir);
-        if let Some(one) = under_way.as_mut()
-            && gone_quiet(&one.stage, progress_age(&dir))
-        {
-            one.stage = "failed".to_owned();
-            tell(&dir, one);
-        }
-        let strip = linkunbound_shell::strip_for(
-            &self.words.get(),
-            &looked,
-            under_way.as_ref(),
-            linkunbound_shell::HERE,
-            self.put_away.borrow().as_deref(),
-        );
-        linkunbound_shell::show_strip(&self.picker, strip.as_ref());
-        let busy = strip
-            .as_ref()
-            .is_some_and(|one| matches!(one.stage, "starting" | "getting" | "installing"));
-        // An install the window started is followed here too: the file is the same.
-        if busy && !self.progress_watch.running() {
-            let ui = Rc::clone(self);
-            self.progress_watch.start(
-                slint::TimerMode::Repeated,
-                Duration::from_millis(300),
-                move || ui.refresh_strip(),
-            );
-        }
-        if !busy {
-            self.progress_watch.stop();
-        }
-    }
-
-    /// Pressed: a Store copy is taken to settings, where the Store can be asked; any other copy
-    /// has settings download and install with no window, and this watches the file it writes.
-    fn take_update(self: &Rc<Self>) {
-        use linkunbound_core::update::{Progress, looked, tell, under_way_for};
-        let dir = data_dir();
-        let looked = looked(&dir);
-        let Some(found) = looked.found_version.clone() else {
-            return;
-        };
-        // A press on top of a live install is one install; a route this copy cannot take by
-        // itself — the Store's, a copy on a disk image, or one an older file never named — is
-        // the window's to explain.
-        if under_way_for(&dir, &found) {
-            return;
-        }
-        if !linkunbound_shell::takes_it_here(&looked) {
-            open_settings();
-            return;
-        }
-        let started = Progress {
-            version: found,
-            stage: "starting".to_owned(),
-            far: 0,
-        };
-        tell(&dir, &started);
-        if !run_settings(&["--update"]) {
-            tell(
-                &dir,
-                &Progress {
-                    stage: "failed".to_owned(),
-                    ..started
-                },
-            );
-        }
-        self.refresh_strip();
-    }
-
-    fn put_update_away(self: &Rc<Self>) {
-        let dir = data_dir();
-        let looked = linkunbound_core::update::looked(&dir);
-        *self.put_away.borrow_mut() = looked.found_version;
-        if linkunbound_core::update::progress(&dir).is_some_and(|one| one.stage == "failed") {
-            linkunbound_core::update::settle(&dir);
-        }
-        self.refresh_strip();
-    }
-
-    /// Settings holds the network code; this only has to ask, within its interval, so a copy
-    /// whose window is never opened still hears about a release.
-    fn keep_looking(&self) {
-        // An install that was over when this copy started — it is the version now, or the file
-        // is older than any offer — would otherwise show its last bar on the first picker.
-        let dir = data_dir();
-        if linkunbound_core::update::progress(&dir).is_some_and(|one| {
-            !linkunbound_core::update::newer_than(&one.version, linkunbound_shell::HERE)
-        }) {
-            linkunbound_core::update::settle(&dir);
-        }
-        // Read at each tick, not once: the switch in settings has to take effect without a
-        // restart, like everything else there.
-        let look = || {
-            if store().prefs().looks_for_updates {
-                let _ = run_settings(&["--look"]);
-            }
-        };
-        self.looker.start(
-            slint::TimerMode::Repeated,
-            Duration::from_secs(6 * 60 * 60),
-            look,
-        );
-        slint::Timer::single_shot(Duration::from_secs(20), look);
-        // Once a session, off the start-up path: the icons of browsers long uninstalled are
-        // what the cache otherwise fills with.
-        slint::Timer::single_shot(Duration::from_secs(90), || {
-            let browsers = catalogue();
-            linkunbound_core::prune_icons(
-                &data_dir().join("icons"),
-                browsers.iter().map(|b| b.id.as_str()),
-            );
-        });
     }
 
     fn obey(&self, prefs: &linkunbound_core::Preferences) {
@@ -1193,12 +1075,17 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     picker.on_update_asked(|| {
         if let Some(ui) = ui() {
-            ui.take_update();
+            ui.strip_pressed();
         }
     });
     picker.on_update_dismissed(|| {
         if let Some(ui) = ui() {
-            ui.put_update_away();
+            ui.strip_closed();
+        }
+    });
+    picker.on_update_never_asked(|| {
+        if let Some(ui) = ui() {
+            ui.never_ask();
         }
     });
 
@@ -1241,6 +1128,7 @@ fn main() -> Result<(), slint::PlatformError> {
         progress_watch: slint::Timer::default(),
         looker: slint::Timer::default(),
         put_away: RefCell::new(None),
+        strip_stage: Cell::new(""),
         prefs_seen: Cell::new(prefs_touched_at()),
         held_focus: Cell::new(false),
         launched_at: Cell::new(None),
@@ -1418,6 +1306,7 @@ mod tests {
             progress_watch: slint::Timer::default(),
             looker: slint::Timer::default(),
             put_away: RefCell::new(None),
+            strip_stage: Cell::new(""),
             prefs_seen: Cell::new(super::prefs_touched_at()),
             held_focus: Cell::new(false),
             launched_at: Cell::new(None),

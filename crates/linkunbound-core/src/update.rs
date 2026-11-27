@@ -201,15 +201,256 @@ pub fn signed_by(signature: &str, pubkey: &str) -> bool {
     key_id(signature).is_some_and(|signed| key_id(pubkey) == Some(signed))
 }
 
+#[must_use]
+pub fn minor_of(version: &str) -> Option<(u64, u64)> {
+    semver::Version::parse(version.trim_start_matches('v'))
+        .ok()
+        .map(|parsed| (parsed.major, parsed.minor))
+}
+
+#[must_use]
+pub fn asks_about_automatic(prefs: &crate::Preferences, here: &str, installs_here: bool) -> bool {
+    installs_here
+        && prefs.looks_for_updates
+        && prefs.updates_automatically.is_none()
+        && minor_of(here).is_some()
+        && prefs.updates_asked_in.as_deref().and_then(minor_of) != minor_of(here)
+}
+
+/// A version an earlier attempt already went for is never retried without a press.
+#[must_use]
+pub fn takes_by_itself(
+    prefs: &crate::Preferences,
+    looked: &Looked,
+    under_way: Option<&Progress>,
+    here: &str,
+) -> bool {
+    prefs.updates_automatically == Some(true)
+        && prefs.looks_for_updates
+        && looked.found_version.as_deref().is_some_and(|found| {
+            worth_offering(found, here, looked.candidates)
+                && under_way.is_none_or(|attempt| attempt.version != found)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        Looked, Progress, gone_quiet, keep, looked, newer_than, on_the_candidate_track, progress,
-        settle, tell, under_way_for, worth_offering,
+        Looked, Progress, asks_about_automatic, gone_quiet, keep, looked, minor_of, newer_than,
+        on_the_candidate_track, progress, settle, takes_by_itself, tell, under_way_for,
+        worth_offering,
     };
     use super::{key_id, signed_by};
+    use crate::Preferences;
     use base64::Engine;
     use std::time::Duration;
+
+    fn unanswered() -> Preferences {
+        Preferences::default()
+    }
+
+    fn asked_in(version: &str) -> Preferences {
+        Preferences {
+            updates_asked_in: Some(version.to_owned()),
+            ..unanswered()
+        }
+    }
+
+    fn wanting() -> Preferences {
+        Preferences {
+            updates_automatically: Some(true),
+            ..unanswered()
+        }
+    }
+
+    fn found(version: &str) -> Looked {
+        Looked {
+            found_version: Some(version.to_owned()),
+            ..Looked::default()
+        }
+    }
+
+    fn attempt(version: &str, stage: &str) -> Progress {
+        Progress {
+            version: version.to_owned(),
+            stage: stage.to_owned(),
+            far: 0,
+        }
+    }
+
+    #[test]
+    fn fix_releases_share_the_minor_of_the_version_they_fix() {
+        assert_eq!(minor_of("2.11.0"), Some((2, 11)));
+        assert_eq!(minor_of("2.11.7"), minor_of("2.11.0"));
+        assert_ne!(minor_of("2.12.0"), minor_of("2.11.0"));
+        assert_ne!(minor_of("3.11.0"), minor_of("2.11.0"));
+    }
+
+    #[test]
+    fn a_leading_v_and_a_pre_release_still_name_their_minor() {
+        assert_eq!(minor_of("v2.11.3"), Some((2, 11)));
+        assert_eq!(minor_of("2.12.0-rc.1"), Some((2, 12)));
+    }
+
+    #[test]
+    fn a_version_that_is_not_semver_has_no_minor() {
+        assert_eq!(minor_of("tomorrow"), None);
+        assert_eq!(minor_of("2.11"), None);
+        assert_eq!(minor_of(""), None);
+    }
+
+    #[test]
+    fn a_copy_that_installs_itself_and_never_answered_is_asked() {
+        assert!(asks_about_automatic(&unanswered(), "2.11.0", true));
+    }
+
+    #[test]
+    fn a_copy_that_cannot_install_itself_is_never_asked() {
+        assert!(!asks_about_automatic(&unanswered(), "2.11.0", false));
+    }
+
+    #[test]
+    fn a_copy_that_does_not_look_for_updates_is_never_asked() {
+        let prefs = Preferences {
+            looks_for_updates: false,
+            ..unanswered()
+        };
+        assert!(!asks_about_automatic(&prefs, "2.11.0", true));
+    }
+
+    #[test]
+    fn an_answer_of_either_kind_ends_the_asking() {
+        for answer in [true, false] {
+            let prefs = Preferences {
+                updates_automatically: Some(answer),
+                ..unanswered()
+            };
+            assert!(!asks_about_automatic(&prefs, "2.11.0", true));
+        }
+    }
+
+    #[test]
+    fn a_question_put_away_waits_for_the_next_minor_version() {
+        assert!(!asks_about_automatic(&asked_in("2.11.0"), "2.11.0", true));
+        assert!(
+            !asks_about_automatic(&asked_in("2.11.0"), "2.11.4", true),
+            "a fix release is not a reason to ask again"
+        );
+        assert!(!asks_about_automatic(&asked_in("v2.11.0"), "2.11.1", true));
+        assert!(asks_about_automatic(&asked_in("2.11.4"), "2.12.0", true));
+        assert!(asks_about_automatic(&asked_in("2.11.0"), "3.11.0", true));
+    }
+
+    #[test]
+    fn a_question_put_away_in_a_garbled_version_is_asked_again() {
+        assert!(asks_about_automatic(&asked_in("tomorrow"), "2.11.0", true));
+    }
+
+    #[test]
+    fn a_copy_whose_own_version_is_not_semver_is_never_asked() {
+        assert!(!asks_about_automatic(&unanswered(), "tomorrow", true));
+        assert!(!asks_about_automatic(&asked_in("2.11.0"), "tomorrow", true));
+    }
+
+    #[test]
+    fn a_copy_that_wants_updates_takes_a_newer_version_by_itself() {
+        assert!(takes_by_itself(
+            &wanting(),
+            &found("2.12.0"),
+            None,
+            "2.11.0"
+        ));
+    }
+
+    #[test]
+    fn a_copy_that_never_answered_or_said_no_takes_nothing_by_itself() {
+        let said_no = Preferences {
+            updates_automatically: Some(false),
+            ..unanswered()
+        };
+        assert!(!takes_by_itself(
+            &unanswered(),
+            &found("2.12.0"),
+            None,
+            "2.11.0"
+        ));
+        assert!(!takes_by_itself(&said_no, &found("2.12.0"), None, "2.11.0"));
+    }
+
+    #[test]
+    fn a_copy_that_does_not_look_for_updates_takes_nothing_by_itself() {
+        let prefs = Preferences {
+            looks_for_updates: false,
+            ..wanting()
+        };
+        assert!(!takes_by_itself(&prefs, &found("2.12.0"), None, "2.11.0"));
+    }
+
+    #[test]
+    fn nothing_found_means_nothing_to_take() {
+        assert!(!takes_by_itself(
+            &wanting(),
+            &Looked::default(),
+            None,
+            "2.11.0"
+        ));
+    }
+
+    #[test]
+    fn a_version_that_is_not_newer_is_not_taken() {
+        assert!(!takes_by_itself(
+            &wanting(),
+            &found("2.11.0"),
+            None,
+            "2.11.0"
+        ));
+        assert!(!takes_by_itself(
+            &wanting(),
+            &found("2.10.0"),
+            None,
+            "2.11.0"
+        ));
+    }
+
+    #[test]
+    fn a_candidate_is_not_taken_by_a_copy_off_the_candidate_track() {
+        assert!(!takes_by_itself(
+            &wanting(),
+            &found("2.12.0-rc.1"),
+            None,
+            "2.11.0"
+        ));
+        let on_track = Looked {
+            candidates: Some(true),
+            ..found("2.12.0-rc.1")
+        };
+        assert!(takes_by_itself(&wanting(), &on_track, None, "2.11.0"));
+    }
+
+    #[test]
+    fn a_version_an_earlier_attempt_went_for_is_not_retried_at_any_stage() {
+        for stage in ["starting", "getting", "installing", "failed"] {
+            assert!(
+                !takes_by_itself(
+                    &wanting(),
+                    &found("2.12.0"),
+                    Some(&attempt("2.12.0", stage)),
+                    "2.11.0"
+                ),
+                "retried after {stage}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_attempt_at_another_version_does_not_hold_back_a_newer_one() {
+        assert!(takes_by_itself(
+            &wanting(),
+            &found("2.12.1"),
+            Some(&attempt("2.12.0", "failed")),
+            "2.11.0"
+        ));
+    }
 
     #[test]
     fn a_copy_that_is_itself_a_candidate_stays_on_that_track_until_told_otherwise() {

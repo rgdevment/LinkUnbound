@@ -14,10 +14,15 @@ const PREFS = {
   looks_for_updates: true,
 };
 
-function answers(prefs = PREFS, held: string | null = "Alt+Shift+L", fail?: string) {
+function answers(
+  prefs = PREFS,
+  held: string | null = "Alt+Shift+L",
+  fail?: string,
+  installsHere = true,
+) {
   invoke.mockImplementation((cmd: string) => {
     if (cmd === "prefs_set" && fail) return Promise.reject(fail);
-    return Promise.resolve({ prefs, shortcut_held: held });
+    return Promise.resolve({ prefs, shortcut_held: held, installs_here: installsHere });
   });
 }
 
@@ -72,6 +77,31 @@ describe("application settings", () => {
     expect(invoke).toHaveBeenCalledWith("prefs_set", {
       prefs: { ...PREFS, looks_for_updates: false },
     });
+  });
+
+  it("lets updates install on their own, and says so to the backend", async () => {
+    mount();
+    const automatic = await screen.findByRole("switch", {
+      name: "Instalar las actualizaciones solas",
+    });
+    expect(automatic).not.toBeChecked();
+    await userEvent.click(automatic);
+    expect(invoke).toHaveBeenCalledWith("updates_automatically_set", { on: true });
+  });
+
+  it("does not offer to install on its own where the copy cannot replace itself", async () => {
+    answers(PREFS, "Alt+Shift+L", undefined, false);
+    mount();
+    await screen.findByRole("switch", { name: "Buscar versiones nuevas en segundo plano" });
+    expect(screen.queryByRole("switch", { name: "Instalar las actualizaciones solas" })).toBeNull();
+  });
+
+  it("disables installing on its own while the look for releases is off", async () => {
+    answers({ ...PREFS, looks_for_updates: false });
+    mount();
+    expect(
+      await screen.findByRole("switch", { name: "Instalar las actualizaciones solas" }),
+    ).toBeDisabled();
   });
 
   it("captures a combination from the physical keys, not the printed ones", async () => {
