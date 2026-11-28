@@ -74,7 +74,11 @@ pub struct Edit {
     pub keys: BTreeMap<String, String>,
 }
 
+/// A network path is refused unread: merely asking whether it is a file signs in to its host.
 pub fn readable(path: &str) -> bool {
+    if linkunbound_core::is_remote(path) {
+        return false;
+    }
     let path = std::path::Path::new(path);
     path.is_file() || is_bundle(path)
 }

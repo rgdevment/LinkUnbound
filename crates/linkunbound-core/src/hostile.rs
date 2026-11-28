@@ -35,8 +35,10 @@ pub fn arms_a_launcher(arg: &str) -> bool {
         .find_map(|prefix| named.strip_prefix(prefix))
         .is_some_and(|name| RUNS_SOMETHING_ELSE.contains(&name))
         // `--user-data-dir=\\host\share` makes the browser reach the same host the executable
-        // check keeps it away from.
+        // check keeps it away from, and so does a bare `\\host\share\x.html` or the value of a
+        // switch given apart, like Firefox's `-profile \\host\p`.
         || is_remote(value.trim().trim_matches('"'))
+        || is_remote(arg.trim().trim_matches('"'))
 }
 
 /// Strips rather than rejects: an odd switch costs the switch, not the browser.
@@ -117,6 +119,28 @@ mod tests {
 
     /// Letters, digits, dash and underscore each stay; everything else becomes a dash. Reading
     /// that as one condition rather than three would turn every name into dashes.
+    /// Only the `=` form was looked at: an argument that is itself a network path, or a switch's
+    /// value given as the next argument, reached the browser and the host it names.
+    #[test]
+    fn a_network_path_given_as_an_argument_of_its_own_is_disarmed() {
+        for arg in [
+            r"\\host\share\x.html",
+            r#""\\host\p""#,
+            "//host/share",
+            r"\\?\UNC\h\s",
+        ] {
+            assert!(arms_a_launcher(arg), "{arg}");
+        }
+        for arg in [
+            "-profile",
+            "--new-window",
+            r"C:\Profiles\work",
+            "https://a.test/",
+        ] {
+            assert!(!arms_a_launcher(arg), "{arg}");
+        }
+    }
+
     #[test]
     fn a_name_keeps_what_is_safe_to_keep() {
         assert_eq!(as_file_name("chrome-2_beta"), "chrome-2_beta");
