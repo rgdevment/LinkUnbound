@@ -228,7 +228,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - name: One quarter of the window, dealt out so the shards weigh the same
         run: |
@@ -250,7 +250,7 @@ jobs:
                 }' \
             | paste -sd, -)
           echo "$list"
-          npx stryker run --inPlace --mutate "$list" --concurrency 4 \
+          npx --no-install stryker run --inPlace --mutate "$list" --concurrency 4 \
             --reporters progress-append-only,clear-text,json
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -31,7 +31,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+
+      - name: The lockfiles name registry packages only, and no new install script
+        run: node scripts/lockfiles.mjs
 
       # A workflow that will not parse fails with no job and no line, and the release only runs on a pushed tag.
       - name: The workflows parse
@@ -175,7 +178,7 @@ jobs:
       - name: The notices the new lock carries
         if: steps.move.outputs.crates != ''
         run: |
-          npm ci --prefix app
+          npm ci --ignore-scripts --prefix app
           npm run notices
 
       - name: Leave the branch ready
@@ -230,7 +233,7 @@ jobs:
       - name: Regenerated, they match the copy in the tree
         if: steps.look.outputs.notices == 'true'
         run: |
-          (cd app && npm ci)
+          (cd app && npm ci --ignore-scripts)
           npm run notices
           if ! git diff --exit-code THIRD-PARTY-BUNDLED.md THIRD-PARTY-LICENSES.md; then
             echo "::error::THIRD-PARTY-BUNDLED.md or THIRD-PARTY-LICENSES.md is behind the lockfiles; run npm run notices and commit them"

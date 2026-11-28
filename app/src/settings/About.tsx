@@ -68,7 +68,7 @@ function Notices({ text, label }: { text: string; label: string }) {
   useEffect(() => {
     const holder = box.current;
     if (!holder) return;
-    holder.innerHTML = composed(text);
+    holder.replaceChildren(composed(text));
     const clicked = (event: Event) => {
       const link = (event.target as HTMLElement).closest("a");
       if (!link) return;

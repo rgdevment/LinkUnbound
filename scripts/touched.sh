@@ -20,7 +20,7 @@ grep -qx 'scripts/touched\.sh' <<< "$changed" && everything
 either() { grep -qE "$1" <<< "$2" && echo true || echo false; }
 
 # A path not known to stay out of Rust's way counts as Rust, so a new one runs the whole suite.
-outside_rust='^(app/src/|app/(\.gitignore|biome\.json|index\.html|package(-lock)?\.json|stryker\.config\.json|tsconfig(\.node)?\.json|vite\.config\.ts)$|hooks/|packaging/|resources/|(CLA|COMMERCIAL|CONTRIBUTING|PRIVACY|README|SECURITY)\.md$|package(-lock)?\.json$|\.markdownlint-cli2\.jsonc$|\.editorconfig$|\.github/(FUNDING|dependabot)\.yml$|\.github/(not-this-spanish|oversized)\.txt$|\.github/workflows/(bundle|caches|cla|commits|feed|mutants|mutants-sweep|release|rules|update-badge)\.yml$)'
+outside_rust='^(app/src/|app/(\.gitignore|\.npmrc|biome\.json|index\.html|package(-lock)?\.json|stryker\.config\.json|tsconfig(\.node)?\.json|vite\.config\.ts)$|hooks/|packaging/|resources/|scripts/lockfiles\.mjs$|(CLA|COMMERCIAL|CONTRIBUTING|PRIVACY|README|SECURITY)\.md$|package(-lock)?\.json$|\.markdownlint-cli2\.jsonc$|\.editorconfig$|\.github/(FUNDING|dependabot)\.yml$|\.github/(not-this-spanish|oversized)\.txt$|\.github/workflows/(bundle|caches|cla|commits|feed|mutants|mutants-sweep|release|rules|update-badge)\.yml$)'
 news_the_resident_embeds='app/src/news\.json'
 first=$( { grep -x "$news_the_resident_embeds" <<< "$changed"; grep -vE "$outside_rust" <<< "$changed"; } \
   | grep -v '^$' | head -1 || true)

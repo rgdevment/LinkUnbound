@@ -172,6 +172,11 @@ application and dies with the console it was started from.
 | `npm test --prefix app`                      | Run the front-end tests                        |
 | `npm run lint:md`                            | Lint the Markdown                              |
 | `npm run notices`                            | Rewrite THIRD-PARTY-BUNDLED.md from the lockfiles |
+| `npm run lockfiles`                          | Refuse a package from outside the npm registry, or one that runs a script when installed |
+
+Nothing in `app/` runs a script when it is installed: `app/.npmrc` says so, and CI installs
+every tree with `--ignore-scripts`. A package that starts to ship one fails `npm run lockfiles`
+until it is read and named in `scripts/lockfiles.mjs`.
 | `cargo mutants -p <crate>`                   | Hunt for mutants the tests miss                |
 | `npm run mutants --prefix app`               | The same, for the front end                    |
 
