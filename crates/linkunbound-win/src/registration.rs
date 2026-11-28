@@ -14,8 +14,8 @@ const APP_DESCRIPTION: &str = "Browser picker for Windows";
 
 const URL_SCHEMES: [&str; 2] = ["http", "https"];
 
-const FILE_EXTENSIONS: [&str; 10] = [
-    ".htm", ".html", ".xhtml", ".xht", ".pdf", ".svg", ".mhtml", ".mht", ".shtml", ".webp",
+const FILE_EXTENSIONS: [&str; 11] = [
+    ".htm", ".html", ".xhtml", ".xht", ".pdf", ".svg", ".mhtml", ".mht", ".shtml", ".webp", ".avif",
 ];
 
 const USER_CHOICE_PATHS: [&str; 7] = [
@@ -480,6 +480,12 @@ mod tests {
         )
         .expect("the package manifest");
         assert!(manifest.contains(&format!(r#"<Application Id="{PACKAGED_APP_ID}""#)));
+        for ext in FILE_EXTENSIONS {
+            assert!(
+                manifest.contains(&format!("<uap:FileType>{ext}</uap:FileType>")),
+                "a Store copy is never offered for {ext}, which the standalone one opens"
+            );
+        }
     }
 
     #[test]

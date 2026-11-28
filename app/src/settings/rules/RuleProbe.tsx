@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSpoken, useWords } from "../../i18n";
 import { saidPlainly } from "../../refusal";
 import Glyph from "./Glyph";
+import type { Draft } from "./RuleForm";
 import RuleRow, { Where } from "./RuleRow";
 import { covers, FAMILY_LABEL, familyOf, type Probe, type RuleView } from "./types";
 
@@ -17,7 +18,7 @@ export default function RuleProbe({
   rules: RuleView[];
   apps: string[];
   onWinner: (id: string | null) => void;
-  onCreate: (site: string) => void;
+  onCreate: (draft: Draft) => void;
   onClose: () => void;
 }>) {
   const t = useWords();
@@ -94,7 +95,7 @@ export default function RuleProbe({
         <input
           ref={box}
           aria-label={t("probeUrl")}
-          placeholder="https://…"
+          placeholder={t("probePlaceholder")}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => {
@@ -155,10 +156,16 @@ export default function RuleProbe({
                 {t("probeNoneBody")}{" "}
                 <button
                   type="button"
-                  onClick={() => onCreate(probe.site)}
+                  onClick={() =>
+                    onCreate(
+                      probe.file_type
+                        ? { kind: "file_type", value: probe.file_type }
+                        : { kind: "site", value: probe.site },
+                    )
+                  }
                   className="text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent"
                 >
-                  {t("probeCreate", probe.site)}
+                  {t("probeCreate", probe.file_type ? `.${probe.file_type}` : probe.site)}
                 </button>
               </span>
             </>

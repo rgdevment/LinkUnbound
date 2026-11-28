@@ -154,6 +154,7 @@ FunctionEnd
       DeleteRegValue HKCU "Software\Classes\.mht\OpenWithProgIds" "LinkUnboundURL"
       DeleteRegValue HKCU "Software\Classes\.shtml\OpenWithProgIds" "LinkUnboundURL"
       DeleteRegValue HKCU "Software\Classes\.webp\OpenWithProgIds" "LinkUnboundURL"
+      DeleteRegValue HKCU "Software\Classes\.avif\OpenWithProgIds" "LinkUnboundURL"
     ${EndIf}
 
     ; The sign-in entry names the resident being removed; left behind, it runs nothing every

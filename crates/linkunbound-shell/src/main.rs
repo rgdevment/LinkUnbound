@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use linkunbound_core::{Language, Origin, Store, Strings, data_dir, host_of, normalise};
+use linkunbound_core::{Language, Origin, Store, Strings, data_dir, host_for_rules, normalise};
 use linkunbound_shell::hotkey::Hotkey;
 use linkunbound_shell::tray::{Asked, Tray};
 use linkunbound_shell::waking::{comes_back_after_updates, wants_no_window};
@@ -312,7 +312,7 @@ fn answered_by_rule(url: &str, source: Option<&Origin>) -> Option<Fired> {
             });
         })
         .ok()?;
-    let host = host_of(url)?;
+    let host = host_for_rules(url)?;
     let rule = rules.resolve_from(url, &host, source)?;
     let browsers = catalogue();
     let browser = browsers
@@ -340,7 +340,7 @@ fn answered_by_rule(url: &str, source: Option<&Origin>) -> Option<Fired> {
     Some(Fired {
         rule_id: rule.id.clone(),
         browser,
-        host,
+        host: linkunbound_core::local_file_parts(url).map_or(host, |(name, _)| name),
     })
 }
 

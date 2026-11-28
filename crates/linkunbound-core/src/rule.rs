@@ -70,27 +70,43 @@ pub enum Scope {
     Url(String),
     Host(String),
     Site(String),
+    /// Every document of one type on this machine, by its extension: `pdf`.
+    FileType(String),
+}
+
+/// A file type as a person writes it — `PDF`, `.pdf`, `*.pdf` — in the form a rule keeps it.
+#[must_use]
+pub fn file_type_named(said: &str) -> Option<String> {
+    let bare = said.trim().trim_start_matches('*').trim_start_matches('.');
+    let fits = (1..=16).contains(&bare.len()) && bare.chars().all(|c| c.is_ascii_alphanumeric());
+    fits.then(|| bare.to_ascii_lowercase())
 }
 
 impl Scope {
+    /// A document arrives with an empty host, which no host or site may claim: a hand-edited
+    /// `site: ""` would otherwise answer for every file on the machine.
     #[must_use]
     pub fn matches(&self, url: &str, host: &str) -> bool {
         match self {
             Self::Any => true,
             Self::Url(u) => crate::url::same_address(url, u),
-            Self::Host(h) => host == h.trim_end_matches('.'),
+            Self::Host(h) => !host.is_empty() && host == h.trim_end_matches('.'),
             Self::Site(d) => {
                 let d = d.trim_end_matches('.');
-                host == d || host.strip_suffix(d).is_some_and(|p| p.ends_with('.'))
+                !host.is_empty()
+                    && (host == d || host.strip_suffix(d).is_some_and(|p| p.ends_with('.')))
             }
+            Self::FileType(kind) => crate::url::local_file_type(url)
+                .is_some_and(|got| file_type_named(kind).is_some_and(|kind| kind == got)),
         }
     }
 
-    /// The origin bonus in `Rule` sits above every value this returns.
+    /// The origin bonus in `Rule` sits above every value this returns. A type never competes with
+    /// a site or a host: those need a host, and a document has none.
     fn specificity(&self) -> u64 {
         match self {
             Self::Any => 0,
-            Self::Site(d) => 1_000 + d.len() as u64,
+            Self::Site(d) | Self::FileType(d) => 1_000 + d.len() as u64,
             Self::Host(h) => 100_000 + h.len() as u64,
             Self::Url(u) => 10_000_000 + u.len() as u64,
         }
@@ -157,6 +173,7 @@ impl Rule {
             Scope::Url(u) => format!("url:{u}"),
             Scope::Host(h) => format!("host:{h}"),
             Scope::Site(d) => format!("site:{d}"),
+            Scope::FileType(kind) => format!("type:{kind}"),
         };
         match &self.source_app {
             Some(app) => format!("{scope}@{}", app.to_ascii_lowercase()),
@@ -1108,6 +1125,79 @@ mod tests {
         );
         assert_eq!(set.replace("host", for_an_app), super::Replaced::Done);
         assert_eq!(set.rules[1].id, "site:github.com@teams");
+    }
+
+    const REPORT: &str = "file:///C:/Users/ana/Downloads/Report.PDF";
+
+    #[test]
+    fn a_file_type_is_kept_the_one_way_however_it_was_written() {
+        use super::file_type_named;
+        for said in ["pdf", "PDF", ".pdf", "*.pdf", "  .Pdf "] {
+            assert_eq!(file_type_named(said).as_deref(), Some("pdf"), "{said}");
+        }
+        for said in [
+            "",
+            ".",
+            "*.",
+            "pdf/x",
+            "p df",
+            "../pdf",
+            "ñ",
+            "abcdefghijklmnopq",
+        ] {
+            assert!(file_type_named(said).is_none(), "{said}");
+        }
+    }
+
+    #[test]
+    fn a_file_type_answers_for_every_document_of_that_type_and_nothing_else() {
+        let pdf = Scope::FileType("pdf".to_owned());
+        assert!(pdf.matches(REPORT, ""));
+        assert!(pdf.matches("file:///Users/ana/a.pdf", ""));
+        assert!(!pdf.matches("file:///Users/ana/a.html", ""));
+        assert!(
+            !pdf.matches("https://a.test/report.pdf", "a.test"),
+            "a link is not a document on this machine"
+        );
+        assert!(Scope::FileType(".PDF".to_owned()).matches(REPORT, ""));
+    }
+
+    /// A document has no host to offer, and a site or host saved empty would claim every one.
+    #[test]
+    fn no_host_or_site_answers_for_a_document() {
+        for scope in [
+            Scope::Site(String::new()),
+            Scope::Host(String::new()),
+            Scope::Site("github.com".to_owned()),
+        ] {
+            assert!(!scope.matches(REPORT, ""), "{scope:?}");
+        }
+    }
+
+    /// A type for every app, the app the document came from for that app: the same order a site
+    /// and an app rule keep, and an exact file above both.
+    #[test]
+    fn a_document_is_answered_by_its_file_its_app_and_its_type_in_that_order() {
+        let set = RuleSet {
+            schema_version: 2,
+            rules: vec![
+                rule("type", Scope::FileType("pdf".to_owned()), None, "firefox"),
+                rule("app", Scope::Any, Some("explorer"), "edge"),
+                rule("file", Scope::Url(REPORT.to_owned()), None, "chrome"),
+                rule("site", Scope::Site("github.com".to_owned()), None, "safari"),
+            ],
+        };
+        let winner =
+            |url: &str, from: Option<&str>| set.resolve(url, "", from).map(|r| r.id.as_str());
+        assert_eq!(winner("file:///C:/x/other.pdf", None), Some("type"));
+        assert_eq!(
+            winner("file:///C:/x/other.pdf", Some("explorer")),
+            Some("app")
+        );
+        assert_eq!(winner(REPORT, None), Some("file"));
+        assert_eq!(winner("file:///C:/x/page.html", None), None);
+        let saved = rule("", Scope::FileType("pdf".to_owned()), None, "x");
+        assert_eq!(saved.identity(), "type:pdf");
     }
 
     #[test]

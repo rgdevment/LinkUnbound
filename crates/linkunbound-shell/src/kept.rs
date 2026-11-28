@@ -1,4 +1,4 @@
-use linkunbound_core::{Origin, Rule, Target, host_of};
+use linkunbound_core::{Origin, Rule, Target, host_for_rules};
 use linkunbound_shell::{Listed, Reaches};
 
 use crate::{notice, store};
@@ -42,7 +42,7 @@ pub fn rule_for(
     reach: Reaches,
     source_app: Option<String>,
 ) -> Option<Rule> {
-    let host = host_of(url)?;
+    let host = host_for_rules(url)?;
     let scope = reach.scope(url, &host)?;
     if reach.binds_to_the_source() && source_app.is_none() {
         return None;
@@ -107,6 +107,26 @@ mod tests {
             "but it answers whichever app produced the link"
         );
         assert_eq!(site.scope, Scope::Site("github.com".to_owned()));
+    }
+
+    /// The picker offers both for a document and used to close as if it had kept either, having
+    /// written nothing: a document has no host, and the rule was built from one.
+    #[test]
+    fn a_document_is_remembered_by_its_type_or_by_the_app_it_came_from() {
+        let report = "file:///C:/Users/ana/Downloads/Report.PDF";
+        let by_type = rule_for(report, &chosen(), false, Reaches::Site, None)
+            .expect("the type of a document makes a rule");
+        assert_eq!(by_type.scope, Scope::FileType("pdf".to_owned()));
+        assert_eq!(by_type.source_app, None);
+
+        let explorer = Some("explorer".to_owned());
+        let by_app = rule_for(report, &chosen(), false, Reaches::FromApp, explorer)
+            .expect("the app a document came from makes a rule");
+        assert_eq!(by_app.scope, Scope::Any);
+        assert_eq!(by_app.source_app.as_deref(), Some("explorer"));
+
+        let elsewhere = "file://host/share/Report.pdf";
+        assert!(rule_for(elsewhere, &chosen(), false, Reaches::Site, None).is_none());
     }
 
     #[test]

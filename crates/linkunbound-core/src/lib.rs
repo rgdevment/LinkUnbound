@@ -43,16 +43,16 @@ pub use prefs::{Density, Locale, PickerPosition, PickerStyle, Preferences, TextS
 pub use private::private_flag_for;
 pub use report::{diagnostics, redact};
 pub use rule::{
-    Origin, Replaced, Rule, RuleSet, Scope, Target, Why, is_public_suffix, same_name, site_of,
-    visible, why_first,
+    Origin, Replaced, Rule, RuleSet, Scope, Target, Why, file_type_named, is_public_suffix,
+    same_name, site_of, visible, why_first,
 };
 pub use seen::{APPS_SEEN, SeenApp};
 pub use star::{Asking, asking};
 pub use store::{Store, StoreError, data_dir, seconds_now, unmarked};
 pub use url::{
-    OWN_SCHEME, host_of, is_launchable, is_own_scheme, local_file_parts, local_web_file,
-    local_web_file_extensions, looks_unresolved, normalise, unwrap_edge_protocol,
-    unwrap_own_scheme, unwrap_safe_link,
+    OWN_SCHEME, document_named, host_for_rules, host_of, is_launchable, is_own_scheme,
+    local_file_parts, local_file_type, local_web_file, local_web_file_extensions, looks_unresolved,
+    normalise, unwrap_edge_protocol, unwrap_own_scheme, unwrap_safe_link,
 };
 
 #[cfg(test)]

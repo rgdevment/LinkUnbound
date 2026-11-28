@@ -17,6 +17,7 @@ const CHIP: Record<Family, string> = {
   url: "bg-(--accent-soft) text-accent",
   host: "bg-(--tile) text-ink-2",
   site: "bg-(--tile) text-ink-2",
+  file_type: "bg-(--tile) text-ink-2",
 };
 
 export function KindChip({ family }: Readonly<{ family: Family }>) {

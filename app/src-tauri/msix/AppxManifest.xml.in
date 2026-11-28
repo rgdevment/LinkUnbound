@@ -68,7 +68,7 @@
         <!--
           What makes this a browser at all. Windows offers the application in
           its default-apps list because of these, and hands it the link when the
-          person picks it. The same two schemes and the same ten extensions the
+          person picks it. The same two schemes and the same eleven extensions the
           standalone build writes to the registry, because a person who moves
           between the two should not find a different set of file types.
         -->
@@ -107,6 +107,7 @@
               <uap:FileType>.mht</uap:FileType>
               <uap:FileType>.shtml</uap:FileType>
               <uap:FileType>.webp</uap:FileType>
+              <uap:FileType>.avif</uap:FileType>
             </uap:SupportedFileTypes>
           </uap:FileTypeAssociation>
         </uap:Extension>

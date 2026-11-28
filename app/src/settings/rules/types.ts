@@ -22,7 +22,7 @@ export type RuleView = {
   id: string;
   browser_id: string;
   profile_id: string | null;
-  kind: "any" | "url" | "host" | "site";
+  kind: "any" | "url" | "host" | "site" | "file_type";
   covers: string;
   browser: string;
   profile: string | null;
@@ -40,10 +40,11 @@ export type Probe = {
   why: Why | null;
   also: RuleView[];
   site: string;
+  file_type: string | null;
 };
 
 /// «From» whenever an app is named, whatever else the rule covers.
-export type Family = "app" | "url" | "host" | "site";
+export type Family = "app" | "url" | "host" | "site" | "file_type";
 
 export function familyOf(rule: RuleView): Family {
   if (rule.source_app) return "app";
@@ -55,10 +56,12 @@ export const FAMILY_LABEL: Record<Family, Key> = {
   url: "kindUrl",
   host: "kindHost",
   site: "kindSite",
+  file_type: "kindFileType",
 };
 
 export function covers(rule: RuleView): string {
   if (rule.source_app && rule.kind === "any") return rule.source_app;
+  if (rule.kind === "file_type") return `.${rule.covers}`;
   return rule.covers;
 }
 

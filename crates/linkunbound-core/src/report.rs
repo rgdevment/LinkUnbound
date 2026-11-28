@@ -31,6 +31,7 @@ fn describe(scope: &Scope, words: &Strings) -> String {
         Scope::Url(u) => Strings::fill(words.report_the_link, &redact(u, words.report_redacted)),
         Scope::Host(h) => Strings::fill(words.report_the_host, h),
         Scope::Site(d) => Strings::fill(words.report_the_site, d),
+        Scope::FileType(kind) => Strings::fill(words.report_the_file_type, kind),
     }
 }
 
@@ -171,6 +172,32 @@ mod tests {
         assert!(!out.contains("inbox"));
         assert!(out.contains("desde teams"));
         assert!(out.contains("en privado"));
+    }
+
+    /// A type names no place the person has been, and a rule for one exact document does.
+    #[test]
+    fn the_report_names_a_file_type_and_never_the_path_of_a_document() {
+        let rule = |scope: Scope| Rule {
+            id: String::new(),
+            scope,
+            source_app: None,
+            target: Target {
+                browser_id: "firefox".to_owned(),
+                profile_id: None,
+            },
+            private: false,
+        };
+        let rules = RuleSet {
+            schema_version: 2,
+            rules: vec![
+                rule(Scope::FileType("pdf".to_owned())),
+                rule(Scope::Url("file:///C:/Users/Ana/secreto.pdf".to_owned())),
+            ],
+        };
+        let words = Language::English.strings();
+        let out = diagnostics("2.0.0", &[], &rules, &Preferences::default(), &words, &[]);
+        assert!(out.contains("the .pdf files"), "{out}");
+        assert!(!out.contains("secreto") && !out.contains("Ana"), "{out}");
     }
 
     #[test]

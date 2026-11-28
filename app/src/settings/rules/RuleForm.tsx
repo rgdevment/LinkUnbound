@@ -7,13 +7,14 @@ import DestinationPicker from "./DestinationPicker";
 import Glyph, { BrowserIcon } from "./Glyph";
 import { covers, type Destination, named, type RuleView, unnamed } from "./types";
 
-export type FormKind = "site" | "host" | "url" | "app";
+export type FormKind = "site" | "host" | "url" | "app" | "file_type";
 
 const KINDS: { id: FormKind; label: Key; hint: Key }[] = [
   { id: "site", label: "ruleNewKindSite", hint: "ruleNewValueSite" },
   { id: "host", label: "ruleNewKindHost", hint: "ruleNewValueHost" },
   { id: "url", label: "ruleNewKindUrl", hint: "ruleNewValueUrl" },
   { id: "app", label: "ruleNewKindApp", hint: "ruleNewValueApp" },
+  { id: "file_type", label: "ruleNewKindFileType", hint: "ruleNewValueFileType" },
 ];
 
 export type Draft = { kind: FormKind; value: string };

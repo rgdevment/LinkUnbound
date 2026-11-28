@@ -26,6 +26,7 @@ const FILTERS: { id: Filter; label: Key }[] = [
   { id: "url", label: "kindUrl" },
   { id: "host", label: "kindHost" },
   { id: "site", label: "kindSite" },
+  { id: "file_type", label: "kindFileType" },
 ];
 
 /// The search looks at everything a row shows: what it covers, the app, the browser, the profile.
@@ -199,7 +200,7 @@ export default function Rules() {
           rules={rules}
           apps={apps}
           onWinner={setWinner}
-          onCreate={(site) => setAdding({ kind: "site", value: site })}
+          onCreate={setAdding}
           onClose={() => {
             setProbing(false);
             setWinner(null);

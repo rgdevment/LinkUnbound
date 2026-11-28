@@ -171,7 +171,7 @@ Since LinkUnbound is an independent open source project, the installer is signed
 1. Launch **LinkUnbound** from Applications (or Spotlight); the settings window opens
 2. In **Links**, click **Set** under *Set as the default browser*
 3. macOS asks you to confirm the change → **Use "LinkUnbound"**
-4. Done — every link now goes through LinkUnbound. Local `.html` and `.xhtml` files go through it too; `.svg` only if you choose it for them
+4. Done — every link now goes through LinkUnbound. Local `.html` and `.xhtml` files go through it too; `.pdf`, `.svg` and `.webp` only if you choose it for them
 
 **Coming from 1.x?** Remove it before installing 2.0 — the Windows installer offers to — so the two do not fight over the same registration. The details are under [How It Works](#coming-from-1x).
 
@@ -197,7 +197,7 @@ Since LinkUnbound is an independent open source project, the installer is signed
 
 ![Browser rules in LinkUnbound: Microsoft Teams, Slack, atlassian.net and figma.com open in Vivaldi's work profile, github.com and Google Sheets in Chrome's personal profile, and Proton Mail and YouTube in Firefox](resources/assets/store/screenshots/en/03-rules.png)
 
-A rule covers one of four reaches: an exact address, a host (`mail.google.com`), a whole site (`google.com`, which covers `mail.google.com`, `drive.google.com` and the rest), or everything a given application sends. The narrowest reach that matches wins, and a rule scoped to an app wins over any domain rule — naming the origin is a deliberate statement, and a generic domain rule should not override it silently. Between two rules of the same reach, the one higher in the Rules page answers. A rule can also ask for a private window, if the browser has one.
+A rule covers one of four reaches: an exact address, a host (`mail.google.com`), a whole site (`google.com`, which covers `mail.google.com`, `drive.google.com` and the rest), or everything a given application sends. A document opened from your own disk has no site, so its rule covers its type instead: every `.pdf`, every `.html`. The narrowest reach that matches wins, and a rule scoped to an app wins over any domain rule — naming the origin is a deliberate statement, and a generic domain rule should not override it silently. Between two rules of the same reach, the one higher in the Rules page answers. A rule can also ask for a private window, if the browser has one.
 
 **Microsoft SafeLinks are unwrapped** before any rule looks at them, so rules see the real destination, and the picker names it rather than the wrapper.
 
@@ -216,7 +216,7 @@ A rule covers one of four reaches: an exact address, a host (`mail.google.com`),
 ### And the rest
 
 - **Takes links from your other apps** — an application can send a link to `linkunbound://open?url=…` and it goes through your rules, even when LinkUnbound is not the default browser
-- **Opens local documents** when you choose it for them — `.html`, `.pdf` and the rest on Windows, `.html` and `.xhtml` on macOS
+- **Opens local documents** when you choose it for them — `.html`, `.pdf`, `.svg`, `.webp`, `.avif` and the rest on Windows, `.html`, `.xhtml`, `.pdf`, `.svg` and `.webp` on macOS — and a rule can send every document of one type to one browser: every `.pdf` in Firefox, say
 - **Updates itself** — looks at the release feed in the background, says so in the picker and in Settings, and one press installs it; a Microsoft Store copy updates through the Store
 - **Tells you when links are not arriving** — Settings explains why and offers the repair
 
