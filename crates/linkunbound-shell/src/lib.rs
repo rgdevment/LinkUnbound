@@ -15,7 +15,8 @@ use std::rc::Rc;
 
 use linkunbound_core::update::{Looked, Progress, ShopSaid};
 use linkunbound_core::{
-    Browser, Scope, Strings, host_of, is_public_suffix, local_file_parts, looks_unresolved, site_of,
+    Browser, Scope, Strings, host_of, is_public_suffix, local_file_parts, local_file_type,
+    looks_unresolved, site_of,
 };
 
 /// Both windows read the same palette, so the choice is applied once per window
@@ -42,6 +43,7 @@ pub enum Reaches {
     Once,
     Url,
     Host,
+    /// For a document on this machine, which has no site, every document of its type.
     Site,
     /// Every link from the app the click came from, whatever the address. What
     /// the user means by ticking it on a link that arrived from Slack.
@@ -55,7 +57,9 @@ impl Reaches {
             Self::Once => None,
             Self::Url => Some(Scope::Url(url.to_owned())),
             Self::Host => Some(Scope::Host(host.to_owned())),
-            Self::Site => Some(Scope::Site(site_of(host))),
+            Self::Site => Some(
+                local_file_type(url).map_or_else(|| Scope::Site(site_of(host)), Scope::FileType),
+            ),
             Self::FromApp => Some(Scope::Any),
         }
     }
@@ -147,12 +151,20 @@ pub fn reaches(
             true,
             wrapped || host.is_empty() || (host == site && !is_public_suffix(site)),
         ),
-        Said::new(
-            words.reach_site,
-            words.remember_site,
-            true,
-            wrapped || is_public_suffix(site),
-        ),
+        match local_file_type(url) {
+            Some(kind) => Said {
+                label: Strings::fill(words.reach_file_type, &kind),
+                full: Strings::fill(words.remember_file_type, &kind),
+                keeps: true,
+                dead: false,
+            },
+            None => Said::new(
+                words.reach_site,
+                words.remember_site,
+                true,
+                wrapped || is_public_suffix(site),
+            ),
+        },
     ];
     // Left out rather than greyed when there is no origin: a dead label would cost the live
     // ones their space.
@@ -1387,22 +1399,20 @@ mod tests {
         );
     }
 
+    /// A document has no address to remember, only its type and the app it came from.
     #[test]
-    fn a_local_file_is_headed_by_its_name_and_remembered_by_nothing() {
-        let document = "file:///Users/ana/Documents/My%20Page.html";
+    fn a_local_file_is_headed_by_its_name_and_remembered_by_its_type_or_its_app() {
+        let document = "file:///Users/ana/Documents/My%20Page.HTML";
         assert_eq!(
             split(document),
-            ("My Page.html".to_owned(), "…/Documents".to_owned())
+            ("My Page.HTML".to_owned(), "…/Documents".to_owned())
         );
-        let offered = reaches(
-            &SPOKEN,
-            document,
-            "My Page.html",
-            "my page.html",
-            Some("finder"),
-        );
-        assert!(!offered[0].dead, "once is the one reach a file has");
-        assert!(offered[1].dead && offered[2].dead && offered[3].dead);
+        let offered = reaches(&SPOKEN, document, "", "", Some("finder"));
+        assert!(!offered[0].dead && !offered[3].dead && !offered[4].dead);
+        assert!(offered[1].dead && offered[2].dead);
+        assert_eq!(offered[3].full, "Recordar todos los .html");
+        let kept = Reaches::Site.scope(document, "");
+        assert_eq!(kept, Some(Scope::FileType("html".to_owned())));
     }
 
     #[test]

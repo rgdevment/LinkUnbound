@@ -43,6 +43,27 @@ describe("rule form", () => {
       value: "teams",
     });
     expect(draftOf({ ...RULE, kind: "any", covers: "" })).toEqual({ kind: "site", value: "" });
+    expect(draftOf({ ...RULE, kind: "file_type", covers: "pdf" })).toEqual({
+      kind: "file_type",
+      value: "pdf",
+    });
+  });
+
+  it("sends a rule for a type of file as the kind it is", async () => {
+    invoke.mockResolvedValue([RULE]);
+    render(<RuleForm choices={CHOICES} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    await userEvent.click(screen.getByRole("radio", { name: "Un tipo de archivo" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "pdf, html, svg…" }), ".pdf");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("rules_add", {
+        kind: "file_type",
+        value: ".pdf",
+        browserId: "chrome",
+        profileId: null,
+        private: false,
+      }),
+    );
   });
 
   it("gives save, cancel and the kind segments a hover, and the buttons a focus ring", () => {

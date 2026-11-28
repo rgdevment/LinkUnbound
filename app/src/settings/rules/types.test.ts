@@ -36,12 +36,14 @@ describe("rule kinds", () => {
     expect(familyOf(rule({ kind: "host" }))).toBe("host");
     expect(familyOf(rule({ kind: "site" }))).toBe("site");
     expect(familyOf(rule({ kind: "any" }))).toBe("site");
+    expect(familyOf(rule({ kind: "file_type", covers: "pdf" }))).toBe("file_type");
   });
 
   it("reads a rule for an app as the app, and any other as what it covers", () => {
     expect(covers(rule({ kind: "any", covers: "", source_app: "teams" }))).toBe("teams");
     expect(covers(rule({ kind: "site", source_app: "teams" }))).toBe("github.com");
     expect(covers(rule({}))).toBe("github.com");
+    expect(covers(rule({ kind: "file_type", covers: "pdf" }))).toBe(".pdf");
   });
 });
 

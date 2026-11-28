@@ -3,8 +3,9 @@
 use std::cmp::Reverse;
 
 use linkunbound_core::{
-    Browser, Origin, Replaced, Rule, RuleSet, Scope, SeenApp, Target, Why, host_of,
-    is_public_suffix, normalise, same_name, site_of, why_first,
+    Browser, Origin, Replaced, Rule, RuleSet, Scope, SeenApp, Target, Why, document_named,
+    file_type_named, host_of, is_public_suffix, local_file_type, local_web_file_extensions,
+    normalise, same_name, site_of, why_first,
 };
 use serde::Serialize;
 
@@ -86,6 +87,7 @@ fn describe(rule: &Rule, browsers: &[Browser]) -> RuleView {
         Scope::Url(u) => ("url", u.clone()),
         Scope::Host(h) => ("host", h.clone()),
         Scope::Site(d) => ("site", d.clone()),
+        Scope::FileType(kind) => ("file_type", kind.clone()),
     };
     // A profile that is gone is a rule that never fires, however present its browser.
     let resolved = found.is_some() && (rule.target.profile_id.is_none() || profile.is_some());
@@ -191,6 +193,13 @@ fn rule_from(
         "site" => (Scope::Site(site_named()?), None),
         // «Slack» and «Slack.exe» both mean the app somebody sees in «Desde …».
         "app" => (Scope::Any, Some(app_key(said))),
+        // Only a type the system hands this app: a rule for `.docx` would be saved and never fire.
+        "file_type" => {
+            let kind = file_type_named(said)
+                .filter(|kind| local_web_file_extensions().contains(&kind.as_str()))
+                .ok_or("ruleValueNotFileType")?;
+            (Scope::FileType(kind), None)
+        }
         _ => return Err("ruleKindUnknown"),
     };
     Ok(Rule {
@@ -324,6 +333,8 @@ pub struct Probe {
     also: Vec<RuleView>,
     /// The site a new rule would cover, offered when nothing matches.
     site: String,
+    /// For a document, the type a new rule would cover instead of a site.
+    file_type: Option<String>,
 }
 
 fn probed(
@@ -333,12 +344,18 @@ fn probed(
     browsers: &[Browser],
 ) -> Result<Probe, &'static str> {
     let said = url.trim();
-    let written = match said.split_once("://") {
-        Some((scheme, _)) if is_scheme(scheme) => said.to_owned(),
-        _ => format!("https://{said}"),
+    // A document is asked about by its path and never opened: only its type is read.
+    let (link, host) = if let Some(document) = document_named(said) {
+        (document, String::new())
+    } else {
+        let written = match said.split_once("://") {
+            Some((scheme, _)) if is_scheme(scheme) => said.to_owned(),
+            _ => format!("https://{said}"),
+        };
+        let link = normalise(&written).ok_or("ruleValueNotUrl")?;
+        let host = host_of(&link).ok_or("ruleValueNotUrl")?;
+        (link, host)
     };
-    let link = normalise(&written).ok_or("ruleValueNotUrl")?;
-    let host = host_of(&link).ok_or("ruleValueNotUrl")?;
     let origin = from_app.map(|app| Origin {
         key: app_key(app),
         label: app.to_owned(),
@@ -351,6 +368,7 @@ fn probed(
         why,
         also: views.collect(),
         site: site_of(&host),
+        file_type: local_file_type(&link),
     })
 }
 
@@ -1026,6 +1044,53 @@ mod tests {
         let all = offered(Vec::new(), &rules, |_| "Safari".to_owned());
         assert_eq!(all[0].origin.key, "com.apple.Safari");
         assert_eq!(all[0].origin.label, "Safari");
+    }
+
+    /// Typed in any of the ways a person writes one, and only for a type the system hands over.
+    #[test]
+    fn a_file_type_rule_is_kept_bare_and_only_for_a_type_that_arrives() {
+        let all = vec![detected("firefox")];
+        let firefox = || aimed("firefox", None);
+        for said in ["pdf", ".PDF", "*.pdf"] {
+            let rule = rule_from("file_type", said, firefox(), false, &all).expect(said);
+            assert_eq!(rule.scope, Scope::FileType("pdf".to_owned()), "{said}");
+            assert!(rule.source_app.is_none());
+            assert_eq!(describe(&rule, &all).kind, "file_type");
+        }
+        for said in ["docx", "p df", "../pdf"] {
+            assert_eq!(
+                rule_from("file_type", said, firefox(), false, &all),
+                Err("ruleValueNotFileType"),
+                "{said}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_document_is_probed_by_its_path_and_offered_its_type() {
+        let rules = set_of(vec![
+            rule_of(
+                "type:pdf",
+                Scope::FileType("pdf".to_owned()),
+                None,
+                "firefox",
+            ),
+            rule_of("site:a.test", site("a.test"), None, "chrome"),
+        ]);
+        let path = if cfg!(windows) {
+            r"C:\Nowhere\Report.PDF"
+        } else {
+            "/nowhere/Report.PDF"
+        };
+        let probe = probed(&rules, path, None, &[]).expect("a document");
+        assert_eq!(probe.winner.expect("a winner").id, "type:pdf");
+        assert_eq!(probe.file_type.as_deref(), Some("pdf"));
+
+        let none = probed(&rules, "file:///C:/Nowhere/page.html", None, &[]).expect("a document");
+        assert!(none.winner.is_none());
+        assert_eq!(none.file_type.as_deref(), Some("html"));
+        let link = probed(&rules, "https://a.test/x.pdf", None, &[]).expect("a link");
+        assert_eq!(link.file_type, None, "a link is not a document");
     }
 
     #[test]

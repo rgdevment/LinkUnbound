@@ -167,12 +167,17 @@ pub fn looks_unresolved(url: &str) -> bool {
 
 /// What Windows is registered for, and no more: a type the shell offers to open and then refuses
 /// is a double click that ends in the settings window.
-#[cfg(windows)]
-const WEB_FILE_EXTENSIONS: &[&str] = &[
-    "htm", "html", "xhtml", "xht", "pdf", "svg", "mhtml", "mht", "shtml", "webp",
+#[cfg_attr(not(windows), allow(dead_code))]
+const WINDOWS_WEB_FILE_EXTENSIONS: &[&str] = &[
+    "htm", "html", "xhtml", "xht", "pdf", "svg", "mhtml", "mht", "shtml", "webp", "avif",
 ];
+/// What the bundle declares in `Info.plist`, both lists apart so either can be checked anywhere.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+const MAC_WEB_FILE_EXTENSIONS: &[&str] = &["html", "htm", "xhtml", "svg", "pdf", "webp"];
+#[cfg(windows)]
+const WEB_FILE_EXTENSIONS: &[&str] = WINDOWS_WEB_FILE_EXTENSIONS;
 #[cfg(target_os = "macos")]
-const WEB_FILE_EXTENSIONS: &[&str] = &["html", "htm", "xhtml", "svg"];
+const WEB_FILE_EXTENSIONS: &[&str] = MAC_WEB_FILE_EXTENSIONS;
 #[cfg(not(any(windows, target_os = "macos")))]
 const WEB_FILE_EXTENSIONS: &[&str] = &[];
 
@@ -250,6 +255,41 @@ pub fn local_file_parts(raw: &str) -> Option<(String, String)> {
         .map(|folder| format!("…/{folder}"))
         .unwrap_or_default();
     Some((name, folder))
+}
+
+/// The type of a document on this machine as a rule names it: its extension, lowercased.
+#[must_use]
+pub fn local_file_type(raw: &str) -> Option<String> {
+    let (name, _) = local_file_parts(raw)?;
+    let (_, extension) = name.rsplit_once('.')?;
+    (!extension.is_empty()).then(|| extension.to_ascii_lowercase())
+}
+
+/// What rules read a link by: its host, or an empty one for a document on this machine, which only
+/// a rule for its type, its exact address or the app it came from can answer.
+#[must_use]
+pub fn host_for_rules(raw: &str) -> Option<String> {
+    match Url::parse(raw) {
+        Ok(url) if url.scheme() == "file" => local_file_parts(raw).map(|_| String::new()),
+        _ => host_of(raw),
+    }
+}
+
+/// The link a document on this machine goes by, from its path or its `file:` URL, without touching
+/// the disk: for asking the rules about it, never for opening it.
+#[must_use]
+pub fn document_named(said: &str) -> Option<String> {
+    let url = match Url::parse(said) {
+        Ok(url) if url.scheme() == "file" => url,
+        _ if looks_like_a_drive_path(said)
+            || (said.starts_with('/') && !said.starts_with("//")) =>
+        {
+            Url::from_file_path(said).ok()?
+        }
+        _ => return None,
+    };
+    let link: String = url.into();
+    local_file_type(&link).map(|_| link)
 }
 
 fn launchable_file(raw: &str) -> Option<String> {
@@ -628,6 +668,101 @@ mod tests {
         assert!(local_file_parts("file://host/share/page.html").is_none());
         assert!(local_file_parts("file:///").is_none());
         assert!(local_file_parts("file:///Users/ana/Documents/").is_none());
+    }
+
+    #[test]
+    fn a_local_file_is_typed_by_its_extension_and_a_link_is_not() {
+        assert_eq!(
+            local_file_type("file:///C:/Users/ana/Report.PDF").as_deref(),
+            Some("pdf")
+        );
+        assert_eq!(
+            local_file_type("file:///Users/ana/a.b/page.html").as_deref(),
+            Some("html")
+        );
+        for untyped in [
+            "file:///Users/ana/README",
+            "file:///Users/ana/trailing.",
+            "https://a.test/report.pdf",
+            "file://host/share/report.pdf",
+        ] {
+            assert!(local_file_type(untyped).is_none(), "{untyped}");
+        }
+    }
+
+    /// Asking the rules about a document must not reach for it: a network path is refused unread.
+    #[test]
+    fn a_document_is_named_by_its_path_without_being_looked_for() {
+        assert_eq!(
+            document_named("file:///C:/Nowhere/Report.pdf").as_deref(),
+            Some("file:///C:/Nowhere/Report.pdf")
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            document_named(r"C:\No where\Report.pdf").as_deref(),
+            Some("file:///C:/No%20where/Report.pdf")
+        );
+        #[cfg(not(windows))]
+        assert_eq!(
+            document_named("/no where/Report.pdf").as_deref(),
+            Some("file:///no%20where/Report.pdf")
+        );
+        for said in [
+            r"\\host\share\Report.pdf",
+            "//host/share/Report.pdf",
+            "file://host/share/Report.pdf",
+            "https://a.test/Report.pdf",
+            "github.com",
+            "file:///C:/Users/ana/README",
+        ] {
+            assert!(document_named(said).is_none(), "{said}");
+        }
+    }
+
+    /// A document has no host, and the rules still have to be asked about it; a file on another
+    /// machine is not a document of this one and gets no answer at all.
+    #[test]
+    fn rules_read_a_document_by_an_empty_host_and_a_link_by_its_own() {
+        assert_eq!(
+            host_for_rules("https://GitHub.com/a").as_deref(),
+            Some("github.com")
+        );
+        assert_eq!(
+            host_for_rules("file:///C:/Users/ana/report.pdf").as_deref(),
+            Some("")
+        );
+        assert!(host_for_rules("file://host/share/report.pdf").is_none());
+        assert!(host_for_rules("not a url").is_none());
+    }
+
+    /// The bundle is only offered for the types it declares, and the resident refuses any it does
+    /// not open: the two lists drift apart silently, since only a Mac would ever notice.
+    #[test]
+    fn every_type_the_mac_bundle_declares_is_one_the_resident_opens() {
+        let plist = include_str!("../../../app/src-tauri/Info.plist");
+        let (_, declared) = plist
+            .split_once("<key>LSItemContentTypes</key>")
+            .expect("the bundle declares document types");
+        let (declared, _) = declared.split_once("</array>").expect("a closed list");
+        let mut covered: Vec<&str> = Vec::new();
+        for kind in declared.split("<string>").skip(1) {
+            let kind = kind.split("</string>").next().unwrap_or_default();
+            let extensions: &[&str] = match kind {
+                "public.html" => &["html", "htm"],
+                "public.xhtml" => &["xhtml"],
+                "public.svg-image" => &["svg"],
+                "com.adobe.pdf" => &["pdf"],
+                "org.webmproject.webp" => &["webp"],
+                other => panic!("{other} is declared and this test does not know its extension"),
+            };
+            for extension in extensions {
+                assert!(MAC_WEB_FILE_EXTENSIONS.contains(extension), "{extension}");
+            }
+            covered.extend(extensions);
+        }
+        for extension in MAC_WEB_FILE_EXTENSIONS {
+            assert!(covered.contains(extension), ".{extension} is never offered");
+        }
     }
 
     /// Every absolute path used to read as a network one, since `//` is the root by component.

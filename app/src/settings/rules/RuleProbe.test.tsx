@@ -71,7 +71,13 @@ describe("rule probe", () => {
   });
 
   it("tells the winner to the list and says a private window will be used", async () => {
-    const probe: Probe = { winner: RULE, why: "narrower", also: [NEXT], site: "a.test" };
+    const probe: Probe = {
+      winner: RULE,
+      why: "narrower",
+      also: [NEXT],
+      site: "a.test",
+      file_type: null,
+    };
     invoke.mockResolvedValue(probe);
     const { onWinner } = mount();
     await typed("a.test");
@@ -100,16 +106,43 @@ describe("rule probe", () => {
     let late: (p: Probe) => void = () => {};
     invoke
       .mockImplementationOnce(() => new Promise<Probe>((ok) => (late = ok)))
-      .mockResolvedValueOnce({ winner: null, why: null, also: [], site: "b.test" });
+      .mockResolvedValueOnce({
+        winner: null,
+        why: null,
+        also: [],
+        site: "b.test",
+        file_type: null,
+      });
     const { onWinner } = mount();
     await typed("a");
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
     await typed("b");
     expect(await screen.findByText("Ninguna regla coincide")).toBeInTheDocument();
-    late({ winner: RULE, why: "alone", also: [], site: "a.test" });
+    late({ winner: RULE, why: "alone", also: [], site: "a.test", file_type: null });
     await Promise.resolve();
     expect(screen.queryByRole("status")).toHaveTextContent("Ninguna regla coincide");
     expect(onWinner).not.toHaveBeenCalledWith("host:a.test");
+  });
+
+  it("offers a rule for the site of a link, and for the type of a document", async () => {
+    invoke.mockResolvedValueOnce({
+      winner: null,
+      why: null,
+      also: [],
+      site: "a.test",
+      file_type: null,
+    });
+    const { onCreate } = mount();
+    await typed("a.test");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Crear una regla para a.test" }),
+    );
+    expect(onCreate).toHaveBeenLastCalledWith({ kind: "site", value: "a.test" });
+
+    invoke.mockResolvedValue({ winner: null, why: null, also: [], site: "", file_type: "pdf" });
+    await typed("/x.pdf");
+    await userEvent.click(await screen.findByRole("button", { name: "Crear una regla para .pdf" }));
+    expect(onCreate).toHaveBeenLastCalledWith({ kind: "file_type", value: "pdf" });
   });
 
   it("closes from its own button and from Escape anywhere inside it", async () => {
