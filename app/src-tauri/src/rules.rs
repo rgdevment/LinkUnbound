@@ -248,10 +248,16 @@ pub fn rules_retarget(
         profile_id,
     };
     let browsers = catalogue();
-    let opens_privately = browsers
-        .iter()
-        .find(|b| b.id == target.browser_id)
-        .is_some_and(Browser::supports_private);
+    // As the form checks it: a stale screen could otherwise aim a rule at a browser that is gone.
+    let Some(browser) = browsers.iter().find(|b| b.id == target.browser_id) else {
+        return Err("browserGone".to_owned());
+    };
+    if let Some(profile) = target.profile_id.as_deref()
+        && browser.profile(profile).is_none()
+    {
+        return Err("browserGone".to_owned());
+    }
+    let opens_privately = browser.supports_private();
     let mut refused = false;
     let changed = store()
         .edit_rules(|rules| {

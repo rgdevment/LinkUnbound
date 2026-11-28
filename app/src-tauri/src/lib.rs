@@ -281,6 +281,8 @@ fn prefs_set(app: AppHandle, prefs: Preferences) -> Result<Settings, String> {
     let mut settled = prefs;
     store()
         .edit_prefs(|kept| {
+            // A window opened before the resident moved the file on would otherwise move it back.
+            settled.schema_version = kept.schema_version;
             settled.here_since = kept.here_since;
             settled.asked_for_a_star = kept.asked_for_a_star;
             settled.news_seen.clone_from(&kept.news_seen);
