@@ -1,0 +1,50 @@
+name: The bundler and nothing else from npm
+description: >-
+  For a job that holds a signing key: the Tauri CLI at the version the app's lockfile names,
+  checked against it and installed without running any package's scripts. The window it packs
+  was built in the frontend job, away from the key, so nothing else from npm runs here.
+
+outputs:
+  tauri:
+    description: The CLI's entry point, to run with node.
+    value: ${{ steps.install.outputs.tauri }}
+  prebuilt:
+    description: A config that tells the bundler the window is built already.
+    value: ${{ steps.install.outputs.prebuilt }}
+
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: bash
+      run: |
+        dir="$RUNNER_TEMP/bundler"
+        mkdir -p "$dir"
+        v=$(node -p 'require("./app/package-lock.json").packages["node_modules/@tauri-apps/cli"]?.version ?? ""')
+        if [ -z "$v" ]; then
+          echo "::error::the lockfile names no @tauri-apps/cli"
+          exit 1
+        fi
+        npm install --prefix "$dir" --ignore-scripts --no-audit --no-fund "@tauri-apps/cli@$v"
+        node - "$dir" <<'EOF'
+        const { existsSync, readFileSync } = require("node:fs");
+        const dir = process.argv[2];
+        const read = (path) => JSON.parse(readFileSync(path, "utf8")).packages;
+        const want = read("app/package-lock.json");
+        const got = read(`${dir}/package-lock.json`);
+        const here = Object.keys(got).filter(
+          (k) => /^node_modules\/@tauri-apps\/cli(-|$)/.test(k) && existsSync(`${dir}/${k}`),
+        );
+        let fine = here.length >= 2;
+        if (!fine) console.log("::error::no build of the bundler for this machine came with it");
+        for (const k of here) {
+          if (!want[k]?.integrity || want[k].integrity !== got[k].integrity) {
+            console.log(`::error::${k.slice("node_modules/".length)} is not the one the lockfile names`);
+            fine = false;
+          }
+        }
+        process.exit(fine ? 0 : 1);
+        EOF
+        printf '%s' '{"build":{"beforeBuildCommand":null}}' > "$dir/prebuilt.json"
+        echo "tauri=$dir/node_modules/@tauri-apps/cli/tauri.js" >> "$GITHUB_OUTPUT"
+        echo "prebuilt=$dir/prebuilt.json" >> "$GITHUB_OUTPUT"
