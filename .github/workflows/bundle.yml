@@ -67,7 +67,7 @@ jobs:
 
       - name: Frontend
         working-directory: app
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: The resident rides along
         shell: bash
@@ -135,7 +135,7 @@ jobs:
 
       - name: Frontend
         working-directory: app
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: One deployment target for the resident and the app
         run: |

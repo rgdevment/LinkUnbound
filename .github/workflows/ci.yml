@@ -144,7 +144,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run lint
       - run: npm run build
       # Coverage, which runs the tests everywhere else, skips Dependabot's bumps.
@@ -164,7 +164,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run lint:md
 
   # On a pull request only the manifests, the locks and deny.toml can change what this says; main reads it every push.
@@ -267,7 +267,7 @@ jobs:
         if: needs.changes.outputs.picker == 'true'
         working-directory: app
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npm run test:coverage
 
       - name: Every path is relative to the repository, which is what Sonar reads

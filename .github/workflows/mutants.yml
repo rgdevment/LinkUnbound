@@ -241,7 +241,7 @@ jobs:
 
       - if: steps.touched.outputs.any == 'yes'
         working-directory: app
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: A mutant that lives in a file this branch wrote
         if: steps.touched.outputs.list != ''
@@ -251,13 +251,13 @@ jobs:
         env:
           TOUCHED: ${{ steps.touched.outputs.list }}
         run: |
-          npx stryker run --inPlace --mutate "$TOUCHED"
+          npx --no-install stryker run --inPlace --mutate "$TOUCHED"
           echo "::notice::survivors are in the report above and the artifact; this check does not fail on them"
 
       - name: Only the configuration changed, and Stryker still starts with it
         if: steps.touched.outputs.list == '' && steps.touched.outputs.any == 'yes'
         working-directory: app
-        run: npx stryker run --inPlace --dryRunOnly
+        run: npx --no-install stryker run --inPlace --dryRunOnly
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.touched.outputs.list != ''
